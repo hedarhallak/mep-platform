@@ -1,0 +1,11 @@
+[
+  {
+    "id": 101,
+    "name": "Demo Project",
+    "site_lat": 45.5017,
+    "site_lng": -73.5673,
+    "radius_m": 150,
+    "shift_start": "07:00",
+    "shift_end": "15:30"
+  }
+]

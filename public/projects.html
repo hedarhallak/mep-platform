@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Projects — MEP Platform</title>
+<link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #f1f5f9; color: #1e293b; }
+
+  .topbar {
+    background: #1e293b; color: #fff;
+    padding: 0 24px; height: 52px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .topbar-brand { font-weight: 700; font-size: 15px; }
+  .topbar-user  { font-size: 13px; color: #94a3b8; }
+
+  .main { max-width: 1100px; margin: 0 auto; padding: 28px 24px; }
+
+  .page-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 20px;
+  }
+  .page-title { font-size: 22px; font-weight: 700; }
+
+  .filters { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+  .filters select {
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 8px;
+    padding: 8px 12px; font-size: 13px; color: #1e293b; outline: none;
+  }
+  .filters select:focus { border-color: #6366f1; }
+
+  .table-wrap { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; }
+  thead { background: #f8fafc; }
+  th {
+    padding: 11px 16px; text-align: left; font-size: 11px; color: #64748b;
+    letter-spacing: 1px; text-transform: uppercase; border-bottom: 1px solid #e2e8f0; font-weight: 600;
+  }
+  td { padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #f8fafc; }
+
+  .code { font-family: monospace; font-size: 12px; color: #6366f1; background: #eef2ff; padding: 2px 7px; border-radius: 4px; }
+  .badge { display: inline-block; padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .badge-ACTIVE    { background: #dcfce7; color: #15803d; }
+  .badge-PLANNED   { background: #dbeafe; color: #1d4ed8; }
+  .badge-ON_HOLD   { background: #fef9c3; color: #854d0e; }
+  .badge-COMPLETED { background: #f1f5f9; color: #475569; }
+  .badge-CANCELLED { background: #fee2e2; color: #b91c1c; }
+
+  .action-btns { display: flex; gap: 6px; }
+  .btn-sm { padding: 5px 11px; border-radius: 6px; font-size: 12px; cursor: pointer; border: 1px solid; font-weight: 500; transition: all 0.15s; }
+  .btn-edit   { color: #6366f1; border-color: #c7d2fe; background: #eef2ff; }
+  .btn-delete { color: #ef4444; border-color: #fecaca; background: #fff; }
+  .btn-edit:hover   { background: #e0e7ff; }
+  .btn-delete:hover { background: #fee2e2; }
+  .empty { text-align: center; padding: 48px; color: #94a3b8; font-size: 14px; }
+
+  .btn-primary { background: #6366f1; color: #fff; border: none; border-radius: 8px; padding: 10px 18px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+  .btn-primary:hover { background: #4f46e5; }
+  .btn-secondary { background: #fff; color: #475569; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 18px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .btn-link { background: none; border: none; color: #6366f1; font-size: 12px; cursor: pointer; padding: 0; text-decoration: underline; }
+
+  /* ── Modal ── */
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 100; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+  .overlay.open { opacity: 1; pointer-events: all; }
+  .modal { background: #fff; border-radius: 14px; width: 560px; max-width: 95vw; max-height: 90vh; overflow-y: auto; padding: 28px; transform: translateY(16px); transition: transform 0.2s; }
+  .overlay.open .modal { transform: translateY(0); }
+  .modal-title { font-size: 18px; font-weight: 700; margin-bottom: 20px; }
+
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .form-grid .full { grid-column: 1 / -1; }
+
+  .field label { display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 6px; }
+  .field input, .field select, .field textarea {
+    width: 100%; border: 1px solid #e2e8f0; border-radius: 8px;
+    padding: 9px 12px; font-size: 14px; color: #1e293b; outline: none; font-family: inherit;
+  }
+  .field input:focus, .field select:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.1); }
+
+  /* ── Address autocomplete ── */
+  .address-wrap { position: relative; }
+  .suggestions {
+    position: absolute; top: 100%; left: 0; right: 0; z-index: 50;
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.1); max-height: 220px; overflow-y: auto;
+    display: none;
+  }
+  .suggestions.open { display: block; }
+  .suggestion-item {
+    padding: 10px 14px; font-size: 13px; cursor: pointer; border-bottom: 1px solid #f1f5f9;
+    line-height: 1.4;
+  }
+  .suggestion-item:last-child { border-bottom: none; }
+  .suggestion-item:hover { background: #f8fafc; }
+  .suggestion-item strong { color: #1e293b; display: block; }
+  .suggestion-item small  { color: #94a3b8; }
+
+  /* ── Client section ── */
+  .client-row { display: flex; gap: 8px; align-items: flex-end; }
+  .client-row .field { flex: 1; margin: 0; }
+  .client-section {
+    background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;
+    padding: 16px; margin-top: 4px; display: none;
+  }
+  .client-section.open { display: block; }
+  .client-section-title { font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 12px; }
+
+  .modal-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+  .alert { border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-top: 12px; display: none; }
+  .alert-error { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+
+  /* ── Delete modal ── */
+  .delete-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+  .delete-overlay.open { opacity: 1; pointer-events: all; }
+  .delete-modal { background: #fff; border-radius: 14px; width: 420px; max-width: 95vw; padding: 28px; }
+  .delete-title { font-size: 17px; font-weight: 700; margin-bottom: 8px; color: #b91c1c; }
+  .delete-desc  { font-size: 14px; color: #475569; margin-bottom: 16px; line-height: 1.5; }
+  .delete-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+  .btn-danger { background: #ef4444; color: #fff; border: none; border-radius: 8px; padding: 10px 18px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .btn-danger:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .coords-badge {
+    font-size: 11px; font-family: monospace; color: #6366f1;
+    background: #eef2ff; padding: 3px 8px; border-radius: 4px; margin-top: 4px;
+    display: none;
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-brand">MEP Platform — Projects</div>
+  <div class="topbar-user" id="topbar-user"></div>
+</div>
+
+<div class="main">
+  <div class="page-header">
+    <div class="page-title">Projects</div>
+    <button class="btn-primary" id="btn-add" onclick="openAdd()" style="display:none">+ Add Project</button>
+  </div>
+
+  <div class="filters">
+    <select id="filter-status" onchange="loadProjects()">
+      <option value="">All Statuses</option>
+    </select>
+    <select id="filter-trade" onchange="loadProjects()">
+      <option value="">All Trades</option>
+    </select>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Code</th><th>Project Name</th><th>Trade</th><th>Status</th>
+          <th>Address</th><th>Start</th><th>End</th><th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="projects-tbody">
+        <tr><td colspan="8" class="empty">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ── Project Modal ── -->
+<div class="overlay" id="modal">
+  <div class="modal">
+    <div class="modal-title" id="modal-title">Add Project</div>
+    <div class="form-grid">
+
+      <div class="field full">
+        <label>Project Name *</label>
+        <input type="text" id="f-name" placeholder="e.g. Downtown Tower — Plumbing">
+      </div>
+
+      <div class="field">
+        <label>Trade Type *</label>
+        <select id="f-trade"></select>
+      </div>
+
+      <div class="field">
+        <label>Status</label>
+        <select id="f-status"></select>
+      </div>
+
+      <div class="field full">
+        <label>Site Address (Canadian format)</label>
+        <div class="address-wrap">
+          <input type="text" id="f-address" placeholder="e.g. 1770 Avenue Albert-Murphy, Laval, QC" autocomplete="off" oninput="onAddressInput()">
+          <div class="suggestions" id="suggestions"></div>
+        </div>
+        <div class="coords-badge" id="coords-badge"></div>
+      </div>
+
+      <div class="field">
+        <label>Start Date</label>
+        <input type="date" id="f-start">
+      </div>
+
+      <div class="field">
+        <label>End Date</label>
+        <input type="date" id="f-end">
+      </div>
+
+      <!-- Client row -->
+      <div class="field full">
+        <label>Client (optional)</label>
+        <div class="client-row">
+          <div class="field">
+            <select id="f-client"></select>
+          </div>
+          <button class="btn-link" onclick="toggleNewClient()">+ New Client</button>
+        </div>
+
+        <!-- New client inline form -->
+        <div class="client-section" id="new-client-section">
+          <div class="client-section-title">New Client Details <span style="font-weight:400;color:#94a3b8;font-size:11px">(will be saved with the project)</span></div>
+          <div class="form-grid">
+            <div class="field full">
+              <label>Client Name *</label>
+              <input type="text" id="nc-name" placeholder="e.g. ABC General Contractors">
+            </div>
+            <div class="field">
+              <label>Type</label>
+              <select id="nc-type">
+                <option value="General Contractor">General Contractor</option>
+                <option value="Owner">Owner</option>
+                <option value="Developer">Developer</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Phone</label>
+              <input type="text" id="nc-phone" placeholder="+1 514-000-0000">
+            </div>
+            <div class="field">
+              <label>Email</label>
+              <input type="email" id="nc-email" placeholder="contact@client.com">
+            </div>
+            <div class="field full">
+              <label>Address</label>
+              <input type="text" id="nc-address" placeholder="Client office address">
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+    <div class="alert alert-error" id="modal-error"></div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn-primary" onclick="saveProject()">Save Project</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Delete Confirm Modal ── -->
+<div class="delete-overlay" id="delete-modal">
+  <div class="delete-modal">
+    <div class="delete-title">Delete Project</div>
+    <div class="delete-desc">This action cannot be undone. Type the project name to confirm.</div>
+    <div class="field">
+      <label id="delete-label">Type project name to confirm</label>
+      <input type="text" id="delete-confirm-input" oninput="checkDeleteConfirm()">
+    </div>
+    <div class="field" style="margin-top:12px">
+      <label>Reason (optional)</label>
+      <input type="text" id="delete-reason" placeholder="e.g. Project cancelled by client">
+    </div>
+    <div class="alert alert-error" id="delete-error"></div>
+    <div class="delete-footer">
+      <button class="btn-secondary" onclick="closeDeleteModal()">Cancel</button>
+      <button class="btn-danger" id="btn-confirm-delete" onclick="confirmDelete()" disabled>Delete</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const token  = localStorage.getItem('mep_token');
+  let userRole = null;
+  let editingId = null;
+  let deletingId = null, deletingName = null;
+  let meta = { trade_types: [], statuses: [], clients: [] };
+  let selectedCoords = null;  // { lat, lng } from mapbox
+  let mapboxToken = null;
+  let addressTimer = null;
+  let addingNewClient = false;
+
+  if (!token) window.location.href = '/login.html';
+
+  async function api(method, path, body) {
+    const res = await fetch('/api' + path, {
+      method,
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    return res.json();
+  }
+
+  async function init() {
+    const whoami = await api('GET', '/auth/whoami');
+    if (!whoami.ok) { window.location.href = '/login.html'; return; }
+
+    userRole = whoami.user.role;
+    document.getElementById('topbar-user').textContent = whoami.user.username + ' (' + userRole + ')';
+    if (userRole === 'ADMIN') document.getElementById('btn-add').style.display = 'block';
+
+    // Load mapbox token
+    const cfg = await fetch('/api/config').then(r => r.json());
+    mapboxToken = cfg.mapbox_token;
+
+    // Load meta
+    const metaRes = await api('GET', '/projects/meta');
+    if (metaRes.ok) {
+      meta = metaRes;
+      const fStatus = document.getElementById('filter-status');
+      metaRes.statuses.forEach(s => fStatus.innerHTML += `<option value="${s.code}">${s.name}</option>`);
+      const fTrade = document.getElementById('filter-trade');
+      metaRes.trade_types.forEach(t => fTrade.innerHTML += `<option value="${t.code}">${t.name}</option>`);
+    }
+
+    loadProjects();
+  }
+
+  async function loadProjects() {
+    const status = document.getElementById('filter-status').value;
+    const trade  = document.getElementById('filter-trade').value;
+    let url = '/projects?';
+    if (status) url += 'status=' + status + '&';
+    if (trade)  url += 'trade='  + trade;
+
+    const data  = await api('GET', url);
+    const tbody = document.getElementById('projects-tbody');
+
+    if (!data.ok || !data.projects.length) {
+      tbody.innerHTML = `<tr><td colspan="8" class="empty">No projects found</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = data.projects.map(p => `
+      <tr>
+        <td><span class="code">${esc(p.project_code)}</span></td>
+        <td>
+          <strong>${esc(p.project_name)}</strong>
+          ${p.client_name ? `<br><small style="color:#94a3b8">${esc(p.client_name)}</small>` : ''}
+        </td>
+        <td>${esc(p.trade_name || '')}</td>
+        <td><span class="badge badge-${esc(p.status_code)}">${esc(p.status_name)}</span></td>
+        <td style="font-size:12px;color:#64748b;max-width:180px">${esc(p.site_address || '—')}</td>
+        <td style="font-size:13px;color:#64748b">${fmtDate(p.start_date)}</td>
+        <td style="font-size:13px;color:#64748b">${fmtDate(p.end_date)}</td>
+        <td>
+          <div class="action-btns">
+            ${userRole === 'ADMIN' ? `
+              <button class="btn-sm btn-edit"   onclick="openEdit(${p.id})">Edit</button>
+              <button class="btn-sm btn-delete" onclick="openDelete(${p.id},'${esc(p.project_name)}')">Delete</button>
+            ` : '—'}
+          </div>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  // ── Address Autocomplete ──
+  async function onAddressInput() {
+    selectedCoords = null;
+    document.getElementById('coords-badge').style.display = 'none';
+    clearTimeout(addressTimer);
+    const q = document.getElementById('f-address').value.trim();
+    if (q.length < 4) { closeSuggestions(); return; }
+
+    addressTimer = setTimeout(async () => {
+      try {
+        const res  = await fetch(`/api/geocode/suggest?q=${encodeURIComponent(q)}`, {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const data = await res.json();
+
+        const sugg = document.getElementById('suggestions');
+        if (!data.ok || !data.features?.length) { closeSuggestions(); return; }
+
+        sugg.innerHTML = data.features.map((f, i) => {
+          return `<div class="suggestion-item" onclick="selectAddress(${i})">
+            <strong>${esc(f.text)}</strong>
+            <small>${esc(f.place_name)}</small>
+          </div>`;
+        }).join('');
+
+        sugg._features = data.features;
+        sugg.classList.add('open');
+      } catch (e) { closeSuggestions(); }
+    }, 350);
+  }
+
+  function selectAddress(i) {
+    const sugg    = document.getElementById('suggestions');
+    const feature = sugg._features[i];
+    document.getElementById('f-address').value = feature.place_name;
+    selectedCoords = { lng: feature.center[0], lat: feature.center[1] };
+
+    const badge = document.getElementById('coords-badge');
+    badge.textContent = `📍 ${selectedCoords.lat.toFixed(5)}, ${selectedCoords.lng.toFixed(5)}`;
+    badge.style.display = 'inline-block';
+    closeSuggestions();
+  }
+
+  function closeSuggestions() {
+    document.getElementById('suggestions').classList.remove('open');
+  }
+
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.address-wrap')) closeSuggestions();
+  });
+
+  // ── New Client Toggle ──
+  function toggleNewClient() {
+    addingNewClient = !addingNewClient;
+    const section = document.getElementById('new-client-section');
+    section.classList.toggle('open', addingNewClient);
+    document.querySelector('button.btn-link').textContent = addingNewClient ? '− Cancel' : '+ New Client';
+    if (addingNewClient) document.getElementById('f-client').value = '';
+  }
+
+  function populateModal() {
+    const tSel = document.getElementById('f-trade');
+    tSel.innerHTML = '<option value="">Select trade...</option>';
+    meta.trade_types.forEach(t => tSel.innerHTML += `<option value="${t.id}">${t.name}</option>`);
+
+    const sSel = document.getElementById('f-status');
+    sSel.innerHTML = '';
+    meta.statuses.forEach(s => sSel.innerHTML += `<option value="${s.id}">${s.name}</option>`);
+
+    const cSel = document.getElementById('f-client');
+    cSel.innerHTML = '<option value="">— No Client —</option>';
+    meta.clients.forEach(c => cSel.innerHTML += `<option value="${c.id}">${esc(c.client_name)}</option>`);
+  }
+
+  function openAdd() {
+    editingId = null;
+    populateModal();
+    document.getElementById('modal-title').textContent = 'Add Project';
+    ['f-name','f-address','f-start','f-end','nc-name','nc-phone','nc-email','nc-address'].forEach(id => {
+      document.getElementById(id).value = '';
+    });
+    selectedCoords = null;
+    document.getElementById('coords-badge').style.display = 'none';
+    document.getElementById('modal-error').style.display = 'none';
+    addingNewClient = false;
+    document.getElementById('new-client-section').classList.remove('open');
+    document.querySelector('button.btn-link').textContent = '+ New Client';
+    document.getElementById('modal').classList.add('open');
+    document.getElementById('f-name').focus();
+  }
+
+  async function openEdit(id) {
+    const data = await api('GET', '/projects/' + id);
+    if (!data.ok) return;
+    const p = data.project;
+
+    editingId = id;
+    populateModal();
+    document.getElementById('modal-title').textContent = 'Edit Project';
+    document.getElementById('f-name').value    = p.project_name;
+    document.getElementById('f-address').value = p.site_address || '';
+    document.getElementById('f-start').value   = p.start_date ? p.start_date.slice(0,10) : '';
+    document.getElementById('f-end').value     = p.end_date   ? p.end_date.slice(0,10)   : '';
+    document.getElementById('f-trade').value   = p.trade_type_id;
+    document.getElementById('f-status').value  = p.status_id;
+    if (p.client_id) document.getElementById('f-client').value = p.client_id;
+
+    if (p.site_lat && p.site_lng) {
+      selectedCoords = { lat: p.site_lat, lng: p.site_lng };
+      const badge = document.getElementById('coords-badge');
+      badge.textContent = `📍 ${p.site_lat.toFixed(5)}, ${p.site_lng.toFixed(5)}`;
+      badge.style.display = 'inline-block';
+    } else {
+      selectedCoords = null;
+      document.getElementById('coords-badge').style.display = 'none';
+    }
+
+    document.getElementById('modal-error').style.display = 'none';
+    addingNewClient = false;
+    document.getElementById('new-client-section').classList.remove('open');
+    document.querySelector('button.btn-link').textContent = '+ New Client';
+    document.getElementById('modal').classList.add('open');
+  }
+
+  function closeModal() {
+    document.getElementById('modal').classList.remove('open');
+    closeSuggestions();
+  }
+
+  async function saveProject() {
+    const errEl = document.getElementById('modal-error');
+    errEl.style.display = 'none';
+
+    // Create new client first if needed
+    let clientId = parseInt(document.getElementById('f-client').value) || null;
+
+    if (addingNewClient) {
+      const ncName = document.getElementById('nc-name').value.trim();
+      if (!ncName) { showErr(errEl, 'Client name is required'); return; }
+
+      const ncRes = await api('POST', '/projects/clients', {
+        client_name:  ncName,
+        client_type:  document.getElementById('nc-type').value || 'General Contractor',
+        phone:    document.getElementById('nc-phone').value.trim()   || null,
+        email:    document.getElementById('nc-email').value.trim()   || null,
+        address:  document.getElementById('nc-address').value.trim() || null,
+      });
+
+      if (!ncRes.ok) { showErr(errEl, 'Failed to create client: ' + ncRes.error); return; }
+      clientId = ncRes.client.id;
+
+      // Add to meta for future use
+      meta.clients.push(ncRes.client);
+    }
+
+    const siteAddress = document.getElementById('f-address').value.trim() || null;
+
+    // Auto-geocode if address exists but no coords selected
+    if (siteAddress && !selectedCoords) {
+      try {
+        const geoRes = await fetch(`/api/geocode/suggest?q=${encodeURIComponent(siteAddress)}`).then(r => r.json());
+        if (geoRes.features?.length) {
+          const top = geoRes.features[0];
+          selectedCoords = { lng: top.center[0], lat: top.center[1] };
+        }
+      } catch(e) { /* ignore geocode failure */ }
+    }
+
+    const body = {
+      project_name:  document.getElementById('f-name').value.trim(),
+      trade_type_id: parseInt(document.getElementById('f-trade').value)  || null,
+      status_id:     parseInt(document.getElementById('f-status').value) || null,
+      site_address:  siteAddress,
+      site_lat:      selectedCoords?.lat || null,
+      site_lng:      selectedCoords?.lng || null,
+      start_date:    document.getElementById('f-start').value || null,
+      end_date:      document.getElementById('f-end').value   || null,
+      client_id:     clientId,
+    };
+
+    if (!body.project_name)  { showErr(errEl, 'Project name is required'); return; }
+    if (!body.trade_type_id) { showErr(errEl, 'Trade type is required');   return; }
+
+    const method = editingId ? 'PATCH' : 'POST';
+    const url    = editingId ? '/projects/' + editingId : '/projects';
+    const data   = await api(method, url, body);
+
+    if (!data.ok) {
+      const msgs = {
+        PROJECT_NAME_REQUIRED: 'Project name is required',
+        TRADE_TYPE_REQUIRED:   'Trade type is required',
+        INVALID_TRADE_TYPE:    'Invalid trade type',
+        INVALID_CLIENT:        'Invalid client',
+      };
+      showErr(errEl, msgs[data.error] || data.error);
+      return;
+    }
+
+    closeModal();
+    loadProjects();
+  }
+
+  // ── Delete ──
+  function openDelete(id, name) {
+    deletingId = id; deletingName = name;
+    document.getElementById('delete-label').textContent = `Type "${name}" to confirm`;
+    document.getElementById('delete-confirm-input').value = '';
+    document.getElementById('delete-reason').value = '';
+    document.getElementById('delete-error').style.display = 'none';
+    document.getElementById('btn-confirm-delete').disabled = true;
+    document.getElementById('delete-modal').classList.add('open');
+    document.getElementById('delete-confirm-input').focus();
+  }
+
+  function closeDeleteModal() {
+    document.getElementById('delete-modal').classList.remove('open');
+  }
+
+  function checkDeleteConfirm() {
+    const val = document.getElementById('delete-confirm-input').value;
+    document.getElementById('btn-confirm-delete').disabled = (val !== deletingName);
+  }
+
+  async function confirmDelete() {
+    const reason = document.getElementById('delete-reason').value.trim();
+    const errEl  = document.getElementById('delete-error');
+    errEl.style.display = 'none';
+
+    const data = await api('DELETE', '/projects/' + deletingId, { reason: reason || null });
+
+    if (!data.ok) {
+      const msgs = { PROJECT_HAS_ASSIGNMENTS: 'Cannot delete — project has assignments. Change status to CANCELLED instead.' };
+      showErr(errEl, msgs[data.error] || data.error);
+      return;
+    }
+
+    closeDeleteModal();
+    loadProjects();
+  }
+
+  // ── Helpers ──
+  function showErr(el, msg) { el.textContent = msg; el.style.display = 'block'; }
+  function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' });
+  }
+
+  document.getElementById('modal').addEventListener('click', e => { if (e.target === document.getElementById('modal')) closeModal(); });
+  document.getElementById('delete-modal').addEventListener('click', e => { if (e.target === document.getElementById('delete-modal')) closeDeleteModal(); });
+
+  init();
+</script>
+</body>
+</html>

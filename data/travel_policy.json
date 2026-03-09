@@ -1,0 +1,18 @@
+{
+  "policy_source": "ACQ_2025_2028",
+  "enabled": true,
+
+  "company_vehicle_rule": "PAY_IF_DISTANCE_GTE",
+  "company_vehicle_distance_threshold_km": 120,
+
+  "distance_basis": "HOME_TO_PROJECT",
+
+  "over_120km_rule": "APPLY_ACQ_LODGING_PER_DIEM",
+
+  "requires_approval": {
+    "company_vehicle_override": false,
+    "over_120km_override": false
+  },
+
+  "admin_override_mode": "ALLOW"
+}

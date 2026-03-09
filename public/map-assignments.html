@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Map Assignments — MEP Platform</title>
+<link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet">
+<script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #f1f5f9; color: #1e293b; height: 100vh; display: flex; flex-direction: column; }
+
+  .topbar { background: #1e293b; color: #fff; padding: 0 24px; height: 52px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+  .topbar-left { display: flex; align-items: center; gap: 16px; }
+  .topbar-brand { font-weight: 700; font-size: 15px; }
+  .topbar-back { color: #94a3b8; font-size: 13px; cursor: pointer; text-decoration: none; }
+  .topbar-back:hover { color: #fff; }
+  .topbar-user { font-size: 13px; color: #94a3b8; }
+
+  .layout { display: flex; flex: 1; overflow: hidden; }
+
+  /* ── Map ── */
+  #map { flex: 1; }
+
+  /* ── Side Panel ── */
+  .panel {
+    width: 360px;
+    background: #fff;
+    border-left: 1px solid #e2e8f0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .panel-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid #e2e8f0;
+    background: #f8fafc;
+  }
+
+  .panel-title { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+  .panel-sub   { font-size: 12px; color: #64748b; }
+
+  .date-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 12px 20px;
+    border-bottom: 1px solid #e2e8f0;
+    background: #f8fafc;
+  }
+
+  .date-field label { display: block; font-size: 11px; font-weight: 600; color: #64748b; margin-bottom: 4px; }
+  .date-field input {
+    width: 100%; border: 1px solid #e2e8f0; border-radius: 6px;
+    padding: 7px 10px; font-size: 13px; outline: none;
+  }
+  .date-field input:focus { border-color: #6366f1; }
+
+  .panel-empty {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 8px; color: #94a3b8; padding: 24px; text-align: center;
+  }
+  .panel-empty-icon { font-size: 32px; }
+  .panel-empty-text { font-size: 14px; }
+
+  .suggestions-list { flex: 1; overflow-y: auto; }
+
+  .project-info {
+    padding: 14px 20px;
+    border-bottom: 1px solid #e2e8f0;
+    background: #eef2ff;
+  }
+  .project-info-name  { font-size: 14px; font-weight: 700; color: #3730a3; }
+  .project-info-meta  { font-size: 12px; color: #6366f1; margin-top: 2px; }
+
+  .section-label {
+    padding: 10px 20px 6px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #94a3b8;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    background: #f8fafc;
+    border-bottom: 1px solid #f1f5f9;
+  }
+
+  .emp-card {
+    padding: 12px 20px;
+    border-bottom: 1px solid #f1f5f9;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transition: background 0.1s;
+  }
+  .emp-card:hover { background: #f8fafc; }
+  .emp-card.unavailable { opacity: 0.5; }
+
+  .emp-avatar {
+    width: 36px; height: 36px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 700; flex-shrink: 0;
+    color: #fff;
+  }
+  .emp-avatar.available   { background: #6366f1; }
+  .emp-avatar.unavailable { background: #94a3b8; }
+
+  .emp-info { flex: 1; min-width: 0; }
+  .emp-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .emp-meta { font-size: 11px; color: #64748b; margin-top: 2px; display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .emp-badges { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+  .badge-sm {
+    font-size: 10px; padding: 1px 6px; border-radius: 10px; font-weight: 600;
+  }
+  .badge-trade    { background: #dbeafe; color: #1d4ed8; }
+  .badge-distance { background: #f0fdf4; color: #15803d; }
+  .badge-repeat   { background: #fef9c3; color: #854d0e; }
+  .badge-busy     { background: #fee2e2; color: #b91c1c; }
+
+  .btn-assign {
+    background: #6366f1; color: #fff; border: none;
+    border-radius: 6px; padding: 6px 12px; font-size: 12px;
+    font-weight: 600; cursor: pointer; flex-shrink: 0;
+    transition: background 0.15s;
+  }
+  .btn-assign:hover { background: #4f46e5; }
+  .btn-assign:disabled { background: #e2e8f0; color: #94a3b8; cursor: not-allowed; }
+
+  /* ── Legend ── */
+  .legend {
+    position: absolute;
+    bottom: 32px;
+    left: 12px;
+    background: rgba(255,255,255,0.95);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    z-index: 10;
+  }
+  .legend-item { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+  .legend-item:last-child { margin-bottom: 0; }
+  .legend-dot { width: 12px; height: 12px; border-radius: 50%; }
+
+  /* ── Modal ── */
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 200; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+  .overlay.open { opacity: 1; pointer-events: all; }
+  .modal { background: #fff; border-radius: 14px; width: 460px; max-width: 95vw; padding: 28px; transform: translateY(16px); transition: transform 0.2s; }
+  .overlay.open .modal { transform: translateY(0); }
+  .modal-title { font-size: 17px; font-weight: 700; margin-bottom: 6px; }
+  .modal-sub    { font-size: 13px; color: #64748b; margin-bottom: 20px; }
+
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .field label { display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 6px; }
+  .field input, .field select { width: 100%; border: 1px solid #e2e8f0; border-radius: 8px; padding: 9px 12px; font-size: 14px; outline: none; }
+  .field input:focus, .field select:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.1); }
+
+  .modal-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+  .btn-primary   { background: #6366f1; color: #fff; border: none; border-radius: 8px; padding: 10px 18px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .btn-secondary { background: #fff; color: #475569; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 18px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .alert { border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-top: 12px; display: none; }
+  .alert-error { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+
+  .loading-spinner {
+    display: flex; align-items: center; justify-content: center;
+    padding: 32px; color: #94a3b8; font-size: 13px; gap: 8px;
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <a class="topbar-back" href="/assignments.html">← Back</a>
+    <div class="topbar-brand">Map Assignments</div>
+  </div>
+  <div class="topbar-user" id="topbar-user"></div>
+</div>
+
+<div class="layout">
+  <div id="map"></div>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#6366f1"></div> Active Project</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#f59e0b"></div> Available Employee</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#94a3b8"></div> Assigned Employee</div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">Smart Assignment</div>
+      <div class="panel-sub">Click a project on the map to see suggestions</div>
+    </div>
+
+    <div class="date-row">
+      <div class="date-field">
+        <label>Start Date</label>
+        <input type="date" id="p-start" onchange="onDateChange()">
+      </div>
+      <div class="date-field">
+        <label>End Date</label>
+        <input type="date" id="p-end" onchange="onDateChange()">
+      </div>
+    </div>
+
+    <div id="panel-body">
+      <div class="panel-empty">
+        <div class="panel-empty-icon">🗺️</div>
+        <div class="panel-empty-text">Select a project on the map to see available employees</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Assign Confirm Modal -->
+<div class="overlay" id="modal">
+  <div class="modal">
+    <div class="modal-title" id="modal-title">Assign Employee</div>
+    <div class="modal-sub" id="modal-sub"></div>
+    <div class="form-grid">
+      <div class="field">
+        <label>Start Date</label>
+        <input type="date" id="m-start">
+      </div>
+      <div class="field">
+        <label>End Date</label>
+        <input type="date" id="m-end">
+      </div>
+      <div class="field">
+        <label>Shift Start</label>
+        <select id="m-shift-start"></select>
+      </div>
+      <div class="field">
+        <label>Shift End</label>
+        <select id="m-shift-end"></select>
+      </div>
+      <div class="field" style="grid-column:1/-1">
+        <label>Notes</label>
+        <input type="text" id="m-notes" placeholder="Optional">
+      </div>
+    </div>
+    <div class="alert alert-error" id="modal-error"></div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn-primary" onclick="confirmAssign()">Assign</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const token = localStorage.getItem('mep_token') || localStorage.getItem('token');
+  if (!token) window.location.href = '/login.html';
+
+  let map, mapboxToken;
+  let projects  = [];
+  let employees = [];
+  let timeslots = [];
+  let defaultShiftStart = '06:00';
+  let defaultShiftEnd   = '14:30';
+  let selectedProject = null;
+  let assigningEmp    = null;
+  let markers = { projects: [], employees: [] };
+
+  async function api(method, path, body) {
+    const res = await fetch('/api' + path, {
+      method,
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    return res.json();
+  }
+
+  async function init() {
+    const whoami = await api('GET', '/auth/whoami');
+    if (!whoami.ok) { window.location.href = '/login.html'; return; }
+    document.getElementById('topbar-user').textContent = whoami.user.username + ' (' + whoami.user.role + ')';
+
+    // Load config
+    const cfg = await fetch('/api/config').then(r => r.json());
+    mapboxToken = cfg.mapbox_token;
+
+    // Load defaults
+    const def = await api('GET', '/assignments/defaults');
+    if (def.ok) {
+      defaultShiftStart = def.shift_start?.slice(0,5) || '06:00';
+      defaultShiftEnd   = def.shift_end?.slice(0,5)   || '14:30';
+    }
+
+    // Load timeslots
+    const ts = await api('GET', '/assignments/timeslots');
+    if (ts.ok) timeslots = ts.slots;
+
+    // Default dates: tomorrow
+    const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+    const tStr = tomorrow.toISOString().slice(0,10);
+    document.getElementById('p-start').value = tStr;
+    document.getElementById('p-end').value   = tStr;
+
+    // Load active projects
+    const proj = await api('GET', '/projects?status=ACTIVE');
+    if (proj.ok) projects = proj.projects.filter(p => p.site_lat && p.site_lng);
+
+    // Load employees with coords
+    const emp = await api('GET', '/assignments/employees');
+    if (emp.ok) employees = emp.employees;
+
+    initMap();
+  }
+
+  function initMap() {
+    mapboxgl.accessToken = mapboxToken;
+
+    // Center on employees/projects or default to Montreal area
+    const center = projects.length
+      ? [projects[0].site_lng, projects[0].site_lat]
+      : [-73.75, 45.55];
+
+    map = new mapboxgl.Map({
+      container: 'map',
+      style:     'mapbox://styles/mapbox/light-v11',
+      center,
+      zoom:      11,
+    });
+
+    map.addControl(new mapboxgl.NavigationControl(), 'top-left');
+
+    map.on('load', () => {
+      plotProjects();
+      plotEmployees();
+    });
+  }
+
+  function plotProjects() {
+    markers.projects.forEach(m => m.remove());
+    markers.projects = [];
+
+    projects.forEach(p => {
+      const el = document.createElement('div');
+      el.style.cssText = `
+        width: 44px; height: 44px; border-radius: 50%;
+        background: #6366f1; border: 3px solid #fff;
+        box-shadow: 0 2px 8px rgba(99,102,241,0.5);
+        cursor: pointer; display: flex; align-items: center;
+        justify-content: center; color: #fff; font-size: 18px;
+        font-weight: 700; transition: transform 0.15s;
+        user-select: none;
+      `;
+      el.textContent = '🏗';
+      el.title = p.project_name;
+
+      el.addEventListener('click', () => selectProject(p));
+
+      const marker = new mapboxgl.Marker(el)
+        .setLngLat([p.site_lng, p.site_lat])
+        .setPopup(new mapboxgl.Popup({ offset: 20 }).setHTML(
+          `<strong>${esc(p.project_code)}</strong><br>${esc(p.project_name)}<br>
+           <small style="color:#6366f1">${esc(p.trade_name||'')}</small>`
+        ))
+        .addTo(map);
+
+      markers.projects.push(marker);
+    });
+  }
+
+  async function plotEmployees(busyIds = new Set()) {
+    markers.employees.forEach(m => m.remove());
+    markers.employees = [];
+
+    // Get employees with coords from API (with home_lat/lng)
+    const empRes = await fetch('/api/assignments/employees-map?' +
+      `start=${document.getElementById('p-start').value}&end=${document.getElementById('p-end').value}`, {
+      headers: { 'Authorization': 'Bearer ' + token }
+    }).then(r => r.json());
+
+    if (!empRes.ok) return;
+
+    empRes.employees.forEach(emp => {
+      if (!emp.home_lat || !emp.home_lng || emp.home_lat === 0) return;
+
+      const isBusy = !emp.is_available;
+      const el = document.createElement('div');
+      el.style.cssText = `
+        width: 26px; height: 26px; border-radius: 50%;
+        background: ${isBusy ? '#94a3b8' : '#f59e0b'};
+        border: 2px solid #fff;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+        cursor: pointer;
+        transition: transform 0.2s;
+      `;
+      el.title = emp.full_name;
+
+      const marker = new mapboxgl.Marker(el)
+        .setLngLat([emp.home_lng, emp.home_lat])
+        .setPopup(new mapboxgl.Popup({ offset: 16 }).setHTML(
+          `<strong>${esc(emp.full_name)}</strong><br>
+           ${esc(emp.trade_code)} · ${esc(emp.rank_code||'')}<br>
+           <small style="color:${isBusy ? '#b91c1c' : '#15803d'}">${isBusy ? '🔴 Assigned' : '🟢 Available'}</small>`
+        ))
+        .addTo(map);
+
+      markers.employees.push(marker);
+    });
+  }
+
+  async function selectProject(project) {
+    selectedProject = project;
+
+    // Highlight selected project on map
+    markers.projects.forEach((m, i) => {
+      const el = m.getElement();
+      el.style.background = projects[i]?.id === project.id ? '#4338ca' : '#6366f1';
+      el.style.transform  = projects[i]?.id === project.id ? 'scale(1.2)' : 'scale(1)';
+    });
+
+    // Load suggestions (no flyTo — keeps map stable)
+    await loadSuggestions(project);
+  }
+
+  async function loadSuggestions(project) {
+    const start = document.getElementById('p-start').value;
+    const end   = document.getElementById('p-end').value;
+
+    document.getElementById('panel-body').innerHTML = `
+      <div class="loading-spinner">⏳ Loading suggestions...</div>`;
+
+    const data = await api('GET',
+      `/assignments/suggest/${project.id}?start_date=${start}&end_date=${end}`);
+
+    if (!data.ok) {
+      document.getElementById('panel-body').innerHTML =
+        `<div class="panel-empty"><div class="panel-empty-text">Failed to load suggestions</div></div>`;
+      return;
+    }
+
+    // Update employee markers
+    await plotEmployees();
+
+    const available   = data.suggestions.filter(s => s.is_available);
+    const unavailable = data.suggestions.filter(s => !s.is_available);
+
+    let html = `
+      <div class="project-info">
+        <div class="project-info-name">${esc(project.project_code)} — ${esc(project.project_name)}</div>
+        <div class="project-info-meta">${esc(project.trade_name||'')} · ${esc(project.site_address||'')}</div>
+      </div>
+    `;
+
+    if (available.length) {
+      html += `<div class="section-label">✅ Available (${available.length})</div>`;
+      html += available.map(emp => empCard(emp, true)).join('');
+    } else {
+      html += `<div class="panel-empty" style="padding:24px"><div class="panel-empty-text">No available employees for this period</div></div>`;
+    }
+
+    if (unavailable.length) {
+      html += `<div class="section-label" style="cursor:pointer" onclick="toggleBusy(this)">🔴 Busy (${unavailable.length}) — click to show</div>`;
+      html += `<div class="busy-list" style="display:none">`;
+      html += unavailable.map(emp => empCard(emp, false)).join('');
+      html += `</div>`;
+    }
+
+    document.getElementById('panel-body').innerHTML = html;
+  }
+
+  function empCard(emp, canAssign) {
+    const initials = emp.full_name.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase();
+    const badges = [];
+
+    if (emp.trade_match)     badges.push(`<span class="badge-sm badge-trade">✓ Trade match</span>`);
+    if (emp.distance_km !== null) badges.push(`<span class="badge-sm badge-distance">📍 ${emp.distance_km} km</span>`);
+    if (emp.times_together)  badges.push(`<span class="badge-sm badge-repeat">🔄 ${emp.times_together}x together</span>`);
+    if (!canAssign)          badges.push(`<span class="badge-sm badge-busy">Busy</span>`);
+
+    return `
+      <div class="emp-card ${canAssign ? '' : 'unavailable'}">
+        <div class="emp-avatar ${canAssign ? 'available' : 'unavailable'}">${initials}</div>
+        <div class="emp-info">
+          <div class="emp-name">${esc(emp.full_name)}</div>
+          <div class="emp-meta">
+            <span>${esc(emp.trade_code)}</span>
+            <span>${esc(emp.rank_code||'')}</span>
+          </div>
+          <div class="emp-badges">${badges.join('')}</div>
+        </div>
+        <button class="btn-assign" ${canAssign ? '' : 'disabled'}
+          onclick="openAssign(${emp.id}, '${esc(emp.full_name)}')">
+          Assign
+        </button>
+      </div>
+    `;
+  }
+
+  function onDateChange() {
+    if (selectedProject) loadSuggestions(selectedProject);
+    plotEmployees();
+  }
+
+  function openAssign(empId, empName) {
+    assigningEmp = empId;
+    const start  = document.getElementById('p-start').value;
+    const end    = document.getElementById('p-end').value;
+
+    document.getElementById('modal-title').textContent = `Assign: ${empName}`;
+    document.getElementById('modal-sub').textContent   =
+      `Project: ${selectedProject.project_code} — ${selectedProject.project_name}`;
+
+    document.getElementById('m-start').value = start;
+    document.getElementById('m-end').value   = end;
+
+    // Populate shift selects
+    const ss = document.getElementById('m-shift-start');
+    const se = document.getElementById('m-shift-end');
+    ss.innerHTML = '';
+    se.innerHTML = '';
+    timeslots.forEach(t => {
+      ss.innerHTML += `<option value="${t.value}">${t.label}</option>`;
+      se.innerHTML += `<option value="${t.value}">${t.label}</option>`;
+    });
+    ss.value = defaultShiftStart;
+    se.value = defaultShiftEnd;
+
+    document.getElementById('m-notes').value = '';
+    document.getElementById('modal-error').style.display = 'none';
+    document.getElementById('modal').classList.add('open');
+  }
+
+  function closeModal() { document.getElementById('modal').classList.remove('open'); }
+
+  async function confirmAssign() {
+    const errEl = document.getElementById('modal-error');
+    errEl.style.display = 'none';
+
+    const body = {
+      employee_id:  assigningEmp,
+      project_id:   selectedProject.id,
+      start_date:   document.getElementById('m-start').value,
+      end_date:     document.getElementById('m-end').value,
+      shift_start:  document.getElementById('m-shift-start').value,
+      shift_end:    document.getElementById('m-shift-end').value,
+      notes:        document.getElementById('m-notes').value.trim() || null,
+    };
+
+    const data = await api('POST', '/assignments/requests', body);
+
+    if (!data.ok) {
+      const msgs = {
+        PROJECT_NOT_ACTIVE:           'Project is not active',
+        EMPLOYEE_ALREADY_ASSIGNED:    data.message || 'Employee already assigned',
+        EMPLOYEE_HAS_PENDING_REQUEST: data.message || 'Employee has a pending request',
+        END_DATE_BEFORE_START:        'End date must be after start date',
+      };
+      errEl.textContent = msgs[data.error] || data.error;
+      errEl.style.display = 'block';
+      return;
+    }
+
+    closeModal();
+    await loadSuggestions(selectedProject);
+  }
+
+  function toggleBusy(el) {
+    const list = el.nextElementSibling;
+    const showing = list.style.display !== 'none';
+    list.style.display = showing ? 'none' : 'block';
+    el.textContent = showing
+      ? el.textContent.replace('hide','click to show')
+      : el.textContent.replace('click to show','hide');
+  }
+
+  // Helpers
+  function esc(s) {
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  document.getElementById('modal').addEventListener('click', e => {
+    if (e.target === document.getElementById('modal')) closeModal();
+  });
+
+  init();
+</script>
+</body>
+</html>

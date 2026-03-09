@@ -1,0 +1,15 @@
+[
+  {
+    "id": "pc_mjo4rtee8exusij0t3o",
+    "project_id": 101,
+    "phone": "+15140000000",
+    "amount": 12.5,
+    "note": "parking",
+    "receipt_filename": "park_mjo4rteamjmg3kqqxn.pdf",
+    "receipt_mimetype": "application/pdf",
+    "receipt_size": 14,
+    "status": "APPROVED",
+    "created_at": "2025-12-27T10:01:18.998Z",
+    "updated_at": "2025-12-27T10:09:32.575Z"
+  }
+]

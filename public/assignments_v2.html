@@ -1,0 +1,1177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Assignments</title>
+  <link rel="stylesheet" href="app.css" />
+  <style>
+    .tabs{display:flex;gap:8px;margin:10px 0 18px}
+    .tabs button{padding:6px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.06);color:#fff;cursor:pointer}
+    .tabs button.active{background:rgba(255,255,255,.18)}
+    .card{margin-top:14px;padding:16px;border-radius:18px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.05)}
+    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:end}
+    .row>div{min-width:220px;flex:1}
+    label{display:block;font-size:12px;opacity:.9;margin-bottom:6px}
+    input,select,textarea{width:100%;padding:10px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:rgba(0,0,0,.18);color:#fff}
+    textarea{min-height:90px}
+    .actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .btn{padding:10px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.08);color:#fff;cursor:pointer}
+    .btn.primary{background:rgba(255,255,255,.18)}
+    .btn.danger{background:rgba(255,80,80,.18)}
+    .btn.small{padding:7px 10px;border-radius:10px;font-size:12px}
+    .muted{opacity:.8;font-size:12px}
+    .hint{font-size:12px;opacity:.75;margin-top:6px}
+    .error{color:#ffb3b3;margin-top:10px;white-space:pre-wrap}
+    .ok{color:#b8ffb8;margin-top:10px;white-space:pre-wrap}
+    .hidden{display:none}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:10px;border-bottom:1px solid rgba(255,255,255,.08);font-size:13px;vertical-align:top}
+    th{text-align:left;opacity:.9}
+    .pill{padding:4px 8px;border-radius:999px;border:1px solid rgba(255,255,255,.14);display:inline-block;font-size:12px;opacity:.95}
+    .right{text-align:right}
+    .header{display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
+    .header h1{margin:0}
+    .sub{opacity:.75;font-size:12px;margin-top:6px}
+    .top-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .kpi{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .chip{padding:6px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.06);font-size:12px;opacity:.95}
+
+    /* Modal */
+    .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:100}
+    .modal{width:min(720px,94vw);border-radius:16px;border:1px solid rgba(255,255,255,.14);background:rgba(20,25,35,.96);padding:16px}
+    .modal h3{margin:0 0 8px}
+    .modal .meta{font-size:12px;opacity:.8;margin-bottom:10px}
+
+    /* Requests layout */
+    .split{display:flex;gap:14px;flex-wrap:wrap}
+    .split > .col{flex:1;min-width:360px}
+  
+    /* Reduce horizontal scroll: fixed table layout + ellipsis */
+    table{ table-layout: fixed; }
+    th, td{ white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* Give some sensible widths */
+    .col-actions{ width: 190px; }
+    .col-type{ width: 170px; }
+    .col-status{ width: 120px; }
+    .col-emp{ width: 220px; }
+    .col-proj{ width: 260px; }
+    .col-date{ width: 120px; }
+
+  
+    /* Inbox request summaries (cards, no columns/scroll) */
+    #inboxList{ display:flex; flex-direction:column; gap:12px; margin-top:12px; }
+    .req-card{ border:1px solid rgba(255,255,255,.10); background:rgba(255,255,255,.04); border-radius:16px; padding:14px; }
+    .req-head{ display:flex; justify-content:space-between; gap:12px; align-items:flex-start; flex-wrap:wrap; }
+    .req-badges{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    .badge{ padding:4px 10px; border-radius:999px; border:1px solid rgba(255,255,255,.14); font-size:12px; opacity:.95; }
+    .badge.primary{ background: rgba(255,255,255,.08); }
+    .req-title{ font-size:13px; opacity:.9; margin-top:6px; }
+    .req-sub{ font-size:12px; opacity:.75; margin-top:2px; }
+    .req-actions{ display:flex; gap:8px; align-items:center; }
+    .kv{ opacity:.7; font-size:12px; }
+
+  
+    /* Priority layout: pending compact, decided expanded */
+    .req-card.pending{ padding:10px; }
+    .req-card.pending .req-sub{ display:none; }
+    .req-card.decided{ padding:16px; }
+    .req-card.decided .req-sub{ display:block; }
+    .req-card.decided .req-actions{ display:none; } /* no actions on decided */
+    .req-card.decided .req-extra{ margin-top:10px; font-size:12px; opacity:.8; }
+
+  
+    /* Unified Requests cards */
+    #reqList{ display:flex; flex-direction:column; gap:12px; margin-top:12px; }
+    .req-item{ border:1px solid rgba(255,255,255,.10); background:rgba(255,255,255,.04); border-radius:16px; padding:14px; }
+    .req-item.pending{ padding:10px; }
+    .req-head{ display:flex; justify-content:space-between; gap:12px; align-items:flex-start; flex-wrap:wrap; }
+    .req-badges{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    .badge{ padding:4px 10px; border-radius:999px; border:1px solid rgba(255,255,255,.14); font-size:12px; opacity:.95; }
+    .badge.primary{ background: rgba(255,255,255,.08); }
+    .req-lines{ margin-top:8px; display:flex; gap:14px; flex-wrap:wrap; font-size:13px; opacity:.95; }
+    .kv{ opacity:.75; font-size:12px; }
+    .req-actions{ display:flex; gap:8px; align-items:center; }
+
+  </style>
+</head>
+<body>
+  <div class="page" style="max-width:1200px;margin:0 auto;padding:32px 18px;">
+    <div class="header">
+      <div>
+        <h1>Assignments</h1>
+        <div class="sub">Create requests • Admin inbox first • List with sort/filter • Modify/Cancel requests</div>
+      </div>
+      <div class="top-actions">
+        <button class="btn" id="btnRefreshAll" onclick="(function(){try{var t=localStorage.getItem('assignments_v2_active_tab')||location.hash||'#create'; if(t[0]!=='#') t='#'+t; location.hash=t; location.reload();}catch(e){location.reload();}})()">Refresh</button>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button id="tabCreate" class="active">Create</button>
+      <button id="tabList">List</button>
+      <button id="tabRequests">Requests</button>
+    </div>
+
+    <!-- CREATE -->
+    <section id="viewCreate" class="card">
+      <h2 style="margin:0 0 10px;">Create Assignment Request</h2>
+      <div class="muted">Creates a <b>PENDING</b> request. Admin approves it → becomes a real assignment.</div>
+
+      <div class="row" style="margin-top:14px;">
+        <div>
+          <label>Employee</label>
+          <select id="selEmployee"></select>
+        </div>
+        <div>
+          <label>Project</label>
+          <select id="selProject"></select>
+        </div>
+        <div>
+          <label>From</label>
+          <input id="inpFrom" type="date" />
+          <div class="hint">Default: tomorrow</div>
+        </div>
+        <div>
+          <label>To</label>
+          <input id="inpTo" type="date" />
+          <div class="hint">Default: tomorrow</div>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:12px;">
+        <div>
+          <label>Shift</label>
+          <select id="selShift"></select>
+          <div class="hint">Default: 06:00–14:30</div>
+        </div>
+        <div id="shiftCustomWrap" class="hidden">
+          <label>Custom shift (HH:MM-HH:MM)</label>
+          <input id="inpShiftCustom" placeholder="e.g. 07:00-15:30" />
+        </div>
+        <div>
+          <label>Note (optional)</label>
+          <input id="inpNote" placeholder="Reason / comment" />
+        </div>
+      </div>
+
+      <div class="actions" style="margin-top:14px;">
+        <button class="btn primary" id="btnSubmitRequest">Submit Request</button>
+      </div>
+
+      <div id="createOk" class="ok hidden"></div>
+      <div id="createErr" class="error hidden"></div>
+    </section>
+
+    <!-- LIST -->
+    <section id="viewList" class="card hidden">
+      <div class="row">
+        <div>
+          <h2 style="margin:0 0 6px;">Assignments List</h2>
+          <div class="muted">Real assignments (from <code>/api/assignments_v2</code>).</div>
+        </div>
+        <div class="actions" style="justify-content:flex-end;">
+          <input id="listSearch" placeholder="Search employee/project..." style="max-width:260px;" />
+          <select id="listSort" style="max-width:220px;">
+            <option value="date_desc">Date (new → old)</option>
+            <option value="date_asc">Date (old → new)</option>
+            <option value="employee_asc">Employee (A → Z)</option>
+            <option value="project_asc">Project (A → Z)</option>
+          </select>
+          <select id="listRange" style="max-width:190px;">
+            <option value="all">All</option>
+            <option value="today">Today</option>
+            <option value="tomorrow">Tomorrow</option>
+            <option value="week">Next 7 days</option>
+          </select>
+          <button class="btn" id="btnListRefresh">Refresh</button>
+        </div>
+      </div>
+
+      <div class="kpi" style="margin-top:10px;">
+        <span class="chip" id="listCountChip">0</span>
+        <span class="chip" id="listUpdatedChip">Updated: -</span>
+      </div>
+
+      <div style="overflow:auto;margin-top:10px;">
+        <table>
+          <thead>
+            <tr>
+              <th class="col-actions">Actions</th>
+              <th class="col-emp">Employee</th>
+              <th class="col-proj">Project</th>
+              <th class="col-date">From</th>
+              <th class="col-date">To</th>
+              <th>Shift</th>
+              <th class="right">ID</th>
+            </tr>
+          </thead>
+          <tbody id="listBody"></tbody>
+        </table>
+      </div>
+
+      <div id="listErr" class="error hidden"></div>
+    </section>
+
+    <!-- REQUESTS -->
+    <section id="viewRequests" class="card hidden">
+      <div class="row">
+        <div>
+          <h2 style="margin:0 0 6px;">Requests</h2>
+          <div class="muted">Single list (no duplication). Pending first. Use tabs to switch status.</div>
+        </div>
+        <div class="actions" style="justify-content:flex-end;">
+          <button class="btn" id="btnReqRefresh">Refresh</button>
+        </div>
+      </div>
+
+      <div class="tabs" style="margin-top:12px;">
+        <button id="reqTabPending" class="active">Pending</button>
+        <button id="reqTabApproved">Approved</button>
+        <button id="reqTabRejected">Rejected</button>
+        <button id="reqTabAll">All</button>
+      </div>
+
+      <div class="row" style="margin-top:10px;">
+        <div style="min-width:260px;flex:1;">
+          <input id="reqSearch" placeholder="Search requests..." />
+          <div class="hint">Search by employee/project/id/type/status.</div>
+        </div>
+        <div style="min-width:260px;flex:0;">
+          <label>Scope</label>
+          <select id="reqScope">
+            <option value="mine">My requests</option>
+            <option value="all">All requests (admin)</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="reqErr" class="error hidden"></div>
+      <div id="reqOk" class="ok hidden"></div>
+
+      <div id="reqList" style="margin-top:12px;"></div>
+    </section>
+  </div>
+
+  <!-- Modal for Approve/Reject -->
+  <div id="modalBackdrop" class="modal-backdrop hidden" aria-hidden="true">
+    <div class="modal">
+      <h3 id="modalTitle">Decision</h3>
+      <div class="meta" id="modalMeta"></div>
+      <label for="modalNote">Note (optional)</label>
+      <textarea id="modalNote" placeholder="Add a short note (optional)"></textarea>
+
+      <div class="actions" style="margin-top:12px;justify-content:flex-end;">
+        <button class="btn" id="btnModalCancel">Cancel</button>
+        <button class="btn primary" id="btnModalConfirm">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal for Modify Assignment (creates UPDATE_ASSIGNMENT request) -->
+  <div id="editBackdrop" class="modal-backdrop hidden" aria-hidden="true">
+    <div class="modal">
+      <h3 style="margin:0 0 8px;">Request Modify Assignment</h3>
+      <div class="meta" id="editMeta"></div>
+
+      <div class="row" style="margin-top:10px;">
+        <div>
+          <label>Project</label>
+          <select id="editProject"></select>
+        </div>
+        <div>
+          <label>From</label>
+          <input id="editFrom" type="date" />
+        </div>
+        <div>
+          <label>To</label>
+          <input id="editTo" type="date" />
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:10px;">
+        <div>
+          <label>Shift</label>
+          <select id="editShift"></select>
+        </div>
+        <div id="editShiftCustomWrap" class="hidden">
+          <label>Custom shift (HH:MM-HH:MM)</label>
+          <input id="editShiftCustom" placeholder="e.g. 07:00-15:30" />
+        </div>
+        <div>
+          <label>Note (optional)</label>
+          <input id="editNote" placeholder="Why modify?" />
+        </div>
+      </div>
+
+      <div class="actions" style="margin-top:12px;justify-content:flex-end;">
+        <button class="btn" id="btnEditCancel">Cancel</button>
+        <button class="btn primary" id="btnEditSubmit">Submit Modify Request</button>
+      </div>
+
+      <div id="editErr" class="error hidden"></div>
+      <div id="editOk" class="ok hidden"></div>
+    </div>
+  </div>
+
+<script>
+/* --- Phase 4.1: robust token + auto-retry (SAFE) --- */
+function getAuthToken() {
+  // Same-origin iframe shares localStorage; also allow parent bridge.
+  try {
+    if (window.parent && window.parent !== window && typeof window.parent.getMepAuthToken === "function") {
+      const t = window.parent.getMepAuthToken();
+      if (t) return t;
+    }
+  } catch (e) {}
+  return (
+    localStorage.getItem("mep_auth_token") ||
+    localStorage.getItem("mep_token") ||
+    getAuthToken() ||
+    null
+  );
+}
+
+async function waitForToken(timeoutMs = 3000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const t = getAuthToken();
+    if (t) return t;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  return null;
+}
+
+function onAuthChanged(handler) {
+  try { window.addEventListener("mep-auth-changed", handler); } catch (e) {}
+  try { window.addEventListener("storage", (ev) => {
+    if (!ev) return;
+    if (ev.key === "mep_auth_token" || ev.key === "mep_token" || ev.key === "token") handler();
+  }); } catch (e) {}
+}
+/* -------------------------------------------------- */
+
+
+(function() {
+  const $ = (id) => document.getElementById(id);
+  const on = (id, ev, fn) => { const el = $(id); if (el) el.addEventListener(ev, fn); };
+
+  const state = {
+    employees: [],
+    projects: [],
+    assignments: [],
+    myRequests: [],
+    inbox: [],
+    pendingDecision: null,
+    pendingEdit: null,
+    lastAssignmentsUpdatedAt: null
+  };
+
+  const SHIFT_OPTIONS = [
+    { value: "06:00-14:30", label: "Day – 06:00-14:30 (default)" },
+    { value: "14:30-23:00", label: "Evening – 14:30-23:00" },
+    { value: "23:00-06:00", label: "Night – 23:00-06:00" },
+    { value: "CUSTOM", label: "Custom…" }
+  ];
+
+  function yyyyMmDd(d) {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+  function shortDate(v) {
+    if (!v) return "";
+    const s = String(v);
+    return s.length >= 10 ? s.substring(0,10) : s;
+  }
+  function startOfDay(d) {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+
+  function setDefaultDatesTomorrow() {
+    const now = new Date();
+    const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    const v = yyyyMmDd(tomorrow);
+    $("inpFrom").value = v;
+    $("inpTo").value = v;
+  }
+
+  function initShiftSelect(sel, customWrap, customInput) {
+    sel.innerHTML = "";
+    for (const o of SHIFT_OPTIONS) {
+      const opt = document.createElement("option");
+      opt.value = o.value;
+      opt.textContent = o.label;
+      sel.appendChild(opt);
+    }
+    sel.value = "06:00-14:30";
+    customWrap.classList.add("hidden");
+    customInput.value = "";
+
+    sel.addEventListener("change", () => {
+      const v = sel.value;
+      if (v === "CUSTOM") {
+        customWrap.classList.remove("hidden");
+        setTimeout(() => customInput.focus(), 0);
+      } else {
+        customWrap.classList.add("hidden");
+        customInput.value = "";
+      }
+    });
+  }
+
+  function getToken() {
+    const keys = ["token", "auth_token", "jwt", "access_token"];
+    for (const k of keys) {
+      const v = (localStorage.getItem(k) || "").trim();
+      if (v) return v.startsWith("Bearer ") ? v : "Bearer " + v;
+    }
+    return "";
+  }
+
+  function setOk(el, text) { el.classList.remove("hidden"); el.classList.remove("error"); el.classList.add("ok"); el.textContent = text; }
+  function setErr(el, text) { el.classList.remove("hidden"); el.classList.remove("ok"); el.classList.add("error"); el.textContent = text; }
+  function clearMsg(el) { el.classList.add("hidden"); el.textContent = ""; }
+
+  async function api(path, opts = {}) {
+  const __token = getAuthToken();
+
+    const headers = Object.assign({}, opts.headers || {});
+    headers["Content-Type"] = "application/json";
+    const token = getToken();
+    if (token) headers["Authorization"] = token;
+
+    const res = await fetch(path, Object.assign({}, opts, { headers }));
+    const text = await res.text();
+    let data = null;
+    try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text }; }
+    if (!res.ok) {
+      const msg = (data && (data.error || data.message))
+        ? (data.error + (data.message ? (": " + data.message) : ""))
+        : (res.status + " " + res.statusText);
+      const err = new Error(msg);
+      err.status = res.status;
+      err.data = data;
+      throw err;
+    }
+    return data;
+  }
+
+  function activate(tab) {
+    const map = { create:["tabCreate","viewCreate"], list:["tabList","viewList"], requests:["tabRequests","viewRequests"] };
+    for (const k of Object.keys(map)) {
+      const [tb, vw] = map[k];
+      $(tb).classList.toggle("active", k === tab);
+      $(vw).classList.toggle("hidden", k !== tab);
+    }
+  }
+
+  function fillSelect(sel, items, getLabel) {
+    sel.innerHTML = "";
+    for (const it of items) {
+      const opt = document.createElement("option");
+      opt.value = it.id;
+      opt.textContent = getLabel(it);
+      sel.appendChild(opt);
+    }
+  }
+
+  function employeeLabel(row) {
+    const code = row.employee_code ? (row.employee_code + " - ") : "";
+    const name = row.employee_name || ("Employee #" + row.employee_id);
+    return (code + name).trim();
+  }
+  function projectLabel(row) {
+    const code = row.project_code ? (row.project_code + " - ") : "";
+    const name = row.project_name || ("Project #" + row.project_id);
+    return (code + name).trim();
+  }
+
+  async function loadEmployeesProjects() {
+  const token = await waitForToken(3000);
+  if (!token) {
+    try { setErr && setErr('PLEASE_LOGIN'); } catch (e) {}
+    return;
+  }
+
+    const empData = await api("/api/employees", { method: "GET" });
+    state.employees = empData.rows || empData.items || empData || [];
+
+    const projData = await api("/api/projects", { method: "GET" });
+    state.projects = projData.rows || projData.items || projData || [];
+  }
+
+  function passesRangeFilter(row) {
+    const mode = $("listRange").value;
+    if (mode === "all") return true;
+
+    const s = row.start_date ? startOfDay(new Date(shortDate(row.start_date))) : null;
+    if (!s) return true;
+
+    const today = startOfDay(new Date());
+    if (mode === "today") return s.getTime() === today.getTime();
+    if (mode === "tomorrow") {
+      const t = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+      return s.getTime() === t.getTime();
+    }
+    if (mode === "week") {
+      const end = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 7);
+      return s >= today && s < end;
+    }
+    return true;
+  }
+
+  function sortRows(rows) {
+    const mode = $("listSort").value;
+    const out = [...rows];
+
+    const safe = (v) => (v || "").toString().toLowerCase();
+
+    out.sort((a, b) => {
+      if (mode === "employee_asc") {
+        return safe(employeeLabel(a)).localeCompare(safe(employeeLabel(b)));
+      }
+      if (mode === "project_asc") {
+        return safe(projectLabel(a)).localeCompare(safe(projectLabel(b)));
+      }
+
+      // date sorts
+      const da = shortDate(a.start_date);
+      const db = shortDate(b.start_date);
+      if (mode === "date_asc") {
+        if (da < db) return -1;
+        if (da > db) return 1;
+      } else {
+        if (da < db) return 1;
+        if (da > db) return -1;
+      }
+      return Number(b.id || 0) - Number(a.id || 0);
+    });
+
+    return out;
+  }
+
+  function renderAssignments() {
+    const q = ($("listSearch").value || "").trim().toLowerCase();
+    const body = $("listBody");
+    body.innerHTML = "";
+
+    let rows = Array.isArray(state.assignments) ? state.assignments : [];
+    rows = rows.filter(passesRangeFilter);
+
+    if (q) {
+      rows = rows.filter(r => {
+        const hay = (employeeLabel(r) + " " + projectLabel(r) + " " + (r.shift || "")).toLowerCase();
+        return hay.includes(q);
+      });
+    }
+
+    rows = sortRows(rows);
+
+    $("listCountChip").textContent = `${rows.length} assignment(s)`;
+    $("listUpdatedChip").textContent = `Updated: ${state.lastAssignmentsUpdatedAt || "-"}`;
+
+    for (const r of rows) {
+      const tr = document.createElement("tr");
+
+      tr.innerHTML = `
+        <td>
+          <button class="btn small" data-act="modify" data-id="${r.id}">Request Modify</button>
+          <button class="btn small danger" data-act="cancel" data-id="${r.id}">Request Cancel</button>
+        </td>
+        <td>${escapeHtml(employeeLabel(r))}</td>
+        <td>${escapeHtml(projectLabel(r))}</td>
+        <td>${escapeHtml(shortDate(r.start_date))}</td>
+        <td>${escapeHtml(shortDate(r.end_date))}</td>
+        <td><span class="pill">${escapeHtml(r.shift || "06:00-14:30")}</span></td>
+        <td class="right">${escapeHtml(String(r.id ?? ""))}</td>
+      `;
+
+      body.appendChild(tr);
+
+      tr.querySelectorAll("button[data-act]").forEach(btn => {
+        const act = btn.getAttribute("data-act");
+        btn.addEventListener("click", () => {
+          if (act === "modify") openEditModal(r);
+          if (act === "cancel") submitCancelRequest(r);
+        });
+      });
+    }
+  }
+
+  async function refreshAssignments() {
+    clearMsg($("listErr"));
+    try {
+      const data = await api("/api/assignments_v2", { method: "GET" });
+      state.assignments = data.rows || data.items || data || [];
+      state.lastAssignmentsUpdatedAt = new Date().toLocaleString();
+      renderAssignments();
+    } catch (e) {
+      setErr($("listErr"), "❌ " + e.message);
+    }
+  }
+
+  // Requests rendering with search
+  function renderMyRequests() {
+    const q = ($("mineSearch").value || "").trim().toLowerCase();
+    const body = $("mineBody");
+    body.innerHTML = "";
+
+    let rows = Array.isArray(state.myRequests) ? state.myRequests : [];
+    if (q) rows = rows.filter(r => JSON.stringify(r).toLowerCase().includes(q));
+
+    for (const r of rows) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td><span class="pill">${escapeHtml(r.request_type)}</span></td>
+        <td><span class="pill">${escapeHtml(r.status)}</span></td>
+        <td>${escapeHtml(String(r.requested_for_employee_id ?? ""))}</td>
+        <td>${escapeHtml(String(r.project_id ?? ""))}</td>
+        <td>${escapeHtml(shortDate(r.start_date))}</td>
+        <td>${escapeHtml(shortDate(r.end_date))}</td>
+        <td class="right">${escapeHtml(String(r.id))}</td>
+      `;
+      body.appendChild(tr);
+    }
+  }
+
+  function renderInbox() {
+    const q = ($("inboxSearch").value || "").trim().toLowerCase();
+    const list = $("inboxList");
+    if (!list) return;
+    list.innerHTML = "";
+
+    let rows = Array.isArray(state.inbox) ? state.inbox : [];
+    if (q) rows = rows.filter(r => JSON.stringify(r).toLowerCase().includes(q));
+
+    if (!rows.length) {
+      const empty = document.createElement("div");
+      empty.className = "muted";
+      empty.style.marginTop = "8px";
+      empty.textContent = "No requests.";
+      list.appendChild(empty);
+      return;
+    }
+
+    for (const r of rows) {
+      const status = String(r.status || "");
+      const isPending = status === "PENDING";
+
+      const card = document.createElement("div");
+      card.className = "req-card " + (isPending ? "pending" : "decided");
+
+      const type = String(r.request_type || "").replaceAll("_", " ");
+      const emp = String(r.requested_for_employee_id ?? "");
+      const proj = String(r.project_id ?? "");
+      const from = shortDate(r.start_date);
+      const to = shortDate(r.end_date);
+
+      const metaTop = `#${r.id} • ${from} → ${to}`;
+
+      const extra = (!isPending)
+        ? `<div class="req-extra">
+             <div><span class="kv">Decision:</span> ${escapeHtml(status)} • <span class="kv">at:</span> ${escapeHtml(shortDate(r.decision_at) || "")}</div>
+             <div><span class="kv">Note:</span> ${escapeHtml(r.decision_note || "")}</div>
+           </div>`
+        : "";
+
+      card.innerHTML = `
+        <div class="req-head">
+          <div>
+            <div class="req-badges">
+              <span class="badge primary">${escapeHtml(type)}</span>
+              <span class="badge">${escapeHtml(status)}</span>
+              <span class="kv">${escapeHtml(metaTop)}</span>
+            </div>
+            <div class="req-title"><span class="kv">Employee:</span> ${escapeHtml(emp)} &nbsp; • &nbsp; <span class="kv">Project:</span> ${escapeHtml(proj)}</div>
+            <div class="req-sub"><span class="kv">Dates:</span> ${escapeHtml(from)} → ${escapeHtml(to)}</div>
+            ${extra}
+          </div>
+          <div class="req-actions">
+            <button class="btn small primary" data-act="approve" data-id="${r.id}">Approve</button>
+            <button class="btn small danger" data-act="reject" data-id="${r.id}">Reject</button>
+          </div>
+        </div>
+      `;
+
+      list.appendChild(card);
+
+      if (isPending) {
+        card.querySelectorAll("button[data-act]").forEach(btn => {
+          btn.addEventListener("click", () => {
+            const act = btn.getAttribute("data-act");
+            openDecisionModal({
+              requestId: r.id,
+              decision: act === "approve" ? "APPROVE" : "REJECT",
+              meta: `#${r.id} • ${r.request_type} • ${from} → ${to} • emp:${emp} • proj:${proj}`
+            });
+          });
+        });
+      }
+    }
+  }
+
+  async function refreshRequests() {
+    clearMsg($("mineErr"));
+    clearMsg($("inboxErr"));
+    clearMsg($("inboxOk"));
+
+    try {
+      const mine = await api("/api/assignment-requests/mine", { method: "GET" });
+      state.myRequests = mine.items || mine.rows || mine || [];
+      renderMyRequests();
+    } catch (e) {
+      setErr($("mineErr"), "❌ " + e.message);
+    }
+
+    try {
+      const inbox = await api("/api/assignment-requests/inbox", { method: "GET" });
+      state.inbox = inbox.items || inbox.rows || inbox || [];
+      renderInbox();
+    } catch (e) {
+      setErr($("inboxErr"), "❌ " + e.message);
+    }
+  }
+
+  // Decision modal
+  function openDecisionModal({ requestId, decision, meta }) {
+    state.pendingDecision = { requestId, decision };
+    $("modalTitle").textContent = (decision === "APPROVE") ? "Approve request" : "Reject request";
+    $("modalMeta").textContent = meta;
+    $("modalNote").value = "";
+    $("modalBackdrop").classList.remove("hidden");
+    $("modalBackdrop").setAttribute("aria-hidden", "false");
+    setTimeout(() => $("modalNote").focus(), 0);
+  }
+  function closeDecisionModal() {
+    $("modalBackdrop").classList.add("hidden");
+    $("modalBackdrop").setAttribute("aria-hidden", "true");
+    state.pendingDecision = null;
+  }
+  async function decide(requestId, decision, note) {
+    clearMsg($("inboxErr"));
+    clearMsg($("inboxOk"));
+    try {
+      await api(`/api/assignment-requests/${requestId}/decision`, {
+        method: "POST",
+        body: JSON.stringify({ decision, note })
+      });
+      setOk($("inboxOk"), `✅ ${decision} OK for request #${requestId}`);
+      await refreshUnifiedRequests();
+      await refreshAssignments();
+    } catch (e) {
+      setErr($("inboxErr"), "❌ " + e.message);
+      console.error(e);
+    }
+  }
+
+  // Modify / Cancel requests from List
+  function openEditModal(row) {
+    clearMsg($("editErr"));
+    clearMsg($("editOk"));
+
+    state.pendingEdit = row;
+
+    $("editMeta").textContent = `Assignment #${row.id} • ${employeeLabel(row)} • ${projectLabel(row)}`;
+
+    // projects dropdown
+    fillSelect($("editProject"), state.projects, (p) => {
+      const code = p.project_code ? (p.project_code + " - ") : (p.code ? (p.code + " - ") : "");
+      const name = p.name || p.project_name || ("Project " + p.id);
+      return (code ? code : (p.id + " - ")) + name;
+    });
+    $("editProject").value = String(row.project_id);
+
+    $("editFrom").value = shortDate(row.start_date);
+    $("editTo").value = shortDate(row.end_date);
+
+    // shift dropdown
+    initShiftSelect($("editShift"), $("editShiftCustomWrap"), $("editShiftCustom"));
+    const currentShift = (row.shift || "06:00-14:30").trim();
+    const found = SHIFT_OPTIONS.some(o => o.value === currentShift);
+    if (found) {
+      $("editShift").value = currentShift;
+    } else {
+      $("editShift").value = "CUSTOM";
+      $("editShiftCustomWrap").classList.remove("hidden");
+      $("editShiftCustom").value = currentShift;
+    }
+
+    $("editNote").value = "";
+
+    $("editBackdrop").classList.remove("hidden");
+    $("editBackdrop").setAttribute("aria-hidden", "false");
+  }
+
+  function closeEditModal() {
+    $("editBackdrop").classList.add("hidden");
+    $("editBackdrop").setAttribute("aria-hidden", "true");
+    state.pendingEdit = null;
+  }
+
+  function getEditShiftValue() {
+    const v = $("editShift").value;
+    if (v === "CUSTOM") return ($("editShiftCustom").value || "").trim();
+    return v;
+  }
+
+  async function submitModifyRequest() {
+    clearMsg($("editErr"));
+    clearMsg($("editOk"));
+
+    const row = state.pendingEdit;
+    if (!row) return;
+
+    const assignmentId = Number(row.id);
+    const employeeId = Number(row.employee_id);
+    const projectId = Number($("editProject").value);
+    const start = $("editFrom").value || null;
+    const end = $("editTo").value || null;
+    const shift = getEditShiftValue();
+    const note = ($("editNote").value || "").trim();
+
+    if (!start || !end) { setErr($("editErr"), "Select dates."); return; }
+    if ($("editShift").value === "CUSTOM" && !shift) { setErr($("editErr"), "Enter custom shift like 07:00-15:30."); return; }
+
+    const payload_json = { assignment_id: assignmentId, project_id: projectId, start_date: start, end_date: end, shift, note };
+
+    const body = {
+      request_type: "UPDATE_ASSIGNMENT",
+      requested_for_employee_id: employeeId,
+      project_id: projectId,
+      start_date: start,
+      end_date: end,
+      payload_json
+    };
+
+    try {
+      const data = await api("/api/assignment-requests", { method: "POST", body: JSON.stringify(body) });
+      const r = data.request || data;
+      setOk($("editOk"), `✅ Modify request submitted (#${r.id})`);
+      await refreshRequests();
+      closeEditModal();
+      activate("requests");
+    } catch (e) {
+      setErr($("editErr"), "❌ " + e.message);
+      console.error(e);
+    }
+  }
+
+  async function submitCancelRequest(row) {
+    clearMsg($("listErr"));
+    const assignmentId = Number(row.id);
+    const employeeId = Number(row.employee_id);
+    const projectId = Number(row.project_id);
+    const start = shortDate(row.start_date);
+    const end = shortDate(row.end_date);
+
+    const payload_json = { assignment_id: assignmentId, note: "cancel request" };
+
+    const body = {
+      request_type: "CANCEL_ASSIGNMENT",
+      requested_for_employee_id: employeeId,
+      project_id: projectId,
+      start_date: start,
+      end_date: end,
+      payload_json
+    };
+
+    try {
+      const data = await api("/api/assignment-requests", { method: "POST", body: JSON.stringify(body) });
+      const r = data.request || data;
+      setOk($("listErr"), `✅ Cancel request submitted (#${r.id})`);
+      await refreshRequests();
+      activate("requests");
+    } catch (e) {
+      setErr($("listErr"), "❌ " + e.message);
+      console.error(e);
+    }
+  }
+
+  function escapeHtml(s) {
+    return String(s ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+
+  // --- Unified Requests (Tabs + Scope) ---
+  const reqState = { tab: "PENDING", scope: "mine", mine: [], all: [] };
+
+  function setReqTab(tab) {
+    reqState.tab = tab;
+    const map = {
+      PENDING: "reqTabPending",
+      APPROVED: "reqTabApproved",
+      REJECTED: "reqTabRejected",
+      ALL: "reqTabAll"
+    };
+    Object.values(map).forEach(id => { if ($(id)) $(id).classList.remove("active"); });
+    const activeId = map[tab];
+    if ($(activeId)) $(activeId).classList.add("active");
+    renderReqList();
+  }
+
+  async function loadReqMine() {
+    const mine = await api("/api/assignment-requests/mine", { method: "GET" });
+    reqState.mine = mine.items || mine.rows || mine || [];
+  }
+
+  async function loadReqAll() {
+    const inbox = await api("/api/assignment-requests/inbox", { method: "GET" });
+    reqState.all = inbox.items || inbox.rows || inbox || [];
+  }
+
+  function currentReqRows() {
+    const scope = reqState.scope;
+    let rows = (scope === "all") ? reqState.all : reqState.mine;
+
+    if (reqState.tab !== "ALL") {
+      rows = rows.filter(r => String(r.status || "") === reqState.tab);
+    }
+
+    const q = ($("reqSearch")?.value || "").trim().toLowerCase();
+    if (q) rows = rows.filter(r => JSON.stringify(r).toLowerCase().includes(q));
+
+    rows = [...rows].sort((a,b) => {
+      const sa = String(a.status||"");
+      const sb = String(b.status||"");
+      const pa = (sa === "PENDING") ? 0 : 1;
+      const pb = (sb === "PENDING") ? 0 : 1;
+      if (pa !== pb) return pa - pb;
+      const da = (a.created_at || a.decision_at || "").toString();
+      const db = (b.created_at || b.decision_at || "").toString();
+      if (da < db) return 1;
+      if (da > db) return -1;
+      return Number(b.id||0) - Number(a.id||0);
+    });
+
+    return rows;
+  }
+
+  function renderReqList() {
+    clearMsg($("reqErr"));
+    clearMsg($("reqOk"));
+
+    const list = $("reqList");
+    if (!list) return;
+    list.innerHTML = "";
+
+    const rows = currentReqRows();
+    if (!rows.length) {
+      const empty = document.createElement("div");
+      empty.className = "muted";
+      empty.textContent = "No requests.";
+      list.appendChild(empty);
+      return;
+    }
+
+    for (const r of rows) {
+      const status = String(r.status || "");
+      const isPending = status === "PENDING";
+
+      const type = String(r.request_type || "").replaceAll("_"," ");
+      const emp = String(r.requested_for_employee_id ?? "");
+      const proj = String(r.project_id ?? "");
+      const from = shortDate(r.start_date);
+      const to = shortDate(r.end_date);
+
+      const card = document.createElement("div");
+      card.className = "req-item " + (isPending ? "pending" : "decided");
+
+      const extra = (!isPending)
+        ? `<div class="req-lines">
+             <div><span class="kv">Decision at:</span> ${escapeHtml(shortDate(r.decision_at) || "")}</div>
+             <div><span class="kv">Note:</span> ${escapeHtml(r.decision_note || "")}</div>
+           </div>`
+        : "";
+
+      const actions = isPending
+        ? `<div class="req-actions">
+             <button class="btn small primary" data-act="approve" data-id="${r.id}">Approve</button>
+             <button class="btn small danger" data-act="reject" data-id="${r.id}">Reject</button>
+           </div>`
+        : `<div class="kv">#${escapeHtml(String(r.id))}</div>`;
+
+      card.innerHTML = `
+        <div class="req-head">
+          <div>
+            <div class="req-badges">
+              <span class="badge primary">${escapeHtml(type)}</span>
+              <span class="badge">${escapeHtml(status)}</span>
+              <span class="kv">#${escapeHtml(String(r.id))} • ${escapeHtml(from)} → ${escapeHtml(to)}</span>
+            </div>
+            <div class="req-lines">
+              <div><span class="kv">Employee:</span> ${escapeHtml(emp)}</div>
+              <div><span class="kv">Project:</span> ${escapeHtml(proj)}</div>
+            </div>
+            ${extra}
+          </div>
+          ${actions}
+        </div>
+      `;
+      list.appendChild(card);
+
+      if (isPending) {
+        card.querySelectorAll("button[data-act]").forEach(btn => {
+          btn.addEventListener("click", () => {
+            const act = btn.getAttribute("data-act");
+            openDecisionModal({
+              requestId: r.id,
+              decision: act === "approve" ? "APPROVE" : "REJECT",
+              meta: `#${r.id} • ${r.request_type} • ${from} → ${to} • emp:${emp} • proj:${proj}`
+            });
+          });
+        });
+      }
+    }
+  }
+
+  async function refreshUnifiedRequests() {
+    $("btnReqRefresh").disabled = true;
+    try {
+      await loadReqMine();
+      try {
+        await loadReqAll();
+        if ($("reqScope")) $("reqScope").disabled = false;
+      } catch {
+        if ($("reqScope")) { $("reqScope").value = "mine"; $("reqScope").disabled = true; }
+        reqState.scope = "mine";
+      }
+      renderReqList();
+    } catch (e) {
+      setErr($("reqErr"), "❌ " + e.message);
+    } finally {
+      $("btnReqRefresh").disabled = false;
+    }
+  }
+
+  // wire tabs
+  $("tabCreate").addEventListener("click", () => activate("create"));
+  $("tabList").addEventListener("click", async () => { activate("list"); await refreshAssignments(); });
+  $("tabRequests").addEventListener("click", async () => { activate("requests"); await refreshUnifiedRequests(); });
+  if ($("reqTabPending")) $("reqTabPending").addEventListener("click", () => setReqTab("PENDING"));
+  if ($("reqTabApproved")) $("reqTabApproved").addEventListener("click", () => setReqTab("APPROVED"));
+  if ($("reqTabRejected")) $("reqTabRejected").addEventListener("click", () => setReqTab("REJECTED"));
+  if ($("reqTabAll")) $("reqTabAll").addEventListener("click", () => setReqTab("ALL"));
+  on("reqSearch", "input", renderReqList);
+  if ($("reqScope")) $("reqScope").addEventListener("change", () => { reqState.scope = $("reqScope").value; renderReqList(); });
+
+
+  // create submit
+  $("btnSubmitRequest").addEventListener("click", async () => {
+    clearMsg($("createOk"));
+    clearMsg($("createErr"));
+
+    const employeeId = Number($("selEmployee").value);
+    const projectId = Number($("selProject").value);
+    const start = $("inpFrom").value || null;
+    const end = $("inpTo").value || null;
+    const shift = ($("selShift").value === "CUSTOM") ? ($("inpShiftCustom").value || "").trim() : $("selShift").value;
+    const note = ($("inpNote").value || "").trim();
+
+    if (!employeeId || !projectId) { setErr($("createErr"), "Select employee and project."); return; }
+    if (!start || !end) { setErr($("createErr"), "Select dates."); return; }
+    if ($("selShift").value === "CUSTOM" && !shift) { setErr($("createErr"), "Enter custom shift like 07:00-15:30."); return; }
+
+    const body = {
+      request_type: "CREATE_ASSIGNMENT",
+      requested_for_employee_id: employeeId,
+      project_id: projectId,
+      start_date: start,
+      end_date: end,
+      payload_json: { shift, note }
+    };
+
+    try {
+      const data = await api("/api/assignment-requests", { method: "POST", body: JSON.stringify(body) });
+      const r = data.request || data;
+      setOk($("createOk"), `✅ Request submitted (#${r.id})`);
+      await refreshRequests();
+      activate("requests");
+    } catch (e) {
+      setErr($("createErr"), "❌ " + e.message);
+      console.error(e);
+    }
+  });
+
+  // list controls
+  on("btnListRefresh", "click", refreshAssignments);
+  on("listSearch", "input", renderAssignments);
+  on("listSort", "change", renderAssignments);
+  on("listRange", "change", renderAssignments);
+
+  // requests controls
+  on("btnReqRefresh", "click", refreshUnifiedRequests);
+  on("inboxSearch", "input", renderInbox);
+  on("mineSearch", "input", renderMyRequests);
+
+  $("btnRefreshAll").addEventListener("click", async () => {
+    await refreshRequests();
+    await refreshAssignments();
+  });
+
+  // decision modal buttons
+  on("btnModalCancel", "click", closeDecisionModal);
+  $("btnModalConfirm").addEventListener("click", async () => {
+    const note = ($("modalNote").value || "").trim();
+    const pending = state.pendingDecision;
+    closeDecisionModal();
+    if (!pending) return;
+    await decide(pending.requestId, pending.decision, note);
+  });
+  $("modalBackdrop").addEventListener("click", (e) => {
+    if (e.target === $("modalBackdrop")) closeDecisionModal();
+  });
+
+  // edit modal buttons
+  on("btnEditCancel", "click", closeEditModal);
+  on("btnEditSubmit", "click", submitModifyRequest);
+  $("editBackdrop").addEventListener("click", (e) => {
+    if (e.target === $("editBackdrop")) closeEditModal();
+  });
+
+  // init
+  (async () => {
+    await loadEmployeesProjects();
+
+    // fill employee select
+    fillSelect($("selEmployee"), state.employees, (e) => {
+      const code = e.employee_code ? (e.employee_code + " - ") : "";
+      const sot = e.sot || null;
+      const sotFirst = sot?.first_name ?? null;
+      const sotLast = sot?.last_name ?? null;
+      const sotName = [sotFirst, sotLast].filter(Boolean).join(" ").trim();
+      const name = (sotName || e.full_name || [e.first_name, e.last_name].filter(Boolean).join(" ") || ("Employee " + e.id));
+      return (code + name).trim();
+    });
+
+    // fill project select
+    fillSelect($("selProject"), state.projects, (p) => {
+      const code = p.project_code ? (p.project_code + " - ") : (p.code ? (p.code + " - ") : "");
+      const name = p.name || p.project_name || ("Project " + p.id);
+      return (code ? code : (p.id + " - ")) + name;
+    });
+
+    initShiftSelect($("selShift"), $("shiftCustomWrap"), $("inpShiftCustom"));
+    setDefaultDatesTomorrow();
+
+    initShiftSelect($("editShift"), $("editShiftCustomWrap"), $("editShiftCustom"));
+
+    await refreshRequests();
+    await refreshAssignments();
+  })().catch((e) => {
+    console.error(e);
+  });
+})();
+
+// Phase 4.1: reload lists when login/logout happens
+onAuthChanged(() => { try { loadEmployeesProjects && loadEmployeesProjects(); } catch (e) {} });
+
+</script>
+</body>
+</html>

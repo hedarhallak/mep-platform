@@ -1,0 +1,239 @@
+
+/* public/app.css (RECOVERY) */
+/* Goal: restore basic dark UI + layout for Phase 1 workflows. */
+
+:root{
+  --bg:#0b1220;
+  --panel:#101827;
+  --panel2:#0e1622;
+  --text:#e6edf3;
+  --muted:#94a3b8;
+  --border:rgba(255,255,255,0.12);
+  --border2:rgba(255,255,255,0.08);
+  --primary:#2563eb;
+  --ok:#34d399;
+  --warn:#f59e0b;
+  --danger:#ef4444;
+}
+
+*{ box-sizing:border-box; }
+html,body{ height:100%; }
+body{
+  margin:0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  background: radial-gradient(1200px 600px at 20% 10%, rgba(255,255,255,0.06), transparent 55%),
+              radial-gradient(900px 500px at 80% 20%, rgba(37,99,235,0.12), transparent 55%),
+              var(--bg);
+  color:var(--text);
+}
+
+.hidden{ display:none !important; }
+
+a{ color:inherit; }
+
+.topbar{
+  position:sticky;
+  top:0;
+  z-index:50;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  padding:12px 18px;
+  border-bottom:1px solid var(--border2);
+  background: rgba(11,18,32,0.85);
+  backdrop-filter: blur(10px);
+}
+
+.brand{
+  font-weight:800;
+  letter-spacing:0.2px;
+}
+
+.tabs{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  align-items:center;
+}
+
+.tab{
+  border:1px solid var(--border);
+  background: rgba(255,255,255,0.03);
+  color:var(--text);
+  padding:8px 12px;
+  border-radius:999px;
+  cursor:pointer;
+  font-size:14px;
+}
+.tab.active{
+  border-color: rgba(16,185,129,0.55);
+  background: rgba(16,185,129,0.10);
+}
+
+.right{
+  display:flex;
+  gap:10px;
+  align-items:center;
+}
+
+.pill{
+  border:1px solid var(--border);
+  background: rgba(255,255,255,0.03);
+  padding:6px 10px;
+  border-radius:999px;
+  font-size:13px;
+  color:var(--text);
+}
+
+.container{
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 18px;
+}
+
+.view h2{
+  margin: 18px 0 12px 0;
+  font-size: 30px;
+  font-weight: 800;
+}
+
+.card{
+  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.02));
+  border:1px solid var(--border);
+  border-radius:18px;
+  padding:14px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+  margin-bottom: 14px;
+}
+
+.card-title{
+  font-weight:700;
+  margin-bottom: 10px;
+}
+
+.row{
+  display:flex;
+  gap:10px;
+  align-items:center;
+  flex-wrap:wrap;
+}
+
+.hint{
+  margin-top:10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.muted{
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.list .item{
+  padding:10px 12px;
+  border:1px solid var(--border2);
+  border-radius:14px;
+  margin-bottom:10px;
+  background: rgba(255,255,255,0.02);
+}
+
+.btn{
+  border:1px solid var(--border);
+  background: rgba(255,255,255,0.03);
+  color: var(--text);
+  padding: 9px 12px;
+  border-radius: 12px;
+  cursor:pointer;
+  font-size:14px;
+}
+.btn:hover{ border-color: rgba(255,255,255,0.20); }
+.btn.primary{
+  background: rgba(37,99,235,0.90);
+  border-color: rgba(37,99,235,0.90);
+  color: #fff;
+}
+.btn:disabled{
+  opacity:0.55;
+  cursor:not-allowed;
+}
+
+.input, .select{
+  border:1px solid var(--border);
+  background: rgba(0,0,0,0.15);
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: 12px;
+  font-size: 14px;
+}
+.select{ cursor:pointer; }
+
+.tableWrap{
+  border:1px solid var(--border);
+  border-radius: 14px;
+  overflow:auto;
+  background: rgba(255,255,255,0.02);
+}
+table{
+  width:100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+th,td{
+  padding: 10px;
+  border-bottom: 1px solid var(--border2);
+  white-space: nowrap;
+}
+thead th{
+  position: sticky;
+  top: 0;
+  background: rgba(255,255,255,0.04);
+  border-bottom: 1px solid rgba(255,255,255,0.10);
+}
+
+/* Assignments sidebar layout (kept for Phase 1) */
+#view-assignments .assign-layout{
+  display:grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 16px;
+  align-items:start;
+}
+#view-assignments .assign-sidebar{
+  background: var(--panel2);
+  border:1px solid var(--border);
+  border-radius: 16px;
+  padding: 12px;
+}
+#view-assignments .assign-side-title{
+  font-weight:700;
+  margin-bottom: 10px;
+}
+#view-assignments .assign-side-btn{
+  width:100%;
+  text-align:left;
+  border:1px solid var(--border);
+  background: rgba(255,255,255,0.03);
+  color: var(--text);
+  padding: 10px 12px;
+  border-radius: 12px;
+  cursor:pointer;
+  margin-bottom: 8px;
+}
+#view-assignments .assign-side-btn.active{
+  border-color: rgba(16,185,129,0.55);
+  background: rgba(16,185,129,0.10);
+}
+#view-assignments .assign-side-note{
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Small helpers */
+.miniHint{ font-size: 12.5px; color: var(--muted); }
+.okText{ color: var(--ok); }
+.errText{ color: #fbbf24; }
+
+
+/* Step 2: profile gate (UI-only) */
+.tab.tab-disabled{opacity:0.45; cursor:not-allowed;}
