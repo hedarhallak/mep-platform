@@ -91,8 +91,10 @@ app.use("/api/auth",             loadRouter("./routes/auth"));
 app.use("/api/super",            auth, superAdmin, loadRouter("./routes/super_admin"));
 app.use("/api/attendance",       auth, loadRouter("./routes/attendance"));
 app.use("/api/assignments",      auth, loadRouter("./routes/assignments"));
+app.use("/api/assignments",      auth, require("./routes/auto_assign"));
 app.use("/api/projects",         auth, loadRouter("./routes/projects"));
 app.use("/api/project-trades",   auth, require("./routes/project_trades"));
+app.use("/api/project-foremen",  auth, require("./routes/project_foremen"));
 app.use("/api/invite-employee",  auth, require("./routes/invite_employee"));
 app.use("/api/onboarding",       require("./routes/onboarding")); // public — no auth
 app.use("/api/employees",        auth, loadRouter("./routes/employees"));
