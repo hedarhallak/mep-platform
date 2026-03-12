@@ -370,23 +370,29 @@ router.get("/whoami", async (req, res) => {
   try {
     const payload = jwt.verify(token, JWT_SECRET);
     const userId = payload?.user_id;
+    const { normalizeRole } = require("../middleware/roles");
 
-    // Additive: enrich with profile_status (do not break if DB lookup fails)
     if (userId) {
       try {
         const q = await pool.query(
-          "SELECT profile_status FROM public.app_users WHERE id = $1",
+          "SELECT profile_status, role, company_id FROM public.app_users au LEFT JOIN public.companies c ON c.company_id = au.company_id WHERE au.id = $1",
           [String(userId)]
         );
-        const profile_status = q.rows?.[0]?.profile_status || null;
-        return res.json({ ok: true, user: { ...payload, profile_status } });
+        const row = q.rows?.[0] || {};
+        return res.json({
+          ok: true,
+          user: {
+            ...payload,
+            role: normalizeRole(row.role || payload.role),
+            profile_status: row.profile_status || null,
+          }
+        });
       } catch {
-        // fallback to previous behavior
-        return res.json({ ok: true, user: payload });
+        return res.json({ ok: true, user: { ...payload, role: normalizeRole(payload.role) } });
       }
     }
 
-    return res.json({ ok: true, user: payload });
+    return res.json({ ok: true, user: { ...payload, role: normalizeRole(payload.role) } });
   } catch {
     return res.status(401).json({ ok: false, error: "INVALID_TOKEN" });
   }

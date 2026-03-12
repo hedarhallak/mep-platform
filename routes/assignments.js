@@ -17,15 +17,21 @@ const { pool }           = require("../db");
 const { audit, ACTIONS } = require("../lib/audit");
 
 // ── Role helpers ─────────────────────────────────────────
+const { normalizeRole } = require("../middleware/roles");
+
 function requireRoles(allowed) {
+  const normalized = allowed.map(r => normalizeRole(r));
   return (req, res, next) => {
-    if (!allowed.includes(req.user?.role))
+    if (!req.user) return res.status(401).json({ ok: false, error: "UNAUTHENTICATED" });
+    const userRole = normalizeRole(req.user.role);
+    if (userRole === "SUPER_ADMIN") return next();
+    if (!normalized.includes(userRole))
       return res.status(403).json({ ok: false, error: "FORBIDDEN" });
     return next();
   };
 }
-const ADMIN_ONLY = requireRoles(["ADMIN"]);
-const ADMIN_PM   = requireRoles(["ADMIN", "PM"]);
+const ADMIN_ONLY = requireRoles(["COMPANY_ADMIN", "ADMIN"]);
+const ADMIN_PM   = requireRoles(["COMPANY_ADMIN", "ADMIN", "TRADE_ADMIN", "PROJECT_MANAGER", "PM"]);
 
 // ── Time slots helper (every 30 min) ─────────────────────
 function generateTimeSlots() {
@@ -274,8 +280,9 @@ router.post("/requests", ADMIN_PM, async (req, res) => {
       });
 
     // Create request
-    // ADMIN requests are auto-approved
-    const isAdmin  = req.user.role === "ADMIN";
+    // COMPANY_ADMIN and TRADE_ADMIN requests are auto-approved
+    const autoApproveRoles = ["ADMIN", "COMPANY_ADMIN", "TRADE_ADMIN"];
+    const isAdmin  = autoApproveRoles.includes(normalizeRole(req.user.role));
     const status   = isAdmin ? "APPROVED" : "PENDING";
 
     const { rows } = await pool.query(
@@ -512,6 +519,102 @@ router.get("/", async (req, res) => {
   } catch (err) {
     console.error("GET /assignments error:", err);
     return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+  }
+});
+
+// ── PATCH /api/assignments/requests/:id/reassign ─────────
+// Atomically cancel old assignment + create new one in one transaction
+// Avoids race condition of cancel-then-create with overlap check
+router.patch("/requests/:id/reassign", ADMIN_PM, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const reqId     = Number(req.params.id);
+    const companyId = req.user.company_id;
+    const { new_employee_id } = req.body || {};
+
+    if (!new_employee_id)
+      return res.status(400).json({ ok: false, error: "NEW_EMPLOYEE_REQUIRED" });
+
+    await client.query("BEGIN");
+
+    // Get original assignment
+    const orig = await client.query(
+      `SELECT * FROM public.assignment_requests WHERE id = $1 AND company_id = $2 LIMIT 1`,
+      [reqId, companyId]
+    );
+    if (!orig.rows.length) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ ok: false, error: "REQUEST_NOT_FOUND" });
+    }
+    const r = orig.rows[0];
+    if (r.status !== "APPROVED") {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ ok: false, error: "CANNOT_REASSIGN" });
+    }
+
+    // Verify new employee belongs to company
+    const emp = await client.query(
+      `SELECT ep.employee_id, ep.full_name
+       FROM public.employee_profiles ep
+       JOIN public.app_users au ON au.employee_id = ep.employee_id
+       WHERE ep.employee_id = $1 AND au.company_id = $2 LIMIT 1`,
+      [new_employee_id, companyId]
+    );
+    if (!emp.rows.length) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ ok: false, error: "EMPLOYEE_NOT_FOUND" });
+    }
+
+    // Cancel old assignment
+    await client.query(
+      `UPDATE public.assignment_requests SET status = 'CANCELLED', updated_at = NOW() WHERE id = $1`,
+      [reqId]
+    );
+
+    // Check overlap for new employee (excluding the row we just cancelled)
+    const overlap = await client.query(
+      `SELECT id FROM public.assignment_requests
+       WHERE requested_for_employee_id = $1
+         AND company_id = $2
+         AND status IN ('APPROVED', 'PENDING')
+         AND start_date <= $3
+         AND end_date   >= $4`,
+      [new_employee_id, companyId, r.end_date, r.start_date]
+    );
+    if (overlap.rows.length > 0) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        ok: false,
+        error: "EMPLOYEE_ALREADY_ASSIGNED",
+        message: `${emp.rows[0].full_name} is already assigned to another project during this period.`,
+      });
+    }
+
+    // Create new assignment
+    const { rows } = await client.query(
+      `INSERT INTO public.assignment_requests
+         (company_id, project_id, requested_for_employee_id, requested_by_user_id,
+          start_date, end_date, shift_start, shift_end, notes,
+          status, request_type, payload_json,
+          decision_by_user_id, decision_at, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'APPROVED','CREATE_ASSIGNMENT','{}',
+               $4, NOW(), NOW(), NOW())
+       RETURNING *`,
+      [
+        companyId, r.project_id, new_employee_id, req.user.user_id,
+        r.start_date, r.end_date, r.shift_start, r.shift_end, r.notes || null,
+      ]
+    );
+
+    await client.query("COMMIT");
+
+    return res.json({ ok: true, request: rows[0] });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("PATCH reassign error:", err);
+    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+  } finally {
+    client.release();
   }
 });
 

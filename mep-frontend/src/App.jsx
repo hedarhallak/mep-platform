@@ -2,10 +2,13 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider, useAuth } from '@/hooks/useAuth'
 
-import AppLayout     from '@/components/layout/AppLayout'
-import LoginPage     from '@/pages/auth/LoginPage'
-import DashboardPage from '@/pages/dashboard/DashboardPage'
-import ProjectsPage  from '@/pages/projects/ProjectsPage'
+import AppLayout        from '@/components/layout/AppLayout'
+import LoginPage        from '@/pages/auth/LoginPage'
+import DashboardPage    from '@/pages/dashboard/DashboardPage'
+import ProjectsPage     from '@/pages/projects/ProjectsPage'
+import EmployeesPage    from '@/pages/employees/EmployeesPage'
+import OnboardingPage   from '@/pages/onboarding/OnboardingPage'
+import AssignmentsPage  from '@/pages/assignments/AssignmentsPage'
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
@@ -25,7 +28,8 @@ function AppRoutes() {
   const { user } = useAuth()
   return (
     <Routes>
-      <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <LoginPage />} />
+      <Route path="/login"      element={user ? <Navigate to="/dashboard" /> : <LoginPage />} />
+      <Route path="/onboarding" element={<OnboardingPage />} />
       <Route path="/" element={
         <ProtectedRoute>
           <AppLayout />
@@ -34,8 +38,8 @@ function AppRoutes() {
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard"   element={<DashboardPage />} />
         <Route path="projects"    element={<ProjectsPage />} />
-        <Route path="employees"   element={<div className="p-8 text-slate-400">Employees — Coming soon</div>} />
-        <Route path="assignments" element={<div className="p-8 text-slate-400">Assignments — Coming soon</div>} />
+        <Route path="employees"   element={<EmployeesPage />} />
+        <Route path="assignments" element={<AssignmentsPage />} />
         <Route path="map"         element={<div className="p-8 text-slate-400">Map View — Coming soon</div>} />
         <Route path="settings"    element={<div className="p-8 text-slate-400">Settings — Coming soon</div>} />
       </Route>
