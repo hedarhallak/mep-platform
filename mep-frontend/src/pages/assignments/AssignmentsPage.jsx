@@ -4,7 +4,7 @@ import {
   Briefcase, MapPin, Clock, User, Check, X, Loader2,
   ChevronRight, AlertCircle, Plus, Calendar, List,
   Map as MapIcon, Search, Users, TrendingUp, RefreshCw, ArrowLeftRight,
-  Zap, Bot, UserCheck, UserX, Shuffle, Mail, ChevronDown, ChevronUp
+  Zap, Bot, UserCheck, UserX
 } from 'lucide-react'
 
 const todayStr = () => new Date().toISOString().split('T')[0]
@@ -311,31 +311,25 @@ function MapTab({ selectedProj, form, onAssign, onModify, assigning, modifying, 
 
 
 // ─────────────────────────────────────────────────────────────
-// SmartAssignPanel
+// SmartAssignPanel — simplified
 // ─────────────────────────────────────────────────────────────
 function SmartAssignPanel({ onClose, onConfirmed }) {
   const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1)
   const tomorrowStr = tomorrow.toISOString().split('T')[0]
 
-  const [targetDate, setTargetDate]     = useState(tomorrowStr)
-  const [loading, setLoading]           = useState(false)
-  const [confirming, setConfirming]     = useState(false)
-  const [suggestions, setSuggestions]   = useState([])
-  const [fetched, setFetched]           = useState(false)
-  const [error, setError]               = useState('')
-  const [successInfo, setSuccessInfo]   = useState(null)
+  const [targetDate, setTargetDate]   = useState(tomorrowStr)
+  const [loading, setLoading]         = useState(false)
+  const [confirming, setConfirming]   = useState(false)
+  const [suggestions, setSuggestions] = useState([])
+  const [fetched, setFetched]         = useState(false)
+  const [error, setError]             = useState('')
+  const [successInfo, setSuccessInfo] = useState(null)
 
-  // Per-project shift overrides
-  const [shifts, setShifts] = useState({})
-  const getShift = (projId, key) => shifts[projId]?.[key]
-
-  const setShiftVal = (projId, key, val) =>
-    setShifts(p => ({ ...p, [projId]: { ...(p[projId] || {}), [key]: val } }))
-
-  // Swap employee in a suggestion
-  const [swapping, setSwapping]         = useState(null) // { projIdx, empIdx }
-  const [swapOptions, setSwapOptions]   = useState([])
-  const [loadingSwap, setLoadingSwap]   = useState(false)
+  // Per-project overrides: shift_start, shift_end, notes
+  const [overrides, setOverrides] = useState({})
+  const get = (projId, key) => overrides[projId]?.[key]
+  const set = (projId, key, val) =>
+    setOverrides(p => ({ ...p, [projId]: { ...(p[projId] || {}), [key]: val } }))
 
   const handleFetch = async () => {
     setError(''); setFetched(false); setSuggestions([])
@@ -344,52 +338,14 @@ function SmartAssignPanel({ onClose, onConfirmed }) {
       const r = await api.post('/assignments/auto-suggest', { target_date: targetDate })
       setSuggestions(r.data.suggestions || [])
       setFetched(true)
-    } catch(e) { setError(e.response?.data?.message || e.message) }
+    } catch (e) { setError(e.response?.data?.message || e.message) }
     finally { setLoading(false) }
   }
 
-  const handleSwapOpen = async (projIdx, empIdx, tradeCode) => {
-    setSwapping({ projIdx, empIdx })
-    setLoadingSwap(true)
-    try {
-      const proj = suggestions[projIdx]
-      const r = await api.get(`/assignments/suggest/${proj.project_id}?start_date=${targetDate}&end_date=${targetDate}`)
-      const busyIds = new Set(proj.employees.filter(e => e.employee_id).map(e => e.employee_id))
-      const opts = (r.data.suggestions || [])
-        .filter(s => s.is_available && !busyIds.has(s.id))
-        .slice(0, 6)
-      setSwapOptions(opts)
-    } catch(e) { setSwapOptions([]) }
-    finally { setLoadingSwap(false) }
-  }
-
-  const handleSwapSelect = (newEmp) => {
-    const { projIdx, empIdx } = swapping
-    setSuggestions(prev => {
-      const updated = prev.map((p, pi) => pi !== projIdx ? p : {
-        ...p,
-        employees: p.employees.map((e, ei) => ei !== empIdx ? e : {
-          employee_id:   newEmp.id,
-          employee_name: newEmp.full_name,
-          trade_code:    newEmp.trade_code,
-          contact_email: newEmp.contact_email,
-          type:          'manual_swap',
-          replacing:     e.employee_name,
-          score:         newEmp.score,
-        })
-      })
-      return updated
-    })
-    setSwapping(null)
-    setSwapOptions([])
-  }
-
-  const removeEmployee = (projIdx, empIdx) => {
+  const removeEmployee = (projIdx, empIdx) =>
     setSuggestions(prev => prev.map((p, pi) => pi !== projIdx ? p : {
-      ...p,
-      employees: p.employees.filter((_, ei) => ei !== empIdx)
+      ...p, employees: p.employees.filter((_, ei) => ei !== empIdx)
     }))
-  }
 
   const handleConfirm = async () => {
     setConfirming(true); setError('')
@@ -398,207 +354,145 @@ function SmartAssignPanel({ onClose, onConfirmed }) {
         .filter(p => p.employees.some(e => e.employee_id))
         .map(p => ({
           project_id:  p.project_id,
-          shift_start: getShift(p.project_id, 'shift_start') || p.shift_start,
-          shift_end:   getShift(p.project_id, 'shift_end')   || p.shift_end,
-          notes:       getShift(p.project_id, 'notes')       || '',
+          shift_start: get(p.project_id, 'shift_start') || p.shift_start,
+          shift_end:   get(p.project_id, 'shift_end')   || p.shift_end,
+          notes:       get(p.project_id, 'notes')       || '',
           employees:   p.employees.filter(e => e.employee_id),
         }))
       const r = await api.post('/assignments/auto-confirm', { target_date: targetDate, confirmed })
       setSuccessInfo(r.data)
       onConfirmed()
-    } catch(e) { setError(e.response?.data?.message || e.message) }
+    } catch (e) { setError(e.response?.data?.message || e.message) }
     finally { setConfirming(false) }
   }
 
-  const typeBadge = (type) => {
-    if (type === 'carry_over')   return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">↩ Carry-over</span>
-    if (type === 'replacement')  return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">🔄 Replacement</span>
-    if (type === 'new')          return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">🆕 New</span>
-    if (type === 'manual_swap')  return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700">✏️ Edited</span>
-    if (type === 'gap')          return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-600">⚠ Gap</span>
-    return null
-  }
+  const totalEmps = suggestions.reduce((n, p) => n + p.employees.filter(e => e.employee_id && e.type !== 'gap').length, 0)
 
-  // Success screen
+  // ── Success screen ──
   if (successInfo) return (
-    <div className="flex flex-col items-center justify-center py-12 px-8 text-center">
-      <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mb-4">
-        <Check className="w-8 h-8 text-emerald-600" />
+    <div className="flex flex-col items-center justify-center h-full px-8 text-center gap-4">
+      <div className="w-14 h-14 bg-emerald-100 rounded-full flex items-center justify-center">
+        <Check className="w-7 h-7 text-emerald-600" />
       </div>
-      <h3 className="text-lg font-bold text-slate-800 mb-2">Assignments Confirmed!</h3>
-      <div className="flex items-center gap-6 mt-4 mb-6">
-        <div className="text-center"><div className="text-2xl font-black text-indigo-600">{successInfo.assignments_created}</div><div className="text-xs text-slate-400">Created</div></div>
-        <div className="text-center"><div className="text-2xl font-black text-emerald-600">{successInfo.emails_sent}</div><div className="text-xs text-slate-400 flex items-center gap-1"><Mail className="w-3 h-3" />Emails Sent</div></div>
-        {successInfo.emails_failed > 0 && <div className="text-center"><div className="text-2xl font-black text-red-500">{successInfo.emails_failed}</div><div className="text-xs text-slate-400">Failed</div></div>}
+      <div>
+        <h3 className="text-base font-bold text-slate-800">Done!</h3>
+        <p className="text-xs text-slate-400 mt-1">
+          {successInfo.assignments_created} assignments created · {successInfo.emails_sent} emails sent
+          {successInfo.emails_failed > 0 && ` · ${successInfo.emails_failed} failed`}
+        </p>
       </div>
-      <button onClick={onClose} className="px-6 py-2.5 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-700 transition-colors">Done</button>
+      <button onClick={onClose} className="px-5 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-colors">
+        Close
+      </button>
     </div>
   )
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
+
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 flex-shrink-0">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center"><Zap className="w-4 h-4 text-white" /></div>
-          <div>
-            <h3 className="text-sm font-bold text-slate-800">Smart Assign</h3>
-            <p className="text-[11px] text-slate-400">Auto-generate assignments based on today's team</p>
-          </div>
+        <div className="flex items-center gap-2">
+          <Zap className="w-4 h-4 text-indigo-600" />
+          <h3 className="text-sm font-bold text-slate-800">Smart Assign</h3>
         </div>
-        <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"><X className="w-4 h-4" /></button>
-      </div>
-
-      {/* Date picker + Generate */}
-      <div className="flex items-end gap-3 px-5 py-4 border-b border-slate-100 flex-shrink-0">
-        <div className="flex-1">
-          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Target Date</label>
-          <input type="date" value={targetDate} min={tomorrowStr}
-            onChange={e => { setTargetDate(e.target.value); setFetched(false); setSuggestions([]) }}
-            className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-        </div>
-        <button onClick={handleFetch} disabled={loading}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-60">
-          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Bot className="w-4 h-4" />Generate</>}
+        <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+          <X className="w-4 h-4" />
         </button>
       </div>
 
-      {error && <div className="mx-5 mt-3 flex items-center gap-2 p-3 bg-red-50 border border-red-100 rounded-xl text-xs text-red-600 flex-shrink-0"><AlertCircle className="w-4 h-4 flex-shrink-0" />{error}</div>}
+      {/* Date + Generate */}
+      <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100 flex-shrink-0">
+        <input type="date" value={targetDate} min={tomorrowStr}
+          onChange={e => { setTargetDate(e.target.value); setFetched(false); setSuggestions([]) }}
+          className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+        <button onClick={handleFetch} disabled={loading}
+          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-60 whitespace-nowrap">
+          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Generate'}
+        </button>
+      </div>
 
-      {/* Suggestions */}
-      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+      {error && (
+        <div className="mx-5 mt-3 flex items-center gap-2 p-3 bg-red-50 border border-red-100 rounded-xl text-xs text-red-600 flex-shrink-0">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />{error}
+        </div>
+      )}
+
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+
+        {/* Empty state */}
         {!fetched && !loading && (
-          <div className="flex flex-col items-center justify-center py-16 text-center text-slate-400">
-            <Bot className="w-10 h-10 mb-3 opacity-30" />
-            <p className="text-sm font-semibold">Pick a date and click Generate</p>
-            <p className="text-xs mt-1 opacity-60">The algorithm will carry over today's team and find replacements for busy employees</p>
+          <div className="flex flex-col items-center justify-center py-20 text-center text-slate-400">
+            <Bot className="w-8 h-8 mb-3 opacity-25" />
+            <p className="text-sm">Pick a date and click Generate</p>
           </div>
         )}
 
         {fetched && suggestions.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-16 text-center text-slate-400">
-            <p className="text-sm font-semibold">No active projects found</p>
-          </div>
+          <p className="text-center text-sm text-slate-400 py-16">No active projects found</p>
         )}
 
+        {/* Project cards */}
         {suggestions.map((proj, projIdx) => {
-          const shiftStart = getShift(proj.project_id, 'shift_start') || proj.shift_start
-          const shiftEnd   = getShift(proj.project_id, 'shift_end')   || proj.shift_end
-          const validEmps  = proj.employees.filter(e => e.type !== 'gap')
+          const shiftStart = get(proj.project_id, 'shift_start') || proj.shift_start
+          const shiftEnd   = get(proj.project_id, 'shift_end')   || proj.shift_end
+          const emps       = proj.employees.filter(e => e.type !== 'gap')
           const gaps       = proj.employees.filter(e => e.type === 'gap')
 
           return (
-            <div key={proj.project_id} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-              {/* Project header */}
-              <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center gap-3">
-                <div className="w-7 h-7 bg-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0"><Briefcase className="w-3.5 h-3.5 text-white" /></div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-slate-800">{proj.project_code}</span>
-                    {proj.project_name && <span className="text-xs text-slate-400 truncate">{proj.project_name}</span>}
-                  </div>
-                  {proj.site_address && <div className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5"><MapPin className="w-2.5 h-2.5" />{proj.site_address}</div>}
-                </div>
-                <div className="text-[10px] text-slate-400">{proj.today_count} on site today</div>
+            <div key={proj.project_id} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+
+              {/* Project name */}
+              <div className="px-4 py-3 flex items-center gap-2 border-b border-slate-100">
+                <span className="text-sm font-bold text-slate-800">{proj.project_code}</span>
+                {proj.project_name && <span className="text-xs text-slate-400 truncate">{proj.project_name}</span>}
               </div>
 
-              {/* Foremen info */}
-              {Object.keys(proj.foremen || {}).length > 0 && (
-                <div className="px-4 py-2 border-b border-slate-100 flex flex-wrap gap-2">
-                  {Object.values(proj.foremen).map(f => (
-                    <div key={f.trade_code} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-50 border border-blue-100 rounded-lg">
-                      <div className="w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0">{(f.foreman_name||'?')[0]}</div>
-                      <div>
-                        <div className="text-[10px] font-bold text-indigo-700">{f.foreman_name}</div>
-                        <div className="text-[9px] text-slate-400">{f.trade_code} Foreman</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Shift override */}
-              <div className="px-4 py-2 border-b border-slate-100 flex items-center gap-3">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Shift</span>
+              {/* Shift + Notes */}
+              <div className="px-4 py-2.5 flex items-center gap-2 border-b border-slate-100 flex-wrap">
                 {[['shift_start', shiftStart], ['shift_end', shiftEnd]].map(([key, val]) => (
                   <select key={key} value={val}
-                    onChange={e => setShiftVal(proj.project_id, key, e.target.value)}
-                    className="px-2 py-1 border border-slate-200 rounded-lg text-[11px] bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400">
+                    onChange={e => set(proj.project_id, key, e.target.value)}
+                    className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400">
                     {SHIFTS.map(s => <option key={s} value={s}>{fmtTime(s)}</option>)}
                   </select>
                 ))}
+                <input type="text" placeholder="Notes..."
+                  value={get(proj.project_id, 'notes') || ''}
+                  onChange={e => set(proj.project_id, 'notes', e.target.value)}
+                  className="flex-1 min-w-[100px] px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400 placeholder:text-slate-300" />
               </div>
 
-              {/* Employees */}
+              {/* Employee list */}
               <div className="divide-y divide-slate-50">
-                {validEmps.map((emp, empIdx) => (
-                  <div key={empIdx} className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50/60">
-                    <div className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white" style={{ background: trade(emp.trade_code).dot }}>
+                {emps.map((emp, empIdx) => (
+                  <div key={empIdx} className="flex items-center gap-3 px-4 py-2.5">
+                    <div className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white"
+                      style={{ background: trade(emp.trade_code).dot }}>
                       {(emp.employee_name || '?')[0]}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-semibold text-slate-700">{emp.employee_name}</span>
-                        <TradePill code={emp.trade_code} />
-                        {typeBadge(emp.type)}
-                      </div>
-                      {emp.replacing && <div className="text-[10px] text-slate-400 mt-0.5">Replacing: {emp.replacing}</div>}
-                      {!emp.contact_email && <div className="text-[10px] text-amber-500 mt-0.5">⚠ No email — notification won't be sent</div>}
+                      <span className="text-sm font-medium text-slate-700">{emp.employee_name}</span>
                     </div>
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <button onClick={() => handleSwapOpen(projIdx, empIdx, emp.trade_code)}
-                        className="p-1.5 text-indigo-400 hover:bg-indigo-50 rounded-lg transition-colors" title="Swap">
-                        <Shuffle className="w-3.5 h-3.5" />
-                      </button>
-                      <button onClick={() => removeEmployee(projIdx, empIdx)}
-                        className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg transition-colors" title="Remove">
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+                    <TradePill code={emp.trade_code} />
+                    <button onClick={() => removeEmployee(projIdx, empIdx)}
+                      className="p-1 text-slate-300 hover:text-red-400 transition-colors rounded">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 ))}
-
-                {/* Swap dropdown */}
-                {swapping?.projIdx === projIdx && (
-                  <div className="px-4 py-3 bg-indigo-50 border-t border-indigo-100">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[11px] font-bold text-indigo-700 uppercase tracking-widest">Select Replacement</span>
-                      <button onClick={() => { setSwapping(null); setSwapOptions([]) }} className="text-indigo-400 hover:text-indigo-600"><X className="w-3.5 h-3.5" /></button>
-                    </div>
-                    {loadingSwap
-                      ? <div className="flex justify-center py-3"><Loader2 className="w-4 h-4 animate-spin text-indigo-400" /></div>
-                      : swapOptions.length === 0
-                        ? <p className="text-xs text-slate-400 text-center py-2">No available employees</p>
-                        : <div className="space-y-1 max-h-48 overflow-y-auto">
-                            {swapOptions.map(opt => (
-                              <button key={opt.id} onClick={() => handleSwapSelect(opt)}
-                                className="w-full flex items-center gap-2.5 px-3 py-2 bg-white rounded-lg hover:bg-indigo-100 transition-colors text-left border border-indigo-100">
-                                <div className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-bold text-white" style={{ background: trade(opt.trade_code).dot }}>{(opt.full_name||'?')[0]}</div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="text-xs font-semibold text-slate-700 truncate">{opt.full_name}</div>
-                                  <TradePill code={opt.trade_code} />
-                                </div>
-                                <span className="text-[10px] text-slate-400">{opt.distance_km} km</span>
-                              </button>
-                            ))}
-                          </div>
-                    }
-                  </div>
-                )}
 
                 {/* Gaps */}
                 {gaps.map((gap, gi) => (
-                  <div key={'gap'+gi} className="flex items-center gap-3 px-4 py-2.5 bg-red-50/60">
-                    <div className="w-7 h-7 rounded-full flex-shrink-0 bg-red-100 flex items-center justify-center"><UserX className="w-3.5 h-3.5 text-red-500" /></div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs font-semibold text-red-600">No replacement found</div>
-                      <div className="text-[10px] text-red-400">Was: {gap.replacing} · Trade: {gap.trade_code}</div>
-                    </div>
+                  <div key={'gap' + gi} className="flex items-center gap-3 px-4 py-2.5 bg-red-50/50">
+                    <UserX className="w-4 h-4 text-red-400 flex-shrink-0" />
+                    <span className="text-xs text-red-500">No replacement — {gap.trade_code}</span>
                   </div>
                 ))}
 
-                {validEmps.length === 0 && gaps.length === 0 && (
-                  <div className="px-4 py-4 text-center text-xs text-slate-400">No suggestions for this project</div>
+                {emps.length === 0 && gaps.length === 0 && (
+                  <p className="px-4 py-3 text-xs text-slate-400">No suggestions</p>
                 )}
               </div>
             </div>
@@ -607,15 +501,11 @@ function SmartAssignPanel({ onClose, onConfirmed }) {
       </div>
 
       {/* Confirm footer */}
-      {fetched && suggestions.some(p => p.employees.some(e => e.employee_id)) && (
-        <div className="flex-shrink-0 px-5 py-4 border-t border-slate-200 bg-white flex items-center justify-between gap-3">
-          <div className="text-xs text-slate-400">
-            <span className="font-semibold text-slate-600">
-              {suggestions.reduce((n, p) => n + p.employees.filter(e => e.employee_id).length, 0)}
-            </span> assignments · emails will be sent automatically
-          </div>
+      {fetched && totalEmps > 0 && (
+        <div className="flex-shrink-0 px-5 py-4 border-t border-slate-100 bg-white flex items-center justify-between gap-3">
+          <span className="text-xs text-slate-400">{totalEmps} assignments · emails auto-sent</span>
           <button onClick={handleConfirm} disabled={confirming}
-            className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white text-sm font-bold rounded-xl hover:bg-emerald-700 transition-colors disabled:opacity-60">
+            className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 transition-colors disabled:opacity-60">
             {confirming ? <Loader2 className="w-4 h-4 animate-spin" /> : <><UserCheck className="w-4 h-4" />Confirm & Send</>}
           </button>
         </div>
@@ -624,7 +514,7 @@ function SmartAssignPanel({ onClose, onConfirmed }) {
   )
 }
 
-function ListTab({ projects, assignments, loadingAsgn, onCancel, onModify, cancelling, modifying, successMsg, onRefresh }) {
+function ListTab({ projects, assignments, loadingAsgn, onModify, modifying, successMsg, onRefresh }) {
   const today = todayStr()
   const thisWeek = new Date(); thisWeek.setDate(thisWeek.getDate() + 7)
   const thisWeekStr = thisWeek.toISOString().split('T')[0]
@@ -640,11 +530,6 @@ function ListTab({ projects, assignments, loadingAsgn, onCancel, onModify, cance
   // Collapsed project groups
   const [collapsed, setCollapsed] = useState({})
   const toggleCollapse = (k) => setCollapsed(p => ({ ...p, [k]: !p[k] }))
-
-  // Stats
-  const activeToday   = assignments.filter(a => a.start_date <= today && a.end_date >= today).length
-  const activeWeek    = assignments.filter(a => a.start_date <= thisWeekStr && a.end_date >= today).length
-  const projectsCount = new Set(assignments.map(a => a.project_id)).size
 
   // Filtered assignments
   const filtered = assignments.filter(a => {
@@ -678,21 +563,10 @@ function ListTab({ projects, assignments, loadingAsgn, onCancel, onModify, cance
       )}
 
       <div className="flex-1 flex flex-col overflow-hidden min-h-0">
-      {/* Stats bar */}
+      {/* Actions bar */}
       <div className="flex-shrink-0 px-5 pt-4 pb-3 flex items-center gap-3">
-        {[
-          { label: 'Total Active',     value: assignments.length, color: 'text-indigo-600',  bg: 'bg-indigo-50  border-indigo-200' },
-          { label: 'On Site Today',    value: activeToday,        color: 'text-emerald-600', bg: 'bg-emerald-50 border-emerald-200' },
-          { label: 'Active This Week', value: activeWeek,         color: 'text-violet-600',  bg: 'bg-violet-50  border-violet-200' },
-          { label: 'Projects',         value: projectsCount,      color: 'text-amber-600',   bg: 'bg-amber-50   border-amber-200' },
-        ].map(s => (
-          <div key={s.label} className={`flex items-center gap-3 px-4 py-2.5 rounded-xl border ${s.bg}`}>
-            <div className={`text-xl font-black ${s.color}`}>{s.value}</div>
-            <div className="text-[10px] font-semibold text-slate-500 leading-tight">{s.label}</div>
-          </div>
-        ))}
         <button onClick={() => setShowSmartAssign(v => !v)}
-          className={`ml-auto flex items-center gap-2 px-4 py-2.5 rounded-xl border text-xs font-bold transition-colors ${showSmartAssign ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-50'}`}>
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-xs font-bold transition-colors ${showSmartAssign ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-50'}`}>
           <Zap className="w-3.5 h-3.5" />Smart Assign
         </button>
         {successMsg && (
@@ -807,11 +681,7 @@ function ListTab({ projects, assignments, loadingAsgn, onCancel, onModify, cance
                               <div className="flex items-center gap-1.5">
                                 <button onClick={() => onModify(a)} disabled={modifying === a.id}
                                   className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-indigo-500 hover:bg-indigo-50 rounded-lg transition-colors border border-indigo-200 whitespace-nowrap disabled:opacity-50">
-                                  {modifying === a.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <><ArrowLeftRight className="w-3 h-3" />Modify</>}
-                                </button>
-                                <button onClick={() => onCancel(a.id)} disabled={cancelling === a.id}
-                                  className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-red-400 hover:bg-red-50 rounded-lg transition-colors border border-red-200 whitespace-nowrap disabled:opacity-50">
-                                  {cancelling === a.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <><X className="w-3 h-3" />Cancel</>}
+                                  {modifying === a.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <><ArrowLeftRight className="w-3 h-3" />Move</>}
                                 </button>
                               </div>
                             </div>
@@ -836,12 +706,10 @@ export default function AssignmentsPage() {
   const [loadingProj, setLoadingProj] = useState(true)
   const [loadingAsgn, setLoadingAsgn] = useState(true)
   const [assigning, setAssigning] = useState(null)
-  const [cancelling, setCancelling] = useState(null)
   const [successMsg, setSuccessMsg] = useState('')
   const [mapProj, setMapProj] = useState(null)
   const [mapForm,        setMapForm]        = useState({ start_date: todayStr(), end_date: todayStr() })
   const [reassignModal,  setReassignModal]  = useState(null)
-  const [loadingReassign,setLoadingReassign]= useState(false)
   const [modifying,    setModifying]    = useState(null)
 
   useEffect(() => {
@@ -873,40 +741,19 @@ export default function AssignmentsPage() {
     finally { setAssigning(null) }
   }
 
-  const handleCancel = async (id) => {
-    if (!window.confirm('Cancel this assignment?')) return
-    setCancelling(id)
-    try { await api.patch(`/assignments/requests/${id}/cancel`); fetchAssignments() }
-    catch (e) { alert(e.response?.data?.message || e.message) }
-    finally { setCancelling(null) }
+  const handleReassign = (assignment) => {
+    const otherProjects = projects.filter(p => p.id !== assignment.project_id)
+    setReassignModal({ assignment, otherProjects })
   }
 
-  const handleReassign = async (assignment) => {
-    setLoadingReassign(true)
-    try {
-      const r = await api.get(`/assignments/suggest/${assignment.project_id}?start_date=${assignment.start_date}&end_date=${assignment.end_date}`)
-      // Get IDs of all employees currently assigned to this project (exclude them from suggestions)
-      // Note: GET /assignments returns employee_id (from ep.employee_id), not requested_for_employee_id
-      const assignedToProject = new Set(
-        assignments
-          .filter(a => a.project_id === assignment.project_id)
-          .map(a => a.employee_id)
-      )
-      const suggestions = (r.data.suggestions || []).filter(s => !assignedToProject.has(s.id))
-      setReassignModal({ assignment, suggestions })
-    } catch (e) { alert(e.response?.data?.message || e.message) }
-    finally { setLoadingReassign(false) }
-  }
-
-  const handleModifyConfirm = async (newEmpId) => {
+  const handleModifyConfirm = async (newProjectId) => {
     const { assignment } = reassignModal
-    setModifying(newEmpId)
+    setModifying(newProjectId)
     try {
-      // Atomic reassign — cancel old + create new in one DB transaction
-      await api.patch(`/assignments/requests/${assignment.id}/reassign`, { new_employee_id: newEmpId })
+      await api.patch(`/assignments/requests/${assignment.id}/move`, { new_project_id: newProjectId })
       fetchAssignments()
       setReassignModal(null)
-      setSuccessMsg('Modified successfully!')
+      setSuccessMsg('Moved successfully!')
       setTimeout(() => setSuccessMsg(''), 4000)
     } catch (e) { alert(e.response?.data?.message || e.message) }
     finally { setModifying(null) }
@@ -952,8 +799,8 @@ export default function AssignmentsPage() {
       <div className="flex-1 flex flex-col overflow-hidden p-4 gap-4 min-h-0">
         {tab === 'list' && (
           <div className="flex-1 flex rounded-xl border border-slate-200 overflow-hidden bg-white min-h-0">
-            <ListTab assignments={assignments} loadingAsgn={loadingAsgn}
-              onCancel={handleCancel} onModify={handleReassign} cancelling={cancelling} modifying={modifying} successMsg={successMsg}
+            <ListTab projects={projects} assignments={assignments} loadingAsgn={loadingAsgn}
+              onModify={handleReassign} modifying={modifying} successMsg={successMsg}
               onRefresh={fetchAssignments} />
           </div>
         )}
@@ -1001,54 +848,41 @@ export default function AssignmentsPage() {
           </div>
         )}
       </div>
-      {/* Modify Modal */}
+      {/* Move Modal */}
       {reassignModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-bold text-slate-800">Modify Assignment</h3>
+                <h3 className="text-sm font-bold text-slate-800">Move to Project</h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Replacing <span className="font-semibold text-slate-600">{reassignModal.assignment.employee_name}</span> on <span className="font-semibold text-indigo-600">{reassignModal.assignment.project_code}</span>
+                  Moving <span className="font-semibold text-slate-600">{reassignModal.assignment.employee_name}</span> from <span className="font-semibold text-indigo-600">{reassignModal.assignment.project_code}</span>
                 </p>
               </div>
               <button onClick={() => setReassignModal(null)} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="max-h-80 overflow-y-auto divide-y divide-slate-50">
-              {loadingReassign
-                ? <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-slate-300" /></div>
-                : reassignModal.suggestions.length === 0
-                  ? <div className="py-8 text-center text-xs text-slate-400">No available employees for this period</div>
-                  : reassignModal.suggestions.filter(s => s.is_available && s.id !== reassignModal.assignment.employee_id).map(emp => {
-                      const c = trade(emp.trade_code)
-                      return (
-                        <div key={emp.id} className="px-4 py-3 flex items-center gap-3 hover:bg-slate-50 transition-colors">
-                          <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white" style={{ background: c.dot }}>
-                            {(emp.full_name || '?')[0]}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="text-sm font-semibold text-slate-800 truncate">{emp.full_name}</div>
-                            <div className="flex items-center gap-2 mt-0.5">
-                              <TradePill code={emp.trade_code} />
-                              {emp.distance_km != null && <span className="text-[10px] text-slate-400">{emp.distance_km} km</span>}
-                              <span className="text-[10px] font-semibold text-slate-400">Score: {emp.score}</span>
-                            </div>
-                          </div>
-                          <button onClick={() => handleModifyConfirm(emp.id)} disabled={modifying === emp.id}
-                            className="flex-shrink-0 px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-60 whitespace-nowrap flex items-center gap-1">
-                            {modifying === emp.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <><ArrowLeftRight className="w-3 h-3" />Select</>}
-                          </button>
-                        </div>
-                      )
-                    })
+            <div className="max-h-72 overflow-y-auto divide-y divide-slate-50">
+              {reassignModal.otherProjects.length === 0
+                ? <div className="py-8 text-center text-xs text-slate-400">No other active projects</div>
+                : reassignModal.otherProjects.map(proj => (
+                    <button key={proj.id} onClick={() => handleModifyConfirm(proj.id)}
+                      disabled={modifying === proj.id}
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors text-left disabled:opacity-60">
+                      <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <Briefcase className="w-4 h-4 text-white" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-semibold text-slate-800">{proj.project_code}</div>
+                        {proj.project_name && <div className="text-xs text-slate-400 truncate">{proj.project_name || proj.name}</div>}
+                      </div>
+                      {modifying === proj.id
+                        ? <Loader2 className="w-4 h-4 animate-spin text-indigo-500 flex-shrink-0" />
+                        : <ArrowLeftRight className="w-4 h-4 text-slate-300 flex-shrink-0" />}
+                    </button>
+                  ))
               }
-            </div>
-            <div className="px-6 py-3 border-t border-slate-100 flex justify-end">
-              <button onClick={() => setReassignModal(null)} className="px-4 py-2 text-xs font-semibold text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors">
-                Cancel
-              </button>
             </div>
           </div>
         </div>

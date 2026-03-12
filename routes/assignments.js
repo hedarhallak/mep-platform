@@ -618,6 +618,113 @@ router.patch("/requests/:id/reassign", ADMIN_PM, async (req, res) => {
   }
 });
 
+// ── PATCH /api/assignments/requests/:id/move ─────────────
+// Move an employee to a different project (same dates + shift)
+router.patch("/requests/:id/move", ADMIN_PM, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const reqId        = Number(req.params.id);
+    const companyId    = req.user.company_id;
+    const { new_project_id } = req.body || {};
+
+    if (!new_project_id)
+      return res.status(400).json({ ok: false, error: "NEW_PROJECT_REQUIRED" });
+
+    await client.query("BEGIN");
+
+    // Get original assignment
+    const orig = await client.query(
+      `SELECT ar.*, ep.full_name AS employee_name
+       FROM public.assignment_requests ar
+       JOIN public.employee_profiles ep ON ep.employee_id = ar.requested_for_employee_id
+       WHERE ar.id = $1 AND ar.company_id = $2 LIMIT 1`,
+      [reqId, companyId]
+    );
+    if (!orig.rows.length) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ ok: false, error: "REQUEST_NOT_FOUND" });
+    }
+    const r = orig.rows[0];
+    if (r.status !== "APPROVED") {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ ok: false, error: "CANNOT_MOVE", message: "Only APPROVED assignments can be moved." });
+    }
+    if (r.project_id === Number(new_project_id)) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ ok: false, error: "SAME_PROJECT", message: "Employee is already assigned to this project." });
+    }
+
+    // Verify new project belongs to company and is ACTIVE
+    const proj = await client.query(
+      `SELECT p.id, p.project_name, p.project_code, ps.code AS status_code
+       FROM public.projects p
+       JOIN public.project_statuses ps ON ps.id = p.status_id
+       WHERE p.id = $1 AND p.company_id = $2 LIMIT 1`,
+      [new_project_id, companyId]
+    );
+    if (!proj.rows.length) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ ok: false, error: "PROJECT_NOT_FOUND" });
+    }
+    if (proj.rows[0].status_code !== "ACTIVE") {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ ok: false, error: "PROJECT_NOT_ACTIVE" });
+    }
+
+    // Check employee not already assigned to new project during same period
+    const overlap = await client.query(
+      `SELECT id FROM public.assignment_requests
+       WHERE requested_for_employee_id = $1
+         AND project_id = $2
+         AND company_id = $3
+         AND status IN ('APPROVED', 'PENDING')
+         AND id != $4
+         AND start_date <= $5
+         AND end_date   >= $6`,
+      [r.requested_for_employee_id, new_project_id, companyId, reqId, r.end_date, r.start_date]
+    );
+    if (overlap.rows.length > 0) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        ok: false,
+        error: "EMPLOYEE_ALREADY_ON_PROJECT",
+        message: `${r.employee_name} is already assigned to this project during this period.`,
+      });
+    }
+
+    // Update project_id in-place (no need to cancel + recreate)
+    const { rows } = await client.query(
+      `UPDATE public.assignment_requests
+       SET project_id = $1, updated_at = NOW()
+       WHERE id = $2 AND company_id = $3
+       RETURNING *`,
+      [new_project_id, reqId, companyId]
+    );
+
+    await client.query("COMMIT");
+
+    await audit(pool, req, {
+      action:      ACTIONS.ASSIGNMENT_UPDATED,
+      entity_type: "assignment_request",
+      entity_id:   reqId,
+      details:     {
+        action:       "MOVED",
+        from_project: r.project_id,
+        to_project:   new_project_id,
+        employee:     r.employee_name,
+      },
+    });
+
+    return res.json({ ok: true, request: rows[0] });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("PATCH /move error:", err);
+    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+  } finally {
+    client.release();
+  }
+});
+
 module.exports = router;
 
 // ── GET /api/assignments/suggest/:project_id ──────────────
