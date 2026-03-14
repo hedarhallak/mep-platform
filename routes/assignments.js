@@ -15,6 +15,140 @@ const express = require("express");
 const router  = express.Router();
 const { pool }           = require("../db");
 const { audit, ACTIONS } = require("../lib/audit");
+const { sendAssignmentEmployee, sendAssignmentForeman } = require("../lib/email");
+
+// ── notifyAssignment ──────────────────────────────────────────
+// Sends email to the assigned employee + foreman (same project, same trade)
+// Never throws — errors are logged only.
+async function notifyAssignment(pool, assignmentRequestId, companyId) {
+  try {
+    // Load this assignment's details
+    const { rows } = await pool.query(
+      `SELECT
+         ar.start_date, ar.end_date, ar.shift_start, ar.shift_end, ar.notes,
+         ar.assignment_role,
+         ar.requested_for_employee_id AS employee_id,
+         ar.project_id,
+         ep.full_name    AS employee_name,
+         ep.trade_code,
+         ep.phone        AS employee_phone,
+         ep.contact_email AS employee_email,
+         p.project_code, p.project_name, p.site_address
+       FROM public.assignment_requests ar
+       JOIN public.employee_profiles ep ON ep.employee_id = ar.requested_for_employee_id
+       JOIN public.projects           p  ON p.id          = ar.project_id
+       WHERE ar.id = $1 AND ar.company_id = $2
+       LIMIT 1`,
+      [assignmentRequestId, companyId]
+    );
+    if (!rows.length) return;
+    const a = rows[0];
+
+    // Load all APPROVED assignments on the same project overlapping this period
+    const teamRes = await pool.query(
+      `SELECT
+         ep.full_name    AS name,
+         ep.phone,
+         ep.contact_email,
+         ar.assignment_role,
+         ar.id
+       FROM public.assignment_requests ar
+       JOIN public.employee_profiles ep ON ep.employee_id = ar.requested_for_employee_id
+       WHERE ar.project_id  = $1
+         AND ar.company_id  = $2
+         AND ar.status      = 'APPROVED'
+         AND ar.id         != $3
+         AND ar.start_date <= $4
+         AND ar.end_date   >= $5`,
+      [a.project_id, companyId, assignmentRequestId, a.end_date, a.start_date]
+    );
+    const team = teamRes.rows;
+
+    // Find foreman on this project (same period)
+    const foreman = team.find(t => t.assignment_role === 'FOREMAN');
+
+    if (a.assignment_role === 'FOREMAN') {
+      // ── Foreman assigned ──
+      // 1) Send foreman their own assignment details + list of workers
+      const workers = team.filter(t => t.assignment_role !== 'FOREMAN');
+      if (a.employee_email) {
+        await sendAssignmentForeman({
+          to:           a.employee_email,
+          foremanName:  a.employee_name,
+          employeeName: null, // foreman is the one being assigned
+          projectCode:  a.project_code,
+          projectName:  a.project_name,
+          siteAddress:  a.site_address,
+          startDate:    a.start_date,
+          endDate:      a.end_date,
+          shiftStart:   a.shift_start,
+          shiftEnd:     a.shift_end,
+          tradeCode:    a.trade_code,
+          teamList:     workers,
+          isSelfNotice: true,
+        });
+      }
+      // 2) Notify existing workers — update them with foreman contact
+      for (const worker of workers) {
+        if (worker.contact_email) {
+          await sendAssignmentEmployee({
+            to:            worker.contact_email,
+            employeeName:  worker.name,
+            projectCode:   a.project_code,
+            projectName:   a.project_name,
+            siteAddress:   a.site_address,
+            startDate:     a.start_date,
+            endDate:       a.end_date,
+            shiftStart:    a.shift_start,
+            shiftEnd:      a.shift_end,
+            foremanName:   a.employee_name,
+            foremanPhone:  a.employee_phone,
+            updateType:    'foreman_assigned',
+          });
+        }
+      }
+    } else {
+      // ── Worker / Journeyman assigned ──
+      // 1) Send worker their assignment + foreman info if available
+      if (a.employee_email) {
+        await sendAssignmentEmployee({
+          to:           a.employee_email,
+          employeeName: a.employee_name,
+          projectCode:  a.project_code,
+          projectName:  a.project_name,
+          siteAddress:  a.site_address,
+          startDate:    a.start_date,
+          endDate:      a.end_date,
+          shiftStart:   a.shift_start,
+          shiftEnd:     a.shift_end,
+          notes:        a.notes,
+          foremanName:  foreman?.name  || null,
+          foremanPhone: foreman?.phone || null,
+        });
+      }
+      // 2) Notify foreman — new team member added
+      if (foreman?.contact_email) {
+        await sendAssignmentForeman({
+          to:           foreman.contact_email,
+          foremanName:  foreman.name,
+          employeeName: a.employee_name,
+          projectCode:  a.project_code,
+          projectName:  a.project_name,
+          siteAddress:  a.site_address,
+          startDate:    a.start_date,
+          endDate:      a.end_date,
+          shiftStart:   a.shift_start,
+          shiftEnd:     a.shift_end,
+          tradeCode:    a.trade_code,
+          teamList:     null,
+          isSelfNotice: false,
+        });
+      }
+    }
+  } catch (err) {
+    console.error("[notifyAssignment] error:", err.message);
+  }
+}
 
 // ── Role helpers ─────────────────────────────────────────
 const { normalizeRole } = require("../middleware/roles");
@@ -208,7 +342,11 @@ router.post("/requests", ADMIN_PM, async (req, res) => {
       shift_start,
       shift_end,
       notes,
+      assignment_role,
     } = req.body || {};
+
+    const role = ['WORKER','FOREMAN','JOURNEYMAN'].includes((assignment_role||'').toUpperCase())
+      ? assignment_role.toUpperCase() : 'WORKER';
 
     // Validate required fields
     if (!project_id)   return res.status(400).json({ ok: false, error: "PROJECT_REQUIRED" });
@@ -288,11 +426,11 @@ router.post("/requests", ADMIN_PM, async (req, res) => {
     const { rows } = await pool.query(
       `INSERT INTO public.assignment_requests
          (company_id, project_id, requested_for_employee_id, requested_by_user_id,
-          start_date, end_date, shift_start, shift_end, notes,
+          start_date, end_date, shift_start, shift_end, notes, assignment_role,
           status, request_type, payload_json,
           decision_by_user_id, decision_at, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'CREATE_ASSIGNMENT','{}',
-               $11, $12, NOW(), NOW())
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'CREATE_ASSIGNMENT','{}',
+               $12, $13, NOW(), NOW())
        RETURNING *`,
       [
         companyId,
@@ -304,6 +442,7 @@ router.post("/requests", ADMIN_PM, async (req, res) => {
         shift_start,
         shift_end,
         notes || null,
+        role,
         status,
         isAdmin ? req.user.user_id : null,
         isAdmin ? new Date() : null,
@@ -317,6 +456,11 @@ router.post("/requests", ADMIN_PM, async (req, res) => {
       entity_name: `${employee.rows[0].full_name} → ${project.rows[0].project_name}`,
       new_values:  { status, start_date, end_date, shift_start, shift_end },
     });
+
+    // Send notification emails if auto-approved
+    if (isAdmin) {
+      notifyAssignment(pool, rows[0].id, companyId);
+    }
 
     return res.status(201).json({ ok: true, request: rows[0], auto_approved: isAdmin });
   } catch (err) {
@@ -371,6 +515,9 @@ router.patch("/requests/:id/approve", ADMIN_ONLY, async (req, res) => {
       entity_id:   reqId,
       details:     { action: "APPROVED" },
     });
+
+    // Send notification emails
+    notifyAssignment(pool, reqId, companyId);
 
     return res.json({ ok: true, request: rows[0] });
   } catch (err) {
@@ -478,6 +625,7 @@ router.get("/", async (req, res) => {
         ar.shift_start,
         ar.shift_end,
         ar.notes,
+        ar.assignment_role,
         ar.created_at,
         p.id           AS project_id,
         p.project_code,
@@ -487,6 +635,7 @@ router.get("/", async (req, res) => {
         ep.full_name   AS employee_name,
         ep.trade_code,
         ep.rank_code,
+        ep.phone,
         requester.username AS assigned_by
       FROM public.assignment_requests ar
       JOIN public.projects          p         ON p.id           = ar.project_id
@@ -608,6 +757,9 @@ router.patch("/requests/:id/reassign", ADMIN_PM, async (req, res) => {
 
     await client.query("COMMIT");
 
+    // Send notification to new employee + foreman
+    notifyAssignment(pool, rows[0].id, companyId);
+
     return res.json({ ok: true, request: rows[0] });
   } catch (err) {
     await client.query("ROLLBACK");
@@ -715,10 +867,149 @@ router.patch("/requests/:id/move", ADMIN_PM, async (req, res) => {
       },
     });
 
+    // Notify employee of new project assignment
+    notifyAssignment(pool, reqId, companyId);
+
     return res.json({ ok: true, request: rows[0] });
   } catch (err) {
     await client.query("ROLLBACK");
     console.error("PATCH /move error:", err);
+    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+  } finally {
+    client.release();
+  }
+});
+
+// ── POST /api/assignments/repeat-preview ─────────────────────
+// Shows what would be repeated from today to target_date
+router.post("/repeat-preview", ADMIN_PM, async (req, res) => {
+  try {
+    const companyId       = req.user.company_id;
+    const { target_date } = req.body || {};
+    if (!target_date)
+      return res.status(400).json({ ok: false, error: "TARGET_DATE_REQUIRED" });
+
+    const today = new Date().toISOString().split('T')[0];
+
+    // Get today's APPROVED assignments
+    const { rows: todayRows } = await pool.query(
+      `SELECT
+         ar.id, ar.requested_for_employee_id AS employee_id,
+         ar.project_id, ar.shift_start, ar.shift_end, ar.notes, ar.assignment_role,
+         ep.full_name  AS employee_name,
+         ep.trade_code,
+         p.project_code
+       FROM public.assignment_requests ar
+       JOIN public.employee_profiles ep ON ep.employee_id = ar.requested_for_employee_id
+       JOIN public.projects           p  ON p.id          = ar.project_id
+       WHERE ar.company_id = $1
+         AND ar.status     = 'APPROVED'
+         AND ar.start_date <= $2
+         AND ar.end_date   >= $2`,
+      [companyId, today]
+    );
+
+    if (!todayRows.length)
+      return res.json({ ok: true, to_assign: [], already_set: [], message: "No assignments today." });
+
+    // Check which employees already have an assignment on target_date
+    const { rows: busyRows } = await pool.query(
+      `SELECT DISTINCT requested_for_employee_id
+       FROM public.assignment_requests
+       WHERE company_id = $1
+         AND status IN ('APPROVED','PENDING')
+         AND start_date <= $2
+         AND end_date   >= $2`,
+      [companyId, target_date]
+    );
+    const busyIds = new Set(busyRows.map(r => r.requested_for_employee_id));
+
+    const to_assign   = todayRows.filter(a => !busyIds.has(a.employee_id))
+    const already_set = todayRows.filter(a =>  busyIds.has(a.employee_id))
+
+    return res.json({ ok: true, to_assign, already_set });
+  } catch (err) {
+    console.error("POST /repeat-preview error:", err);
+    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+  }
+});
+
+// ── POST /api/assignments/repeat-confirm ─────────────────────
+// Creates assignments for target_date based on today's assignments (skips already assigned)
+router.post("/repeat-confirm", ADMIN_PM, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const companyId       = req.user.company_id;
+    const { target_date } = req.body || {};
+    if (!target_date)
+      return res.status(400).json({ ok: false, error: "TARGET_DATE_REQUIRED" });
+
+    const today = new Date().toISOString().split('T')[0];
+
+    // Get today's assignments
+    const { rows: todayRows } = await pool.query(
+      `SELECT
+         ar.requested_for_employee_id AS employee_id,
+         ar.project_id, ar.shift_start, ar.shift_end, ar.notes, ar.assignment_role
+       FROM public.assignment_requests ar
+       WHERE ar.company_id = $1
+         AND ar.status     = 'APPROVED'
+         AND ar.start_date <= $2
+         AND ar.end_date   >= $2`,
+      [companyId, today]
+    );
+    if (!todayRows.length)
+      return res.json({ ok: true, created: 0, skipped: 0 });
+
+    // Get already assigned on target_date
+    const { rows: busyRows } = await pool.query(
+      `SELECT DISTINCT requested_for_employee_id
+       FROM public.assignment_requests
+       WHERE company_id = $1
+         AND status IN ('APPROVED','PENDING')
+         AND start_date <= $2
+         AND end_date   >= $2`,
+      [companyId, target_date]
+    );
+    const busyIds = new Set(busyRows.map(r => r.requested_for_employee_id));
+
+    await client.query("BEGIN");
+
+    let created = 0;
+    let skipped = 0;
+    const createdIds = [];
+
+    for (const a of todayRows) {
+      if (busyIds.has(a.employee_id)) { skipped++; continue; }
+
+      const { rows } = await client.query(
+        `INSERT INTO public.assignment_requests
+           (company_id, project_id, requested_for_employee_id, requested_by_user_id,
+            start_date, end_date, shift_start, shift_end, notes, assignment_role,
+            status, request_type, payload_json,
+            decision_by_user_id, decision_at, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$5,$6,$7,$8,$9,'APPROVED','CREATE_ASSIGNMENT','{}',
+                 $4,NOW(),NOW(),NOW())
+         RETURNING id`,
+        [companyId, a.project_id, a.employee_id, req.user.user_id,
+         target_date, a.shift_start, a.shift_end, a.notes || null,
+         a.assignment_role || 'WORKER']
+      );
+      createdIds.push(rows[0].id);
+      created++;
+    }
+
+    await client.query("COMMIT");
+
+    // Send notifications (fire and forget)
+    for (const id of createdIds) {
+      notifyAssignment(pool, id, companyId);
+    }
+
+    return res.json({ ok: true, created, skipped });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("POST /repeat-confirm error:", err);
     return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
   } finally {
     client.release();

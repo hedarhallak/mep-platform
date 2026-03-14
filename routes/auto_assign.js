@@ -288,7 +288,7 @@ router.post("/auto-suggest", ADMIN_ONLY, async (req, res) => {
     const todayAssignRes = await pool.query(
       `SELECT ar.project_id, ar.requested_for_employee_id AS employee_id,
               ep.full_name AS employee_name, ep.trade_code,
-              ar.shift_start, ar.shift_end
+              ar.shift_start, ar.shift_end, ar.assignment_role
        FROM public.assignment_requests ar
        JOIN public.employee_profiles ep ON ep.employee_id = ar.requested_for_employee_id
        WHERE ar.company_id = $1
@@ -317,17 +317,20 @@ router.post("/auto-suggest", ADMIN_ONLY, async (req, res) => {
     );
     const busyOnTarget = new Set(busyRes.rows.map(r => r.requested_for_employee_id));
 
-    // 3b. Get foremen for all active projects
+    // 3b. Get foremen from today's assignments (assignment_role = 'FOREMAN')
     const foremenRes = await pool.query(
-      `SELECT pf.project_id, pf.trade_code,
-              ep.full_name   AS foreman_name,
+      `SELECT ar.project_id, ep.trade_code,
+              ep.full_name     AS foreman_name,
               ep.contact_email AS foreman_email,
-              au.phone       AS foreman_phone
-       FROM public.project_foremen pf
-       JOIN public.employee_profiles ep ON ep.employee_id = pf.employee_id
-       LEFT JOIN public.app_users au    ON au.employee_id = pf.employee_id
-       WHERE pf.company_id = $1`,
-      [companyId]
+              ep.phone         AS foreman_phone
+       FROM public.assignment_requests ar
+       JOIN public.employee_profiles ep ON ep.employee_id = ar.requested_for_employee_id
+       WHERE ar.company_id      = $1
+         AND ar.status          = 'APPROVED'
+         AND ar.assignment_role = 'FOREMAN'
+         AND ar.start_date     <= $2
+         AND ar.end_date       >= $2`,
+      [companyId, today]
     );
     // Map: projectId -> { trade -> foremanInfo }
     const foremenByProject = {};
@@ -380,37 +383,38 @@ router.post("/auto-suggest", ADMIN_ONLY, async (req, res) => {
           if (replacement) {
             usedInThisRound.add(replacement.id);
             projSuggestions.push({
-              employee_id:   replacement.id,
-              employee_name: replacement.full_name,
-              trade_code:    replacement.trade_code,
-              contact_email: replacement.contact_email,
-              type:          "replacement",
-              replacing:     worker.employee_name,
-              score:         scoreEmployee(replacement, project),
+              employee_id:     replacement.id,
+              employee_name:   replacement.full_name,
+              trade_code:      replacement.trade_code,
+              contact_email:   replacement.contact_email,
+              assignment_role: worker.assignment_role || 'WORKER',
+              type:            "replacement",
+              replacing:       worker.employee_name,
+              score:           scoreEmployee(replacement, project),
             });
           } else {
-            // No replacement available — flag as gap
             projSuggestions.push({
-              employee_id:   null,
-              employee_name: null,
-              trade_code:    worker.trade_code,
-              contact_email: null,
-              type:          "gap",
-              replacing:     worker.employee_name,
-              score:         0,
+              employee_id:     null,
+              employee_name:   null,
+              trade_code:      worker.trade_code,
+              contact_email:   null,
+              assignment_role: worker.assignment_role || 'WORKER',
+              type:            "gap",
+              replacing:       worker.employee_name,
+              score:           0,
             });
           }
         } else {
-          // Available — carry over
           usedInThisRound.add(worker.employee_id);
           projSuggestions.push({
-            employee_id:   worker.employee_id,
-            employee_name: worker.employee_name,
-            trade_code:    worker.trade_code,
-            contact_email: allEmployees.find(e => e.id === worker.employee_id)?.contact_email,
-            type:          "carry_over",
-            replacing:     null,
-            score:         100 + scoreEmployee(allEmployees.find(e => e.id === worker.employee_id) || {}, project),
+            employee_id:     worker.employee_id,
+            employee_name:   worker.employee_name,
+            trade_code:      worker.trade_code,
+            contact_email:   allEmployees.find(e => e.id === worker.employee_id)?.contact_email,
+            assignment_role: worker.assignment_role || 'WORKER',
+            type:            "carry_over",
+            replacing:       null,
+            score:           100 + scoreEmployee(allEmployees.find(e => e.id === worker.employee_id) || {}, project),
           });
         }
       }
@@ -539,14 +543,15 @@ router.post("/auto-confirm", ADMIN_ONLY, async (req, res) => {
         const { rows } = await client.query(
           `INSERT INTO public.assignment_requests
              (company_id, project_id, requested_for_employee_id, requested_by_user_id,
-              start_date, end_date, shift_start, shift_end, notes,
+              start_date, end_date, shift_start, shift_end, notes, assignment_role,
               status, request_type, payload_json,
               decision_by_user_id, decision_at, created_at, updated_at)
-           VALUES ($1,$2,$3,$4,$5,$5,$6,$7,$8,'APPROVED','CREATE_ASSIGNMENT','{}',
+           VALUES ($1,$2,$3,$4,$5,$5,$6,$7,$8,$9,'APPROVED','CREATE_ASSIGNMENT','{}',
                    $4,NOW(),NOW(),NOW())
            RETURNING id`,
           [companyId, project_id, emp.employee_id, req.user.user_id,
-           target_date, shift_start || "06:00", shift_end || "14:30", notes || null]
+           target_date, shift_start || "06:00", shift_end || "14:30", notes || null,
+           ['WORKER','FOREMAN','JOURNEYMAN'].includes(emp.assignment_role) ? emp.assignment_role : 'WORKER']
         );
 
         const assignId = rows[0].id;

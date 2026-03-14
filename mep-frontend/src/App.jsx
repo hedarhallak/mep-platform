@@ -2,13 +2,16 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider, useAuth } from '@/hooks/useAuth'
 
-import AppLayout        from '@/components/layout/AppLayout'
-import LoginPage        from '@/pages/auth/LoginPage'
-import DashboardPage    from '@/pages/dashboard/DashboardPage'
-import ProjectsPage     from '@/pages/projects/ProjectsPage'
-import EmployeesPage    from '@/pages/employees/EmployeesPage'
-import OnboardingPage   from '@/pages/onboarding/OnboardingPage'
-import AssignmentsPage  from '@/pages/assignments/AssignmentsPage'
+import AppLayout           from '@/components/layout/AppLayout'
+import LoginPage           from '@/pages/auth/LoginPage'
+import DashboardPage       from '@/pages/dashboard/DashboardPage'
+import ProjectsPage        from '@/pages/projects/ProjectsPage'
+import EmployeesPage       from '@/pages/employees/EmployeesPage'
+import OnboardingPage      from '@/pages/onboarding/OnboardingPage'
+import AssignmentsPage     from '@/pages/assignments/AssignmentsPage'
+import AttendancePage      from '@/pages/attendance/AttendancePage'
+import MyHubPage           from '@/pages/hub/MyHubPage'
+import WorkforcePlannerPage from '@/pages/bi/WorkforcePlannerPage'
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
@@ -40,8 +43,12 @@ function AppRoutes() {
         <Route path="projects"    element={<ProjectsPage />} />
         <Route path="employees"   element={<EmployeesPage />} />
         <Route path="assignments" element={<AssignmentsPage />} />
-        <Route path="map"         element={<div className="p-8 text-slate-400">Map View — Coming soon</div>} />
+        <Route path="attendance"  element={<AttendancePage />} />
+        <Route path="my-hub"      element={<MyHubPage />} />
         <Route path="settings"    element={<div className="p-8 text-slate-400">Settings — Coming soon</div>} />
+
+        {/* Business Intelligence */}
+        <Route path="bi/workforce-planner" element={<WorkforcePlannerPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>

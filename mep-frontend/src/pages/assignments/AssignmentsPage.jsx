@@ -1,10 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import api from '@/lib/api'
 import {
-  Briefcase, MapPin, Clock, User, Check, X, Loader2,
+  Briefcase, MapPin, User, Check, X, Loader2,
   ChevronRight, AlertCircle, Plus, Calendar, List,
-  Map as MapIcon, Search, Users, TrendingUp, RefreshCw, ArrowLeftRight,
-  Zap, Bot, UserCheck, UserX
+  Map as MapIcon, Search, RefreshCw, ArrowLeftRight
 } from 'lucide-react'
 
 const todayStr = () => new Date().toISOString().split('T')[0]
@@ -14,9 +13,6 @@ function fmt(d, opts = { month: 'short', day: 'numeric' }) {
   return new Date(d).toLocaleDateString('en-CA', opts)
 }
 
-function daysBetween(a, b) {
-  return Math.max(1, Math.round((new Date(b) - new Date(a)) / 86400000) + 1)
-}
 
 const TRADE_MAP = {
   PLUMBING:      { bg: 'bg-sky-500',     light: 'bg-sky-100 text-sky-700',        dot: '#0ea5e9' },
@@ -50,88 +46,6 @@ function TradePill({ code }) {
   )
 }
 
-function ScoreBar({ score, max = 190 }) {
-  const pct = Math.min(100, Math.round((score / max) * 100))
-  const color = pct > 66 ? 'bg-emerald-400' : pct > 33 ? 'bg-amber-400' : 'bg-slate-300'
-  return (
-    <div className="flex items-center gap-1.5 mt-1.5">
-      <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-        <div className={`h-full rounded-full transition-all duration-500 ${color}`} style={{ width: `${pct}%` }} />
-      </div>
-      <span className="text-[10px] font-medium text-slate-400 w-5 text-right">{score}</span>
-    </div>
-  )
-}
-
-function GanttTimeline({ assignments }) {
-  if (!assignments.length) return null
-  const allDates = assignments.flatMap(a => [a.start_date, a.end_date]).sort()
-  const minDate = new Date(allDates[0])
-  const maxDate = new Date(allDates[allDates.length - 1])
-  const totalDays = Math.max(daysBetween(minDate, maxDate), 14)
-  const weeks = []
-  const cur = new Date(minDate)
-  cur.setDate(cur.getDate() - cur.getDay())
-  while (cur <= maxDate) { weeks.push(new Date(cur)); cur.setDate(cur.getDate() + 7) }
-  const leftPct = (date) => ((new Date(date) - minDate) / (totalDays * 86400000)) * 100
-  const widthPct = (s, e) => Math.max(1, ((new Date(e) - new Date(s)) / (totalDays * 86400000)) * 100)
-  const grouped = {}
-  assignments.forEach(a => {
-    if (!grouped[a.project_id]) grouped[a.project_id] = { ...a, rows: [] }
-    grouped[a.project_id].rows.push(a)
-  })
-  return (
-    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-      <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
-        <h3 className="text-sm font-bold text-slate-700">Assignment Timeline</h3>
-        <span className="text-xs text-slate-400">{assignments.length} assignments</span>
-      </div>
-      <div className="overflow-x-auto">
-        <div style={{ minWidth: 700 }}>
-          <div className="flex border-b border-slate-100 bg-slate-50">
-            <div className="w-48 flex-shrink-0 px-4 py-2 text-xs font-semibold text-slate-500 border-r border-slate-100">Employee / Project</div>
-            <div className="flex-1 relative h-8">
-              {weeks.map((w, i) => (
-                <div key={i} className="absolute top-0 h-full flex items-center" style={{ left: `${leftPct(w)}%` }}>
-                  <span className="text-[10px] text-slate-400 pl-1.5 font-medium whitespace-nowrap">{w.toLocaleDateString('en-CA', { month: 'short', day: 'numeric' })}</span>
-                  <div className="absolute left-0 top-0 h-full w-px bg-slate-200" />
-                </div>
-              ))}
-            </div>
-          </div>
-          {Object.values(grouped).map(group => (
-            <div key={group.project_id}>
-              <div className="flex border-b border-slate-50 bg-slate-50/60">
-                <div className="w-48 flex-shrink-0 px-4 py-1.5 flex items-center gap-2 border-r border-slate-100">
-                  <div className="w-4 h-4 bg-indigo-500 rounded flex items-center justify-center"><Briefcase className="w-2.5 h-2.5 text-white" /></div>
-                  <span className="text-xs font-bold text-slate-600 truncate">{group.project_code}</span>
-                </div>
-                <div className="flex-1" />
-              </div>
-              {group.rows.map(a => {
-                const c = trade(a.trade_code)
-                return (
-                  <div key={a.id} className="flex border-b border-slate-50 hover:bg-slate-50/40 transition-colors">
-                    <div className="w-48 flex-shrink-0 px-4 py-2 flex items-center gap-2 border-r border-slate-100">
-                      <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 text-white" style={{ background: c.dot }}>{(a.employee_name || '?')[0]}</div>
-                      <div className="min-w-0"><div className="text-xs font-medium text-slate-700 truncate">{a.employee_name}</div><TradePill code={a.trade_code} /></div>
-                    </div>
-                    <div className="flex-1 relative py-2 pr-2">
-                      <div className={`absolute top-2 bottom-2 rounded-md ${c.bg} opacity-80 flex items-center px-2 overflow-hidden`}
-                        style={{ left: `${leftPct(a.start_date)}%`, width: `${widthPct(a.start_date, a.end_date)}%`, minWidth: 4 }}>
-                        <span className="text-[10px] text-white font-semibold truncate whitespace-nowrap">{fmtTime(a.shift_start)} – {fmtTime(a.shift_end)}</span>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
 
 function MapTab({ selectedProj, form, onAssign, onModify, assigning, modifying, assignments, successMsg }) {
   const mapRef = useRef(null)
@@ -311,221 +225,358 @@ function MapTab({ selectedProj, form, onAssign, onModify, assigning, modifying, 
 
 
 // ─────────────────────────────────────────────────────────────
-// SmartAssignPanel — simplified
+// RepeatTodayModal
 // ─────────────────────────────────────────────────────────────
-function SmartAssignPanel({ onClose, onConfirmed }) {
+function RepeatTodayModal({ onClose, onSaved }) {
   const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1)
   const tomorrowStr = tomorrow.toISOString().split('T')[0]
 
-  const [targetDate, setTargetDate]   = useState(tomorrowStr)
-  const [loading, setLoading]         = useState(false)
-  const [confirming, setConfirming]   = useState(false)
-  const [suggestions, setSuggestions] = useState([])
-  const [fetched, setFetched]         = useState(false)
-  const [error, setError]             = useState('')
-  const [successInfo, setSuccessInfo] = useState(null)
+  const [targetDate, setTargetDate] = useState(tomorrowStr)
+  const [loading, setLoading]       = useState(false)
+  const [confirming, setConfirming] = useState(false)
+  const [preview, setPreview]       = useState(null) // { toAssign, alreadySet }
+  const [error, setError]           = useState('')
+  const [success, setSuccess]       = useState(false)
 
-  // Per-project overrides: shift_start, shift_end, notes
-  const [overrides, setOverrides] = useState({})
-  const get = (projId, key) => overrides[projId]?.[key]
-  const set = (projId, key, val) =>
-    setOverrides(p => ({ ...p, [projId]: { ...(p[projId] || {}), [key]: val } }))
-
-  const handleFetch = async () => {
-    setError(''); setFetched(false); setSuggestions([])
+  const handlePreview = async () => {
+    setError(''); setPreview(null)
     setLoading(true)
     try {
-      const r = await api.post('/assignments/auto-suggest', { target_date: targetDate })
-      setSuggestions(r.data.suggestions || [])
-      setFetched(true)
+      const r = await api.post('/assignments/repeat-preview', { target_date: targetDate })
+      setPreview(r.data)
     } catch (e) { setError(e.response?.data?.message || e.message) }
     finally { setLoading(false) }
   }
 
-  const removeEmployee = (projIdx, empIdx) =>
-    setSuggestions(prev => prev.map((p, pi) => pi !== projIdx ? p : {
-      ...p, employees: p.employees.filter((_, ei) => ei !== empIdx)
-    }))
-
   const handleConfirm = async () => {
-    setConfirming(true); setError('')
+    setError(''); setConfirming(true)
     try {
-      const confirmed = suggestions
-        .filter(p => p.employees.some(e => e.employee_id))
-        .map(p => ({
-          project_id:  p.project_id,
-          shift_start: get(p.project_id, 'shift_start') || p.shift_start,
-          shift_end:   get(p.project_id, 'shift_end')   || p.shift_end,
-          notes:       get(p.project_id, 'notes')       || '',
-          employees:   p.employees.filter(e => e.employee_id),
-        }))
-      const r = await api.post('/assignments/auto-confirm', { target_date: targetDate, confirmed })
-      setSuccessInfo(r.data)
-      onConfirmed()
+      await api.post('/assignments/repeat-confirm', { target_date: targetDate })
+      setSuccess(true)
+      onSaved()
     } catch (e) { setError(e.response?.data?.message || e.message) }
     finally { setConfirming(false) }
   }
 
-  const totalEmps = suggestions.reduce((n, p) => n + p.employees.filter(e => e.employee_id && e.type !== 'gap').length, 0)
-
-  // ── Success screen ──
-  if (successInfo) return (
-    <div className="flex flex-col items-center justify-center h-full px-8 text-center gap-4">
-      <div className="w-14 h-14 bg-emerald-100 rounded-full flex items-center justify-center">
-        <Check className="w-7 h-7 text-emerald-600" />
+  if (success) return (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-8 text-center">
+        <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <Check className="w-6 h-6 text-emerald-600" />
+        </div>
+        <h3 className="text-base font-bold text-slate-800 mb-1">Done!</h3>
+        <p className="text-xs text-slate-400 mb-6">Today's assignments repeated for {targetDate}</p>
+        <button onClick={onClose} className="px-5 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-colors">Close</button>
       </div>
-      <div>
-        <h3 className="text-base font-bold text-slate-800">Done!</h3>
-        <p className="text-xs text-slate-400 mt-1">
-          {successInfo.assignments_created} assignments created · {successInfo.emails_sent} emails sent
-          {successInfo.emails_failed > 0 && ` · ${successInfo.emails_failed} failed`}
-        </p>
-      </div>
-      <button onClick={onClose} className="px-5 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-colors">
-        Close
-      </button>
     </div>
   )
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
 
-      {/* Header */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <Zap className="w-4 h-4 text-indigo-600" />
-          <h3 className="text-sm font-bold text-slate-800">Smart Assign</h3>
-        </div>
-        <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
-          <X className="w-4 h-4" />
-        </button>
-      </div>
-
-      {/* Date + Generate */}
-      <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100 flex-shrink-0">
-        <input type="date" value={targetDate} min={tomorrowStr}
-          onChange={e => { setTargetDate(e.target.value); setFetched(false); setSuggestions([]) }}
-          className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-        <button onClick={handleFetch} disabled={loading}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-60 whitespace-nowrap">
-          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Generate'}
-        </button>
-      </div>
-
-      {error && (
-        <div className="mx-5 mt-3 flex items-center gap-2 p-3 bg-red-50 border border-red-100 rounded-xl text-xs text-red-600 flex-shrink-0">
-          <AlertCircle className="w-4 h-4 flex-shrink-0" />{error}
-        </div>
-      )}
-
-      {/* Body */}
-      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
-
-        {/* Empty state */}
-        {!fetched && !loading && (
-          <div className="flex flex-col items-center justify-center py-20 text-center text-slate-400">
-            <Bot className="w-8 h-8 mb-3 opacity-25" />
-            <p className="text-sm">Pick a date and click Generate</p>
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <RefreshCw className="w-4 h-4 text-indigo-600" />
+            <h3 className="text-sm font-bold text-slate-800">Repeat Today</h3>
           </div>
-        )}
-
-        {fetched && suggestions.length === 0 && (
-          <p className="text-center text-sm text-slate-400 py-16">No active projects found</p>
-        )}
-
-        {/* Project cards */}
-        {suggestions.map((proj, projIdx) => {
-          const shiftStart = get(proj.project_id, 'shift_start') || proj.shift_start
-          const shiftEnd   = get(proj.project_id, 'shift_end')   || proj.shift_end
-          const emps       = proj.employees.filter(e => e.type !== 'gap')
-          const gaps       = proj.employees.filter(e => e.type === 'gap')
-
-          return (
-            <div key={proj.project_id} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-
-              {/* Project name */}
-              <div className="px-4 py-3 flex items-center gap-2 border-b border-slate-100">
-                <span className="text-sm font-bold text-slate-800">{proj.project_code}</span>
-                {proj.project_name && <span className="text-xs text-slate-400 truncate">{proj.project_name}</span>}
-              </div>
-
-              {/* Shift + Notes */}
-              <div className="px-4 py-2.5 flex items-center gap-2 border-b border-slate-100 flex-wrap">
-                {[['shift_start', shiftStart], ['shift_end', shiftEnd]].map(([key, val]) => (
-                  <select key={key} value={val}
-                    onChange={e => set(proj.project_id, key, e.target.value)}
-                    className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400">
-                    {SHIFTS.map(s => <option key={s} value={s}>{fmtTime(s)}</option>)}
-                  </select>
-                ))}
-                <input type="text" placeholder="Notes..."
-                  value={get(proj.project_id, 'notes') || ''}
-                  onChange={e => set(proj.project_id, 'notes', e.target.value)}
-                  className="flex-1 min-w-[100px] px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400 placeholder:text-slate-300" />
-              </div>
-
-              {/* Employee list */}
-              <div className="divide-y divide-slate-50">
-                {emps.map((emp, empIdx) => (
-                  <div key={empIdx} className="flex items-center gap-3 px-4 py-2.5">
-                    <div className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white"
-                      style={{ background: trade(emp.trade_code).dot }}>
-                      {(emp.employee_name || '?')[0]}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <span className="text-sm font-medium text-slate-700">{emp.employee_name}</span>
-                    </div>
-                    <TradePill code={emp.trade_code} />
-                    <button onClick={() => removeEmployee(projIdx, empIdx)}
-                      className="p-1 text-slate-300 hover:text-red-400 transition-colors rounded">
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ))}
-
-                {/* Gaps */}
-                {gaps.map((gap, gi) => (
-                  <div key={'gap' + gi} className="flex items-center gap-3 px-4 py-2.5 bg-red-50/50">
-                    <UserX className="w-4 h-4 text-red-400 flex-shrink-0" />
-                    <span className="text-xs text-red-500">No replacement — {gap.trade_code}</span>
-                  </div>
-                ))}
-
-                {emps.length === 0 && gaps.length === 0 && (
-                  <p className="px-4 py-3 text-xs text-slate-400">No suggestions</p>
-                )}
-              </div>
-            </div>
-          )
-        })}
-      </div>
-
-      {/* Confirm footer */}
-      {fetched && totalEmps > 0 && (
-        <div className="flex-shrink-0 px-5 py-4 border-t border-slate-100 bg-white flex items-center justify-between gap-3">
-          <span className="text-xs text-slate-400">{totalEmps} assignments · emails auto-sent</span>
-          <button onClick={handleConfirm} disabled={confirming}
-            className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 transition-colors disabled:opacity-60">
-            {confirming ? <Loader2 className="w-4 h-4 animate-spin" /> : <><UserCheck className="w-4 h-4" />Confirm & Send</>}
+          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+            <X className="w-4 h-4" />
           </button>
         </div>
-      )}
+
+        <div className="px-6 py-4 space-y-4">
+          {/* Date */}
+          <div>
+            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Target Date</label>
+            <div className="flex gap-2">
+              <input type="date" value={targetDate} min={tomorrowStr}
+                onChange={e => { setTargetDate(e.target.value); setPreview(null) }}
+                className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+              <button onClick={handlePreview} disabled={loading}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-200 transition-colors disabled:opacity-60">
+                {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Preview'}
+              </button>
+            </div>
+          </div>
+
+          {error && (
+            <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-100 rounded-xl text-xs text-red-600">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />{error}
+            </div>
+          )}
+
+          {/* Preview results */}
+          {preview && (
+            <div className="space-y-3">
+              {/* To be assigned */}
+              {preview.to_assign?.length > 0 && (
+                <div>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                    Will be assigned ({preview.to_assign.length})
+                  </div>
+                  <div className="border border-slate-200 rounded-xl overflow-hidden max-h-48 overflow-y-auto divide-y divide-slate-50">
+                    {preview.to_assign.map((a, i) => {
+                      const c = trade(a.trade_code)
+                      return (
+                        <div key={i} className="flex items-center gap-2.5 px-3 py-2.5">
+                          <div className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white" style={{ background: c.dot }}>
+                            {(a.employee_name || '?')[0]}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs font-semibold text-slate-700 truncate">{a.employee_name}</div>
+                            <div className="text-[10px] text-slate-400">{a.project_code} · <RoleBadge role={a.assignment_role} /></div>
+                          </div>
+                          <Check className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Already assigned */}
+              {preview.already_set?.length > 0 && (
+                <div>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                    Already assigned — skipped ({preview.already_set.length})
+                  </div>
+                  <div className="border border-slate-100 rounded-xl overflow-hidden max-h-32 overflow-y-auto divide-y divide-slate-50 bg-slate-50/50">
+                    {preview.already_set.map((a, i) => (
+                      <div key={i} className="flex items-center gap-2.5 px-3 py-2">
+                        <div className="w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-bold text-white bg-slate-300">
+                          {(a.employee_name || '?')[0]}
+                        </div>
+                        <span className="text-xs text-slate-400 truncate">{a.employee_name} — {a.project_code}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {preview.to_assign?.length === 0 && (
+                <p className="text-sm text-center text-slate-400 py-4">All employees already have assignments for this date.</p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        {preview && preview.to_assign?.length > 0 && (
+          <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between gap-3">
+            <span className="text-xs text-slate-400">{preview.to_assign.length} assignments will be created</span>
+            <button onClick={handleConfirm} disabled={confirming}
+              className="flex items-center gap-2 px-5 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition-colors disabled:opacity-60">
+              {confirming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><Check className="w-3.5 h-3.5" />Confirm</>}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+const ROLES = [
+  { value: 'WORKER',     label: 'Worker',     color: 'bg-slate-100 text-slate-700' },
+  { value: 'FOREMAN',    label: 'Foreman',    color: 'bg-indigo-100 text-indigo-700' },
+  { value: 'JOURNEYMAN', label: 'Journeyman', color: 'bg-amber-100 text-amber-700' },
+]
+
+function RoleBadge({ role }) {
+  const r = ROLES.find(x => x.value === role) || ROLES[0]
+  return <span className={`inline-flex text-[10px] font-bold px-2 py-0.5 rounded-full ${r.color}`}>{r.label}</span>
+}
+
+function NewAssignmentModal({ projects, onClose, onSaved }) {
+  const [employees, setEmployees] = useState([])
+  const [loadingEmp, setLoadingEmp] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [empSearch, setEmpSearch] = useState('')
+
+  const [form, setForm] = useState({
+    project_id:      '',
+    employee_id:     '',
+    start_date:      todayStr(),
+    end_date:        todayStr(),
+    shift_start:     '06:00',
+    shift_end:       '14:30',
+    assignment_role: 'WORKER',
+    notes:           '',
+  })
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  useEffect(() => {
+    api.get('/assignments/employees')
+      .then(r => setEmployees(r.data.employees || []))
+      .catch(() => setEmployees([]))
+      .finally(() => setLoadingEmp(false))
+  }, [])
+
+  const filteredEmps = employees.filter(e =>
+    !empSearch || e.full_name.toLowerCase().includes(empSearch.toLowerCase())
+  )
+
+  const handleSave = async () => {
+    setError('')
+    if (!form.project_id)  return setError('Select a project')
+    if (!form.employee_id) return setError('Select an employee')
+    if (!form.start_date)  return setError('Set start date')
+    if (!form.end_date)    return setError('Set end date')
+    setSaving(true)
+    try {
+      await api.post('/assignments/requests', {
+        project_id:      Number(form.project_id),
+        employee_id:     Number(form.employee_id),
+        start_date:      form.start_date,
+        end_date:        form.end_date,
+        shift_start:     form.shift_start,
+        shift_end:       form.shift_end,
+        assignment_role: form.assignment_role,
+        notes:           form.notes || undefined,
+      })
+      onSaved()
+    } catch (e) { setError(e.response?.data?.message || e.message) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Plus className="w-4 h-4 text-indigo-600" />
+            <h3 className="text-sm font-bold text-slate-800">New Assignment</h3>
+          </div>
+          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="px-6 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
+
+          {/* Project */}
+          <div>
+            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Project</label>
+            <select value={form.project_id} onChange={e => set('project_id', e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
+              <option value="">Select project...</option>
+              {projects.map(p => (
+                <option key={p.id} value={p.id}>{p.project_code}{p.project_name ? ` — ${p.project_name}` : ''}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Employee */}
+          <div>
+            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Employee</label>
+            <div className="relative mb-1.5">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+              <input value={empSearch} onChange={e => setEmpSearch(e.target.value)} placeholder="Search employee..."
+                className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+            </div>
+            {loadingEmp
+              ? <div className="flex justify-center py-4"><Loader2 className="w-4 h-4 animate-spin text-slate-300" /></div>
+              : <div className="border border-slate-200 rounded-xl overflow-hidden max-h-36 overflow-y-auto">
+                  {filteredEmps.map(emp => {
+                    const c = trade(emp.trade_code)
+                    const selected = String(form.employee_id) === String(emp.id)
+                    return (
+                      <button key={emp.id} onClick={() => set('employee_id', emp.id)}
+                        className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-left border-b border-slate-50 last:border-0 transition-colors ${selected ? 'bg-indigo-50' : 'hover:bg-slate-50'}`}>
+                        <div className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white" style={{ background: c.dot }}>
+                          {(emp.full_name || '?')[0]}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs font-semibold text-slate-700 truncate">{emp.full_name}</div>
+                          <TradePill code={emp.trade_code} />
+                        </div>
+                        {selected && <Check className="w-3.5 h-3.5 text-indigo-600 flex-shrink-0" />}
+                      </button>
+                    )
+                  })}
+                  {filteredEmps.length === 0 && <p className="text-xs text-slate-400 text-center py-4">No employees found</p>}
+                </div>
+            }
+          </div>
+
+          {/* Role */}
+          <div>
+            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Role on Project</label>
+            <div className="flex gap-2">
+              {ROLES.map(r => (
+                <button key={r.value} onClick={() => set('assignment_role', r.value)}
+                  className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-colors ${form.assignment_role === r.value ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
+                  {r.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Dates */}
+          <div className="grid grid-cols-2 gap-3">
+            {[['Start Date','start_date'],['End Date','end_date']].map(([label, key]) => (
+              <div key={key}>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">{label}</label>
+                <input type="date" value={form[key]} onChange={e => set(key, e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+              </div>
+            ))}
+          </div>
+
+          {/* Shift */}
+          <div className="grid grid-cols-2 gap-3">
+            {[['Shift Start','shift_start'],['Shift End','shift_end']].map(([label, key]) => (
+              <div key={key}>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">{label}</label>
+                <select value={form[key]} onChange={e => set(key, e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                  {SHIFTS.map(s => <option key={s} value={s}>{fmtTime(s)}</option>)}
+                </select>
+              </div>
+            ))}
+          </div>
+
+          {/* Notes */}
+          <div>
+            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Notes (optional)</label>
+            <input type="text" value={form.notes} onChange={e => set('notes', e.target.value)}
+              placeholder="Any special instructions..."
+              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-slate-300" />
+          </div>
+
+          {error && (
+            <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-100 rounded-xl text-xs text-red-600">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />{error}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-end gap-3">
+          <button onClick={onClose} className="px-4 py-2 text-xs font-semibold text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors">
+            Cancel
+          </button>
+          <button onClick={handleSave} disabled={saving}
+            className="flex items-center gap-2 px-5 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-60">
+            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><Check className="w-3.5 h-3.5" />Assign</>}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
 
 function ListTab({ projects, assignments, loadingAsgn, onModify, modifying, successMsg, onRefresh }) {
   const today = todayStr()
-  const thisWeek = new Date(); thisWeek.setDate(thisWeek.getDate() + 7)
-  const thisWeekStr = thisWeek.toISOString().split('T')[0]
-
-  // Smart Assign panel
-  const [showSmartAssign, setShowSmartAssign] = useState(false)
 
   // Filters
-  const [filterProject, setFilterProject] = useState('')
+  const [filterProject,  setFilterProject]  = useState('')
   const [filterEmployee, setFilterEmployee] = useState('')
-  const [filterDate, setFilterDate] = useState('')
+  const [filterDate,     setFilterDate]     = useState('')
 
   // Collapsed project groups
   const [collapsed, setCollapsed] = useState({})
@@ -551,33 +602,16 @@ function ListTab({ projects, assignments, loadingAsgn, onModify, modifying, succ
   const groupList = Object.values(grouped).sort((a, b) => a.project_code.localeCompare(b.project_code))
 
   return (
-    <div className="flex-1 flex overflow-hidden min-h-0 bg-slate-50">
-      {/* Smart Assign Panel — slide in from right */}
-      {showSmartAssign && (
-        <div className="w-[480px] flex-shrink-0 bg-white border-l border-slate-200 flex flex-col overflow-hidden shadow-xl z-10">
-          <SmartAssignPanel
-            onClose={() => setShowSmartAssign(false)}
-            onConfirmed={() => { setShowSmartAssign(false); onRefresh?.() }}
-          />
+    <div className="flex-1 flex flex-col overflow-hidden min-h-0 bg-slate-50">
+      {/* Success message */}
+      {successMsg && (
+        <div className="flex-shrink-0 mx-5 mt-4 flex items-center gap-1.5 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-700 font-semibold">
+          <Check className="w-3.5 h-3.5" />{successMsg}
         </div>
       )}
 
-      <div className="flex-1 flex flex-col overflow-hidden min-h-0">
-      {/* Actions bar */}
-      <div className="flex-shrink-0 px-5 pt-4 pb-3 flex items-center gap-3">
-        <button onClick={() => setShowSmartAssign(v => !v)}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-xs font-bold transition-colors ${showSmartAssign ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-50'}`}>
-          <Zap className="w-3.5 h-3.5" />Smart Assign
-        </button>
-        {successMsg && (
-          <div className="flex items-center gap-1.5 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-700 font-semibold">
-            <Check className="w-3.5 h-3.5" />{successMsg}
-          </div>
-        )}
-      </div>
-
       {/* Filters */}
-      <div className="flex-shrink-0 px-5 pb-3 flex items-center gap-2">
+      <div className="flex-shrink-0 px-5 pt-4 pb-3 flex items-center gap-2">
         <div className="relative flex-1 max-w-[200px]">
           <Briefcase className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
           <input value={filterProject} onChange={e => setFilterProject(e.target.value)} placeholder="Filter by project..."
@@ -649,9 +683,10 @@ function ListTab({ projects, assignments, loadingAsgn, onModify, modifying, succ
                     {/* Employees table */}
                     {isOpen && (
                       <>
-                        <div className="border-t border-slate-100 grid grid-cols-[1fr_120px_160px_auto] text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2 bg-slate-50">
+                        <div className="border-t border-slate-100 grid grid-cols-[1fr_120px_80px_160px_auto] text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2 bg-slate-50">
                           <span>Employee</span>
                           <span>Trade</span>
+                          <span>Role</span>
                           <span>Period</span>
                           <span>Actions</span>
                         </div>
@@ -659,7 +694,7 @@ function ListTab({ projects, assignments, loadingAsgn, onModify, modifying, succ
                           const isToday = a.start_date <= today && a.end_date >= today
                           const c = trade(a.trade_code)
                           return (
-                            <div key={a.id} className="grid grid-cols-[1fr_120px_160px_auto] items-center px-4 py-2.5 border-t border-slate-50 hover:bg-slate-50/70 transition-colors">
+                            <div key={a.id} className="grid grid-cols-[1fr_120px_80px_160px_auto] items-center px-4 py-2.5 border-t border-slate-50 hover:bg-slate-50/70 transition-colors">
                               {/* Employee */}
                               <div className="flex items-center gap-2.5 min-w-0">
                                 <div className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white" style={{ background: c.dot }}>
@@ -672,6 +707,8 @@ function ListTab({ projects, assignments, loadingAsgn, onModify, modifying, succ
                               </div>
                               {/* Trade */}
                               <div><TradePill code={a.trade_code} /></div>
+                              {/* Role */}
+                              <div><RoleBadge role={a.assignment_role} /></div>
                               {/* Period */}
                               <div className="flex items-center gap-1.5">
                                 <div className="text-xs text-slate-600 font-medium">{fmt(a.start_date)} → {fmt(a.end_date)}</div>
@@ -694,7 +731,6 @@ function ListTab({ projects, assignments, loadingAsgn, onModify, modifying, succ
               })
         }
       </div>
-      </div>
     </div>
   )
 }
@@ -711,6 +747,8 @@ export default function AssignmentsPage() {
   const [mapForm,        setMapForm]        = useState({ start_date: todayStr(), end_date: todayStr() })
   const [reassignModal,  setReassignModal]  = useState(null)
   const [modifying,    setModifying]    = useState(null)
+  const [newAssignModal, setNewAssignModal] = useState(false)
+  const [repeatModal,    setRepeatModal]    = useState(false)
 
   useEffect(() => {
     api.get('/projects?status=ACTIVE')
@@ -759,34 +797,28 @@ export default function AssignmentsPage() {
     finally { setModifying(null) }
   }
 
-  const assignedToday = assignments.filter(a => { const t = todayStr(); return a.start_date <= t && a.end_date >= t }).length
-
   return (
     <div className="flex flex-col h-screen bg-slate-50 overflow-hidden">
       <div className="bg-white border-b border-slate-200 px-6 py-4 flex-shrink-0">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-lg font-bold text-slate-900">Assignments</h1>
             <p className="text-xs text-slate-400 mt-0.5">Manage workforce assignments across all projects</p>
           </div>
-          <div className="flex items-center gap-3">
-            {[
-              { icon: Briefcase,  label: 'Active Projects', value: projects.length,   color: 'text-indigo-500' },
-              { icon: Users,      label: 'Assigned Today',  value: assignedToday,      color: 'text-emerald-500' },
-              { icon: TrendingUp, label: 'Total Active',    value: assignments.length, color: 'text-violet-500' },
-            ].map(({ icon: Icon, label, value, color }) => (
-              <div key={label} className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2">
-                <Icon className={`w-4 h-4 ${color}`} />
-                <div><div className="text-[10px] text-slate-500">{label}</div><div className="text-sm font-bold text-slate-800">{value}</div></div>
-              </div>
-            ))}
-          </div>
         </div>
-        <div className="flex items-center gap-1 mt-4">
+        <div className="flex items-center gap-2">
+          <button onClick={() => setNewAssignModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 transition-colors shadow-sm">
+            <Plus className="w-3.5 h-3.5" />Assign Employee
+          </button>
+          <button onClick={() => setRepeatModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-white text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-50 transition-colors border border-slate-200">
+            <RefreshCw className="w-3.5 h-3.5" />Assign Tomorrow as Today
+          </button>
+          <div className="w-px h-5 bg-slate-200 mx-1" />
           {[
-            { id: 'list',     icon: List,     label: 'List View' },
-            { id: 'map',      icon: MapIcon,  label: 'Map View' },
-            { id: 'timeline', icon: Calendar, label: 'Timeline' },
+            { id: 'list', icon: List,    label: 'Assignments List' },
+            { id: 'map',  icon: MapIcon, label: 'Geographical Assignment' },
           ].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${tab === t.id ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'}`}>
@@ -837,17 +869,25 @@ export default function AssignmentsPage() {
           </div>
         )}
 
-        {tab === 'timeline' && (
-          <div className="flex-1 overflow-y-auto">
-            {loadingAsgn
-              ? <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-slate-300" /></div>
-              : assignments.length === 0
-                ? <div className="flex flex-col items-center justify-center py-20 text-center"><Calendar className="w-10 h-10 text-slate-200 mb-3" /><p className="text-sm text-slate-400">No assignments to display in timeline</p></div>
-                : <GanttTimeline assignments={assignments} />
-            }
-          </div>
-        )}
       </div>
+      {repeatModal && (
+        <RepeatTodayModal
+          onClose={() => setRepeatModal(false)}
+          onSaved={() => { fetchAssignments(); setSuccessMsg('Repeated successfully!'); setTimeout(() => setSuccessMsg(''), 4000) }}
+        />
+      )}
+      {newAssignModal && (
+        <NewAssignmentModal
+          projects={projects}
+          onClose={() => setNewAssignModal(false)}
+          onSaved={() => {
+            setNewAssignModal(false)
+            fetchAssignments()
+            setSuccessMsg('Assigned successfully!')
+            setTimeout(() => setSuccessMsg(''), 4000)
+          }}
+        />
+      )}
       {/* Move Modal */}
       {reassignModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">

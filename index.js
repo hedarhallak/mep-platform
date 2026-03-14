@@ -110,6 +110,9 @@ app.use("/api/assignment-requests", auth, loadRouter("./routes/assignment_reques
 // --- Daily Dispatch ---
 app.use("/api/daily-dispatch", auth, loadRouter("./routes/daily_dispatch"));
 
+// --- Business Intelligence ---
+app.use("/api/bi", auth, require("./routes/bi"));
+
 // --- Employee Invites ---
 app.use("/api/employee-invites", auth, loadRouter("./routes/employee_invites"));
 

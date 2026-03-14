@@ -79,20 +79,24 @@ async function getTodayRows(employeeId, companyId) {
   return r.rows;
 }
 
-// Assignment lookup (source of truth)
-
+// Assignment lookup — source of truth is assignment_requests
 async function getTodayAssignment(employeeId, companyId) {
   const r = await pool.query(
-    `
-    SELECT id AS assignment_id, project_id, shift
-    FROM public.assignments
-    WHERE employee_id = $1
-      AND company_id = $2
-      AND start_date <= CURRENT_DATE
-      AND (end_date IS NULL OR end_date >= CURRENT_DATE)
-    ORDER BY start_date DESC
-    LIMIT 1
-    `,
+    `SELECT
+       ar.id           AS assignment_id,
+       ar.project_id,
+       ar.shift_start  AS shift_start_time,
+       ar.shift_end    AS shift_end_time,
+       ar.assignment_role,
+       ar.notes
+     FROM public.assignment_requests ar
+     WHERE ar.requested_for_employee_id = $1
+       AND ar.company_id  = $2
+       AND ar.status      = 'APPROVED'
+       AND ar.start_date <= CURRENT_DATE
+       AND ar.end_date   >= CURRENT_DATE
+     ORDER BY ar.start_date DESC
+     LIMIT 1`,
     [employeeId, companyId]
   );
   return r.rows[0] || null;
@@ -156,13 +160,13 @@ router.post("/today/action", async (req, res) => {
       }
 
       await pool.query(
-        `
-        INSERT INTO public.attendance_logs
-          (employee_id, company_id, project_id, check_in_at, check_in_location, status, approval_note, created_at, inside_geofence, distance_to_site_m)
-        VALUES
-          ($1, $2, $3, NOW(), ${UNKNOWN_POINT_SQL}, 'PENDING', 'UI_ARRIVE', NOW(), false, NULL)
-        `,
-        [employeeId, req.user.company_id, assignment.project_id]
+        `INSERT INTO public.attendance_logs
+           (employee_id, company_id, project_id, assignment_request_id,
+            check_in_at, check_in_location, status, approval_note,
+            created_at, inside_geofence, distance_to_site_m)
+         VALUES
+           ($1, $2, $3, $4, NOW(), ${UNKNOWN_POINT_SQL}, 'PENDING', 'UI_ARRIVE', NOW(), false, NULL)`,
+        [employeeId, req.user.company_id, assignment.project_id, assignment.assignment_id]
       );
 
       return res.json({ ok: true, did: "ARRIVE", project_id: assignment.project_id });
@@ -302,6 +306,237 @@ router.post("/clockin", async (req, res) => {
   } catch (e) {
     console.error(e);
     return res.status(500).json({ ok: false, error: "CLOCKIN_FAILED" });
+  }
+});
+
+// ── POST /foreman-checkin ────────────────────────────────────
+// Foreman checks in an employee on their behalf
+router.post("/foreman-checkin", async (req, res) => {
+  try {
+    const companyId  = req.user.company_id;
+    const projectId  = Number(req.body?.project_id);
+    const employeeId = Number(req.body?.employee_id);
+    const startTime  = String(req.body?.start_time || "").trim();
+
+    if (!projectId)  return res.status(400).json({ ok: false, error: "BAD_PROJECT_ID" });
+    if (!employeeId) return res.status(400).json({ ok: false, error: "BAD_EMPLOYEE_ID" });
+    if (!/^\d{2}:\d{2}(:\d{2})?$/.test(startTime))
+      return res.status(400).json({ ok: false, error: "BAD_START_TIME" });
+
+    // Check no open session
+    const open = await pool.query(
+      `SELECT attendance_id FROM public.attendance_logs
+       WHERE employee_id = $1 AND company_id = $2 AND check_out_at IS NULL LIMIT 1`,
+      [employeeId, companyId]
+    );
+    if (open.rowCount > 0)
+      return res.json({ ok: true, duplicate_open: true, open_row: open.rows[0] });
+
+    // Get assignment_request_id for today
+    const asgn = await pool.query(
+      `SELECT id FROM public.assignment_requests
+       WHERE requested_for_employee_id = $1 AND company_id = $2
+         AND status = 'APPROVED' AND start_date <= CURRENT_DATE AND end_date >= CURRENT_DATE
+       ORDER BY start_date DESC LIMIT 1`,
+      [employeeId, companyId]
+    );
+
+    const { rows } = await pool.query(
+      `INSERT INTO public.attendance_logs
+         (employee_id, company_id, project_id, assignment_request_id,
+          check_in_at, check_in_location, status, approval_note,
+          created_at, inside_geofence, distance_to_site_m)
+       VALUES
+         ($1, $2, $3, $4,
+          (CURRENT_DATE::timestamp + $5::time), ${UNKNOWN_POINT_SQL},
+          'PENDING', 'FOREMAN_CHECKIN', NOW(), false, NULL)
+       RETURNING attendance_id, employee_id, project_id, check_in_at`,
+      [employeeId, companyId, projectId, asgn.rows[0]?.id || null, startTime]
+    );
+    return res.json({ ok: true, row: rows[0] });
+  } catch (e) {
+    console.error("POST /foreman-checkin error:", e);
+    return res.status(500).json({ ok: false, error: "FOREMAN_CHECKIN_FAILED" });
+  }
+});
+
+// ── POST /foreman-checkout ───────────────────────────────────
+// Foreman checks out an employee on their behalf
+router.post("/foreman-checkout", async (req, res) => {
+  try {
+    const companyId    = req.user.company_id;
+    const employeeId   = Number(req.body?.employee_id);
+    const overtimeHours = req.body?.overtime_hours ? Number(req.body.overtime_hours) : null;
+
+    if (!employeeId) return res.status(400).json({ ok: false, error: "BAD_EMPLOYEE_ID" });
+
+    // Find open session
+    const open = await pool.query(
+      `SELECT attendance_id FROM public.attendance_logs
+       WHERE employee_id = $1 AND company_id = $2 AND check_out_at IS NULL
+       ORDER BY check_in_at DESC LIMIT 1`,
+      [employeeId, companyId]
+    );
+    if (!open.rowCount)
+      return res.status(409).json({ ok: false, error: "NO_OPEN_SESSION" });
+
+    const attendanceId = open.rows[0].attendance_id;
+
+    await pool.query(
+      `UPDATE public.attendance_logs
+       SET check_out_at = NOW(),
+           check_out_location = ${UNKNOWN_POINT_SQL},
+           overtime_hours = COALESCE($1, overtime_hours)
+       WHERE attendance_id = $2 AND company_id = $3`,
+      [overtimeHours, attendanceId, companyId]
+    );
+
+    return res.json({ ok: true, attendance_id: attendanceId });
+  } catch (e) {
+    console.error("POST /foreman-checkout error:", e);
+    return res.status(500).json({ ok: false, error: "FOREMAN_CHECKOUT_FAILED" });
+  }
+});
+// Foreman requests overtime approval for a completed attendance log
+router.post("/overtime/request", async (req, res) => {
+  try {
+    const companyId      = req.user.company_id;
+    const { attendance_id, overtime_hours, note } = req.body || {};
+
+    if (!attendance_id || !overtime_hours)
+      return res.status(400).json({ ok: false, error: "MISSING_FIELDS" });
+
+    const hours = Number(overtime_hours);
+    if (!Number.isFinite(hours) || hours <= 0 || hours > 12)
+      return res.status(400).json({ ok: false, error: "INVALID_OVERTIME_HOURS" });
+
+    // Verify log exists and is closed
+    const { rows } = await pool.query(
+      `SELECT attendance_id, check_in_at, check_out_at, employee_id
+       FROM public.attendance_logs
+       WHERE attendance_id = $1 AND company_id = $2 LIMIT 1`,
+      [attendance_id, companyId]
+    );
+    if (!rows.length)
+      return res.status(404).json({ ok: false, error: "LOG_NOT_FOUND" });
+    if (!rows[0].check_out_at)
+      return res.status(409).json({ ok: false, error: "SESSION_STILL_OPEN" });
+
+    await pool.query(
+      `UPDATE public.attendance_logs
+       SET overtime_hours = $1, approval_note = $2
+       WHERE attendance_id = $3 AND company_id = $4`,
+      [hours, note || null, attendance_id, companyId]
+    );
+
+    return res.json({ ok: true, attendance_id, overtime_hours: hours });
+  } catch (e) {
+    console.error("POST /overtime/request error:", e);
+    return res.status(500).json({ ok: false, error: "OVERTIME_REQUEST_FAILED" });
+  }
+});
+
+// ── PATCH /overtime/:id/approve ──────────────────────────────
+// Admin approves overtime
+router.patch("/overtime/:id/approve", async (req, res) => {
+  try {
+    const companyId    = req.user.company_id;
+    const attendanceId = Number(req.params.id);
+    const { approved, note } = req.body || {};
+
+    const { rows } = await pool.query(
+      `UPDATE public.attendance_logs
+       SET overtime_approved    = $1,
+           overtime_approved_by = $2,
+           approval_note        = COALESCE($3, approval_note)
+       WHERE attendance_id = $4 AND company_id = $5
+       RETURNING attendance_id, overtime_hours, overtime_approved`,
+      [!!approved, req.user.user_id, note || null, attendanceId, companyId]
+    );
+    if (!rows.length)
+      return res.status(404).json({ ok: false, error: "LOG_NOT_FOUND" });
+
+    return res.json({ ok: true, log: rows[0] });
+  } catch (e) {
+    console.error("PATCH /overtime/approve error:", e);
+    return res.status(500).json({ ok: false, error: "OVERTIME_APPROVE_FAILED" });
+  }
+});
+
+// ── GET /report/daily ────────────────────────────────────────
+// Daily attendance report for a project on a given date
+// Query params: project_id, date (YYYY-MM-DD, default today)
+router.get("/report/daily", async (req, res) => {
+  try {
+    const companyId  = req.user.company_id;
+    const projectId  = req.query.project_id ? Number(req.query.project_id) : null;
+    const reportDate = req.query.date || new Date().toISOString().split("T")[0];
+
+    let query = `
+      SELECT
+        al.attendance_id,
+        al.work_date,
+        al.check_in_at,
+        al.check_out_at,
+        al.overtime_hours,
+        al.overtime_approved,
+        al.manager_approved,
+        al.attendance_id,
+        al.overtime_approved,
+        al.break_minutes,
+        ep.full_name   AS employee_name,
+        ep.trade_code,
+        ar.assignment_role,
+        p.project_code,
+        p.project_name,
+        CASE
+          WHEN al.check_in_at IS NOT NULL AND al.check_out_at IS NOT NULL THEN
+            ROUND(
+              (EXTRACT(EPOCH FROM (al.check_out_at - al.check_in_at)) / 3600
+               - COALESCE(al.break_minutes, 0) / 60.0
+              )::numeric, 2
+            )
+          ELSE NULL
+        END AS worked_hours
+      FROM public.attendance_logs al
+      JOIN public.employee_profiles ep ON ep.employee_id = al.employee_id
+      JOIN public.projects            p  ON p.id          = al.project_id
+      LEFT JOIN public.assignment_requests ar
+             ON ar.id = al.assignment_request_id
+      WHERE al.company_id = $1
+        AND al.work_date  = $2::date
+    `;
+
+    const params = [companyId, reportDate];
+
+    if (projectId) {
+      params.push(projectId);
+      query += ` AND al.project_id = $${params.length}`;
+    }
+
+    query += " ORDER BY p.project_code, ep.full_name";
+
+    const { rows } = await pool.query(query, params);
+
+    // Summary per project
+    const summary = rows.reduce((acc, r) => {
+      const key = r.project_code;
+      if (!acc[key]) acc[key] = { project_code: key, project_name: r.project_name, present: 0, total_hours: 0, total_overtime: 0 };
+      acc[key].present++;
+      acc[key].total_hours    += Number(r.worked_hours || 0);
+      acc[key].total_overtime += Number(r.overtime_hours || 0);
+      return acc;
+    }, {});
+
+    return res.json({
+      ok: true,
+      date: reportDate,
+      records: rows,
+      summary: Object.values(summary),
+    });
+  } catch (e) {
+    console.error("GET /report/daily error:", e);
+    return res.status(500).json({ ok: false, error: "REPORT_FAILED" });
   }
 });
 
