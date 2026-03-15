@@ -675,10 +675,23 @@ function InboxTab() {
 // ── Main Page ─────────────────────────────────────────────────
 export default function MyHubPage() {
   const [tab, setTab] = useState('attendance')
+  const [materialsCount, setMaterialsCount] = useState(0)
+
+  useEffect(() => {
+    const fetchCount = async () => {
+      try {
+        const r = await api.get('/materials/inbox/count')
+        setMaterialsCount(r.data.count || 0)
+      } catch (_) {}
+    }
+    fetchCount()
+    const interval = setInterval(fetchCount, 30_000)
+    return () => clearInterval(interval)
+  }, [])
 
   const tabs = [
     { id: 'attendance', icon: CalendarCheck, label: 'Attendance Approval' },
-    { id: 'inbox',      icon: Inbox,         label: 'Inbox'               },
+    { id: 'materials',  icon: Package,       label: 'Materials', count: materialsCount },
   ]
 
   return (
@@ -703,7 +716,15 @@ export default function MyHubPage() {
               className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${
                 tab === t.id ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
               }`}>
-              <t.icon className="w-3.5 h-3.5" />{t.label}
+              <t.icon className="w-3.5 h-3.5" />
+              {t.label}
+              {t.count > 0 && (
+                <span className={`min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full flex items-center justify-center ${
+                  tab === t.id ? 'bg-white text-indigo-600' : 'bg-red-500 text-white'
+                }`}>
+                  {t.count > 99 ? '99+' : t.count}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -712,7 +733,7 @@ export default function MyHubPage() {
       {/* Body */}
       <div className="flex-1 overflow-y-auto px-6 py-5">
         {tab === 'attendance' && <AttendanceApprovalTab />}
-        {tab === 'inbox'      && <InboxTab />}
+        {tab === 'materials'  && <InboxTab />}
       </div>
     </div>
   )

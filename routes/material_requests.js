@@ -377,6 +377,32 @@ router.get("/pdf-data", ANY, async (req, res) => {
       ]
     );
 
+    // 8. Send email
+    const { sendPurchaseOrder } = require('../lib/email');
+    const emailTo = supplier
+      ? supplier.email
+      : (company.procurement_email || company.admin_email);
+
+    if (emailTo) {
+      sendPurchaseOrder({
+        to:             emailTo,
+        ref,
+        date:           new Date().toLocaleDateString('en-CA'),
+        companyName:    company.name,
+        companyPhone:   company.phone,
+        companyAddress: company.address,
+        projectCode:    project?.project_code,
+        projectName:    project?.project_name,
+        siteAddress:    project?.site_address,
+        foremanName:    foreman?.full_name,
+        foremanPhone:   foreman?.foreman_phone,
+        items,
+        note:           note || null,
+        isProcurement:  !supplier_id || supplier_id === 'procurement',
+        supplierName:   supplier?.name,
+      }).catch(e => console.error('[PO email error]', e.message));
+    }
+
     return res.json({
       ok: true,
       pdf_data: {
@@ -393,6 +419,26 @@ router.get("/pdf-data", ANY, async (req, res) => {
     });
   } catch (err) {
     console.error("GET /pdf-data error:", err);
+    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+  }
+});
+
+// ── GET /inbox/count ─────────────────────────────────────────
+router.get("/inbox/count", ANY, async (req, res) => {
+  try {
+    const companyId  = req.user.company_id;
+    const employeeId = await resolveEmployeeId(req);
+    const { rows: [{ count }] } = await pool.query(
+      `SELECT COUNT(*) AS count
+       FROM public.material_requests
+       WHERE company_id          = $1
+         AND foreman_employee_id = $2
+         AND status NOT IN ('CANCELLED','SENT')`,
+      [companyId, employeeId]
+    );
+    return res.json({ ok: true, count: Number(count) });
+  } catch (err) {
+    console.error("GET /inbox/count error:", err);
     return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
   }
 });

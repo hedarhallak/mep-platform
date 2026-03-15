@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
+import api from '@/lib/api'
 import {
   LayoutDashboard, FolderKanban, Users, ClipboardList,
   Settings, LogOut, Building2, BarChart2, Brain,
@@ -14,7 +15,7 @@ const mainNav = [
   { to: '/suppliers',        icon: Truck,           label: 'Suppliers'        },
   { to: '/assignments',      icon: ClipboardList,   label: 'Assignments'      },
   { to: '/attendance',       icon: CalendarCheck,   label: 'Attendance'       },
-  { to: '/my-hub',           icon: Inbox,           label: 'My Hub'           },
+  { to: '/my-hub',           icon: Inbox,           label: 'My Hub',           badge: true },
   { to: '/material-request', icon: Package,         label: 'Material Request' },
   { to: '/purchase-orders',  icon: FileText,        label: 'Purchase Orders'  },
 ]
@@ -28,6 +29,20 @@ export default function AppLayout() {
   const navigate  = useNavigate()
   const location  = useLocation()
   const [biOpen, setBiOpen] = useState(location.pathname.startsWith('/bi'))
+  const [hubCount, setHubCount] = useState(0)
+
+  // Poll inbox count every 60 seconds
+  useEffect(() => {
+    const fetchCount = async () => {
+      try {
+        const r = await api.get('/materials/inbox/count')
+        setHubCount(r.data.count || 0)
+      } catch (_) {}
+    }
+    fetchCount()
+    const interval = setInterval(fetchCount, 60_000)
+    return () => clearInterval(interval)
+  }, [])
 
   const handleLogout = () => { logout(); navigate('/login') }
   const isBiActive = location.pathname.startsWith('/bi')
@@ -47,7 +62,7 @@ export default function AppLayout() {
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
 
           {/* Main items */}
-          {mainNav.map(({ to, icon: Icon, label }) => (
+          {mainNav.map(({ to, icon: Icon, label, badge }) => (
             <NavLink key={to} to={to}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -55,7 +70,13 @@ export default function AppLayout() {
                 }`
               }
             >
-              <Icon size={16} />{label}
+              <Icon size={16} />
+              <span className="flex-1">{label}</span>
+              {badge && hubCount > 0 && (
+                <span className="flex-shrink-0 min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                  {hubCount > 99 ? '99+' : hubCount}
+                </span>
+              )}
             </NavLink>
           ))}
 
