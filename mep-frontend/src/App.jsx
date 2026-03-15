@@ -11,6 +11,8 @@ import OnboardingPage      from '@/pages/onboarding/OnboardingPage'
 import AssignmentsPage     from '@/pages/assignments/AssignmentsPage'
 import AttendancePage      from '@/pages/attendance/AttendancePage'
 import MyHubPage           from '@/pages/hub/MyHubPage'
+import MaterialRequestPage from '@/pages/materials/MaterialRequestPage'
+import SuppliersPage      from '@/pages/suppliers/SuppliersPage'
 import WorkforcePlannerPage from '@/pages/bi/WorkforcePlannerPage'
 
 const queryClient = new QueryClient({
@@ -44,8 +46,10 @@ function AppRoutes() {
         <Route path="employees"   element={<EmployeesPage />} />
         <Route path="assignments" element={<AssignmentsPage />} />
         <Route path="attendance"  element={<AttendancePage />} />
-        <Route path="my-hub"      element={<MyHubPage />} />
-        <Route path="settings"    element={<div className="p-8 text-slate-400">Settings — Coming soon</div>} />
+        <Route path="my-hub"           element={<MyHubPage />} />
+        <Route path="material-request" element={<MaterialRequestPage />} />
+        <Route path="suppliers"        element={<SuppliersPage />} />
+        <Route path="settings"         element={<div className="p-8 text-slate-400">Settings — Coming soon</div>} />
 
         {/* Business Intelligence */}
         <Route path="bi/workforce-planner" element={<WorkforcePlannerPage />} />

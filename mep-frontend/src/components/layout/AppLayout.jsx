@@ -4,16 +4,18 @@ import { useAuth } from '@/hooks/useAuth'
 import {
   LayoutDashboard, FolderKanban, Users, ClipboardList,
   Settings, LogOut, Building2, BarChart2, Brain,
-  ChevronDown, ChevronRight, CalendarCheck, Inbox
+  ChevronDown, ChevronRight, CalendarCheck, Inbox, Package, Truck
 } from 'lucide-react'
 
 const mainNav = [
-  { to: '/dashboard',   icon: LayoutDashboard, label: 'Dashboard'   },
-  { to: '/projects',    icon: FolderKanban,    label: 'Projects'    },
-  { to: '/employees',   icon: Users,           label: 'Employees'   },
-  { to: '/assignments', icon: ClipboardList,   label: 'Assignments' },
-  { to: '/attendance',  icon: CalendarCheck,   label: 'Attendance'  },
-  { to: '/my-hub',      icon: Inbox,           label: 'My Hub'      },
+  { to: '/dashboard',        icon: LayoutDashboard, label: 'Dashboard'        },
+  { to: '/employees',        icon: Users,           label: 'Employees'        },
+  { to: '/projects',         icon: FolderKanban,    label: 'Projects'         },
+  { to: '/suppliers',        icon: Truck,           label: 'Suppliers'        },
+  { to: '/assignments',      icon: ClipboardList,   label: 'Assignments'      },
+  { to: '/attendance',       icon: CalendarCheck,   label: 'Attendance'       },
+  { to: '/my-hub',           icon: Inbox,           label: 'My Hub'           },
+  { to: '/material-request', icon: Package,         label: 'Material Request' },
 ]
 
 const biNav = [
@@ -113,14 +115,14 @@ export default function AppLayout() {
 
         {/* User */}
         <div className="px-4 py-4 border-t border-slate-800">
-          <div className="text-xs text-slate-500 mb-1">{user?.company_name || 'Company'}</div>
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm font-medium text-white">{user?.username}</div>
+          <div className="text-xs text-slate-500 mb-1 truncate">{user?.company_name || 'Company'}</div>
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium text-white truncate">{user?.username}</div>
               <div className="text-xs text-indigo-400">{user?.role}</div>
             </div>
             <button onClick={handleLogout}
-              className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+              className="flex-shrink-0 p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
               title="Logout"
             >
               <LogOut size={15} />
