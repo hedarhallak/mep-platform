@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import api from '@/lib/api'
 import {
   Package, Plus, X, Send, Loader2, Check,
@@ -7,18 +7,61 @@ import {
 
 const UNITS = ['pcs', 'm', 'ft', 'kg', 'lb', 'box', 'roll', 'bag', 'set', 'pair', 'L', 'gal']
 
-function ItemRow({ item, index, onChange, onRemove, isLast }) {
+function ItemRow({ item, index, onChange, onRemove }) {
+  const [suggestions, setSuggestions] = useState([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const debounceRef = useRef(null)
+
+  const handleNameChange = (val) => {
+    onChange(index, 'item_name', val)
+    clearTimeout(debounceRef.current)
+    if (val.length >= 2) {
+      debounceRef.current = setTimeout(async () => {
+        try {
+          const r = await api.get(`/materials/catalog?q=${encodeURIComponent(val)}`)
+          setSuggestions(r.data.items || [])
+          setShowSuggestions(true)
+        } catch (_) {}
+      }, 300)
+    } else {
+      setSuggestions([])
+      setShowSuggestions(false)
+    }
+  }
+
+  const selectSuggestion = (s) => {
+    onChange(index, 'item_name', s.item_name)
+    onChange(index, 'unit', s.default_unit)
+    setSuggestions([])
+    setShowSuggestions(false)
+  }
+
   return (
     <div className="grid grid-cols-[1fr_100px_80px_auto] gap-2 items-start">
-      {/* Item name */}
-      <div>
+      {/* Item name with autocomplete */}
+      <div className="relative">
         <input
           type="text"
           value={item.item_name}
-          onChange={e => onChange(index, 'item_name', e.target.value)}
+          onChange={e => handleNameChange(e.target.value)}
+          onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+          onFocus={() => item.item_name.length >= 2 && suggestions.length && setShowSuggestions(true)}
           placeholder="e.g. Copper pipe 3/4 inch"
           className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-slate-300"
         />
+        {showSuggestions && suggestions.length > 0 && (
+          <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+            {suggestions.map((s, i) => (
+              <button key={i} onMouseDown={() => selectSuggestion(s)}
+                className="w-full flex items-center justify-between px-3 py-2 hover:bg-indigo-50 transition-colors text-left">
+                <span className="text-sm text-slate-700">{s.item_name}</span>
+                <span className="text-[10px] text-slate-400 ml-2 flex-shrink-0">
+                  {s.default_unit} · used {s.use_count}×
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
         {item.note !== undefined && (
           <input
             type="text"

@@ -203,6 +203,115 @@ function AttendanceApprovalTab() {
   )
 }
 
+// ── Purchase Order HTML Generator ────────────────────────────
+function generatePOHtml(d) {
+  const itemRows = (d.items || []).map((it, i) => `
+    <tr style="background:${i % 2 === 0 ? '#f8fafc' : '#fff'}">
+      <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#1e293b">${i + 1}</td>
+      <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#1e293b;font-weight:500">${it.item_name}</td>
+      <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#4f46e5;font-weight:700;text-align:center">${it.quantity}</td>
+      <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#64748b;text-align:center">${it.unit}</td>
+    </tr>
+  `).join('')
+
+  const toSection = d.supplier
+    ? `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin-bottom:20px">
+        <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">To — Supplier</div>
+        <div style="font-size:14px;font-weight:700;color:#1e293b">${d.supplier.name}</div>
+        ${d.supplier.email ? `<div style="font-size:12px;color:#64748b;margin-top:2px">✉ ${d.supplier.email}</div>` : ''}
+        ${d.supplier.phone ? `<div style="font-size:12px;color:#64748b">📞 ${d.supplier.phone}</div>` : ''}
+        ${d.supplier.address ? `<div style="font-size:12px;color:#64748b">📍 ${d.supplier.address}</div>` : ''}
+      </div>`
+    : `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px;margin-bottom:20px">
+        <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">To — Internal</div>
+        <div style="font-size:14px;font-weight:700;color:#1e293b">Procurement Department</div>
+        ${d.company.procurement_email ? `<div style="font-size:12px;color:#64748b;margin-top:2px">✉ ${d.company.procurement_email}</div>` : ''}
+      </div>`
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Purchase Order ${d.ref}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #fff; color: #1e293b; }
+    @media print {
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .no-print { display: none; }
+    }
+  </style>
+</head>
+<body style="padding:40px;max-width:800px;margin:0 auto">
+
+  <!-- Print button -->
+  <div class="no-print" style="margin-bottom:20px;text-align:right">
+    <button onclick="window.print()" style="background:#4f46e5;color:#fff;border:none;padding:10px 24px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">
+      🖨 Print / Save as PDF
+    </button>
+  </div>
+
+  <!-- Header -->
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;padding-bottom:24px;border-bottom:2px solid #4f46e5">
+    <div>
+      <div style="font-size:22px;font-weight:800;color:#4f46e5">${d.company.name || 'Company'}</div>
+      ${d.company.address ? `<div style="font-size:12px;color:#64748b;margin-top:4px">📍 ${d.company.address}</div>` : ''}
+      ${d.company.phone ? `<div style="font-size:12px;color:#64748b">📞 ${d.company.phone}</div>` : ''}
+    </div>
+    <div style="text-align:right">
+      <div style="font-size:20px;font-weight:800;color:#1e293b">Purchase Order</div>
+      <div style="font-size:13px;color:#64748b;margin-top:4px">Ref: <strong>${d.ref}</strong></div>
+      <div style="font-size:13px;color:#64748b">Date: ${d.date}</div>
+    </div>
+  </div>
+
+  <!-- Project & Foreman -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px">
+      <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Project</div>
+      <div style="font-size:14px;font-weight:700;color:#1e293b">${d.project?.project_code || ''} ${d.project?.project_name ? '— ' + d.project.project_name : ''}</div>
+      ${d.project?.site_address ? `<div style="font-size:12px;color:#64748b;margin-top:4px">📍 ${d.project.site_address}</div>` : ''}
+    </div>
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px">
+      <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Requested By</div>
+      <div style="font-size:14px;font-weight:700;color:#1e293b">${d.foreman?.full_name || ''}</div>
+      ${d.foreman?.foreman_phone ? `<div style="font-size:12px;color:#64748b;margin-top:4px">📞 ${d.foreman.foreman_phone}</div>` : ''}
+    </div>
+  </div>
+
+  <!-- To section -->
+  ${toSection}
+
+  <!-- Items table -->
+  <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
+    <thead>
+      <tr style="background:#4f46e5">
+        <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:1px;width:40px">#</th>
+        <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:1px">Item Description</th>
+        <th style="padding:10px 14px;text-align:center;font-size:11px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:1px;width:80px">Qty</th>
+        <th style="padding:10px 14px;text-align:center;font-size:11px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:1px;width:80px">Unit</th>
+      </tr>
+    </thead>
+    <tbody>${itemRows}</tbody>
+  </table>
+
+  <!-- Notes -->
+  ${d.note ? `
+  <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:14px;margin-bottom:24px">
+    <div style="font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Notes</div>
+    <div style="font-size:13px;color:#78350f">${d.note}</div>
+  </div>` : ''}
+
+  <!-- Footer -->
+  <div style="border-top:1px solid #e2e8f0;padding-top:16px;display:flex;justify-content:space-between;align-items:center">
+    <div style="font-size:11px;color:#94a3b8">Generated by MEP Platform · ${d.date}</div>
+    <div style="font-size:11px;color:#94a3b8">${d.ref}</div>
+  </div>
+
+</body>
+</html>`
+}
+
 // ── Inbox Tab ─────────────────────────────────────────────────
 function InboxTab() {
   const [requests, setRequests]   = useState([])
@@ -214,6 +323,7 @@ function InboxTab() {
   const [surplus, setSurplus]     = useState({})       // item_name → surplus info
   const [sendModal, setSendModal] = useState(false)
   const [sendTarget, setSendTarget] = useState('')     // supplier id or 'procurement'
+  const [sendNote, setSendNote]   = useState('')
   const [sending, setSending]     = useState(false)
   const [successMsg, setSuccessMsg] = useState('')
 
@@ -275,16 +385,34 @@ function InboxTab() {
     ))
   }
 
-  // ── Send ─────────────────────────────────────────────────────
+  // ── Send + PDF ───────────────────────────────────────────────
   const handleSend = async () => {
     if (!sendTarget) return
     setSending(true)
     try {
-      // Mark all pending requests as SENT
+      // 1. Fetch PDF data
+      const ids = pendingRequests.map(r => r.id).join(',')
+      const params = new URLSearchParams({ request_ids: ids })
+      if (sendTarget !== 'procurement') params.set('supplier_id', sendTarget)
+      if (sendNote) params.set('note', sendNote)
+      const pdfRes = await api.get(`/materials/pdf-data?${params}`)
+      const d = pdfRes.data.pdf_data
+
+      // 2. Generate PDF HTML
+      const html = generatePOHtml(d)
+
+      // 3. Open print window
+      const win = window.open('', '_blank', 'width=900,height=700')
+      win.document.write(html)
+      win.document.close()
+      win.focus()
+
+      // 4. Mark as SENT
       await Promise.all(pendingRequests.map(r =>
         api.patch(`/materials/requests/${r.id}/review`, { status: 'SENT' })
       ))
       setSendModal(false)
+      setSendNote('')
       setMergedItems(null)
       showSuccess('Request sent successfully ✓')
       fetchInbox()
@@ -486,7 +614,7 @@ function InboxTab() {
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="px-6 py-4 space-y-2">
+            <div className="px-6 py-4 space-y-2 max-h-[55vh] overflow-y-auto">
               {/* Procurement option */}
               <button onClick={() => setSendTarget('procurement')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-colors text-left ${
@@ -523,6 +651,12 @@ function InboxTab() {
                   ))}
                 </>
               )}
+            </div>
+            <div className="px-6 py-3 border-t border-slate-100">
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Notes (optional)</label>
+              <textarea value={sendNote} onChange={e => setSendNote(e.target.value)}
+                rows={2} placeholder="e.g. Contact Ahmad if foreman unavailable — 514-000-0000"
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-slate-300 resize-none" />
             </div>
             <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3">
               <button onClick={() => setSendModal(false)} className="px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors">Cancel</button>

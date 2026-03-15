@@ -4,7 +4,7 @@ import { useAuth } from '@/hooks/useAuth'
 import {
   LayoutDashboard, FolderKanban, Users, ClipboardList,
   Settings, LogOut, Building2, BarChart2, Brain,
-  ChevronDown, ChevronRight, CalendarCheck, Inbox, Package, Truck
+  ChevronDown, ChevronRight, CalendarCheck, Inbox, Package, Truck, FileText
 } from 'lucide-react'
 
 const mainNav = [
@@ -16,6 +16,7 @@ const mainNav = [
   { to: '/attendance',       icon: CalendarCheck,   label: 'Attendance'       },
   { to: '/my-hub',           icon: Inbox,           label: 'My Hub'           },
   { to: '/material-request', icon: Package,         label: 'Material Request' },
+  { to: '/purchase-orders',  icon: FileText,        label: 'Purchase Orders'  },
 ]
 
 const biNav = [

@@ -109,6 +109,18 @@ router.post("/requests", ANY, async (req, res) => {
           ]
         );
         itemRows.push(item);
+
+        // Auto-save to catalog (upsert)
+        await client.query(
+          `INSERT INTO public.material_catalog (company_id, item_name, default_unit, use_count, last_used_at)
+           VALUES ($1, $2, $3, 1, NOW())
+           ON CONFLICT (company_id, LOWER(TRIM(item_name)))
+           DO UPDATE SET
+             use_count    = material_catalog.use_count + 1,
+             default_unit = EXCLUDED.default_unit,
+             last_used_at = NOW()`,
+          [companyId, String(it.item_name).trim(), String(it.unit || 'pcs').trim()]
+        );
       }
 
       await client.query("COMMIT");
@@ -289,6 +301,102 @@ router.patch("/requests/:id/review", FOREMAN, async (req, res) => {
   }
 });
 
+// ── GET /pdf-data ────────────────────────────────────────────
+// Returns all data needed to generate the purchase order PDF
+router.get("/pdf-data", ANY, async (req, res) => {
+  try {
+    const companyId  = req.user.company_id;
+    const employeeId = await resolveEmployeeId(req);
+    const { request_ids, supplier_id, note } = req.query;
+
+    if (!request_ids)
+      return res.status(400).json({ ok: false, error: "REQUEST_IDS_REQUIRED" });
+
+    const ids = String(request_ids).split(',').map(Number).filter(Boolean);
+
+    // 1. Company info
+    const { rows: [company] } = await pool.query(
+      `SELECT name, phone, admin_email, procurement_email, address, logo_url
+       FROM public.companies WHERE company_id = $1`, [companyId]
+    );
+
+    // 2. Foreman info
+    const { rows: [foreman] } = await pool.query(
+      `SELECT ep.full_name, ep.contact_email, ep.phone AS foreman_phone
+       FROM public.employee_profiles ep
+       WHERE ep.employee_id = $1 LIMIT 1`, [employeeId]
+    );
+
+    // 3. Project info (from first request)
+    const { rows: [project] } = await pool.query(
+      `SELECT p.id, p.project_code, p.project_name, p.site_address
+       FROM public.material_requests mr
+       JOIN public.projects p ON p.id = mr.project_id
+       WHERE mr.id = $1 AND mr.company_id = $2 LIMIT 1`,
+      [ids[0], companyId]
+    );
+
+    // 4. Merged items
+    const { rows: items } = await pool.query(
+      `SELECT mri.item_name, SUM(mri.quantity) AS quantity, mri.unit
+       FROM public.material_request_items mri
+       WHERE mri.request_id = ANY($1::bigint[])
+       GROUP BY mri.item_name, mri.unit
+       ORDER BY mri.item_name`,
+      [ids]
+    );
+
+    // 5. Supplier info (optional)
+    let supplier = null;
+    if (supplier_id && supplier_id !== 'procurement') {
+      const { rows: [s] } = await pool.query(
+        `SELECT name, email, phone, address FROM public.suppliers
+         WHERE id = $1 AND company_id = $2 LIMIT 1`,
+        [Number(supplier_id), companyId]
+      );
+      supplier = s || null;
+    }
+
+    // 6. Reference number
+    const ref = `PO-${companyId}-${Date.now().toString().slice(-6)}`;
+
+    // 7. Save purchase order record
+    await pool.query(
+      `INSERT INTO public.purchase_orders
+         (company_id, ref, project_id, foreman_id, supplier_id, is_procurement, items, note)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [
+        companyId,
+        ref,
+        project?.id || null,
+        employeeId,
+        supplier_id && supplier_id !== 'procurement' ? Number(supplier_id) : null,
+        !supplier_id || supplier_id === 'procurement',
+        JSON.stringify(items),
+        note || null,
+      ]
+    );
+
+    return res.json({
+      ok: true,
+      pdf_data: {
+        ref,
+        date: new Date().toLocaleDateString('en-CA'),
+        company,
+        foreman,
+        project,
+        items,
+        supplier,
+        note: note || null,
+        is_procurement: !supplier_id || supplier_id === 'procurement',
+      }
+    });
+  } catch (err) {
+    console.error("GET /pdf-data error:", err);
+    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+  }
+});
+
 // ── GET /inbox ───────────────────────────────────────────────
 // Returns all pending material requests assigned to this foreman
 router.get("/inbox", ANY, async (req, res) => {
@@ -321,6 +429,35 @@ router.get("/inbox", ANY, async (req, res) => {
     return res.json({ ok: true, requests: rows });
   } catch (err) {
     console.error("GET /materials/inbox error:", err);
+    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+  }
+});
+
+// ── GET /catalog ─────────────────────────────────────────────
+// Autocomplete endpoint — returns matching items from catalog
+router.get("/catalog", ANY, async (req, res) => {
+  try {
+    const companyId = req.user.company_id;
+    const q = String(req.query.q || '').trim();
+
+    let query = `
+      SELECT item_name, default_unit, use_count
+      FROM public.material_catalog
+      WHERE company_id = $1
+    `;
+    const params = [companyId];
+
+    if (q.length >= 2) {
+      params.push(`%${q.toLowerCase()}%`);
+      query += ` AND LOWER(item_name) LIKE $${params.length}`;
+    }
+
+    query += " ORDER BY use_count DESC, last_used_at DESC LIMIT 10";
+
+    const { rows } = await pool.query(query, params);
+    return res.json({ ok: true, items: rows });
+  } catch (err) {
+    console.error("GET /catalog error:", err);
     return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
   }
 });
@@ -431,6 +568,74 @@ router.get("/returns", ANY, async (req, res) => {
   } catch (err) {
     console.error("GET /returns error:", err);
     return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+  }
+});
+
+// ── GET /purchase-orders ─────────────────────────────────────
+router.get("/purchase-orders", ANY, async (req, res) => {
+  try {
+    const companyId  = req.user.company_id;
+    const employeeId = await resolveEmployeeId(req);
+    const userRole   = (req.user.role || '').toUpperCase();
+    const isAdmin    = ['COMPANY_ADMIN','ADMIN','TRADE_ADMIN'].includes(userRole)
+
+    // Admins see all POs, foreman sees only their own
+    let q = `
+      SELECT
+        po.id, po.ref, po.sent_at, po.note, po.is_procurement,
+        po.items,
+        p.project_code, p.project_name,
+        ep.full_name  AS foreman_name,
+        s.name        AS supplier_name,
+        s.email       AS supplier_email
+      FROM public.purchase_orders po
+      JOIN public.projects          p  ON p.id          = po.project_id
+      JOIN public.employee_profiles ep ON ep.employee_id = po.foreman_id
+      LEFT JOIN public.suppliers    s  ON s.id          = po.supplier_id
+      WHERE po.company_id = $1
+    `
+    const params = [companyId]
+
+    if (!isAdmin) {
+      params.push(employeeId)
+      q += ` AND po.foreman_id = $${params.length}`
+    }
+
+    q += " ORDER BY po.sent_at DESC LIMIT 100"
+
+    const { rows } = await pool.query(q, params)
+    return res.json({ ok: true, purchase_orders: rows })
+  } catch (err) {
+    console.error("GET /purchase-orders error:", err)
+    return res.status(500).json({ ok: false, error: "SERVER_ERROR" })
+  }
+});
+
+// ── GET /purchase-orders/:id ──────────────────────────────────
+router.get("/purchase-orders/:id", ANY, async (req, res) => {
+  try {
+    const companyId = req.user.company_id
+    const id = Number(req.params.id)
+
+    const { rows: [po] } = await pool.query(
+      `SELECT po.*, p.project_code, p.project_name, p.site_address,
+              ep.full_name AS foreman_name,
+              s.name AS supplier_name, s.email AS supplier_email,
+              s.phone AS supplier_phone, s.address AS supplier_address,
+              c.name AS company_name, c.address AS company_address, c.phone AS company_phone
+       FROM public.purchase_orders po
+       JOIN public.projects p ON p.id = po.project_id
+       JOIN public.employee_profiles ep ON ep.employee_id = po.foreman_id
+       LEFT JOIN public.suppliers s ON s.id = po.supplier_id
+       JOIN public.companies c ON c.company_id = po.company_id
+       WHERE po.id = $1 AND po.company_id = $2`,
+      [id, companyId]
+    )
+    if (!po) return res.status(404).json({ ok: false, error: "NOT_FOUND" })
+    return res.json({ ok: true, purchase_order: po })
+  } catch (err) {
+    console.error("GET /purchase-orders/:id error:", err)
+    return res.status(500).json({ ok: false, error: "SERVER_ERROR" })
   }
 });
 
