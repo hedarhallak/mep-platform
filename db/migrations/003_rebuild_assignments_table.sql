@@ -1,4 +1,4 @@
-﻿-- db/migrations/003_rebuild_assignments_table.sql
+-- db/migrations/003_rebuild_assignments_table.sql
 -- Option 1: Create a REAL assignments table for Assignments V2 workflow.
 -- We rename the current public.assignments (which currently has only column "name")
 -- to public.assignments_legacy, then create a new public.assignments with the proper columns.
@@ -13,6 +13,7 @@ BEGIN
     FROM information_schema.tables
     WHERE table_schema='public' AND table_name='assignments'
   ) THEN
+    -- If assignments_legacy already exists, keep the current one as-is (do not overwrite).
     IF NOT EXISTS (
       SELECT 1
       FROM information_schema.tables
@@ -33,8 +34,10 @@ CREATE TABLE IF NOT EXISTS public.assignments (
   start_date  DATE NOT NULL,
   end_date    DATE NOT NULL,
 
+  -- Store shift as text for now (e.g. "06:00-14:30"). Later we can normalize.
   shift TEXT NOT NULL DEFAULT '06:00-14:30',
 
+  -- Optional metadata
   created_by_user_id BIGINT NULL,
   source_request_id  BIGINT NULL,
 
@@ -48,10 +51,11 @@ CREATE INDEX IF NOT EXISTS idx_assignments_project_id  ON public.assignments(pro
 CREATE INDEX IF NOT EXISTS idx_assignments_start_date  ON public.assignments(start_date);
 CREATE INDEX IF NOT EXISTS idx_assignments_end_date    ON public.assignments(end_date);
 
+-- Optional: prevent duplicates for exact same assignment line
 CREATE UNIQUE INDEX IF NOT EXISTS uq_assignments_unique_line
   ON public.assignments(employee_id, project_id, start_date, end_date, shift);
 
--- 4) updated_at trigger
+-- 4) updated_at trigger (reuse shared helper if exists)
 CREATE OR REPLACE FUNCTION public.set_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN

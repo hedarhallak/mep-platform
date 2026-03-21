@@ -17,6 +17,7 @@
 const router = require("express").Router();
 const { pool } = require("../db");
 const { normalizeRole } = require("../middleware/roles");
+const { can } = require("../middleware/permissions");
 
 function requireRoles(allowed) {
   const normalized = allowed.map(r => normalizeRole(r));
@@ -47,7 +48,7 @@ async function resolveEmployeeId(req) {
 
 // ── POST /requests ───────────────────────────────────────────
 // Worker or foreman creates a material request
-router.post("/requests", ANY, async (req, res) => {
+router.post("/requests", can("materials.request_submit"), async (req, res) => {
   try {
     const companyId  = req.user.company_id;
     const employeeId = await resolveEmployeeId(req);
@@ -138,7 +139,7 @@ router.post("/requests", ANY, async (req, res) => {
 });
 
 // ── GET /requests ────────────────────────────────────────────
-router.get("/requests", ANY, async (req, res) => {
+router.get("/requests", can("materials.request_view_own"), async (req, res) => {
   try {
     const companyId = req.user.company_id;
     const { project_id, status } = req.query;
@@ -175,7 +176,7 @@ router.get("/requests", ANY, async (req, res) => {
 });
 
 // ── GET /requests/:id ────────────────────────────────────────
-router.get("/requests/:id", ANY, async (req, res) => {
+router.get("/requests/:id", can("materials.request_view_own"), async (req, res) => {
   try {
     const companyId = req.user.company_id;
     const id = Number(req.params.id);
@@ -202,7 +203,7 @@ router.get("/requests/:id", ANY, async (req, res) => {
 });
 
 // ── PATCH /requests/:id/cancel ───────────────────────────────
-router.patch("/requests/:id/cancel", ANY, async (req, res) => {
+router.patch("/requests/:id/cancel", can("materials.request_view_own"), async (req, res) => {
   try {
     const companyId  = req.user.company_id;
     const employeeId = await resolveEmployeeId(req);
@@ -234,7 +235,7 @@ router.patch("/requests/:id/cancel", ANY, async (req, res) => {
 
 // ── PATCH /requests/:id/review ───────────────────────────────
 // Foreman sets qty_from_surplus / qty_from_supplier per item after checking surplus
-router.patch("/requests/:id/review", FOREMAN, async (req, res) => {
+router.patch("/requests/:id/review", can("hub.materials_merge_send"), async (req, res) => {
   try {
     const companyId = req.user.company_id;
     const id = Number(req.params.id);
@@ -303,7 +304,7 @@ router.patch("/requests/:id/review", FOREMAN, async (req, res) => {
 
 // ── GET /pdf-data ────────────────────────────────────────────
 // Returns all data needed to generate the purchase order PDF
-router.get("/pdf-data", ANY, async (req, res) => {
+router.get("/pdf-data", can("purchase_orders.print"), async (req, res) => {
   try {
     const companyId  = req.user.company_id;
     const employeeId = await resolveEmployeeId(req);
@@ -424,7 +425,7 @@ router.get("/pdf-data", ANY, async (req, res) => {
 });
 
 // ── GET /inbox/count ─────────────────────────────────────────
-router.get("/inbox/count", ANY, async (req, res) => {
+router.get("/inbox/count", can("hub.materials_inbox"), async (req, res) => {
   try {
     const companyId  = req.user.company_id;
     const employeeId = await resolveEmployeeId(req);
@@ -445,7 +446,7 @@ router.get("/inbox/count", ANY, async (req, res) => {
 
 // ── GET /inbox ───────────────────────────────────────────────
 // Returns all pending material requests assigned to this foreman
-router.get("/inbox", ANY, async (req, res) => {
+router.get("/inbox", can("hub.materials_inbox"), async (req, res) => {
   try {
     const companyId  = req.user.company_id;
     const employeeId = await resolveEmployeeId(req);
@@ -481,7 +482,7 @@ router.get("/inbox", ANY, async (req, res) => {
 
 // ── GET /catalog ─────────────────────────────────────────────
 // Autocomplete endpoint — returns matching items from catalog
-router.get("/catalog", ANY, async (req, res) => {
+router.get("/catalog", can("materials.catalog_view"), async (req, res) => {
   try {
     const companyId = req.user.company_id;
     const q = String(req.query.q || '').trim();
@@ -510,7 +511,7 @@ router.get("/catalog", ANY, async (req, res) => {
 
 // ── GET /surplus ─────────────────────────────────────────────
 // Returns available surplus items — used for smart suggestion
-router.get("/surplus", ANY, async (req, res) => {
+router.get("/surplus", can("materials.surplus_view"), async (req, res) => {
   try {
     const companyId = req.user.company_id;
     const { item_name } = req.query;
@@ -545,7 +546,7 @@ router.get("/surplus", ANY, async (req, res) => {
 
 // ── POST /returns ────────────────────────────────────────────
 // Foreman declares surplus materials available from their project
-router.post("/returns", FOREMAN, async (req, res) => {
+router.post("/returns", can("materials.surplus_declare"), async (req, res) => {
   try {
     const companyId  = req.user.company_id;
     const employeeId = await resolveEmployeeId(req);
@@ -592,7 +593,7 @@ router.post("/returns", FOREMAN, async (req, res) => {
 });
 
 // ── GET /returns ─────────────────────────────────────────────
-router.get("/returns", ANY, async (req, res) => {
+router.get("/returns", can("materials.surplus_view"), async (req, res) => {
   try {
     const companyId = req.user.company_id;
     const { project_id } = req.query;
@@ -618,7 +619,7 @@ router.get("/returns", ANY, async (req, res) => {
 });
 
 // ── GET /purchase-orders ─────────────────────────────────────
-router.get("/purchase-orders", ANY, async (req, res) => {
+router.get("/purchase-orders", can("purchase_orders.view"), async (req, res) => {
   try {
     const companyId  = req.user.company_id;
     const employeeId = await resolveEmployeeId(req);
@@ -658,7 +659,7 @@ router.get("/purchase-orders", ANY, async (req, res) => {
 });
 
 // ── GET /purchase-orders/:id ──────────────────────────────────
-router.get("/purchase-orders/:id", ANY, async (req, res) => {
+router.get("/purchase-orders/:id", can("purchase_orders.view"), async (req, res) => {
   try {
     const companyId = req.user.company_id
     const id = Number(req.params.id)

@@ -1,37 +1,38 @@
 import { useState, useEffect } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
+import { usePermissions } from '@/hooks/usePermissions.jsx'
 import api from '@/lib/api'
 import {
   LayoutDashboard, FolderKanban, Users, ClipboardList,
   Settings, LogOut, Building2, BarChart2, Brain,
-  ChevronDown, ChevronRight, CalendarCheck, Inbox, Package, Truck, FileText
+  ChevronDown, ChevronRight, CalendarCheck, Inbox, Package, Truck, FileText, Shield
 } from 'lucide-react'
 
 const mainNav = [
-  { to: '/dashboard',        icon: LayoutDashboard, label: 'Dashboard'        },
-  { to: '/employees',        icon: Users,           label: 'Employees'        },
-  { to: '/projects',         icon: FolderKanban,    label: 'Projects'         },
-  { to: '/suppliers',        icon: Truck,           label: 'Suppliers'        },
-  { to: '/assignments',      icon: ClipboardList,   label: 'Assignments'      },
-  { to: '/attendance',       icon: CalendarCheck,   label: 'Attendance'       },
-  { to: '/my-hub',           icon: Inbox,           label: 'My Hub',           badge: true },
-  { to: '/material-request', icon: Package,         label: 'Material Request' },
-  { to: '/purchase-orders',  icon: FileText,        label: 'Purchase Orders'  },
+  { to: '/dashboard',        icon: LayoutDashboard, label: 'Dashboard',        permission: null },
+  { to: '/employees',        icon: Users,           label: 'Employees',        permission: { module: 'employees', action: 'view' } },
+  { to: '/projects',         icon: FolderKanban,    label: 'Projects',         permission: { module: 'projects',  action: 'view' } },
+  { to: '/suppliers',        icon: Truck,           label: 'Suppliers',        permission: { module: 'suppliers', action: 'view' } },
+  { to: '/assignments',      icon: ClipboardList,   label: 'Assignments',      permission: { module: 'assignments', action: 'view' } },
+  { to: '/attendance',       icon: CalendarCheck,   label: 'Attendance',       permission: { module: 'attendance', action: 'view' } },
+  { to: '/my-hub',           icon: Inbox,           label: 'My Hub',           permission: null, badge: true },
+  { to: '/material-request', icon: Package,         label: 'Material Request', permission: { module: 'materials', action: 'request_view_all' } },
+  { to: '/purchase-orders',  icon: FileText,        label: 'Purchase Orders',  permission: { module: 'purchase_orders', action: 'view' } },
 ]
 
 const biNav = [
-  { to: '/bi/workforce-planner', icon: Brain, label: 'Workforce Planner' },
+  { to: '/bi/workforce-planner', icon: Brain, label: 'Workforce Planner', permission: { module: 'bi', action: 'workforce_planner' } },
 ]
 
 export default function AppLayout() {
   const { user, logout } = useAuth()
+  const { can, loading: permsLoading } = usePermissions()
   const navigate  = useNavigate()
   const location  = useLocation()
   const [biOpen, setBiOpen] = useState(location.pathname.startsWith('/bi'))
   const [hubCount, setHubCount] = useState(0)
 
-  // Poll inbox count every 60 seconds
   useEffect(() => {
     const fetchCount = async () => {
       try {
@@ -46,6 +47,15 @@ export default function AppLayout() {
 
   const handleLogout = () => { logout(); navigate('/login') }
   const isBiActive = location.pathname.startsWith('/bi')
+
+  const visibleMain = mainNav.filter(item =>
+    !item.permission || permsLoading || can(item.permission.module, item.permission.action)
+  )
+  const visibleBi = biNav.filter(item =>
+    !item.permission || permsLoading || can(item.permission.module, item.permission.action)
+  )
+  const showPermissions = !permsLoading && can('settings', 'permissions')
+  const showSettings    = !permsLoading && can('settings', 'company')
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -62,7 +72,7 @@ export default function AppLayout() {
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
 
           {/* Main items */}
-          {mainNav.map(({ to, icon: Icon, label, badge }) => (
+          {visibleMain.map(({ to, icon: Icon, label, badge }) => (
             <NavLink key={to} to={to}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -86,52 +96,71 @@ export default function AppLayout() {
           </div>
 
           {/* BI Section */}
-          <button onClick={() => setBiOpen(v => !v)}
-            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-              isBiActive ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <BarChart2 size={16} />
-              <span>Business Intelligence</span>
-            </div>
-            {biOpen
-              ? <ChevronDown size={13} className="text-slate-500" />
-              : <ChevronRight size={13} className="text-slate-500" />
-            }
-          </button>
+          {visibleBi.length > 0 && (
+            <>
+              <button onClick={() => setBiOpen(v => !v)}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  isBiActive ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <BarChart2 size={16} />
+                  <span>Business Intelligence</span>
+                </div>
+                {biOpen
+                  ? <ChevronDown size={13} className="text-slate-500" />
+                  : <ChevronRight size={13} className="text-slate-500" />
+                }
+              </button>
 
-          {biOpen && (
-            <div className="ml-3 pl-3 border-l border-slate-700 space-y-0.5">
-              {biNav.map(({ to, icon: Icon, label }) => (
-                <NavLink key={to} to={to}
-                  className={({ isActive }) =>
-                    `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      isActive ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                    }`
-                  }
-                >
-                  <Icon size={15} />{label}
-                </NavLink>
-              ))}
-            </div>
+              {biOpen && (
+                <div className="ml-3 pl-3 border-l border-slate-700 space-y-0.5">
+                  {visibleBi.map(({ to, icon: Icon, label }) => (
+                    <NavLink key={to} to={to}
+                      className={({ isActive }) =>
+                        `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          isActive ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                        }`
+                      }
+                    >
+                      <Icon size={15} />{label}
+                    </NavLink>
+                  ))}
+                </div>
+              )}
+
+              {/* Divider */}
+              <div className="pt-2 pb-1">
+                <div className="border-t border-slate-800" />
+              </div>
+            </>
           )}
 
-          {/* Divider */}
-          <div className="pt-2 pb-1">
-            <div className="border-t border-slate-800" />
-          </div>
+          {/* Permissions */}
+          {showPermissions && (
+            <NavLink to="/permissions"
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  isActive ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                }`
+              }
+            >
+              <Shield size={16} />Permissions
+            </NavLink>
+          )}
 
           {/* Settings */}
-          <NavLink to="/settings"
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                isActive ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-              }`
-            }
-          >
-            <Settings size={16} />Settings
-          </NavLink>
+          {showSettings && (
+            <NavLink to="/settings"
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  isActive ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                }`
+              }
+            >
+              <Settings size={16} />Settings
+            </NavLink>
+          )}
 
         </nav>
 

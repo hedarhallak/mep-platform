@@ -14,7 +14,7 @@ const router  = require("express").Router();
 const crypto  = require("crypto");
 const { pool } = require("../db");
 const auth    = require("../middleware/auth");
-const { COMPANY_ADMIN_UP } = require("../middleware/roles");
+const { can } = require("../middleware/permissions");
 const { sendEmail } = require("../lib/email");
 
 router.use(auth);
@@ -120,7 +120,7 @@ function inviteEmailHtml({ firstName, lastName, role, tradeName, inviteUrl, appN
 }
 
 // ── POST /api/invite-employee ─────────────────────────────────
-router.post("/", COMPANY_ADMIN_UP, async (req, res) => {
+router.post("/", can("employees.invite"), async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");

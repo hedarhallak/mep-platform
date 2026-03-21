@@ -12,6 +12,7 @@
 const router = require("express").Router();
 const { pool } = require("../db");
 const { normalizeRole } = require("../middleware/roles");
+const { can } = require("../middleware/permissions");
 
 function requireRoles(allowed) {
   const normalized = allowed.map(r => normalizeRole(r));
@@ -29,7 +30,7 @@ const ADMIN_ONLY = requireRoles(["COMPANY_ADMIN", "ADMIN", "TRADE_ADMIN"]);
 const FAR_THRESHOLD_KM = 65; // flag assignments beyond this distance
 
 // ── GET /api/bi/workforce-suggestions ────────────────────────
-router.get("/workforce-suggestions", ADMIN_ONLY, async (req, res) => {
+router.get("/workforce-suggestions", can("bi.access_full"), async (req, res) => {
   try {
     const companyId = req.user.company_id;
     const today = new Date().toISOString().split("T")[0];

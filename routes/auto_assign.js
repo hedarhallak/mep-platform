@@ -12,18 +12,7 @@ const { pool } = require("../db");
 const { sendEmail } = require("../lib/email");
 const { normalizeRole } = require("../middleware/roles");
 
-function requireRoles(allowed) {
-  const normalized = allowed.map(r => normalizeRole(r));
-  return (req, res, next) => {
-    if (!req.user) return res.status(401).json({ ok: false, error: "UNAUTHENTICATED" });
-    const userRole = normalizeRole(req.user.role);
-    if (userRole === "SUPER_ADMIN") return next();
-    if (!normalized.includes(userRole))
-      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
-    return next();
-  };
-}
-const ADMIN_ONLY = requireRoles(["COMPANY_ADMIN", "ADMIN"]);
+const { can } = require("../middleware/permissions");
 
 // ─────────────────────────────────────────────────────────────
 // Email Templates
@@ -259,7 +248,7 @@ function assignmentAdminSummaryEmailHtml({
 // Body: { target_date }
 // Returns suggested assignments per project grouped
 // ─────────────────────────────────────────────────────────────
-router.post("/auto-suggest", ADMIN_ONLY, async (req, res) => {
+router.post("/auto-suggest", can("assignments.smart_assign"), async (req, res) => {
   try {
     const companyId   = req.user.company_id;
     const { target_date } = req.body || {};
@@ -348,7 +337,7 @@ router.post("/auto-suggest", ADMIN_ONLY, async (req, res) => {
        FROM public.employee_profiles ep
        JOIN public.app_users au ON au.employee_id = ep.employee_id
        WHERE au.company_id = $1 AND au.employee_id IS NOT NULL
-         AND au.role NOT IN ('ADMIN','SUPER_ADMIN')
+         AND au.role NOT IN ('COMPANY_ADMIN','SUPER_ADMIN','IT_ADMIN')
        ORDER BY ep.full_name`,
       [companyId]
     );
@@ -484,7 +473,7 @@ function haversineKm(lat1, lng1, lat2, lng2) {
 // POST /auto-confirm
 // Body: { target_date, confirmed: [ { project_id, shift_start, shift_end, notes, employees: [{employee_id, trade_code, contact_email, employee_name, type}] } ] }
 // ─────────────────────────────────────────────────────────────
-router.post("/auto-confirm", ADMIN_ONLY, async (req, res) => {
+router.post("/auto-confirm", can("assignments.smart_assign"), async (req, res) => {
   const client = await pool.connect();
   try {
     const companyId  = req.user.company_id;
@@ -501,7 +490,7 @@ router.post("/auto-confirm", ADMIN_ONLY, async (req, res) => {
       `SELECT c.name AS company_name, au.email AS admin_email
        FROM public.companies c
        JOIN public.app_users au ON au.company_id = c.company_id
-       WHERE c.company_id = $1 AND au.role IN ('ADMIN','COMPANY_ADMIN')
+       WHERE c.company_id = $1 AND au.role IN ('COMPANY_ADMIN','IT_ADMIN')
        ORDER BY au.created_at ASC LIMIT 1`,
       [companyId]
     );

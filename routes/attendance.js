@@ -10,6 +10,8 @@ if (!pool || typeof pool.query !== "function") {
 }
 
 
+const { can } = require("../middleware/permissions");
+
 // ---------- Auth middleware (robust) ----------
 let requireAuth = null;
 try {
@@ -111,7 +113,7 @@ function nextAction(openRow) {
 }
 
 // ---------- GET /today ----------
-router.get("/today", async (req, res) => {
+router.get("/today", can("attendance.view_self"), async (req, res) => {
   try {
     const employeeId = await resolveEmployeeId(req);
     if (!employeeId) return res.status(400).json({ ok: false, error: "MISSING_EMPLOYEE" });
@@ -143,7 +145,7 @@ router.get("/today", async (req, res) => {
 });
 
 // ---------- POST /today/action ----------
-router.post("/today/action", async (req, res) => {
+router.post("/today/action", can("attendance.checkin"), async (req, res) => {
   try {
     const employeeId = await resolveEmployeeId(req);
     if (!employeeId) return res.status(400).json({ ok: false, error: "MISSING_EMPLOYEE" });
@@ -208,7 +210,7 @@ router.post("/today/action", async (req, res) => {
  * - cannot submit after check-in
  * - cannot check-in after absence (via attendance_logs trigger)
  */
-router.post("/absence", async (req, res) => {
+router.post("/absence", can("attendance.checkin"), async (req, res) => {
   try {
     const userId = await resolveUserId(req);
     const assignmentId = Number(req.body?.assignment_id);
@@ -251,7 +253,7 @@ router.post("/absence", async (req, res) => {
 });
 
 // ---------- SHIFT + CLOCKIN (kept) ----------
-router.get("/shift", async (req, res) => {
+router.get("/shift", can("attendance.view_self"), async (req, res) => {
   try {
     const employeeId = await resolveEmployeeId(req);
     if (!employeeId) return res.status(400).json({ ok: false, error: "Missing employee" });
@@ -269,7 +271,7 @@ router.get("/shift", async (req, res) => {
   }
 });
 
-router.post("/clockin", async (req, res) => {
+router.post("/clockin", can("attendance.checkin"), async (req, res) => {
   try {
     const employeeId = await resolveEmployeeId(req);
     if (!employeeId) return res.status(400).json({ ok: false, error: "Missing employee" });
@@ -311,7 +313,7 @@ router.post("/clockin", async (req, res) => {
 
 // ── POST /foreman-checkin ────────────────────────────────────
 // Foreman checks in an employee on their behalf
-router.post("/foreman-checkin", async (req, res) => {
+router.post("/foreman-checkin", can("attendance.checkin"), async (req, res) => {
   try {
     const companyId  = req.user.company_id;
     const projectId  = Number(req.body?.project_id);
@@ -362,7 +364,7 @@ router.post("/foreman-checkin", async (req, res) => {
 
 // ── POST /foreman-checkout ───────────────────────────────────
 // Foreman checks out an employee on their behalf
-router.post("/foreman-checkout", async (req, res) => {
+router.post("/foreman-checkout", can("attendance.checkin"), async (req, res) => {
   try {
     const companyId    = req.user.company_id;
     const employeeId   = Number(req.body?.employee_id);
@@ -398,7 +400,7 @@ router.post("/foreman-checkout", async (req, res) => {
   }
 });
 // Foreman requests overtime approval for a completed attendance log
-router.post("/overtime/request", async (req, res) => {
+router.post("/overtime/request", can("attendance.checkin"), async (req, res) => {
   try {
     const companyId      = req.user.company_id;
     const { attendance_id, overtime_hours, note } = req.body || {};
@@ -438,7 +440,7 @@ router.post("/overtime/request", async (req, res) => {
 
 // ── PATCH /overtime/:id/approve ──────────────────────────────
 // Admin approves overtime
-router.patch("/overtime/:id/approve", async (req, res) => {
+router.patch("/overtime/:id/approve", can("attendance.overtime_approve"), async (req, res) => {
   try {
     const companyId    = req.user.company_id;
     const attendanceId = Number(req.params.id);
@@ -466,7 +468,7 @@ router.patch("/overtime/:id/approve", async (req, res) => {
 // ── GET /report/daily ────────────────────────────────────────
 // Daily attendance report for a project on a given date
 // Query params: project_id, date (YYYY-MM-DD, default today)
-router.get("/report/daily", async (req, res) => {
+router.get("/report/daily", can("attendance.view"), async (req, res) => {
   try {
     const companyId  = req.user.company_id;
     const projectId  = req.query.project_id ? Number(req.query.project_id) : null;

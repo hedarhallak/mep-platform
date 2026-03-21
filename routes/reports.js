@@ -5,6 +5,7 @@ const router = express.Router();
 const db = require("../db");
 const pool = db && db.pool ? db.pool : db;
 const auth = require("../middleware/auth");
+const { can } = require("../middleware/permissions");
 
 if (!pool || typeof pool.query !== "function") {
   throw new Error("DB pool is not initialized correctly. Expected pool.query to be a function.");
@@ -216,7 +217,7 @@ async function queryParkingClaims(companyId) {
   return rows;
 }
 
-router.get("/timesheet.csv", auth, async (req, res) => {
+router.get("/timesheet.csv", auth, can("bi.access_full"), async (req, res) => {
   if (!requireRoles(req, res, ["ADMIN", "FOREMAN"])) return;
 
   const companyId = requireCompany(req, res);
@@ -257,7 +258,7 @@ router.get("/timesheet.csv", auth, async (req, res) => {
   }
 });
 
-router.get("/project_summary.csv", auth, async (req, res) => {
+router.get("/project_summary.csv", auth, can("bi.access_full"), async (req, res) => {
   if (!requireRoles(req, res, ["ADMIN", "FOREMAN"])) return;
 
   const companyId = requireCompany(req, res);
@@ -280,7 +281,7 @@ router.get("/project_summary.csv", auth, async (req, res) => {
   }
 });
 
-router.get("/travel_allowance.csv", auth, async (req, res) => {
+router.get("/travel_allowance.csv", auth, can("bi.access_full"), async (req, res) => {
   if (!requireRoles(req, res, ["ADMIN", "FOREMAN"])) return;
 
   const companyId = requireCompany(req, res);
@@ -303,7 +304,7 @@ router.get("/travel_allowance.csv", auth, async (req, res) => {
   }
 });
 
-router.get("/parking_claims.csv", auth, async (req, res) => {
+router.get("/parking_claims.csv", auth, can("bi.access_full"), async (req, res) => {
   if (!requireRoles(req, res, ["ADMIN", "FOREMAN"])) return;
 
   const companyId = requireCompany(req, res);

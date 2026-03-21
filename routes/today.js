@@ -6,7 +6,7 @@ const auth = require("../middleware/auth");
 /**
  * GET /api/attendance/today
  */
-router.get("/today", auth, async (req, res) => {
+router.get("/today", auth, can("attendance.view_self"), async (req, res) => {
   try {
     const employeeId = req.user.employee_id;
     const companyId = req.user.company_id;
@@ -60,7 +60,7 @@ router.get("/today", auth, async (req, res) => {
  * POST /api/attendance/today/action
  * Body: { action: "arrive"|"end", project_id?, lat, lng }
  */
-router.post("/today/action", auth, async (req, res) => {
+router.post("/today/action", auth, can("attendance.checkin"), async (req, res) => {
   try {
     const employeeId = req.user.employee_id;
     const companyId = req.user.company_id;
@@ -135,10 +135,10 @@ router.post("/today/action", auth, async (req, res) => {
  * Admin-only.
  * Body optional: { employee_id }
  */
-router.post("/today/reset", auth, async (req, res) => {
+router.post("/today/reset", auth, can("attendance.approve"), async (req, res) => {
   try {
     const role = String(req.user.role || "").toUpperCase();
-    if (role !== "ADMIN") return res.status(403).json({ ok: false, error: "ADMIN_ONLY" });
+    // Role check handled by can() middleware
 
     const companyId = req.user.company_id;
     if (!companyId) return res.status(400).json({ ok: false, error: "NO_COMPANY_ID" });

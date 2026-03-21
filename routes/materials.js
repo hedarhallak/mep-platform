@@ -49,6 +49,7 @@ function pickAuthMiddleware(mod) {
 }
 
 const requireAuthResolved = pickAuthMiddleware(authModule);
+const { can } = require("../middleware/permissions");
 const requireAuth = requireAuthResolved
   ? requireAuthResolved
   : (req, res) => {
@@ -178,7 +179,7 @@ async function requireForemanCap(client, user) {
 //  Existing: Foreman Projects (for picker)
 //  GET /api/materials/foreman/projects
 // ==========================================================
-router.get("/foreman/projects", requireAuth, async (req, res) => {
+router.get("/foreman/projects", can("hub.materials_inbox"), async (req, res) => {
   const client = await pool.connect();
   try {
     await requireForemanCap(client, req.user);
@@ -211,7 +212,7 @@ router.get("/foreman/projects", requireAuth, async (req, res) => {
 //  POST /api/materials/submit
 //  Writes to your materials_requests schema
 // ==========================================================
-router.post("/submit", requireAuth, async (req, res) => {
+router.post("/submit", can("materials.request_submit"), async (req, res) => {
   const client = await pool.connect();
   try {
     const { employee_id, user_id } = req.user || {};
@@ -263,7 +264,7 @@ router.post("/submit", requireAuth, async (req, res) => {
 //  Existing: Foreman Board (legacy list of requests)
 //  GET /api/materials/foreman/today?project_id=..&work_date=..
 // ==========================================================
-router.get("/foreman/today", requireAuth, async (req, res) => {
+router.get("/foreman/today", can("hub.materials_inbox"), async (req, res) => {
   const client = await pool.connect();
   try {
     await requireForemanCap(client, req.user);
@@ -320,7 +321,7 @@ router.get("/foreman/today", requireAuth, async (req, res) => {
 //  POST /api/materials/foreman/items
 //  (kept for backward compatibility; Option-1 uses ticket draft endpoints below)
 // ==========================================================
-router.post("/foreman/items", requireAuth, async (req, res) => {
+router.post("/foreman/items", can("hub.materials_merge_send"), async (req, res) => {
   const client = await pool.connect();
   try {
     await requireForemanCap(client, req.user);
@@ -432,7 +433,7 @@ async function getTicketWithItems(client, ticketId) {
  * - draft ticket + items (if exists/created)
  * - merged preview (server-side)
  */
-router.get("/foreman/workspace", requireAuth, async (req, res) => {
+router.get("/foreman/workspace", can("hub.materials_inbox"), async (req, res) => {
   const client = await pool.connect();
   try {
     await requireForemanCap(client, req.user);
@@ -520,7 +521,7 @@ router.get("/foreman/workspace", requireAuth, async (req, res) => {
  * PUT /api/materials/foreman/requests/:request_id/items/:item_id
  * Body: { item_text?, qty?, unit?, note? }
  */
-router.put("/foreman/requests/:request_id/items/:item_id", requireAuth, async (req, res) => {
+router.put("/foreman/requests/:request_id/items/:item_id", can("hub.materials_merge_send"), async (req, res) => {
   const client = await pool.connect();
   try {
     await requireForemanCap(client, req.user);
@@ -595,7 +596,7 @@ router.put("/foreman/requests/:request_id/items/:item_id", requireAuth, async (r
  * Delete a worker request item (foreman review)
  * DELETE /api/materials/foreman/requests/:request_id/items/:item_id
  */
-router.delete("/foreman/requests/:request_id/items/:item_id", requireAuth, async (req, res) => {
+router.delete("/foreman/requests/:request_id/items/:item_id", can("hub.materials_merge_send"), async (req, res) => {
   const client = await pool.connect();
   try {
     await requireForemanCap(client, req.user);
@@ -651,7 +652,7 @@ router.delete("/foreman/requests/:request_id/items/:item_id", requireAuth, async
  * }
  * source must be 'FOREMAN' or 'WORKER'
  */
-router.post("/foreman/ticket/items", requireAuth, async (req, res) => {
+router.post("/foreman/ticket/items", can("hub.materials_merge_send"), async (req, res) => {
   const client = await pool.connect();
   try {
     await requireForemanCap(client, req.user);
@@ -740,7 +741,7 @@ router.post("/foreman/ticket/items", requireAuth, async (req, res) => {
  * Delete draft ticket item
  * DELETE /api/materials/foreman/ticket/items/:id
  */
-router.delete("/foreman/ticket/items/:id", requireAuth, async (req, res) => {
+router.delete("/foreman/ticket/items/:id", can("hub.materials_merge_send"), async (req, res) => {
   const client = await pool.connect();
   try {
     await requireForemanCap(client, req.user);
@@ -764,7 +765,7 @@ router.delete("/foreman/ticket/items/:id", requireAuth, async (req, res) => {
  * POST /api/materials/foreman/ticket/send
  * Body: { project_id?: number, work_date?: "YYYY-MM-DD", note?: string }
  */
-router.post("/foreman/ticket/send", requireAuth, async (req, res) => {
+router.post("/foreman/ticket/send", can("hub.materials_merge_send"), async (req, res) => {
   const client = await pool.connect();
   try {
     await requireForemanCap(client, req.user);

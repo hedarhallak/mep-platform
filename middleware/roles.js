@@ -1,25 +1,35 @@
 "use strict";
 
 /**
+ * middleware/roles.js
+ *
  * Role hierarchy for MEP Platform
  *
- * SUPER_ADMIN      → sees all companies, system management
- * COMPANY_ADMIN    → sees all within company, analytics & reports (no daily assignments)
- * ADMIN            → legacy alias for COMPANY_ADMIN
- * TRADE_ADMIN      → manages assignments for specific trade(s)
- * PROJECT_MANAGER  → suggests assignments for his projects (was PM)
- * PM               → legacy alias for PROJECT_MANAGER
- * PURCHASING       → purchasing department
- * WORKER           → sees own assignments only
+ * SUPER_ADMIN            → sees all companies, system management
+ * IT_ADMIN               → system + user management, no business data
+ * COMPANY_ADMIN          → full access within company
+ * TRADE_PROJECT_MANAGER  → read-only analytics for own trade
+ * TRADE_ADMIN            → manages assignments + attendance for own trade
+ * WORKER                 → sees own data only
+ *
+ * Legacy aliases (kept for backward compatibility during migration):
+ * ADMIN       → COMPANY_ADMIN
+ * PM          → TRADE_PROJECT_MANAGER
+ * PROJECT_MANAGER → TRADE_PROJECT_MANAGER
+ * FOREMAN     → TRADE_ADMIN
+ * PURCHASING  → TRADE_ADMIN
  */
 
 const ROLE_ALIASES = {
-  ADMIN: "COMPANY_ADMIN",
-  PM:    "PROJECT_MANAGER",
+  ADMIN:           "COMPANY_ADMIN",
+  PM:              "TRADE_PROJECT_MANAGER",
+  PROJECT_MANAGER: "TRADE_PROJECT_MANAGER",
+  FOREMAN:         "TRADE_ADMIN",
+  PURCHASING:      "TRADE_ADMIN",
 };
 
 /**
- * Normalize role — maps legacy roles to new ones
+ * Normalize role — maps legacy roles to new canonical roles
  */
 function normalizeRole(role) {
   if (!role) return null;
@@ -31,24 +41,20 @@ function normalizeRole(role) {
  * Role power levels — higher = more access
  */
 const ROLE_LEVEL = {
-  SUPER_ADMIN:     100,
-  COMPANY_ADMIN:   80,
-  TRADE_ADMIN:     60,
-  PROJECT_MANAGER: 40,
-  PURCHASING:      30,
-  WORKER:          10,
+  SUPER_ADMIN:           100,
+  IT_ADMIN:               90,
+  COMPANY_ADMIN:          80,
+  TRADE_PROJECT_MANAGER:  50,
+  TRADE_ADMIN:            60,
+  WORKER:                 10,
 };
 
 /**
  * requireRoles(allowedRoles)
  * Middleware factory — allows access if user role is in the list
- * Supports both new roles and legacy aliases
- *
- * Example:
- *   router.get('/route', requireRoles(['COMPANY_ADMIN','TRADE_ADMIN']), handler)
+ * Supports both new roles and legacy aliases via normalizeRole
  */
 function requireRoles(allowedRoles) {
-  // Normalize the allowed list too (in case legacy roles passed)
   const normalized = allowedRoles.map(r => normalizeRole(r));
 
   return (req, res, next) => {
@@ -58,7 +64,6 @@ function requireRoles(allowedRoles) {
 
     const userRole = normalizeRole(req.user.role);
 
-    // SUPER_ADMIN always passes
     if (userRole === "SUPER_ADMIN") return next();
 
     if (!normalized.includes(userRole)) {
@@ -77,9 +82,6 @@ function requireRoles(allowedRoles) {
 /**
  * requireMinLevel(level)
  * Allows any role at or above the given power level
- *
- * Example:
- *   requireMinLevel(60) → TRADE_ADMIN and above
  */
 function requireMinLevel(level) {
   return (req, res, next) => {
@@ -105,16 +107,18 @@ function requireMinLevel(level) {
 
 // ── Prebuilt guards ───────────────────────────────────────────
 const SUPER_ADMIN_ONLY  = requireRoles(["SUPER_ADMIN"]);
-const COMPANY_ADMIN_UP  = requireMinLevel(80);   // COMPANY_ADMIN + SUPER_ADMIN
-const TRADE_ADMIN_UP    = requireMinLevel(60);   // TRADE_ADMIN + above
-const PM_UP             = requireMinLevel(40);   // PM + above
-const ANY_AUTHENTICATED = requireMinLevel(10);   // any logged in user
+const IT_ADMIN_UP       = requireMinLevel(90);  // IT_ADMIN + SUPER_ADMIN
+const COMPANY_ADMIN_UP  = requireMinLevel(80);  // COMPANY_ADMIN + above
+const TRADE_ADMIN_UP    = requireMinLevel(60);  // TRADE_ADMIN + above
+const PM_UP             = requireMinLevel(50);  // TRADE_PROJECT_MANAGER + above
+const ANY_AUTHENTICATED = requireMinLevel(10);  // any logged in user
 
 module.exports = {
   normalizeRole,
   requireRoles,
   requireMinLevel,
   SUPER_ADMIN_ONLY,
+  IT_ADMIN_UP,
   COMPANY_ADMIN_UP,
   TRADE_ADMIN_UP,
   PM_UP,

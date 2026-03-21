@@ -3,11 +3,9 @@
 
 require("dotenv").config();
 const express = require("express");
-const path = require("path");
-const helmet = require("helmet");
+const helmet  = require("helmet");
 const rateLimit = require("express-rate-limit");
 const { pool } = require("./db");
-const borrowRequestsRouter = require("./routes/borrow_requests");
 const app = express();
 
 // --- Security headers ---
@@ -37,24 +35,25 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
   message: { ok: false, error: "TOO_MANY_REQUESTS", message: "Too many attempts, please try again later." },
 });
-app.use("/api/auth/login", authLimiter);
+app.use("/api/auth/login",  authLimiter);
 app.use("/api/auth/signup", authLimiter);
 
 function loadRouter(modPath) {
   const mod = require(modPath);
   if (typeof mod === "function") return mod;
-  if (mod && typeof mod.router === "function") return mod.router;
-  if (mod && typeof mod.default === "function") return mod.default;
+  if (mod && typeof mod.router   === "function") return mod.router;
+  if (mod && typeof mod.default  === "function") return mod.default;
   throw new Error(`Route module "${modPath}" did not export an Express router function.`);
 }
 
-const auth = require("./middleware/auth");
+const auth       = require("./middleware/auth");
 const superAdmin = require("./middleware/super_admin");
 if (typeof auth !== "function") {
   throw new Error(`"./middleware/auth" must export a middleware function, got ${typeof auth}`);
 }
 
-// --- Public endpoints ---
+// ── Public endpoints ──────────────────────────────────────────
+
 app.get("/api/geocode/suggest", async (req, res) => {
   try {
     const q     = String(req.query.q || "").trim();
@@ -67,7 +66,6 @@ app.get("/api/geocode/suggest", async (req, res) => {
 
     const r    = await fetch(url);
     const data = await r.json();
-
     return res.json({ ok: true, features: data.features || [] });
   } catch (err) {
     console.error("geocode/suggest error:", err.message);
@@ -86,55 +84,48 @@ app.get("/api/health", (req, res) => {
   res.json({ ok: true, service: "mep-site-workforce", time: new Date().toISOString() });
 });
 
-// --- Routes ---
-app.use("/api/auth",             loadRouter("./routes/auth"));
-app.use("/api/super",            auth, superAdmin, loadRouter("./routes/super_admin"));
-app.use("/api/attendance",       auth, loadRouter("./routes/attendance"));
-app.use("/api/assignments",      auth, loadRouter("./routes/assignments"));
-app.use("/api/assignments",      auth, require("./routes/auto_assign"));
-app.use("/api/projects",         auth, loadRouter("./routes/projects"));
-app.use("/api/project-trades",   auth, require("./routes/project_trades"));
-app.use("/api/project-foremen",  auth, require("./routes/project_foremen"));
-app.use("/api/invite-employee",  auth, require("./routes/invite_employee"));
-app.use("/api/onboarding",       require("./routes/onboarding")); // public — no auth
-app.use("/api/employees",        auth, loadRouter("./routes/employees"));
-app.use("/api/profile",          auth, loadRouter("./routes/profile"));
-app.use("/api/reports",          auth, loadRouter("./routes/reports"));
-app.use("/api/borrow_requests",  auth, borrowRequestsRouter);
-app.use("/api/materials",        auth, loadRouter("./routes/materials"));
-app.use("/api",                  auth, loadRouter("./routes/parking"));
+// ── Auth (public) ─────────────────────────────────────────────
+app.use("/api/auth",       loadRouter("./routes/auth"));
+app.use("/api/onboarding", require("./routes/onboarding")); // public — no auth
+app.use("/activate",       loadRouter("./routes/activate")); // public — activation link
 
-// --- Assignment Requests Inbox ---
-app.use("/api/assignment-requests", auth, loadRouter("./routes/assignment_requests"));
+// ── Super admin ───────────────────────────────────────────────
+app.use("/api/super", auth, superAdmin, loadRouter("./routes/super_admin"));
 
-// --- Daily Dispatch ---
-app.use("/api/daily-dispatch", auth, loadRouter("./routes/daily_dispatch"));
+// ── Core business routes ──────────────────────────────────────
+app.use("/api/employees",       auth, loadRouter("./routes/employees"));
+app.use("/api/projects",        auth, loadRouter("./routes/projects"));
+app.use("/api/suppliers",       auth, require("./routes/suppliers"));
+app.use("/api/assignments",     auth, loadRouter("./routes/assignments"));
+app.use("/api/assignments",     auth, require("./routes/auto_assign"));
+app.use("/api/attendance",      auth, loadRouter("./routes/attendance"));
+app.use("/api/profile",         auth, loadRouter("./routes/profile"));
 
-// --- Business Intelligence ---
-app.use("/api/bi", auth, require("./routes/bi"));
+// ── Project structure ─────────────────────────────────────────
+app.use("/api/project-trades",  auth, require("./routes/project_trades"));
+app.use("/api/project-foremen", auth, require("./routes/project_foremen"));
 
-// --- Material Requests ---
+// ── Materials & Purchase Orders ───────────────────────────────
+app.use("/api/materials", auth, loadRouter("./routes/materials"));
 app.use("/api/materials", auth, require("./routes/material_requests"));
 
-// --- Suppliers ---
-app.use("/api/suppliers", auth, require("./routes/suppliers"));
+// ── Business Intelligence ─────────────────────────────────────
+app.use("/api/bi",      auth, require("./routes/bi"));
+app.use("/api/reports", auth, loadRouter("./routes/reports"));
 
-// --- Employee Invites ---
-app.use("/api/employee-invites", auth, loadRouter("./routes/employee_invites"));
+// ── Daily operations ──────────────────────────────────────────
+app.use("/api/daily-dispatch", auth, loadRouter("./routes/daily_dispatch"));
 
-// --- User Invites ---
-app.use("/api/user-invites", auth, loadRouter("./routes/user_invites"));
+// ── User & invite management ──────────────────────────────────
+app.use("/api/invite-employee",  auth, require("./routes/invite_employee"));
 
-// --- Admin Users ---
-app.use("/api/admin/users", auth, loadRouter("./routes/admin_users"));
+app.use("/api/user-invites",     auth, loadRouter("./routes/user_invites"));
+app.use("/api/admin/users",      auth, loadRouter("./routes/admin_users"));
 
-// --- Activation Page (public) ---
-app.use("/activate", loadRouter("./routes/activate"));
+// ── RBAC Permissions ──────────────────────────────────────────
+app.use("/api/permissions", auth, require("./routes/permissions"));
 
-// Static
-app.use("/", express.static(path.join(__dirname, "public")));
-
-// Start
+// ── Start ─────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);

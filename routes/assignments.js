@@ -15,6 +15,7 @@ const express = require("express");
 const router  = express.Router();
 const { pool }           = require("../db");
 const { audit, ACTIONS } = require("../lib/audit");
+const { can } = require("../middleware/permissions");
 const { sendAssignmentEmployee, sendAssignmentForeman } = require("../lib/email");
 
 // ── notifyAssignment ──────────────────────────────────────────
@@ -186,13 +187,13 @@ function generateTimeSlots() {
 }
 
 // ── GET /api/assignments/timeslots ────────────────────────
-router.get("/timeslots", (req, res) => {
+router.get("/timeslots", can("assignments.view"), (req, res) => {
   return res.json({ ok: true, slots: generateTimeSlots() });
 });
 
 // ── GET /api/assignments/employees-map ───────────────────
 // Employees with home coords + availability for given period
-router.get("/employees-map", async (req, res) => {
+router.get("/employees-map", can("assignments.view"), async (req, res) => {
   try {
     const { start, end } = req.query;
     const companyId = req.user.company_id;
@@ -234,7 +235,7 @@ router.get("/employees-map", async (req, res) => {
   }
 });
 // List employees that have a profile (employee_id not null)
-router.get("/employees", async (req, res) => {
+router.get("/employees", can("assignments.view"), async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT ep.employee_id AS id, ep.full_name, ep.trade_code, ep.role_code, ep.rank_code,
@@ -256,7 +257,7 @@ router.get("/employees", async (req, res) => {
 
 // ── GET /api/assignments/defaults ────────────────────────
 // Returns company default shift times
-router.get("/defaults", async (req, res) => {
+router.get("/defaults", can("assignments.view"), async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT default_shift_start, default_shift_end
@@ -276,7 +277,7 @@ router.get("/defaults", async (req, res) => {
 });
 
 // ── GET /api/assignments/requests ────────────────────────
-router.get("/requests", async (req, res) => {
+router.get("/requests", can("assignments.view"), async (req, res) => {
   try {
     const { status } = req.query;
     const companyId  = req.user.company_id;
@@ -331,7 +332,7 @@ router.get("/requests", async (req, res) => {
 });
 
 // ── POST /api/assignments/requests ───────────────────────
-router.post("/requests", ADMIN_PM, async (req, res) => {
+router.post("/requests", can("assignments.create"), async (req, res) => {
   try {
     const companyId = req.user.company_id;
     const {
@@ -470,7 +471,7 @@ router.post("/requests", ADMIN_PM, async (req, res) => {
 });
 
 // ── PATCH /api/assignments/requests/:id/approve ──────────
-router.patch("/requests/:id/approve", ADMIN_ONLY, async (req, res) => {
+router.patch("/requests/:id/approve", can("assignments.edit"), async (req, res) => {
   try {
     const reqId     = Number(req.params.id);
     const companyId = req.user.company_id;
@@ -527,7 +528,7 @@ router.patch("/requests/:id/approve", ADMIN_ONLY, async (req, res) => {
 });
 
 // ── PATCH /api/assignments/requests/:id/reject ───────────
-router.patch("/requests/:id/reject", ADMIN_ONLY, async (req, res) => {
+router.patch("/requests/:id/reject", can("assignments.edit"), async (req, res) => {
   try {
     const reqId     = Number(req.params.id);
     const companyId = req.user.company_id;
@@ -567,7 +568,7 @@ router.patch("/requests/:id/reject", ADMIN_ONLY, async (req, res) => {
 
 // ── PATCH /api/assignments/requests/:id/cancel ───────────
 // PM can cancel their own PENDING request
-router.patch("/requests/:id/cancel", ADMIN_PM, async (req, res) => {
+router.patch("/requests/:id/cancel", can("assignments.edit"), async (req, res) => {
   try {
     const reqId     = Number(req.params.id);
     const companyId = req.user.company_id;
@@ -612,7 +613,7 @@ router.patch("/requests/:id/cancel", ADMIN_PM, async (req, res) => {
 
 // ── GET /api/assignments ──────────────────────────────────
 // Active (APPROVED) assignments — what's on site today/upcoming
-router.get("/", async (req, res) => {
+router.get("/", can("assignments.view"), async (req, res) => {
   try {
     const { project_id, employee_id, date } = req.query;
     const companyId = req.user.company_id;
@@ -674,7 +675,7 @@ router.get("/", async (req, res) => {
 // ── PATCH /api/assignments/requests/:id/reassign ─────────
 // Atomically cancel old assignment + create new one in one transaction
 // Avoids race condition of cancel-then-create with overlap check
-router.patch("/requests/:id/reassign", ADMIN_PM, async (req, res) => {
+router.patch("/requests/:id/reassign", can("assignments.edit"), async (req, res) => {
   const client = await pool.connect();
   try {
     const reqId     = Number(req.params.id);
@@ -772,7 +773,7 @@ router.patch("/requests/:id/reassign", ADMIN_PM, async (req, res) => {
 
 // ── PATCH /api/assignments/requests/:id/move ─────────────
 // Move an employee to a different project (same dates + shift)
-router.patch("/requests/:id/move", ADMIN_PM, async (req, res) => {
+router.patch("/requests/:id/move", can("assignments.edit"), async (req, res) => {
   const client = await pool.connect();
   try {
     const reqId        = Number(req.params.id);
@@ -882,7 +883,7 @@ router.patch("/requests/:id/move", ADMIN_PM, async (req, res) => {
 
 // ── POST /api/assignments/repeat-preview ─────────────────────
 // Shows what would be repeated from today to target_date
-router.post("/repeat-preview", ADMIN_PM, async (req, res) => {
+router.post("/repeat-preview", can("assignments.create"), async (req, res) => {
   try {
     const companyId       = req.user.company_id;
     const { target_date } = req.body || {};
@@ -936,7 +937,7 @@ router.post("/repeat-preview", ADMIN_PM, async (req, res) => {
 
 // ── POST /api/assignments/repeat-confirm ─────────────────────
 // Creates assignments for target_date based on today's assignments (skips already assigned)
-router.post("/repeat-confirm", ADMIN_PM, async (req, res) => {
+router.post("/repeat-confirm", can("assignments.create"), async (req, res) => {
   const client = await pool.connect();
   try {
     const companyId       = req.user.company_id;
@@ -1020,7 +1021,7 @@ module.exports = router;
 
 // ── GET /api/assignments/suggest/:project_id ──────────────
 // Smart suggestions: available employees ranked by distance + compatibility
-router.get("/suggest/:project_id", async (req, res) => {
+router.get("/suggest/:project_id", can("assignments.view"), async (req, res) => {
   try {
     const projectId = Number(req.params.project_id);
     const companyId = req.user.company_id;

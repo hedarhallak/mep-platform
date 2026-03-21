@@ -12,13 +12,14 @@ const router  = express.Router();
 const { pool } = require("../db");
 const auth    = require("../middleware/auth");
 const { COMPANY_ADMIN_UP, TRADE_ADMIN_UP } = require("../middleware/roles");
+const { can } = require("../middleware/permissions");
 
 router.use(auth);
 
 // ── GET /api/employees ────────────────────────────────────────
 // Returns all employees for the current company
 // SUPER_ADMIN must pass ?company_id=X or gets all companies
-router.get("/", TRADE_ADMIN_UP, async (req, res) => {
+router.get("/", can("employees.view"), async (req, res) => {
   try {
     const userRole  = req.user.role;
     const companyId = req.user.company_id ? Number(req.user.company_id) : null;
@@ -112,7 +113,7 @@ router.get("/", TRADE_ADMIN_UP, async (req, res) => {
 });
 
 // ── GET /api/employees/:id ────────────────────────────────────
-router.get("/:id", TRADE_ADMIN_UP, async (req, res) => {
+router.get("/:id", can("employees.view"), async (req, res) => {
   try {
     const employeeId = Number(req.params.id);
     const companyId  = req.user.company_id ? Number(req.user.company_id) : null;

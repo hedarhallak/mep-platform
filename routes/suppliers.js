@@ -12,6 +12,7 @@
 const router = require("express").Router();
 const { pool } = require("../db");
 const { normalizeRole } = require("../middleware/roles");
+const { can } = require("../middleware/permissions");
 
 function requireRoles(allowed) {
   const normalized = allowed.map(r => normalizeRole(r));
@@ -30,7 +31,7 @@ const ADMIN_ONLY = requireRoles(["COMPANY_ADMIN","ADMIN"]);
 const VALID_TRADES = ['PLUMBING','ELECTRICAL','HVAC','CARPENTRY','GENERAL','ALL'];
 
 // ── GET /suppliers ───────────────────────────────────────────
-router.get("/", ANY, async (req, res) => {
+router.get("/", can("suppliers.view"), async (req, res) => {
   try {
     const companyId  = req.user.company_id;
     const { trade_code } = req.query;
@@ -57,7 +58,7 @@ router.get("/", ANY, async (req, res) => {
 });
 
 // ── POST /suppliers ──────────────────────────────────────────
-router.post("/", ADMIN_ONLY, async (req, res) => {
+router.post("/", can("suppliers.create"), async (req, res) => {
   try {
     const companyId = req.user.company_id;
     const { name, email, phone, address, trade_code, note } = req.body || {};
@@ -86,7 +87,7 @@ router.post("/", ADMIN_ONLY, async (req, res) => {
 });
 
 // ── PATCH /suppliers/:id ─────────────────────────────────────
-router.patch("/:id", ADMIN_ONLY, async (req, res) => {
+router.patch("/:id", can("suppliers.edit"), async (req, res) => {
   try {
     const companyId = req.user.company_id;
     const id = Number(req.params.id);
@@ -126,7 +127,7 @@ router.patch("/:id", ADMIN_ONLY, async (req, res) => {
 });
 
 // ── DELETE /suppliers/:id (soft delete) ──────────────────────
-router.delete("/:id", ADMIN_ONLY, async (req, res) => {
+router.delete("/:id", can("suppliers.delete"), async (req, res) => {
   try {
     const companyId = req.user.company_id;
     const id = Number(req.params.id);

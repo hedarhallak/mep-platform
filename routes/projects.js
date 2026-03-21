@@ -20,6 +20,7 @@ const express = require("express");
 const router  = express.Router();
 const { pool }           = require("../db");
 const { audit, ACTIONS } = require("../lib/audit");
+const { can } = require("../middleware/permissions");
 
 // ── Helpers ──────────────────────────────────────────────
 
@@ -38,7 +39,7 @@ const ADMIN_PM   = requireRoles(["ADMIN", "PM"]);
 
 // ── GET /api/projects/meta ────────────────────────────────
 // Returns dropdown data: trade_types, project_statuses, clients
-router.get("/meta", async (req, res) => {
+router.get("/meta", can("projects.view"), async (req, res) => {
   try {
     const companyId = req.user.company_id;
 
@@ -64,7 +65,7 @@ router.get("/meta", async (req, res) => {
 });
 
 // ── GET /api/projects/clients ─────────────────────────────
-router.get("/clients", async (req, res) => {
+router.get("/clients", can("projects.view"), async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT id, client_code, client_name, client_type, phone, email, address, is_active, created_at
@@ -81,7 +82,7 @@ router.get("/clients", async (req, res) => {
 });
 
 // ── POST /api/projects/clients ────────────────────────────
-router.post("/clients", ADMIN_ONLY, async (req, res) => {
+router.post("/clients", can("projects.create"), async (req, res) => {
   try {
     const companyId = req.user.company_id;
     const { client_name, client_type, phone, email, address } = req.body || {};
@@ -121,7 +122,7 @@ router.post("/clients", ADMIN_ONLY, async (req, res) => {
 });
 
 // ── GET /api/projects ─────────────────────────────────────
-router.get("/", async (req, res) => {
+router.get("/", can("projects.view"), async (req, res) => {
   try {
     const { status, trade } = req.query;
     const companyId = req.user.company_id;
@@ -175,7 +176,7 @@ router.get("/", async (req, res) => {
 });
 
 // ── GET /api/projects/map ─────────────────────────────────
-router.get("/map", async (req, res) => {
+router.get("/map", can("projects.view"), async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT id, project_code, project_name, site_address, site_lat, site_lng,
@@ -196,7 +197,7 @@ router.get("/map", async (req, res) => {
 });
 
 // ── GET /api/projects/:id ─────────────────────────────────
-router.get("/:id", async (req, res) => {
+router.get("/:id", can("projects.view"), async (req, res) => {
   try {
     const projectId = Number(req.params.id);
     const companyId = req.user.company_id;
@@ -229,7 +230,7 @@ router.get("/:id", async (req, res) => {
 });
 
 // ── POST /api/projects ────────────────────────────────────
-router.post("/", ADMIN_ONLY, async (req, res) => {
+router.post("/", can("projects.create"), async (req, res) => {
   try {
     const companyId = req.user.company_id;
     const {
@@ -321,7 +322,7 @@ router.post("/", ADMIN_ONLY, async (req, res) => {
 });
 
 // ── PATCH /api/projects/:id ───────────────────────────────
-router.patch("/:id", ADMIN_ONLY, async (req, res) => {
+router.patch("/:id", can("projects.edit"), async (req, res) => {
   try {
     const projectId = Number(req.params.id);
     const companyId = req.user.company_id;
@@ -392,7 +393,7 @@ router.patch("/:id", ADMIN_ONLY, async (req, res) => {
 });
 
 // ── DELETE /api/projects/:id ──────────────────────────────
-router.delete("/:id", ADMIN_ONLY, async (req, res) => {
+router.delete("/:id", can("projects.delete"), async (req, res) => {
   try {
     const projectId = Number(req.params.id);
     const companyId = req.user.company_id;

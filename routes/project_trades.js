@@ -13,7 +13,7 @@
 const router = require("express").Router();
 const pool   = require("../db");
 const auth   = require("../middleware/auth");
-const { TRADE_ADMIN_UP, COMPANY_ADMIN_UP, requireRoles } = require("../middleware/roles");
+const { can } = require("../middleware/permissions");
 
 // All routes require authentication
 router.use(auth);
@@ -66,7 +66,7 @@ router.get("/:project_id", async (req, res) => {
 });
 
 // ── POST /api/project-trades/:project_id ─────────────────────
-router.post("/:project_id", COMPANY_ADMIN_UP, async (req, res) => {
+router.post("/:project_id", can("projects.edit"), async (req, res) => {
   try {
     const { project_id } = req.params;
     const { trade_type_id, trade_admin_id, notes } = req.body;
@@ -119,7 +119,7 @@ router.post("/:project_id", COMPANY_ADMIN_UP, async (req, res) => {
 });
 
 // ── PATCH /api/project-trades/:id ────────────────────────────
-router.patch("/:id", TRADE_ADMIN_UP, async (req, res) => {
+router.patch("/:id", can("projects.edit"), async (req, res) => {
   try {
     const { id } = req.params;
     const { trade_admin_id, status, notes } = req.body;
@@ -151,7 +151,7 @@ router.patch("/:id", TRADE_ADMIN_UP, async (req, res) => {
 });
 
 // ── DELETE /api/project-trades/:id ───────────────────────────
-router.delete("/:id", COMPANY_ADMIN_UP, async (req, res) => {
+router.delete("/:id", can("projects.delete"), async (req, res) => {
   try {
     const { id } = req.params;
     const companyId = req.user.company_id;

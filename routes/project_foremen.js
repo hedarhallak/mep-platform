@@ -12,18 +12,7 @@ const router  = require("express").Router();
 const { pool } = require("../db");
 const { normalizeRole } = require("../middleware/roles");
 
-function requireRoles(allowed) {
-  const normalized = allowed.map(r => normalizeRole(r));
-  return (req, res, next) => {
-    if (!req.user) return res.status(401).json({ ok: false, error: "UNAUTHENTICATED" });
-    const userRole = normalizeRole(req.user.role);
-    if (userRole === "SUPER_ADMIN") return next();
-    if (!normalized.includes(userRole))
-      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
-    return next();
-  };
-}
-const ADMIN_ONLY = requireRoles(["COMPANY_ADMIN", "ADMIN"]);
+const { can } = require("../middleware/permissions");
 
 // ── GET /api/project-foremen/:project_id ─────────────────────
 router.get("/:project_id", async (req, res) => {
@@ -58,7 +47,7 @@ router.get("/:project_id", async (req, res) => {
 
 // ── POST /api/project-foremen/:project_id ────────────────────
 // Body: { employee_id, trade_code }
-router.post("/:project_id", ADMIN_ONLY, async (req, res) => {
+router.post("/:project_id", can("projects.edit"), async (req, res) => {
   try {
     const companyId = req.user.company_id;
     const projectId = Number(req.params.project_id);
@@ -110,7 +99,7 @@ router.post("/:project_id", ADMIN_ONLY, async (req, res) => {
 });
 
 // ── DELETE /api/project-foremen/:project_id/:trade ───────────
-router.delete("/:project_id/:trade", ADMIN_ONLY, async (req, res) => {
+router.delete("/:project_id/:trade", can("projects.edit"), async (req, res) => {
   try {
     const companyId = req.user.company_id;
     const projectId = Number(req.params.project_id);
