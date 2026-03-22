@@ -123,6 +123,7 @@ app.use("/api/user-invites",     auth, loadRouter("./routes/user_invites"));
 app.use("/api/admin/users",      auth, loadRouter("./routes/admin_users"));
 
 // ── RBAC Permissions ──────────────────────────────────────────
+app.use("/api/users",       auth, require("./routes/user_management"));
 app.use("/api/permissions", auth, require("./routes/permissions"));
 
 // ── Start ─────────────────────────────────────────────────────

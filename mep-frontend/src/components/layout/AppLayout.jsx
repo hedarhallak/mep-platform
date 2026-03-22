@@ -11,14 +11,14 @@ import {
 
 const mainNav = [
   { to: '/dashboard',        icon: LayoutDashboard, label: 'Dashboard',        permission: null },
-  { to: '/employees',        icon: Users,           label: 'Employees',        permission: { module: 'employees', action: 'view' } },
-  { to: '/projects',         icon: FolderKanban,    label: 'Projects',         permission: { module: 'projects',  action: 'view' } },
-  { to: '/suppliers',        icon: Truck,           label: 'Suppliers',        permission: { module: 'suppliers', action: 'view' } },
-  { to: '/assignments',      icon: ClipboardList,   label: 'Assignments',      permission: { module: 'assignments', action: 'view' } },
-  { to: '/attendance',       icon: CalendarCheck,   label: 'Attendance',       permission: { module: 'attendance', action: 'view' } },
+  { to: '/employees',        icon: Users,           label: 'Employees',        permission: { module: 'employees',       action: 'view'           } },
+  { to: '/projects',         icon: FolderKanban,    label: 'Projects',         permission: { module: 'projects',        action: 'view'           } },
+  { to: '/suppliers',        icon: Truck,           label: 'Suppliers',        permission: { module: 'suppliers',       action: 'view'           } },
+  { to: '/assignments',      icon: ClipboardList,   label: 'Assignments',      permission: { module: 'assignments',     action: 'view'           } },
+  { to: '/attendance',       icon: CalendarCheck,   label: 'Attendance',       permission: { module: 'attendance',      action: 'view_self'      } },
   { to: '/my-hub',           icon: Inbox,           label: 'My Hub',           permission: null, badge: true },
-  { to: '/material-request', icon: Package,         label: 'Material Request', permission: { module: 'materials', action: 'request_view_all' } },
-  { to: '/purchase-orders',  icon: FileText,        label: 'Purchase Orders',  permission: { module: 'purchase_orders', action: 'view' } },
+  { to: '/material-request', icon: Package,         label: 'Material Request', permission: { module: 'materials',       action: 'request_submit' } },
+  { to: '/purchase-orders',  icon: FileText,        label: 'Purchase Orders',  permission: { module: 'purchase_orders', action: 'view'           } },
 ]
 
 const biNav = [
@@ -48,18 +48,42 @@ export default function AppLayout() {
   const handleLogout = () => { logout(); navigate('/login') }
   const isBiActive = location.pathname.startsWith('/bi')
 
-  const visibleMain = mainNav.filter(item =>
-    !item.permission || permsLoading || can(item.permission.module, item.permission.action)
+  const canSeeAttendance = !permsLoading && (
+    can('attendance', 'view_self') ||
+    can('attendance', 'view') ||
+    can('attendance', 'view_own_trade')
   )
+  const canSeeMaterials = !permsLoading && (
+    can('materials', 'request_submit') ||
+    can('materials', 'request_view_own') ||
+    can('materials', 'request_view_all') ||
+    can('materials', 'request_view_own_trade')
+  )
+  const canSeePurchaseOrders = !permsLoading && (
+    can('purchase_orders', 'view') ||
+    can('purchase_orders', 'view_own') ||
+    can('purchase_orders', 'view_own_trade')
+  )
+
+  const visibleMain = mainNav.filter(item => {
+    if (!item.permission) return true
+    if (permsLoading) return false
+    if (item.to === '/attendance')       return canSeeAttendance
+    if (item.to === '/material-request') return canSeeMaterials
+    if (item.to === '/purchase-orders')  return canSeePurchaseOrders
+    return can(item.permission.module, item.permission.action)
+  })
+
   const visibleBi = biNav.filter(item =>
     !item.permission || permsLoading || can(item.permission.module, item.permission.action)
   )
+
+  const showUserMgmt    = !permsLoading && can('settings', 'user_management')
   const showPermissions = !permsLoading && can('settings', 'permissions')
   const showSettings    = !permsLoading && can('settings', 'company')
 
   return (
     <div className="flex h-screen overflow-hidden">
-      {/* Sidebar */}
       <aside className="w-56 flex flex-col bg-[#0f172a] text-slate-300 flex-shrink-0">
 
         {/* Brand */}
@@ -71,7 +95,6 @@ export default function AppLayout() {
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
 
-          {/* Main items */}
           {visibleMain.map(({ to, icon: Icon, label, badge }) => (
             <NavLink key={to} to={to}
               className={({ isActive }) =>
@@ -90,7 +113,6 @@ export default function AppLayout() {
             </NavLink>
           ))}
 
-          {/* Divider */}
           <div className="pt-2 pb-1">
             <div className="border-t border-slate-800" />
           </div>
@@ -129,11 +151,23 @@ export default function AppLayout() {
                 </div>
               )}
 
-              {/* Divider */}
               <div className="pt-2 pb-1">
                 <div className="border-t border-slate-800" />
               </div>
             </>
+          )}
+
+          {/* User Management */}
+          {showUserMgmt && (
+            <NavLink to="/user-management"
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  isActive ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                }`
+              }
+            >
+              <Users size={16} />User Management
+            </NavLink>
           )}
 
           {/* Permissions */}

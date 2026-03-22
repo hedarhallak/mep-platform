@@ -16,7 +16,8 @@ import MaterialRequestPage  from '@/pages/materials/MaterialRequestPage'
 import PurchaseOrdersPage   from '@/pages/materials/PurchaseOrdersPage'
 import SuppliersPage        from '@/pages/suppliers/SuppliersPage'
 import WorkforcePlannerPage from '@/pages/bi/WorkforcePlannerPage'
-import PermissionsPage      from '@/pages/PermissionsPage'
+import PermissionsPage       from '@/pages/PermissionsPage'
+import UserManagementPage  from '@/pages/UserManagementPage'
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
@@ -33,15 +34,25 @@ function ProtectedRoute({ children }) {
   return user ? children : <Navigate to="/login" replace />
 }
 
-// ── Permission guard ──────────────────────────────────────────
-function RequirePermission({ module, action = 'view', children }) {
+// ── Permission guard — supports multiple allowed permissions ───
+// Pass `anyOf` array: user needs at least ONE of them
+function RequirePermission({ module, action, anyOf, children }) {
   const { can, loading } = usePermissions()
+
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">
       <div className="text-slate-400 text-sm">Loading...</div>
     </div>
   )
-  return can(module, action) ? children : <Navigate to="/dashboard" replace />
+
+  // Check multiple permission options
+  if (anyOf) {
+    const allowed = anyOf.some(p => can(p.module, p.action))
+    return allowed ? children : <Navigate to="/dashboard" replace />
+  }
+
+  // Single permission check
+  return can(module, action || 'view') ? children : <Navigate to="/dashboard" replace />
 }
 
 function AppRoutes() {
@@ -61,45 +72,35 @@ function AppRoutes() {
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="my-hub"    element={<MyHubPage />} />
 
-        {/* Guarded routes */}
+        {/* Single permission routes */}
         <Route path="employees" element={
-          <RequirePermission module="employees">
+          <RequirePermission module="employees" action="view">
             <EmployeesPage />
           </RequirePermission>
         }/>
         <Route path="projects" element={
-          <RequirePermission module="projects">
+          <RequirePermission module="projects" action="view">
             <ProjectsPage />
           </RequirePermission>
         }/>
         <Route path="assignments" element={
-          <RequirePermission module="assignments">
+          <RequirePermission module="assignments" action="view">
             <AssignmentsPage />
           </RequirePermission>
         }/>
-        <Route path="attendance" element={
-          <RequirePermission module="attendance">
-            <AttendancePage />
-          </RequirePermission>
-        }/>
-        <Route path="material-request" element={
-          <RequirePermission module="materials" action="request_view_all">
-            <MaterialRequestPage />
-          </RequirePermission>
-        }/>
-        <Route path="purchase-orders" element={
-          <RequirePermission module="purchase_orders">
-            <PurchaseOrdersPage />
-          </RequirePermission>
-        }/>
         <Route path="suppliers" element={
-          <RequirePermission module="suppliers">
+          <RequirePermission module="suppliers" action="view">
             <SuppliersPage />
           </RequirePermission>
         }/>
         <Route path="bi/workforce-planner" element={
           <RequirePermission module="bi" action="workforce_planner">
             <WorkforcePlannerPage />
+          </RequirePermission>
+        }/>
+        <Route path="user-management" element={
+          <RequirePermission module="settings" action="user_management">
+            <UserManagementPage />
           </RequirePermission>
         }/>
         <Route path="permissions" element={
@@ -112,6 +113,37 @@ function AppRoutes() {
             <div className="p-8 text-slate-400">Settings — Coming soon</div>
           </RequirePermission>
         }/>
+
+        {/* Multi-permission routes — user needs ANY ONE of the listed permissions */}
+        <Route path="attendance" element={
+          <RequirePermission anyOf={[
+            { module: 'attendance', action: 'view'            },
+            { module: 'attendance', action: 'view_self'       },
+            { module: 'attendance', action: 'view_own_trade'  },
+          ]}>
+            <AttendancePage />
+          </RequirePermission>
+        }/>
+        <Route path="material-request" element={
+          <RequirePermission anyOf={[
+            { module: 'materials', action: 'request_submit'         },
+            { module: 'materials', action: 'request_view_own'       },
+            { module: 'materials', action: 'request_view_all'       },
+            { module: 'materials', action: 'request_view_own_trade' },
+          ]}>
+            <MaterialRequestPage />
+          </RequirePermission>
+        }/>
+        <Route path="purchase-orders" element={
+          <RequirePermission anyOf={[
+            { module: 'purchase_orders', action: 'view'            },
+            { module: 'purchase_orders', action: 'view_own'        },
+            { module: 'purchase_orders', action: 'view_own_trade'  },
+          ]}>
+            <PurchaseOrdersPage />
+          </RequirePermission>
+        }/>
+
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
