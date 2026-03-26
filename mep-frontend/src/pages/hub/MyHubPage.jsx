@@ -1,194 +1,131 @@
 import { useState, useEffect, useCallback } from 'react'
 import api from '@/lib/api'
+import { usePermissions } from '@/hooks/usePermissions.jsx'
 import {
   Inbox, CalendarCheck, CheckCheck, Loader2, AlertCircle,
-  Check, X, Clock, Users, ChevronRight, RefreshCw,
-  Briefcase, MapPin, Package
+  Check, X, Clock, ChevronRight, RefreshCw, Briefcase, Package,
+  FileText, ClipboardList, Eye, CheckCircle2, Upload,
+  Plus, Search, Users
 } from 'lucide-react'
 
+// ── Helpers ───────────────────────────────────────────────────
 const todayStr = () => new Date().toISOString().split('T')[0]
-
 function fmtTime(ts) {
   if (!ts) return '—'
   return new Date(ts).toLocaleTimeString('en-CA', { hour: '2-digit', minute: '2-digit', hour12: true })
 }
-
 function fmtHours(h) {
-  if (h == null || h === '') return '—'
-  const n = Number(h)
-  if (isNaN(n)) return '—'
-  const hrs  = Math.floor(n)
-  const mins = Math.round((n - hrs) * 60)
+  if (h == null) return '—'
+  const n = Number(h); if (isNaN(n)) return '—'
+  const hrs = Math.floor(n); const mins = Math.round((n - hrs) * 60)
   return mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`
 }
-
-const TRADE_DOT = {
-  PLUMBING: '#0ea5e9', ELECTRICAL: '#f59e0b', HVAC: '#10b981',
-  CARPENTRY: '#f97316', GENERAL: '#64748b',
+const TRADE_DOT = { PLUMBING:'#0ea5e9', ELECTRICAL:'#f59e0b', HVAC:'#10b981', CARPENTRY:'#f97316', GENERAL:'#64748b' }
+const dot = c => TRADE_DOT[(c||'').toUpperCase()] || '#94a3b8'
+const PRIORITY_STYLE = {
+  LOW:'bg-slate-100 text-slate-500 border-slate-200',
+  NORMAL:'bg-blue-50 text-blue-600 border-blue-200',
+  HIGH:'bg-amber-50 text-amber-700 border-amber-200',
+  URGENT:'bg-red-50 text-red-600 border-red-200',
 }
-const dot = (code) => TRADE_DOT[(code||'').toUpperCase()] || '#94a3b8'
+const TYPE_ICON = { TASK: ClipboardList, BLUEPRINT: FileText, NOTE: Briefcase }
 
-// ── Attendance Approval Tab ───────────────────────────────────
+// ── Attendance Tab ────────────────────────────────────────────
 function AttendanceApprovalTab() {
-  const [date, setDate]         = useState(todayStr())
-  const [records, setRecords]   = useState([])
-  const [loading, setLoading]   = useState(false)
+  const [date, setDate] = useState(todayStr())
+  const [records, setRecords] = useState([])
+  const [loading, setLoading] = useState(false)
   const [approving, setApproving] = useState(false)
-  const [successMsg, setSuccessMsg] = useState('')
-  const [error, setError]       = useState('')
+  const [msg, setMsg] = useState(null)
 
   const fetchRecords = useCallback(async () => {
-    setLoading(true); setError('')
-    try {
-      // Fetch all attendance for this date (no project filter)
-      const r = await api.get(`/attendance/report/daily?date=${date}`)
-      setRecords(r.data.records || [])
-    } catch (e) { setError(e.response?.data?.message || e.message) }
+    setLoading(true); setMsg(null)
+    try { const r = await api.get(`/attendance/report/daily?date=${date}`); setRecords(r.data.records || []) }
+    catch (e) { setMsg({ type:'error', text: e.response?.data?.message || e.message }) }
     finally { setLoading(false) }
   }, [date])
-
   useEffect(() => { fetchRecords() }, [fetchRecords])
 
-  const showSuccess = (msg) => { setSuccessMsg(msg); setTimeout(() => setSuccessMsg(''), 4000) }
+  const flash = (text, type='success') => { setMsg({ type, text }); setTimeout(() => setMsg(null), 4000) }
 
-  const handleApproveAll = async () => {
-    const toApprove = records.filter(r => r.check_in_at && r.check_out_at && !r.manager_approved)
-    if (!toApprove.length) return
+  const approveAll = async () => {
+    const rows = records.filter(r => r.check_in_at && r.check_out_at && !r.manager_approved)
+    if (!rows.length) return
     setApproving(true)
     try {
-      await Promise.all(toApprove.map(r =>
-        api.patch(`/attendance/overtime/${r.attendance_id}/approve`, { approved: true })
-      ))
-      showSuccess(`${toApprove.length} records approved ✓`)
+      await Promise.all(rows.map(r => api.patch(`/attendance/overtime/${r.attendance_id}/approve`, { approved: true })))
+      flash(`${rows.length} records approved ✓`)
       fetchRecords()
-    } catch (e) { setError(e.response?.data?.message || e.message) }
+    } catch (e) { flash(e.response?.data?.message || e.message, 'error') }
     finally { setApproving(false) }
   }
 
-  const handleApproveOne = async (attendanceId) => {
-    try {
-      await api.patch(`/attendance/overtime/${attendanceId}/approve`, { approved: true })
-      showSuccess('Approved ✓')
-      fetchRecords()
-    } catch (e) { alert(e.response?.data?.message || e.message) }
-  }
-
   const pendingCount = records.filter(r => r.check_in_at && r.check_out_at && !r.manager_approved).length
-
-  // Group by project
-  const grouped = records.reduce((acc, r) => {
-    const key = r.project_code
-    if (!acc[key]) acc[key] = { project_code: r.project_code, project_name: r.project_name, records: [] }
-    acc[key].records.push(r)
-    return acc
-  }, {})
-  const groups = Object.values(grouped)
+  const groups = Object.values(records.reduce((acc, r) => {
+    if (!acc[r.project_code]) acc[r.project_code] = { project_code: r.project_code, project_name: r.project_name, records: [] }
+    acc[r.project_code].records.push(r); return acc
+  }, {}))
 
   return (
     <div className="space-y-4">
-      {/* Controls */}
       <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-slate-400">Date</span>
-          <input type="date" value={date} onChange={e => setDate(e.target.value)}
-            className="px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-        </div>
-        <button onClick={fetchRecords} disabled={loading}
-          className="p-2 bg-white border border-slate-200 rounded-lg text-slate-400 hover:bg-slate-50 transition-colors disabled:opacity-50">
+        <input type="date" value={date} onChange={e => setDate(e.target.value)}
+          className="px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+        <button onClick={fetchRecords} disabled={loading} className="p-2 bg-white border border-slate-200 rounded-lg text-slate-400 hover:bg-slate-50">
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
         </button>
         {pendingCount > 0 && (
-          <button onClick={handleApproveAll} disabled={approving}
-            className="ml-auto flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-60">
+          <button onClick={approveAll} disabled={approving}
+            className="ml-auto flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 disabled:opacity-60">
             {approving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><CheckCheck className="w-3.5 h-3.5" />Approve All ({pendingCount})</>}
           </button>
         )}
       </div>
-
-      {successMsg && (
-        <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-xs text-emerald-700 font-semibold">
-          <Check className="w-4 h-4 flex-shrink-0" />{successMsg}
-        </div>
-      )}
-      {error && (
-        <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-100 rounded-xl text-xs text-red-600">
-          <AlertCircle className="w-4 h-4 flex-shrink-0" />{error}
-        </div>
-      )}
-
+      {msg && <div className={`flex items-center gap-2 p-3 rounded-xl text-xs font-semibold ${msg.type==='error' ? 'bg-red-50 border border-red-100 text-red-600' : 'bg-emerald-50 border border-emerald-100 text-emerald-700'}`}>{msg.text}</div>}
       {loading && <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-slate-300" /></div>}
-
       {!loading && records.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <CalendarCheck className="w-10 h-10 text-slate-200 mb-3" />
-          <p className="text-sm font-semibold text-slate-400">No attendance records for {date}</p>
+          <p className="text-sm font-semibold text-slate-400">No records for {date}</p>
         </div>
       )}
-
       {!loading && groups.map(group => (
         <div key={group.project_code} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          {/* Project header */}
           <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center gap-2">
-            <div className="w-7 h-7 bg-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0">
-              <Briefcase className="w-3.5 h-3.5 text-white" />
-            </div>
+            <div className="w-7 h-7 bg-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0"><Briefcase className="w-3.5 h-3.5 text-white" /></div>
             <span className="text-sm font-bold text-slate-800">{group.project_code}</span>
             {group.project_name && <span className="text-xs text-slate-400">{group.project_name}</span>}
-            <span className="ml-auto text-[10px] font-semibold px-2 py-1 bg-indigo-50 text-indigo-600 rounded-lg">
-              {group.records.length} employees
-            </span>
+            <span className="ml-auto text-[10px] font-semibold px-2 py-1 bg-indigo-50 text-indigo-600 rounded-lg">{group.records.length} employees</span>
           </div>
-
           <table className="w-full">
-            <thead>
-              <tr className="border-b border-slate-100">
-                <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">Employee</th>
-                <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">Check In</th>
-                <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">Check Out</th>
-                <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">Hours</th>
-                <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">Overtime</th>
-                <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">Status</th>
-                <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">Action</th>
-              </tr>
-            </thead>
+            <thead><tr className="border-b border-slate-100">
+              {['Employee','In','Out','Hours','OT','Status',''].map(h => (
+                <th key={h} className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">{h}</th>
+              ))}
+            </tr></thead>
             <tbody>
               {group.records.map((r, i) => (
-                <tr key={i} className="border-b border-slate-50 hover:bg-slate-50/60 last:border-0 transition-colors">
+                <tr key={i} className="border-b border-slate-50 hover:bg-slate-50/60 last:border-0">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2.5">
-                      <div className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white"
-                        style={{ background: dot(r.trade_code) }}>
-                        {(r.employee_name || '?')[0]}
-                      </div>
-                      <div>
-                        <div className="text-sm font-semibold text-slate-700">{r.employee_name}</div>
-                        <div className="text-[10px] text-slate-400">{r.assignment_role || 'WORKER'}</div>
-                      </div>
+                      <div className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white" style={{ background: dot(r.trade_code) }}>{(r.employee_name||'?')[0]}</div>
+                      <div><div className="text-sm font-semibold text-slate-700">{r.employee_name}</div><div className="text-[10px] text-slate-400">{r.assignment_role||'WORKER'}</div></div>
                     </div>
                   </td>
                   <td className="px-4 py-3 text-xs text-slate-600">{fmtTime(r.check_in_at)}</td>
                   <td className="px-4 py-3 text-xs text-slate-600">{fmtTime(r.check_out_at)}</td>
                   <td className="px-4 py-3 text-xs font-semibold text-slate-700">{fmtHours(r.worked_hours)}</td>
+                  <td className="px-4 py-3">{r.overtime_hours > 0 ? <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">+{r.overtime_hours}h</span> : <span className="text-xs text-slate-300">—</span>}</td>
                   <td className="px-4 py-3">
-                    {r.overtime_hours > 0
-                      ? <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">+{r.overtime_hours}h OT</span>
-                      : <span className="text-xs text-slate-300">—</span>
-                    }
-                  </td>
-                  <td className="px-4 py-3">
-                    {!r.check_in_at
-                      ? <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-400">Absent</span>
-                      : !r.check_out_at
-                        ? <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-600">On Site</span>
-                        : r.manager_approved
-                          ? <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 flex items-center gap-1 w-fit"><Check className="w-3 h-3" />Approved</span>
-                          : <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-600">Pending</span>
-                    }
+                    {!r.check_in_at ? <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-400">Absent</span>
+                      : !r.check_out_at ? <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-600">On Site</span>
+                      : r.manager_approved ? <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">✓ Approved</span>
+                      : <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-600">Pending</span>}
                   </td>
                   <td className="px-4 py-3">
                     {r.check_in_at && r.check_out_at && !r.manager_approved && (
-                      <button onClick={() => handleApproveOne(r.attendance_id)}
-                        className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-600 border border-emerald-200 hover:bg-emerald-50 rounded-lg transition-colors whitespace-nowrap">
+                      <button onClick={async () => { await api.patch(`/attendance/overtime/${r.attendance_id}/approve`, { approved: true }); flash('Approved ✓'); fetchRecords() }}
+                        className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-600 border border-emerald-200 hover:bg-emerald-50 rounded-lg whitespace-nowrap">
                         <Check className="w-3 h-3" />Approve
                       </button>
                     )}
@@ -203,466 +140,579 @@ function AttendanceApprovalTab() {
   )
 }
 
-// ── Purchase Order HTML Generator ────────────────────────────
-function generatePOHtml(d) {
-  const itemRows = (d.items || []).map((it, i) => `
-    <tr style="background:${i % 2 === 0 ? '#f8fafc' : '#fff'}">
-      <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#1e293b">${i + 1}</td>
-      <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#1e293b;font-weight:500">${it.item_name}</td>
-      <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#4f46e5;font-weight:700;text-align:center">${it.quantity}</td>
-      <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#64748b;text-align:center">${it.unit}</td>
-    </tr>
-  `).join('')
+// ── Send Task Tab ─────────────────────────────────────────────
+function SendTaskTab() {
+  const [projects, setProjects] = useState([])
+  const [workers, setWorkers]   = useState([])
+  const [sent, setSent]         = useState([])
+  const [loadingSent, setLoadingSent] = useState(true)
+  const [sending, setSending]   = useState(false)
+  const [showForm, setShowForm] = useState(false)
+  const [msg, setMsg]           = useState(null)
+  const [workerSearch, setWorkerSearch] = useState('')
+  const [expanded, setExpanded]   = useState({})
+  const [file, setFile]         = useState(null)
+  const [form, setForm] = useState({ title:'', body:'', type:'TASK', priority:'NORMAL', project_id:'', due_date:'', recipient_ids:[] })
 
-  const toSection = d.supplier
-    ? `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin-bottom:20px">
-        <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">To — Supplier</div>
-        <div style="font-size:14px;font-weight:700;color:#1e293b">${d.supplier.name}</div>
-        ${d.supplier.email ? `<div style="font-size:12px;color:#64748b;margin-top:2px">✉ ${d.supplier.email}</div>` : ''}
-        ${d.supplier.phone ? `<div style="font-size:12px;color:#64748b">📞 ${d.supplier.phone}</div>` : ''}
-        ${d.supplier.address ? `<div style="font-size:12px;color:#64748b">📍 ${d.supplier.address}</div>` : ''}
-      </div>`
-    : `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px;margin-bottom:20px">
-        <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">To — Internal</div>
-        <div style="font-size:14px;font-weight:700;color:#1e293b">Procurement Department</div>
-        ${d.company.procurement_email ? `<div style="font-size:12px;color:#64748b;margin-top:2px">✉ ${d.company.procurement_email}</div>` : ''}
-      </div>`
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+  const flash = (text, type='success') => { setMsg({ type, text }); setTimeout(() => setMsg(null), 4000) }
 
-  return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>Purchase Order ${d.ref}</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #fff; color: #1e293b; }
-    @media print {
-      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      .no-print { display: none; }
-    }
-  </style>
-</head>
-<body style="padding:40px;max-width:800px;margin:0 auto">
+  const filteredWorkers = workerSearch.trim()
+    ? workers.filter(w => `${w.first_name||''} ${w.last_name||''} ${w.username||''} ${w.trade_name||''}`.toLowerCase().includes(workerSearch.toLowerCase()))
+    : workers
 
-  <!-- Print button -->
-  <div class="no-print" style="margin-bottom:20px;text-align:right">
-    <button onclick="window.print()" style="background:#4f46e5;color:#fff;border:none;padding:10px 24px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">
-      🖨 Print / Save as PDF
-    </button>
-  </div>
+  useEffect(() => {
+    api.get('/hub/my-projects').then(r => setProjects(r.data.projects || [])).catch(() => {})
+    api.get('/hub/workers').then(r => setWorkers(r.data.workers || [])).catch(() => {})
+    fetchSent()
+  }, [])
 
-  <!-- Header -->
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;padding-bottom:24px;border-bottom:2px solid #4f46e5">
-    <div>
-      <div style="font-size:22px;font-weight:800;color:#4f46e5">${d.company.name || 'Company'}</div>
-      ${d.company.address ? `<div style="font-size:12px;color:#64748b;margin-top:4px">📍 ${d.company.address}</div>` : ''}
-      ${d.company.phone ? `<div style="font-size:12px;color:#64748b">📞 ${d.company.phone}</div>` : ''}
+  useEffect(() => {
+    if (!form.project_id) return
+    api.get(`/hub/workers?project_id=${form.project_id}`).then(r => setWorkers(r.data.workers || [])).catch(() => {})
+  }, [form.project_id])
+
+  const fetchSent = async () => {
+    setLoadingSent(true)
+    try { const r = await api.get('/hub/messages/sent'); setSent(r.data.messages || []) }
+    catch (_) {} finally { setLoadingSent(false) }
+  }
+
+  const toggleRecipient = id => set('recipient_ids', form.recipient_ids.includes(id) ? form.recipient_ids.filter(r => r !== id) : [...form.recipient_ids, id])
+  const selectAll = () => set('recipient_ids', filteredWorkers.map(w => w.id))
+  const clearAll  = () => set('recipient_ids', [])
+
+  const resetForm = () => { setForm({ title:'', body:'', type:'TASK', priority:'NORMAL', project_id:'', due_date:'', recipient_ids:[] }); setFile(null); setWorkerSearch(''); setShowForm(false) }
+
+  const handleSend = async () => {
+    setMsg(null)
+    if (!form.title.trim())         return flash('Title is required', 'error')
+    if (!form.recipient_ids.length) return flash('Select at least one recipient', 'error')
+    setSending(true)
+    try {
+      const fd = new FormData()
+      fd.append('title', form.title.trim())
+      fd.append('body', form.body.trim())
+      fd.append('type', form.type)
+      fd.append('priority', form.priority)
+      fd.append('project_id', form.project_id || '')
+      fd.append('due_date', form.due_date || '')
+      fd.append('recipient_ids', JSON.stringify(form.recipient_ids))
+      if (file) fd.append('file', file)
+      const res = await api.post('/hub/messages', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      const d = res.data
+      const text = d.pending > 0
+        ? `Sent to ${d.sent} worker${d.sent!==1?'s':''} ✓ — ${d.pending} pending assignment`
+        : `Sent to ${d.sent} worker${d.sent!==1?'s':''} ✓`
+      flash(text)
+      resetForm()
+      fetchSent()
+    } catch (e) { flash(e.response?.data?.error || e.message || 'Failed to send', 'error') }
+    finally { setSending(false) }
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-bold text-slate-700">Tasks & Blueprints</span>
+          {sent.length > 0 && <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{sent.length} sent</span>}
+        </div>
+        <button onClick={() => setShowForm(v => !v)}
+          className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors ${showForm ? 'text-slate-500 hover:bg-slate-100' : 'bg-slate-900 text-white hover:bg-slate-700'}`}>
+          <Plus className="w-3.5 h-3.5" />{showForm ? 'Cancel' : 'New Task'}
+        </button>
+      </div>
+
+      {msg && <div className={`flex items-center gap-2 p-3 rounded-xl text-xs font-semibold ${msg.type==='error' ? 'bg-red-50 border border-red-100 text-red-600' : 'bg-emerald-50 border border-emerald-100 text-emerald-700'}`}>{msg.text}</div>}
+
+      {/* ── Compose Form ── */}
+      {showForm && (
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+
+          {/* Row 1: Type + Priority + Title */}
+          <div className="p-4 border-b border-slate-100 space-y-3">
+            <div className="flex items-center gap-3">
+              {/* Type */}
+              <div className="flex rounded-lg border border-slate-200 overflow-hidden">
+                {[{v:'TASK',l:'Task'},{v:'BLUEPRINT',l:'Blueprint'},{v:'NOTE',l:'Note'}].map((t,i) => (
+                  <button key={t.v} onClick={() => set('type', t.v)}
+                    className={`px-3 py-1.5 text-xs font-semibold transition-colors ${t.v===form.type ? 'bg-slate-900 text-white' : 'text-slate-400 hover:bg-slate-50'} ${i>0?'border-l border-slate-200':''}`}>
+                    {t.l}
+                  </button>
+                ))}
+              </div>
+              {/* Priority */}
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg">
+                {[{v:'LOW',c:'bg-slate-300'},{v:'NORMAL',c:'bg-blue-400'},{v:'HIGH',c:'bg-amber-400'},{v:'URGENT',c:'bg-red-500'}].map(p => (
+                  <button key={p.v} onClick={() => set('priority', p.v)} title={p.v}
+                    className={`w-4 h-4 rounded-full transition-all ${p.c} ${form.priority===p.v ? 'ring-2 ring-offset-1 ring-slate-300 scale-125' : 'opacity-30 hover:opacity-70'}`} />
+                ))}
+                <span className="text-[10px] font-semibold text-slate-500 ml-1">{form.priority}</span>
+              </div>
+              {/* Due date — inline */}
+              <input type="date" value={form.due_date} onChange={e => set('due_date', e.target.value)}
+                className="ml-auto px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800 text-slate-500" />
+            </div>
+            <input type="text" value={form.title} onChange={e => set('title', e.target.value)}
+              placeholder="Task title *"
+              className="w-full px-3 py-2.5 text-sm font-medium border border-slate-200 rounded-lg placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-900" />
+            <textarea value={form.body} onChange={e => set('body', e.target.value)}
+              rows={2} placeholder="Instructions for the worker (optional)..."
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-900 resize-none" />
+          </div>
+
+          {/* Row 2: Project + File in one line */}
+          <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-3">
+            <select value={form.project_id} onChange={e => { set('project_id', e.target.value); set('recipient_ids', []); setWorkerSearch('') }}
+              className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-slate-900">
+              <option value="">No project</option>
+              {projects.map(p => <option key={p.id} value={p.id}>{p.project_code} — {p.project_name}</option>)}
+            </select>
+            <label className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors flex-shrink-0 ${file ? 'border-slate-900 bg-slate-50' : 'border-dashed border-slate-200 hover:border-slate-400'}`}>
+              <Upload className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+              <span className={`text-xs truncate max-w-[140px] ${file ? 'text-slate-700 font-medium' : 'text-slate-400'}`}>
+                {file ? file.name : 'Attach file'}
+              </span>
+              {file && <button type="button" onClick={e => { e.preventDefault(); setFile(null) }} className="text-slate-400 hover:text-red-500 flex-shrink-0"><X className="w-3 h-3" /></button>}
+              <input type="file" accept=".pdf,image/*" className="hidden" onChange={e => setFile(e.target.files?.[0] || null)} />
+            </label>
+          </div>
+
+          {/* Row 3: Recipients */}
+          <div className="px-4 py-3 border-b border-slate-100">
+            <div className="flex items-center justify-between mb-2.5">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-slate-700">Recipients</span>
+                {form.recipient_ids.length > 0 && <span className="px-2 py-0.5 bg-slate-900 text-white rounded-full text-[10px] font-bold">{form.recipient_ids.length} selected</span>}
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <Search className="w-3 h-3 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input type="text" value={workerSearch} onChange={e => setWorkerSearch(e.target.value)}
+                    placeholder="Search..."
+                    className="pl-7 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg w-36 focus:outline-none focus:ring-2 focus:ring-slate-900 bg-white" />
+                </div>
+                <button onClick={selectAll} className="text-[11px] text-indigo-600 hover:underline font-medium">All</button>
+                <button onClick={clearAll} className="text-[11px] text-slate-400 hover:underline">Clear</button>
+              </div>
+            </div>
+            {workers.length === 0
+              ? <p className="text-xs text-slate-400 py-2 text-center">No workers found</p>
+              : <div className="grid grid-cols-3 gap-1.5 max-h-40 overflow-y-auto">
+                  {filteredWorkers
+                    .sort((a,b) => (b.is_assigned?1:0)-(a.is_assigned?1:0))
+                    .map(w => {
+                      const selected = form.recipient_ids.includes(w.id)
+                      const name = w.first_name ? `${w.first_name} ${w.last_name}` : w.username
+                      return (
+                        <button key={w.id} onClick={() => toggleRecipient(w.id)}
+                          className={`flex items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-all border ${selected ? 'bg-slate-900 border-slate-900' : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'}`}>
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${selected ? 'bg-white text-slate-900' : w.is_assigned ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                            {name[0]?.toUpperCase()}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className={`text-xs font-semibold truncate ${selected ? 'text-white' : 'text-slate-700'}`}>{name}</div>
+                            <div className={`text-[10px] truncate ${selected ? 'text-slate-400' : 'text-slate-400'}`}>
+                              {w.trade_name || '—'}{form.project_id && (w.is_assigned ? <span className="text-emerald-500"> ✓</span> : <span className="text-amber-500"> ⏳</span>)}
+                            </div>
+                          </div>
+                        </button>
+                      )
+                    })
+                  }
+                </div>
+            }
+          </div>
+
+          {/* Footer */}
+          <div className="px-4 py-3 bg-slate-50 flex items-center justify-between">
+            <span className="text-xs text-slate-400">
+              {form.recipient_ids.length === 0 ? 'Select at least one recipient' : `Ready to send to ${form.recipient_ids.length} worker${form.recipient_ids.length>1?'s':''}`}
+            </span>
+            <div className="flex gap-2">
+              <button onClick={resetForm} className="px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-200 rounded-lg transition-colors">Cancel</button>
+              <button onClick={handleSend} disabled={sending}
+                className="flex items-center gap-2 px-5 py-2 bg-slate-900 hover:bg-slate-700 disabled:opacity-50 text-white rounded-lg text-sm font-semibold">
+                {sending ? <><Loader2 className="w-3.5 h-3.5 animate-spin"/>Sending...</> : <><Send className="w-3.5 h-3.5"/>Send Task</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Sent List — card style like Material Requests ── */}
+      {loadingSent && <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-slate-300" /></div>}
+      {!loadingSent && sent.length === 0 && !showForm && (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <Send className="w-10 h-10 text-slate-200 mb-3" />
+          <p className="text-sm font-semibold text-slate-400">No tasks sent yet</p>
+          <p className="text-xs text-slate-300 mt-1">Create a task to send to your team</p>
+        </div>
+      )}
+      {!loadingSent && sent.map(task => {
+        const Icon    = TYPE_ICON[task.type] || ClipboardList
+        const total   = Number(task.total_recipients) || 0
+        const acked   = Number(task.acknowledged_count) || 0
+        const pending = Number(task.pending_count) || 0
+        const ackPct  = total > 0 ? Math.round((acked / total) * 100) : 0
+        const isOpen  = expanded[task.id]
+
+        return (
+          <div key={task.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            {/* Card header — clickable to expand */}
+            <button onClick={() => setExpanded(p => ({...p, [task.id]: !p[task.id]}))}
+              className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-slate-50 text-left">
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                task.type==='BLUEPRINT' ? 'bg-cyan-100' : task.type==='NOTE' ? 'bg-slate-100' : 'bg-indigo-100'
+              }`}>
+                <Icon className={`w-4 h-4 ${task.type==='BLUEPRINT' ? 'text-cyan-600' : task.type==='NOTE' ? 'text-slate-500' : 'text-indigo-600'}`} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-semibold text-slate-800">{task.title}</span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${PRIORITY_STYLE[task.priority]||PRIORITY_STYLE.NORMAL}`}>{task.priority}</span>
+                  {task.file_url && <span className="text-[10px] text-slate-400 flex items-center gap-0.5"><FileText className="w-3 h-3" />File</span>}
+                </div>
+                <div className="flex items-center gap-2 mt-0.5 text-[10px] text-slate-400 flex-wrap">
+                  <span>{new Date(task.created_at).toLocaleDateString('en-CA',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</span>
+                  {task.project_code && <><span>·</span><span>{task.project_code}</span></>}
+                  {task.due_date && <span className="text-amber-600">· Due {new Date(task.due_date).toLocaleDateString()}</span>}
+                  <span>· {total} recipient{total!==1?'s':''}</span>
+                </div>
+              </div>
+              {/* Mini progress */}
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <div className="text-right">
+                  <div className="text-xs font-bold text-slate-700">{ackPct}%</div>
+                  <div className="text-[10px] text-slate-400">done</div>
+                </div>
+                <div className="w-10 h-10 flex-shrink-0 relative">
+                  <svg viewBox="0 0 36 36" className="w-10 h-10 -rotate-90">
+                    <circle cx="18" cy="18" r="15" fill="none" stroke="#f1f5f9" strokeWidth="3" />
+                    <circle cx="18" cy="18" r="15" fill="none" stroke={ackPct===100?"#10b981":"#6366f1"} strokeWidth="3"
+                      strokeDasharray={`${ackPct * 0.942} 94.2`} strokeLinecap="round" />
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-[9px] font-bold text-slate-600">{acked}/{total}</span>
+                  </div>
+                </div>
+                <ChevronRight className={`w-4 h-4 text-slate-300 transition-transform ${isOpen?'rotate-90':''}`} />
+              </div>
+            </button>
+
+            {/* Expanded details */}
+            {isOpen && (
+              <div className="border-t border-slate-100 p-4 space-y-3">
+                {/* Recipient statuses */}
+                {task.recipients && task.recipients.length > 0 && (
+                  <div>
+                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">Recipients</p>
+                    <div className="space-y-1.5">
+                      {task.recipients.map((r, i) => {
+                        const rname = r.first_name ? `${r.first_name} ${r.last_name}` : r.username
+                        const isPending = r.status === 'PENDING'
+                        const isDone    = r.status === 'ACKNOWLEDGED'
+                        const isRead    = r.status === 'READ'
+                        return (
+                          <div key={i} className={`flex items-center gap-2.5 px-3 py-2 rounded-lg ${
+                            isDone ? 'bg-emerald-50' : isPending ? 'bg-amber-50' : isRead ? 'bg-blue-50' : 'bg-slate-50'
+                          }`}>
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0 ${
+                              isDone ? 'bg-emerald-500' : isPending ? 'bg-amber-400' : isRead ? 'bg-blue-500' : 'bg-slate-400'
+                            }`}>{rname[0]?.toUpperCase()}</div>
+                            <span className="text-xs font-medium text-slate-700 flex-1">{rname}</span>
+                            <span className={`text-[10px] font-semibold ${isDone?'text-emerald-600':isPending?'text-amber-600':isRead?'text-blue-600':'text-slate-500'}`}>
+                              {isDone ? '✓ Done' : isPending ? '⏳ Awaiting assignment' : isRead ? '👁 Seen' : '📬 Sent'}
+                            </span>
+                            {r.acknowledged_at && <span className="text-[10px] text-slate-400">{new Date(r.acknowledged_at).toLocaleDateString()}</span>}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+                {pending > 0 && (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 rounded-lg text-xs text-amber-700">
+                    <Clock className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span>{pending} recipient{pending!==1?'s':''} will receive this task once assigned to the project</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
-    <div style="text-align:right">
-      <div style="font-size:20px;font-weight:800;color:#1e293b">Purchase Order</div>
-      <div style="font-size:13px;color:#64748b;margin-top:4px">Ref: <strong>${d.ref}</strong></div>
-      <div style="font-size:13px;color:#64748b">Date: ${d.date}</div>
-    </div>
-  </div>
-
-  <!-- Project & Foreman -->
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
-    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px">
-      <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Project</div>
-      <div style="font-size:14px;font-weight:700;color:#1e293b">${d.project?.project_code || ''} ${d.project?.project_name ? '— ' + d.project.project_name : ''}</div>
-      ${d.project?.site_address ? `<div style="font-size:12px;color:#64748b;margin-top:4px">📍 ${d.project.site_address}</div>` : ''}
-    </div>
-    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px">
-      <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Requested By</div>
-      <div style="font-size:14px;font-weight:700;color:#1e293b">${d.foreman?.full_name || ''}</div>
-      ${d.foreman?.foreman_phone ? `<div style="font-size:12px;color:#64748b;margin-top:4px">📞 ${d.foreman.foreman_phone}</div>` : ''}
-    </div>
-  </div>
-
-  <!-- To section -->
-  ${toSection}
-
-  <!-- Items table -->
-  <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
-    <thead>
-      <tr style="background:#4f46e5">
-        <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:1px;width:40px">#</th>
-        <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:1px">Item Description</th>
-        <th style="padding:10px 14px;text-align:center;font-size:11px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:1px;width:80px">Qty</th>
-        <th style="padding:10px 14px;text-align:center;font-size:11px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:1px;width:80px">Unit</th>
-      </tr>
-    </thead>
-    <tbody>${itemRows}</tbody>
-  </table>
-
-  <!-- Notes -->
-  ${d.note ? `
-  <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:14px;margin-bottom:24px">
-    <div style="font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Notes</div>
-    <div style="font-size:13px;color:#78350f">${d.note}</div>
-  </div>` : ''}
-
-  <!-- Footer -->
-  <div style="border-top:1px solid #e2e8f0;padding-top:16px;display:flex;justify-content:space-between;align-items:center">
-    <div style="font-size:11px;color:#94a3b8">Generated by MEP Platform · ${d.date}</div>
-    <div style="font-size:11px;color:#94a3b8">${d.ref}</div>
-  </div>
-
-</body>
-</html>`
+  )
 }
 
-// ── Inbox Tab ─────────────────────────────────────────────────
+// ── Worker Inbox Tab ──────────────────────────────────────────
+function WorkerInboxTab() {
+  const [messages, setMessages] = useState([])
+  const [loading, setLoading]   = useState(true)
+  const [expanded, setExpanded] = useState({})
+  const [acking, setAcking]     = useState({})
+
+  const fetchInbox = useCallback(async () => {
+    setLoading(true)
+    try { const r = await api.get('/hub/messages/inbox'); setMessages(r.data.messages || []) }
+    catch (_) {} finally { setLoading(false) }
+  }, [])
+  useEffect(() => { fetchInbox() }, [fetchInbox])
+
+  const handleExpand = async (msg) => {
+    const isOpen = expanded[msg.id]
+    setExpanded(p => ({ ...p, [msg.id]: !isOpen }))
+    if (!isOpen && msg.status === 'SENT') {
+      try {
+        await api.patch(`/hub/messages/${msg.id}/read`)
+        setMessages(prev => prev.map(m => m.id===msg.id ? {...m, status:'READ'} : m))
+      } catch (_) {}
+    }
+  }
+
+  const handleAck = async (msgId) => {
+    setAcking(p => ({ ...p, [msgId]: true }))
+    try {
+      await api.patch(`/hub/messages/${msgId}/ack`)
+      setMessages(prev => prev.map(m => m.id===msgId ? {...m, status:'ACKNOWLEDGED', acknowledged_at: new Date().toISOString()} : m))
+    } catch (_) {} finally { setAcking(p => ({ ...p, [msgId]: false })) }
+  }
+
+  const unread = messages.filter(m => m.status==='SENT').length
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-bold text-slate-700">My Tasks</span>
+        {unread > 0 && <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">{unread} new</span>}
+        <button onClick={fetchInbox} className="ml-auto p-1.5 text-slate-400 hover:bg-slate-100 rounded-lg"><RefreshCw className="w-3.5 h-3.5" /></button>
+      </div>
+      {loading && <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-slate-300" /></div>}
+      {!loading && messages.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <Inbox className="w-10 h-10 text-slate-200 mb-3" />
+          <p className="text-sm font-semibold text-slate-400">No tasks yet</p>
+          <p className="text-xs text-slate-300 mt-1">Tasks from your foreman will appear here</p>
+        </div>
+      )}
+      {!loading && messages.map(msg => {
+        const Icon   = TYPE_ICON[msg.type] || ClipboardList
+        const isOpen = expanded[msg.id]
+        const isNew  = msg.status === 'SENT'
+        const isDone = msg.status === 'ACKNOWLEDGED'
+        const sender = msg.sender_first ? `${msg.sender_first} ${msg.sender_last}` : msg.sender_username
+        return (
+          <div key={msg.id} className={`bg-white rounded-xl border overflow-hidden ${isNew ? 'border-amber-200 shadow-sm' : 'border-slate-200'}`}>
+            <button onClick={() => handleExpand(msg)} className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-slate-50 text-left">
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${isDone ? 'bg-emerald-100' : isNew ? 'bg-amber-100' : 'bg-slate-100'}`}>
+                <Icon className={`w-4 h-4 ${isDone ? 'text-emerald-600' : isNew ? 'text-amber-600' : 'text-slate-500'}`} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`text-sm font-semibold ${isNew ? 'text-slate-900' : 'text-slate-700'}`}>{msg.title}</span>
+                  {isDone ? <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700"><CheckCircle2 className="w-3 h-3" />Done</span>
+                    : isNew ? <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700"><Clock className="w-3 h-3" />New</span>
+                    : <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-600"><Eye className="w-3 h-3" />Read</span>}
+                  <PriorityBadge priority={msg.priority} />
+                </div>
+                <div className="text-[10px] text-slate-400 mt-0.5 flex gap-2">
+                  <span>From {sender}</span>
+                  {msg.project_code && <><span>·</span><span>{msg.project_code}</span></>}
+                  {msg.due_date && <span className="text-amber-600">· Due {new Date(msg.due_date).toLocaleDateString()}</span>}
+                </div>
+              </div>
+              <ChevronRight className={`w-4 h-4 text-slate-300 flex-shrink-0 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
+            </button>
+            {isOpen && (
+              <div className="border-t border-slate-100 p-4 space-y-3">
+                {msg.body && <div className="bg-slate-50 rounded-lg p-3"><p className="text-xs font-semibold text-slate-500 mb-1">Instructions</p><p className="text-sm text-slate-700 whitespace-pre-wrap">{msg.body}</p></div>}
+                {msg.file_url && (
+                  <div>
+                    <p className="text-xs font-semibold text-slate-500 mb-2">Attached File</p>
+                    {msg.file_type?.startsWith('image/')
+                      ? <img src={`/uploads${msg.file_url}`} alt={msg.file_name} className="max-w-full rounded-lg border border-slate-200 max-h-96 object-contain" />
+                      : <a href={`/uploads${msg.file_url}`} target="_blank" rel="noopener noreferrer"
+                          className="flex items-center gap-3 px-4 py-3 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition-colors">
+                          <FileText className="w-5 h-5 text-indigo-600 flex-shrink-0" />
+                          <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-indigo-700 truncate">{msg.file_name}</p><p className="text-xs text-indigo-500">Click to open</p></div>
+                          <ChevronRight className="w-4 h-4 text-indigo-400" />
+                        </a>}
+                  </div>
+                )}
+                {!isDone
+                  ? <button onClick={() => handleAck(msg.id)} disabled={acking[msg.id]}
+                      className="w-full flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white rounded-lg text-sm font-semibold">
+                      {acking[msg.id] ? <><Loader2 className="w-4 h-4 animate-spin" />Confirming...</> : <><CheckCircle2 className="w-4 h-4" />Mark as Done</>}
+                    </button>
+                  : <div className="flex items-center justify-center gap-2 py-2 text-emerald-600 text-sm font-semibold">
+                      <CheckCircle2 className="w-4 h-4" />Completed {msg.acknowledged_at ? new Date(msg.acknowledged_at).toLocaleDateString() : ''}
+                    </div>
+                }
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── Materials Inbox Tab ───────────────────────────────────────
 function InboxTab() {
-  const [requests, setRequests]   = useState([])
+  const [requests, setRequests] = useState([])
   const [suppliers, setSuppliers] = useState([])
-  const [loading, setLoading]     = useState(true)
-  const [error, setError]         = useState('')
-  const [expanded, setExpanded]   = useState({})
-  const [mergedItems, setMergedItems] = useState(null) // null = not merged yet
-  const [surplus, setSurplus]     = useState({})       // item_name → surplus info
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [expanded, setExpanded] = useState({})
+  const [mergedItems, setMergedItems] = useState(null)
+  const [surplus, setSurplus] = useState({})
   const [sendModal, setSendModal] = useState(false)
-  const [sendTarget, setSendTarget] = useState('')     // supplier id or 'procurement'
-  const [sendNote, setSendNote]   = useState('')
-  const [sending, setSending]     = useState(false)
+  const [sendTarget, setSendTarget] = useState('')
+  const [sendNote, setSendNote] = useState('')
+  const [sending, setSending] = useState(false)
   const [successMsg, setSuccessMsg] = useState('')
 
   const fetchInbox = async () => {
     setLoading(true); setError('')
     try {
-      const [inboxRes, supplierRes] = await Promise.all([
-        api.get('/materials/inbox'),
-        api.get('/suppliers'),
-      ])
-      setRequests(inboxRes.data.requests || [])
-      setSuppliers(supplierRes.data.suppliers || [])
-      setMergedItems(null)
+      const [ir, sr] = await Promise.all([api.get('/materials/inbox'), api.get('/suppliers')])
+      setRequests(ir.data.requests || []); setSuppliers(sr.data.suppliers || []); setMergedItems(null)
     } catch (e) { setError(e.response?.data?.message || e.message) }
     finally { setLoading(false) }
   }
-
   useEffect(() => { fetchInbox() }, [])
 
-  const showSuccess = (msg) => { setSuccessMsg(msg); setTimeout(() => setSuccessMsg(''), 4000) }
+  const flash = msg => { setSuccessMsg(msg); setTimeout(() => setSuccessMsg(''), 4000) }
+  const toggleExpand = id => setExpanded(p => ({ ...p, [id]: !p[id] }))
+  const pending = requests.filter(r => r.status==='PENDING' || r.status==='REVIEWED')
 
-  const toggleExpand = (id) => setExpanded(p => ({ ...p, [id]: !p[id] }))
-
-  const pendingRequests = requests.filter(r => r.status === 'PENDING' || r.status === 'REVIEWED')
-
-  // ── Merge all pending requests ───────────────────────────────
   const handleMerge = async () => {
-    // Combine all items, sum duplicates by item_name + unit
     const map = {}
-    for (const req of pendingRequests) {
-      for (const item of (req.items || [])) {
-        const key = `${item.item_name.toLowerCase()}__${item.unit}`
-        if (!map[key]) {
-          map[key] = { item_name: item.item_name, quantity: 0, unit: item.unit, sources: [] }
-        }
-        map[key].quantity += Number(item.quantity)
-        map[key].sources.push({ requester: req.requester_name, qty: Number(item.quantity) })
-      }
+    for (const req of pending) for (const item of (req.items||[])) {
+      const key = `${item.item_name.toLowerCase()}__${item.unit}`
+      if (!map[key]) map[key] = { item_name: item.item_name, quantity: 0, unit: item.unit, sources: [] }
+      map[key].quantity += Number(item.quantity)
+      map[key].sources.push({ requester: req.requester_name, qty: Number(item.quantity) })
     }
-    const merged = Object.values(map)
-    setMergedItems(merged)
-
-    // Check surplus for each item
-    const surplusMap = {}
+    const merged = Object.values(map); setMergedItems(merged)
+    const sm = {}
     for (const item of merged) {
-      try {
-        const r = await api.get(`/materials/surplus?item_name=${encodeURIComponent(item.item_name)}`)
-        const found = r.data.surplus || []
-        if (found.length) surplusMap[item.item_name.toLowerCase()] = found
-      } catch (_) {}
+      try { const r = await api.get(`/materials/surplus?item_name=${encodeURIComponent(item.item_name)}`); if (r.data.surplus?.length) sm[item.item_name.toLowerCase()] = r.data.surplus } catch (_) {}
     }
-    setSurplus(surplusMap)
+    setSurplus(sm)
   }
 
-  // ── Update merged item quantity ──────────────────────────────
-  const updateMergedQty = (index, val) => {
-    setMergedItems(prev => prev.map((it, i) =>
-      i === index ? { ...it, quantity: Math.max(0, Math.floor(Number(val) || 0)) } : it
-    ))
-  }
-
-  // ── Send + PDF ───────────────────────────────────────────────
   const handleSend = async () => {
-    if (!sendTarget) return
-    setSending(true)
+    if (!sendTarget) return; setSending(true)
     try {
-      // 1. Fetch PDF data
-      const ids = pendingRequests.map(r => r.id).join(',')
+      const ids = pending.map(r => r.id).join(',')
       const params = new URLSearchParams({ request_ids: ids })
       if (sendTarget !== 'procurement') params.set('supplier_id', sendTarget)
       if (sendNote) params.set('note', sendNote)
-      const pdfRes = await api.get(`/materials/pdf-data?${params}`)
-      const d = pdfRes.data.pdf_data
-
-      // 2. Generate PDF HTML
-      const html = generatePOHtml(d)
-
-      // 3. Open print window
-      const win = window.open('', '_blank', 'width=900,height=700')
-      win.document.write(html)
-      win.document.close()
-      win.focus()
-
-      // 4. Mark as SENT
-      await Promise.all(pendingRequests.map(r =>
-        api.patch(`/materials/requests/${r.id}/review`, { status: 'SENT' })
-      ))
-      setSendModal(false)
-      setSendNote('')
-      setMergedItems(null)
-      showSuccess('Request sent successfully ✓')
-      fetchInbox()
+      const d = (await api.get(`/materials/pdf-data?${params}`)).data.pdf_data
+      const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>PO ${d.ref}</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,sans-serif;padding:40px;max-width:800px;margin:0 auto}@media print{.noprint{display:none}}</style></head><body>
+        <div class="noprint" style="margin-bottom:20px;text-align:right"><button onclick="window.print()" style="background:#4f46e5;color:#fff;border:none;padding:10px 24px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">🖨 Print / Save PDF</button></div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:32px;padding-bottom:24px;border-bottom:2px solid #4f46e5">
+          <div style="font-size:22px;font-weight:800;color:#4f46e5">${d.company?.name||'Company'}</div>
+          <div style="text-align:right"><div style="font-size:20px;font-weight:800">Purchase Order</div><div style="font-size:13px;color:#64748b">Ref: <strong>${d.ref}</strong> · ${d.date}</div></div>
+        </div>
+        ${d.supplier ? `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin-bottom:20px"><div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:8px">To — Supplier</div><div style="font-size:14px;font-weight:700">${d.supplier.name}</div>${d.supplier.email?`<div style="font-size:12px;color:#64748b">✉ ${d.supplier.email}</div>`:''}</div>` : `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px;margin-bottom:20px"><div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:8px">To — Internal</div><div style="font-size:14px;font-weight:700">Procurement Department</div></div>`}
+        <table style="width:100%;border-collapse:collapse;margin-bottom:20px"><thead><tr style="background:#4f46e5">${['#','Item','Qty','Unit'].map(h=>`<th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:700;color:#fff">${h}</th>`).join('')}</tr></thead>
+        <tbody>${(d.items||[]).map((it,i)=>`<tr style="background:${i%2===0?'#f8fafc':'#fff'}"><td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-size:13px">${i+1}</td><td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-size:13px;font-weight:500">${it.item_name}</td><td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#4f46e5;font-weight:700;text-align:center">${it.quantity}</td><td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-size:13px;text-align:center">${it.unit}</td></tr>`).join('')}</tbody></table>
+        <div style="border-top:1px solid #e2e8f0;padding-top:16px;font-size:11px;color:#94a3b8">Generated by MEP Platform · ${d.date} · ${d.ref}</div></body></html>`
+      const win = window.open('','_blank','width=900,height=700'); win.document.write(html); win.document.close(); win.focus()
+      await Promise.all(pending.map(r => api.patch(`/materials/requests/${r.id}/review`, { status: 'SENT' })))
+      setSendModal(false); setSendNote(''); setMergedItems(null); flash('Sent ✓'); fetchInbox()
     } catch (e) { alert(e.response?.data?.message || e.message) }
     finally { setSending(false) }
   }
 
-  const statusColor = (s) => {
-    if (s === 'PENDING')  return 'bg-amber-100 text-amber-700'
-    if (s === 'REVIEWED') return 'bg-blue-100 text-blue-700'
-    if (s === 'MERGED')   return 'bg-violet-100 text-violet-700'
-    if (s === 'SENT')     return 'bg-emerald-100 text-emerald-700'
-    return 'bg-slate-100 text-slate-500'
-  }
+  const sc = s => s==='PENDING'?'bg-amber-100 text-amber-700':s==='REVIEWED'?'bg-blue-100 text-blue-700':s==='SENT'?'bg-emerald-100 text-emerald-700':'bg-slate-100 text-slate-500'
 
   return (
     <div className="space-y-4">
-
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-sm font-bold text-slate-700">Material Requests</span>
-          {pendingRequests.length > 0 && (
-            <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
-              {pendingRequests.length} pending
-            </span>
-          )}
+          {pending.length > 0 && <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">{pending.length} pending</span>}
         </div>
         <div className="flex items-center gap-2">
-          {pendingRequests.length > 0 && !mergedItems && (
-            <button onClick={handleMerge}
-              className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 transition-colors">
-              <Package className="w-3.5 h-3.5" />Merge & Review
-            </button>
+          {pending.length > 0 && !mergedItems && (
+            <button onClick={handleMerge} className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700"><Package className="w-3.5 h-3.5" />Merge & Review</button>
           )}
-          <button onClick={fetchInbox} disabled={loading}
-            className="p-2 bg-white border border-slate-200 rounded-lg text-slate-400 hover:bg-slate-50 transition-colors disabled:opacity-50">
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-          </button>
+          <button onClick={fetchInbox} disabled={loading} className="p-2 bg-white border border-slate-200 rounded-lg text-slate-400 hover:bg-slate-50 disabled:opacity-50"><RefreshCw className={`w-3.5 h-3.5 ${loading?'animate-spin':''}`} /></button>
         </div>
       </div>
-
-      {successMsg && (
-        <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-xs text-emerald-700 font-semibold">
-          <Check className="w-4 h-4 flex-shrink-0" />{successMsg}
-        </div>
-      )}
-      {error && (
-        <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-100 rounded-xl text-xs text-red-600">
-          <AlertCircle className="w-4 h-4 flex-shrink-0" />{error}
-        </div>
-      )}
-
+      {successMsg && <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-xs text-emerald-700 font-semibold"><Check className="w-4 h-4" />{successMsg}</div>}
+      {error && <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-100 rounded-xl text-xs text-red-600"><AlertCircle className="w-4 h-4" />{error}</div>}
       {loading && <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-slate-300" /></div>}
-
-      {/* ── Merged View ── */}
       {!loading && mergedItems && (
         <div className="bg-white rounded-xl border border-indigo-200 overflow-hidden">
           <div className="px-4 py-3 bg-indigo-50 border-b border-indigo-100 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Package className="w-4 h-4 text-indigo-600" />
-              <span className="text-sm font-bold text-indigo-800">Merged Request — {mergedItems.length} items</span>
-              <span className="text-[10px] text-indigo-500">from {pendingRequests.length} requests</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <button onClick={() => setMergedItems(null)}
-                className="px-3 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100 rounded-lg transition-colors">
-                Cancel
-              </button>
-              <button onClick={() => setSendModal(true)}
-                className="flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition-colors">
-                <Check className="w-3.5 h-3.5" />Send Request
-              </button>
+            <div className="flex items-center gap-2"><Package className="w-4 h-4 text-indigo-600" /><span className="text-sm font-bold text-indigo-800">Merged — {mergedItems.length} items from {pending.length} requests</span></div>
+            <div className="flex gap-2">
+              <button onClick={() => setMergedItems(null)} className="px-3 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100 rounded-lg">Cancel</button>
+              <button onClick={() => setSendModal(true)} className="flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700"><Check className="w-3.5 h-3.5" />Send Request</button>
             </div>
           </div>
-
-          <table className="w-full">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-100">
-                <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">Item</th>
-                <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">Total Qty</th>
-                <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">Unit</th>
-                <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">Sources</th>
-                <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">Surplus Available</th>
-              </tr>
-            </thead>
-            <tbody>
-              {mergedItems.map((item, i) => {
-                const surplusItems = surplus[item.item_name.toLowerCase()] || []
-                const totalSurplus = surplusItems.reduce((s, x) => s + Number(x.qty_available), 0)
-                return (
-                  <tr key={i} className="border-b border-slate-50 last:border-0">
-                    <td className="px-4 py-3 text-sm font-medium text-slate-700">{item.item_name}</td>
-                    <td className="px-4 py-3">
-                      <input type="number" min="0" step="1" value={item.quantity}
-                        onChange={e => updateMergedQty(i, e.target.value)}
-                        className="w-20 px-2 py-1 border border-slate-200 rounded-lg text-sm font-bold text-indigo-600 text-center focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-400">{item.unit}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-col gap-0.5">
-                        {item.sources.map((s, j) => (
-                          <span key={j} className="text-[10px] text-slate-400">{s.requester}: {s.qty}</span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      {totalSurplus > 0 ? (
-                        <div className="flex flex-col gap-0.5">
-                          {surplusItems.map((s, j) => (
-                            <span key={j} className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full w-fit">
-                              {s.qty_available} {item.unit} @ {s.project_code}
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-[10px] text-slate-300">None</span>
-                      )}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+          <table className="w-full"><thead><tr className="bg-slate-50 border-b border-slate-100">{['Item','Qty','Unit','Sources','Surplus'].map(h=><th key={h} className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">{h}</th>)}</tr></thead>
+          <tbody>{mergedItems.map((item,i)=>{
+            const si = surplus[item.item_name.toLowerCase()]||[]; const ts = si.reduce((s,x)=>s+Number(x.qty_available),0)
+            return <tr key={i} className="border-b border-slate-50 last:border-0">
+              <td className="px-4 py-3 text-sm font-medium text-slate-700">{item.item_name}</td>
+              <td className="px-4 py-3"><input type="number" min="0" value={item.quantity} onChange={e=>setMergedItems(prev=>prev.map((it,j)=>j===i?{...it,quantity:Math.max(0,Math.floor(Number(e.target.value)||0))}:it))} className="w-20 px-2 py-1 border border-slate-200 rounded-lg text-sm font-bold text-indigo-600 text-center focus:outline-none focus:ring-2 focus:ring-indigo-300" /></td>
+              <td className="px-4 py-3 text-xs text-slate-400">{item.unit}</td>
+              <td className="px-4 py-3">{item.sources.map((s,j)=><span key={j} className="text-[10px] text-slate-400 block">{s.requester}: {s.qty}</span>)}</td>
+              <td className="px-4 py-3">{ts>0?si.map((s,j)=><span key={j} className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full block w-fit">{s.qty_available} {item.unit} @ {s.project_code}</span>):<span className="text-[10px] text-slate-300">None</span>}</td>
+            </tr>
+          })}</tbody></table>
         </div>
       )}
-
-      {/* ── Individual Requests ── */}
-      {!loading && requests.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <Inbox className="w-10 h-10 text-slate-200 mb-3" />
-          <p className="text-sm font-semibold text-slate-400">No material requests</p>
-          <p className="text-xs text-slate-300 mt-1">Requests from your team will appear here</p>
-        </div>
-      )}
-
+      {!loading && requests.length === 0 && <div className="flex flex-col items-center justify-center py-16 text-center"><Inbox className="w-10 h-10 text-slate-200 mb-3" /><p className="text-sm font-semibold text-slate-400">No material requests</p></div>}
       {!loading && requests.map(req => (
         <div key={req.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <button onClick={() => toggleExpand(req.id)}
-            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors text-left">
-            <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white"
-              style={{ background: '#6366f1' }}>
-              {(req.requester_name || '?')[0]}
-            </div>
+          <button onClick={() => toggleExpand(req.id)} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 text-left">
+            <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white" style={{background:'#6366f1'}}>{(req.requester_name||'?')[0]}</div>
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-sm font-semibold text-slate-800">{req.requester_name}</span>
-                <span className="text-xs text-slate-400">{req.project_code}</span>
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${statusColor(req.status)}`}>
-                  {req.status}
-                </span>
-              </div>
-              <div className="text-[10px] text-slate-400 mt-0.5">
-                {req.items?.length || 0} items · {new Date(req.created_at).toLocaleString('en-CA', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-              </div>
+              <div className="flex items-center gap-2 flex-wrap"><span className="text-sm font-semibold text-slate-800">{req.requester_name}</span><span className="text-xs text-slate-400">{req.project_code}</span><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${sc(req.status)}`}>{req.status}</span></div>
+              <div className="text-[10px] text-slate-400 mt-0.5">{req.items?.length||0} items · {new Date(req.created_at).toLocaleString('en-CA',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
             </div>
-            <ChevronRight className={`w-4 h-4 text-slate-300 flex-shrink-0 transition-transform ${expanded[req.id] ? 'rotate-90' : ''}`} />
+            <ChevronRight className={`w-4 h-4 text-slate-300 flex-shrink-0 transition-transform ${expanded[req.id]?'rotate-90':''}`} />
           </button>
-
           {expanded[req.id] && (
             <div className="border-t border-slate-100">
-              {req.note && (
-                <div className="px-4 py-2 bg-amber-50 text-xs text-amber-700 border-b border-amber-100">
-                  📝 {req.note}
-                </div>
-              )}
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-100">
-                    <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2">Item</th>
-                    <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2">Qty</th>
-                    <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2">Unit</th>
-                    <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2">Note</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(req.items || []).map((item, i) => (
-                    <tr key={i} className="border-b border-slate-50 last:border-0">
-                      <td className="px-4 py-2.5 text-sm font-medium text-slate-700">{item.item_name}</td>
-                      <td className="px-4 py-2.5 text-sm font-bold text-indigo-600">{item.quantity}</td>
-                      <td className="px-4 py-2.5 text-xs text-slate-400">{item.unit}</td>
-                      <td className="px-4 py-2.5 text-xs text-slate-400">{item.note || '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              {req.note && <div className="px-4 py-2 bg-amber-50 text-xs text-amber-700 border-b border-amber-100">📝 {req.note}</div>}
+              <table className="w-full"><thead><tr className="bg-slate-50 border-b border-slate-100">{['Item','Qty','Unit','Note'].map(h=><th key={h} className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2">{h}</th>)}</tr></thead>
+              <tbody>{(req.items||[]).map((item,i)=><tr key={i} className="border-b border-slate-50 last:border-0"><td className="px-4 py-2.5 text-sm font-medium text-slate-700">{item.item_name}</td><td className="px-4 py-2.5 text-sm font-bold text-indigo-600">{item.quantity}</td><td className="px-4 py-2.5 text-xs text-slate-400">{item.unit}</td><td className="px-4 py-2.5 text-xs text-slate-400">{item.note||'—'}</td></tr>)}</tbody></table>
             </div>
           )}
         </div>
       ))}
-
-      {/* ── Send Modal ── */}
       {sendModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-              <h3 className="text-sm font-bold text-slate-800">Send Request To</h3>
-              <button onClick={() => setSendModal(false)} className="p-1.5 text-slate-400 hover:bg-slate-100 rounded-lg">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between"><h3 className="text-sm font-bold text-slate-800">Send Request To</h3><button onClick={()=>setSendModal(false)} className="p-1.5 text-slate-400 hover:bg-slate-100 rounded-lg"><X className="w-4 h-4" /></button></div>
             <div className="px-6 py-4 space-y-2 max-h-[55vh] overflow-y-auto">
-              {/* Procurement option */}
-              <button onClick={() => setSendTarget('procurement')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-colors text-left ${
-                  sendTarget === 'procurement' ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200 hover:bg-slate-50'
-                }`}>
-                <div className="w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <Briefcase className="w-4 h-4 text-indigo-600" />
-                </div>
-                <div>
-                  <div className="text-sm font-semibold text-slate-800">Procurement Department</div>
-                  <div className="text-[10px] text-slate-400">Internal — company purchasing team</div>
-                </div>
-                {sendTarget === 'procurement' && <Check className="w-4 h-4 text-indigo-600 ml-auto" />}
+              <button onClick={()=>setSendTarget('procurement')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-left ${sendTarget==='procurement'?'border-indigo-400 bg-indigo-50':'border-slate-200 hover:bg-slate-50'}`}>
+                <div className="w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center"><Briefcase className="w-4 h-4 text-indigo-600" /></div>
+                <div><div className="text-sm font-semibold text-slate-800">Procurement Department</div><div className="text-[10px] text-slate-400">Internal</div></div>
+                {sendTarget==='procurement' && <Check className="w-4 h-4 text-indigo-600 ml-auto" />}
               </button>
-
-              {/* Suppliers */}
-              {suppliers.length > 0 && (
-                <>
-                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pt-1">Suppliers</div>
-                  {suppliers.map(s => (
-                    <button key={s.id} onClick={() => setSendTarget(String(s.id))}
-                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-colors text-left ${
-                        sendTarget === String(s.id) ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200 hover:bg-slate-50'
-                      }`}>
-                      <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                        <Package className="w-4 h-4 text-slate-500" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-semibold text-slate-800 truncate">{s.name}</div>
-                        <div className="text-[10px] text-slate-400">{s.trade_code} · {s.email}</div>
-                      </div>
-                      {sendTarget === String(s.id) && <Check className="w-4 h-4 text-indigo-600 ml-auto flex-shrink-0" />}
-                    </button>
-                  ))}
-                </>
-              )}
+              {suppliers.length > 0 && (<><div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pt-1">Suppliers</div>
+                {suppliers.map(s=><button key={s.id} onClick={()=>setSendTarget(String(s.id))} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-left ${sendTarget===String(s.id)?'border-indigo-400 bg-indigo-50':'border-slate-200 hover:bg-slate-50'}`}>
+                  <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center"><Package className="w-4 h-4 text-slate-500" /></div>
+                  <div className="flex-1 min-w-0"><div className="text-sm font-semibold text-slate-800 truncate">{s.name}</div><div className="text-[10px] text-slate-400">{s.trade_code} · {s.email}</div></div>
+                  {sendTarget===String(s.id) && <Check className="w-4 h-4 text-indigo-600 ml-auto" />}
+                </button>)}</>)}
             </div>
-            <div className="px-6 py-3 border-t border-slate-100">
-              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Notes (optional)</label>
-              <textarea value={sendNote} onChange={e => setSendNote(e.target.value)}
-                rows={2} placeholder="e.g. Contact Ahmad if foreman unavailable — 514-000-0000"
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-slate-300 resize-none" />
-            </div>
+            <div className="px-6 py-3 border-t border-slate-100"><textarea value={sendNote} onChange={e=>setSendNote(e.target.value)} rows={2} placeholder="Notes (optional)" className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none" /></div>
             <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3">
-              <button onClick={() => setSendModal(false)} className="px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors">Cancel</button>
-              <button onClick={handleSend} disabled={!sendTarget || sending}
-                className="flex items-center gap-2 px-5 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 disabled:opacity-60 transition-colors">
-                {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><Check className="w-3.5 h-3.5" />Confirm Send</>}
+              <button onClick={()=>setSendModal(false)} className="px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 rounded-xl">Cancel</button>
+              <button onClick={handleSend} disabled={!sendTarget||sending} className="flex items-center gap-2 px-5 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 disabled:opacity-60">
+                {sending?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<><Check className="w-3.5 h-3.5"/>Confirm Send</>}
               </button>
             </div>
           </div>
@@ -674,66 +724,62 @@ function InboxTab() {
 
 // ── Main Page ─────────────────────────────────────────────────
 export default function MyHubPage() {
-  const [tab, setTab] = useState('attendance')
+  const { can, loading: permsLoading } = usePermissions()
+  const [tab, setTab] = useState(null)
   const [materialsCount, setMaterialsCount] = useState(0)
+  const [tasksUnread, setTasksUnread]       = useState(0)
+
+  const canAttendance   = !permsLoading && can('attendance', 'approve')
+  const canMaterials    = !permsLoading && can('hub', 'materials_inbox')
+  const canReceiveTasks = !permsLoading && can('hub', 'receive_tasks')
 
   useEffect(() => {
-    const fetchCount = async () => {
-      try {
-        const r = await api.get('/materials/inbox/count')
-        setMaterialsCount(r.data.count || 0)
-      } catch (_) {}
-    }
-    fetchCount()
-    const interval = setInterval(fetchCount, 30_000)
-    return () => clearInterval(interval)
-  }, [])
+    if (permsLoading || tab) return
+    if (canAttendance)    setTab('attendance')
+    else if (canSendTasks)    setTab('send')
+    else if (canReceiveTasks) setTab('tasks')
+    else if (canMaterials)    setTab('materials')
+  }, [permsLoading])
+
+  useEffect(() => {
+    if (!canMaterials) return
+    const f = async () => { try { const r = await api.get('/materials/inbox/count'); setMaterialsCount(r.data.count||0) } catch(_){} }
+    f(); const i = setInterval(f, 30000); return () => clearInterval(i)
+  }, [canMaterials])
+
+  useEffect(() => {
+    if (!canReceiveTasks) return
+    const f = async () => { try { const r = await api.get('/hub/messages/unread-count'); setTasksUnread(r.data.count||0) } catch(_){} }
+    f(); const i = setInterval(f, 30000); return () => clearInterval(i)
+  }, [canReceiveTasks])
 
   const tabs = [
-    { id: 'attendance', icon: CalendarCheck, label: 'Attendance Approval' },
-    { id: 'materials',  icon: Package,       label: 'Materials', count: materialsCount },
-  ]
+    canAttendance   && { id:'attendance', icon:CalendarCheck, label:'Attendance' },
+    canMaterials    && { id:'materials',  icon:Package,       label:'Materials',  count:materialsCount },
+    canReceiveTasks && { id:'tasks',      icon:ClipboardList, label:'My Tasks',   count:tasksUnread },
+  ].filter(Boolean)
 
   return (
     <div className="flex flex-col h-screen bg-slate-50 overflow-hidden">
-
-      {/* Header */}
       <div className="bg-white border-b border-slate-200 px-6 py-4 flex-shrink-0">
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center">
-            <Inbox className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <h1 className="text-lg font-bold text-slate-900">My Hub</h1>
-            <p className="text-xs text-slate-400 mt-0.5">Your daily tasks, approvals and requests</p>
-          </div>
+          <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center"><Inbox className="w-5 h-5 text-white" /></div>
+          <div><h1 className="text-lg font-bold text-slate-900">My Hub</h1><p className="text-xs text-slate-400 mt-0.5">Your daily tasks, approvals and requests</p></div>
         </div>
-
-        {/* Tabs */}
         <div className="flex items-center gap-1">
           {tabs.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${
-                tab === t.id ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
-              }`}>
-              <t.icon className="w-3.5 h-3.5" />
-              {t.label}
-              {t.count > 0 && (
-                <span className={`min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full flex items-center justify-center ${
-                  tab === t.id ? 'bg-white text-indigo-600' : 'bg-red-500 text-white'
-                }`}>
-                  {t.count > 99 ? '99+' : t.count}
-                </span>
-              )}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${tab===t.id ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'}`}>
+              <t.icon className="w-3.5 h-3.5" />{t.label}
+              {t.count > 0 && <span className={`min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full flex items-center justify-center ${tab===t.id ? 'bg-white text-indigo-600' : 'bg-red-500 text-white'}`}>{t.count>99?'99+':t.count}</span>}
             </button>
           ))}
         </div>
       </div>
-
-      {/* Body */}
       <div className="flex-1 overflow-y-auto px-6 py-5">
-        {tab === 'attendance' && <AttendanceApprovalTab />}
-        {tab === 'materials'  && <InboxTab />}
+        {tab==='attendance' && <AttendanceApprovalTab />}
+        {tab==='materials'  && <InboxTab />}
+        {tab==='tasks'      && <WorkerInboxTab />}
       </div>
     </div>
   )

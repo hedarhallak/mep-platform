@@ -3,6 +3,7 @@
 
 require("dotenv").config();
 const express = require("express");
+const path    = require("path");
 const helmet  = require("helmet");
 const rateLimit = require("express-rate-limit");
 const { pool } = require("./db");
@@ -18,6 +19,7 @@ app.use(helmet({
       styleSrc:       ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://api.mapbox.com"],
       fontSrc:        ["'self'", "https://fonts.gstatic.com"],
       connectSrc:     ["'self'", "https://api.mapbox.com", "https://events.mapbox.com"],
+      objectSrc:      ["'self'"],
       imgSrc:         ["'self'", "data:", "blob:", "https://api.mapbox.com"],
       workerSrc:      ["'self'", "blob:"],
     },
@@ -125,6 +127,10 @@ app.use("/api/admin/users",      auth, loadRouter("./routes/admin_users"));
 // ── RBAC Permissions ──────────────────────────────────────────
 app.use("/api/users",       auth, require("./routes/user_management"));
 app.use("/api/permissions", auth, require("./routes/permissions"));
+
+// ── Hub (Tasks & Blueprints) ──────────────────────────────────
+app.use("/api/hub",       auth, require("./routes/hub"));
+app.use("/uploads/hub",   require("express").static(path.join(__dirname, "uploads/hub")));
 
 // ── Start ─────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;

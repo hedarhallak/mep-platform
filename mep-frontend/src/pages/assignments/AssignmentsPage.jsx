@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import api from '@/lib/api'
+import WorkerPicker from '@/components/shared/WorkerPicker'
 import {
   Briefcase, MapPin, User, Check, X, Loader2,
   ChevronRight, AlertCircle, Plus, Calendar, List,
@@ -320,7 +321,7 @@ function RepeatTodayModal({ onClose, onSaved }) {
                     {preview.to_assign.map((a, i) => {
                       const c = trade(a.trade_code)
                       return (
-                        <div key={i} className="flex items-center gap-2.5 px-3 py-2.5">
+                        <div key={a.employee_id || a.employee_name || i} className="flex items-center gap-2.5 px-3 py-2.5">
                           <div className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white" style={{ background: c.dot }}>
                             {(a.employee_name || '?')[0]}
                           </div>
@@ -344,7 +345,7 @@ function RepeatTodayModal({ onClose, onSaved }) {
                   </div>
                   <div className="border border-slate-100 rounded-xl overflow-hidden max-h-32 overflow-y-auto divide-y divide-slate-50 bg-slate-50/50">
                     {preview.already_set.map((a, i) => (
-                      <div key={i} className="flex items-center gap-2.5 px-3 py-2">
+                      <div key={`skip-${a.employee_id || a.employee_name || i}`} className="flex items-center gap-2.5 px-3 py-2">
                         <div className="w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-bold text-white bg-slate-300">
                           {(a.employee_name || '?')[0]}
                         </div>
@@ -393,7 +394,6 @@ function NewAssignmentModal({ projects, onClose, onSaved }) {
   const [loadingEmp, setLoadingEmp] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [empSearch, setEmpSearch] = useState('')
 
   const [form, setForm] = useState({
     project_id:      '',
@@ -414,9 +414,7 @@ function NewAssignmentModal({ projects, onClose, onSaved }) {
       .finally(() => setLoadingEmp(false))
   }, [])
 
-  const filteredEmps = employees.filter(e =>
-    !empSearch || e.full_name.toLowerCase().includes(empSearch.toLowerCase())
-  )
+
 
   const handleSave = async () => {
     setError('')
@@ -473,33 +471,30 @@ function NewAssignmentModal({ projects, onClose, onSaved }) {
           {/* Employee */}
           <div>
             <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Employee</label>
-            <div className="relative mb-1.5">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
-              <input value={empSearch} onChange={e => setEmpSearch(e.target.value)} placeholder="Search employee..."
-                className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-            </div>
             {loadingEmp
               ? <div className="flex justify-center py-4"><Loader2 className="w-4 h-4 animate-spin text-slate-300" /></div>
-              : <div className="border border-slate-200 rounded-xl overflow-hidden max-h-36 overflow-y-auto">
-                  {filteredEmps.map(emp => {
-                    const c = trade(emp.trade_code)
-                    const selected = String(form.employee_id) === String(emp.id)
-                    return (
-                      <button key={emp.id} onClick={() => set('employee_id', emp.id)}
-                        className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-left border-b border-slate-50 last:border-0 transition-colors ${selected ? 'bg-indigo-50' : 'hover:bg-slate-50'}`}>
-                        <div className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white" style={{ background: c.dot }}>
-                          {(emp.full_name || '?')[0]}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-xs font-semibold text-slate-700 truncate">{emp.full_name}</div>
-                          <TradePill code={emp.trade_code} />
-                        </div>
-                        {selected && <Check className="w-3.5 h-3.5 text-indigo-600 flex-shrink-0" />}
-                      </button>
-                    )
-                  })}
-                  {filteredEmps.length === 0 && <p className="text-xs text-slate-400 text-center py-4">No employees found</p>}
-                </div>
+              : <WorkerPicker
+                  mode="single"
+                  workers={employees.map(e => ({
+                    id: e.id,
+                    first_name: e.full_name?.split(' ')[0] || e.full_name,
+                    last_name:  e.full_name?.split(' ').slice(1).join(' ') || '',
+                    username:   e.full_name,
+                    trade_name: e.trade_code,
+                  }))}
+                  value={form.employee_id
+                    ? employees.filter(e => String(e.id) === String(form.employee_id)).map(e => ({
+                        id: e.id,
+                        first_name: e.full_name?.split(' ')[0] || e.full_name,
+                        last_name:  e.full_name?.split(' ').slice(1).join(' ') || '',
+                        username:   e.full_name,
+                        trade_name: e.trade_code,
+                      }))[0] || null
+                    : null
+                  }
+                  onChange={w => set('employee_id', w ? w.id : '')}
+                  placeholder="Type to search for an employee..."
+                />
             }
           </div>
 

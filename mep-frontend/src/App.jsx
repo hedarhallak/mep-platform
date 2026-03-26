@@ -18,6 +18,7 @@ import SuppliersPage        from '@/pages/suppliers/SuppliersPage'
 import WorkforcePlannerPage from '@/pages/bi/WorkforcePlannerPage'
 import PermissionsPage       from '@/pages/PermissionsPage'
 import UserManagementPage  from '@/pages/UserManagementPage'
+import TaskRequestPage     from '@/pages/TaskRequestPage'
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
@@ -96,6 +97,11 @@ function AppRoutes() {
         <Route path="bi/workforce-planner" element={
           <RequirePermission module="bi" action="workforce_planner">
             <WorkforcePlannerPage />
+          </RequirePermission>
+        }/>
+        <Route path="task-request" element={
+          <RequirePermission module="hub" action="send_tasks">
+            <TaskRequestPage />
           </RequirePermission>
         }/>
         <Route path="user-management" element={

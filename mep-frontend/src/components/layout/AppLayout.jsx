@@ -6,7 +6,7 @@ import api from '@/lib/api'
 import {
   LayoutDashboard, FolderKanban, Users, ClipboardList,
   Settings, LogOut, Building2, BarChart2, Brain,
-  ChevronDown, ChevronRight, CalendarCheck, Inbox, Package, Truck, FileText, Shield
+  ChevronDown, ChevronRight, CalendarCheck, Inbox, Package, Truck, FileText, Shield, Send
 } from 'lucide-react'
 
 const mainNav = [
@@ -16,9 +16,10 @@ const mainNav = [
   { to: '/suppliers',        icon: Truck,           label: 'Suppliers',        permission: { module: 'suppliers',       action: 'view'           } },
   { to: '/assignments',      icon: ClipboardList,   label: 'Assignments',      permission: { module: 'assignments',     action: 'view'           } },
   { to: '/attendance',       icon: CalendarCheck,   label: 'Attendance',       permission: { module: 'attendance',      action: 'view_self'      } },
-  { to: '/my-hub',           icon: Inbox,           label: 'My Hub',           permission: null, badge: true },
+  { to: '/task-request',     icon: Send,            label: 'Task Request',     permission: { module: 'hub',             action: 'send_tasks'     } },
   { to: '/material-request', icon: Package,         label: 'Material Request', permission: { module: 'materials',       action: 'request_submit' } },
   { to: '/purchase-orders',  icon: FileText,        label: 'Purchase Orders',  permission: { module: 'purchase_orders', action: 'view'           } },
+  { to: '/my-hub',           icon: Inbox,           label: 'My Hub',           permission: null, badge: true },
 ]
 
 const biNav = [
