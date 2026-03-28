@@ -736,7 +736,6 @@ export default function MyHubPage() {
   useEffect(() => {
     if (permsLoading || tab) return
     if (canAttendance)    setTab('attendance')
-    else if (canSendTasks)    setTab('send')
     else if (canReceiveTasks) setTab('tasks')
     else if (canMaterials)    setTab('materials')
   }, [permsLoading])

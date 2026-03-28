@@ -465,7 +465,9 @@ router.get("/inbox", can("hub.materials_inbox"), async (req, res) => {
          ) AS items
        FROM public.material_requests mr
        JOIN public.projects          p  ON p.id          = mr.project_id
-       JOIN public.employee_profiles ep ON ep.employee_id = mr.requested_by
+       LEFT JOIN public.employee_profiles ep ON ep.employee_id = (
+           SELECT au.employee_id FROM public.app_users au WHERE au.id = mr.requested_by LIMIT 1
+         )
        WHERE mr.company_id           = $1
          AND mr.foreman_employee_id  = $2
          AND mr.status NOT IN ('CANCELLED','SENT')

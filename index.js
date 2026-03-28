@@ -130,6 +130,9 @@ app.use("/api/permissions", auth, require("./routes/permissions"));
 
 // ── Hub (Tasks & Blueprints) ──────────────────────────────────
 app.use("/api/hub",       auth, require("./routes/hub"));
+
+// ── Daily Standup ─────────────────────────────────────────────
+app.use("/api/standup",   auth, require("./routes/standup"));
 app.use("/uploads/hub",   require("express").static(path.join(__dirname, "uploads/hub")));
 
 // ── Start ─────────────────────────────────────────────────────

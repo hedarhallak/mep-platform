@@ -19,6 +19,7 @@ import WorkforcePlannerPage from '@/pages/bi/WorkforcePlannerPage'
 import PermissionsPage       from '@/pages/PermissionsPage'
 import UserManagementPage  from '@/pages/UserManagementPage'
 import TaskRequestPage     from '@/pages/TaskRequestPage'
+import StandupPage         from '@/pages/StandupPage'
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
@@ -97,6 +98,11 @@ function AppRoutes() {
         <Route path="bi/workforce-planner" element={
           <RequirePermission module="bi" action="workforce_planner">
             <WorkforcePlannerPage />
+          </RequirePermission>
+        }/>
+        <Route path="standup" element={
+          <RequirePermission module="standup" action="manage">
+            <StandupPage />
           </RequirePermission>
         }/>
         <Route path="task-request" element={

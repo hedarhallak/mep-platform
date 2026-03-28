@@ -2,11 +2,13 @@ import { useState, useEffect } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { usePermissions } from '@/hooks/usePermissions.jsx'
+import { usePWA } from '@/hooks/usePWA.jsx'
 import api from '@/lib/api'
 import {
   LayoutDashboard, FolderKanban, Users, ClipboardList,
   Settings, LogOut, Building2, BarChart2, Brain,
-  ChevronDown, ChevronRight, CalendarCheck, Inbox, Package, Truck, FileText, Shield, Send
+  ChevronDown, ChevronRight, CalendarCheck, Inbox, Package, Truck, FileText, Shield, Send,
+  Download, WifiOff, RefreshCw
 } from 'lucide-react'
 
 const mainNav = [
@@ -16,6 +18,7 @@ const mainNav = [
   { to: '/suppliers',        icon: Truck,           label: 'Suppliers',        permission: { module: 'suppliers',       action: 'view'           } },
   { to: '/assignments',      icon: ClipboardList,   label: 'Assignments',      permission: { module: 'assignments',     action: 'view'           } },
   { to: '/attendance',       icon: CalendarCheck,   label: 'Attendance',       permission: { module: 'attendance',      action: 'view_self'      } },
+  { to: '/standup',          icon: ClipboardList,   label: 'Daily Standup',    permission: { module: 'standup',         action: 'manage'         } },
   { to: '/task-request',     icon: Send,            label: 'Task Request',     permission: { module: 'hub',             action: 'send_tasks'     } },
   { to: '/material-request', icon: Package,         label: 'Material Request', permission: { module: 'materials',       action: 'request_submit' } },
   { to: '/purchase-orders',  icon: FileText,        label: 'Purchase Orders',  permission: { module: 'purchase_orders', action: 'view'           } },
@@ -29,6 +32,7 @@ const biNav = [
 export default function AppLayout() {
   const { user, logout } = useAuth()
   const { can, loading: permsLoading } = usePermissions()
+  const { installPrompt, isOnline, updateAvailable, promptInstall, applyUpdate } = usePWA()
   const navigate  = useNavigate()
   const location  = useLocation()
   const [biOpen, setBiOpen] = useState(location.pathname.startsWith('/bi'))
@@ -84,143 +88,187 @@ export default function AppLayout() {
   const showSettings    = !permsLoading && can('settings', 'company')
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <aside className="w-56 flex flex-col bg-[#0f172a] text-slate-300 flex-shrink-0">
+    <>
+      <div className="flex h-screen overflow-hidden">
+        {/* Sidebar */}
+        <aside className="w-56 flex flex-col bg-[#0f172a] text-slate-300 flex-shrink-0">
 
-        {/* Brand */}
-        <div className="flex items-center gap-2 px-5 py-5 border-b border-slate-800">
-          <Building2 size={20} className="text-indigo-400" />
-          <span className="font-bold text-white text-sm">MEP Platform</span>
-        </div>
-
-        {/* Nav */}
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-
-          {visibleMain.map(({ to, icon: Icon, label, badge }) => (
-            <NavLink key={to} to={to}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  isActive ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                }`
-              }
-            >
-              <Icon size={16} />
-              <span className="flex-1">{label}</span>
-              {badge && hubCount > 0 && (
-                <span className="flex-shrink-0 min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                  {hubCount > 99 ? '99+' : hubCount}
-                </span>
-              )}
-            </NavLink>
-          ))}
-
-          <div className="pt-2 pb-1">
-            <div className="border-t border-slate-800" />
+          {/* Brand */}
+          <div className="flex items-center gap-2 px-5 py-5 border-b border-slate-800">
+            <Building2 size={20} className="text-indigo-400" />
+            <span className="font-bold text-white text-sm">MEP Platform</span>
           </div>
 
-          {/* BI Section */}
-          {visibleBi.length > 0 && (
-            <>
-              <button onClick={() => setBiOpen(v => !v)}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  isBiActive ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <BarChart2 size={16} />
-                  <span>Business Intelligence</span>
-                </div>
-                {biOpen
-                  ? <ChevronDown size={13} className="text-slate-500" />
-                  : <ChevronRight size={13} className="text-slate-500" />
+          {/* Nav */}
+          <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+
+            {visibleMain.map(({ to, icon: Icon, label, badge }) => (
+              <NavLink key={to} to={to}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    isActive ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                  }`
                 }
-              </button>
+              >
+                <Icon size={16} />
+                <span className="flex-1">{label}</span>
+                {badge && hubCount > 0 && (
+                  <span className="flex-shrink-0 min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                    {hubCount > 99 ? '99+' : hubCount}
+                  </span>
+                )}
+              </NavLink>
+            ))}
 
-              {biOpen && (
-                <div className="ml-3 pl-3 border-l border-slate-700 space-y-0.5">
-                  {visibleBi.map(({ to, icon: Icon, label }) => (
-                    <NavLink key={to} to={to}
-                      className={({ isActive }) =>
-                        `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                          isActive ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                        }`
-                      }
-                    >
-                      <Icon size={15} />{label}
-                    </NavLink>
-                  ))}
-                </div>
-              )}
-
-              <div className="pt-2 pb-1">
-                <div className="border-t border-slate-800" />
-              </div>
-            </>
-          )}
-
-          {/* User Management */}
-          {showUserMgmt && (
-            <NavLink to="/user-management"
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  isActive ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                }`
-              }
-            >
-              <Users size={16} />User Management
-            </NavLink>
-          )}
-
-          {/* Permissions */}
-          {showPermissions && (
-            <NavLink to="/permissions"
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  isActive ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                }`
-              }
-            >
-              <Shield size={16} />Permissions
-            </NavLink>
-          )}
-
-          {/* Settings */}
-          {showSettings && (
-            <NavLink to="/settings"
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  isActive ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                }`
-              }
-            >
-              <Settings size={16} />Settings
-            </NavLink>
-          )}
-
-        </nav>
-
-        {/* User */}
-        <div className="px-4 py-4 border-t border-slate-800">
-          <div className="text-xs text-slate-500 mb-1 truncate">{user?.company_name || 'Company'}</div>
-          <div className="flex items-center justify-between gap-2">
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium text-white truncate">{user?.username}</div>
-              <div className="text-xs text-indigo-400">{user?.role}</div>
+            <div className="pt-2 pb-1">
+              <div className="border-t border-slate-800" />
             </div>
-            <button onClick={handleLogout}
-              className="flex-shrink-0 p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
-              title="Logout"
-            >
-              <LogOut size={15} />
+
+            {/* BI Section */}
+            {visibleBi.length > 0 && (
+              <>
+                <button onClick={() => setBiOpen(v => !v)}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    isBiActive ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <BarChart2 size={16} />
+                    <span>Business Intelligence</span>
+                  </div>
+                  {biOpen
+                    ? <ChevronDown size={13} className="text-slate-500" />
+                    : <ChevronRight size={13} className="text-slate-500" />
+                  }
+                </button>
+
+                {biOpen && (
+                  <div className="ml-3 pl-3 border-l border-slate-700 space-y-0.5">
+                    {visibleBi.map(({ to, icon: Icon, label }) => (
+                      <NavLink key={to} to={to}
+                        className={({ isActive }) =>
+                          `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                            isActive ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                          }`
+                        }
+                      >
+                        <Icon size={15} />{label}
+                      </NavLink>
+                    ))}
+                  </div>
+                )}
+
+                <div className="pt-2 pb-1">
+                  <div className="border-t border-slate-800" />
+                </div>
+              </>
+            )}
+
+            {/* User Management */}
+            {showUserMgmt && (
+              <NavLink to="/user-management"
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    isActive ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                  }`
+                }
+              >
+                <Users size={16} />User Management
+              </NavLink>
+            )}
+
+            {/* Permissions */}
+            {showPermissions && (
+              <NavLink to="/permissions"
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    isActive ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                  }`
+                }
+              >
+                <Shield size={16} />Permissions
+              </NavLink>
+            )}
+
+            {/* Settings */}
+            {showSettings && (
+              <NavLink to="/settings"
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    isActive ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                  }`
+                }
+              >
+                <Settings size={16} />Settings
+              </NavLink>
+            )}
+
+          </nav>
+
+          {/* User */}
+          <div className="px-4 py-4 border-t border-slate-800">
+            <div className="text-xs text-slate-500 mb-1 truncate">{user?.company_name || 'Company'}</div>
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-medium text-white truncate">{user?.username}</div>
+                <div className="text-xs text-indigo-400">{user?.role}</div>
+              </div>
+              <button onClick={handleLogout}
+                className="flex-shrink-0 p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+                title="Logout"
+              >
+                <LogOut size={15} />
+              </button>
+            </div>
+          </div>
+        </aside>
+
+        {/* Main */}
+        <main className="flex-1 overflow-auto bg-slate-50 flex flex-col">
+
+          {/* Offline banner */}
+          {!isOnline && (
+            <div className="flex-shrink-0 flex items-center justify-center gap-2 bg-amber-500 text-white text-xs font-semibold py-2 px-4">
+              <WifiOff size={13} />
+              You're offline — some features may be unavailable
+            </div>
+          )}
+
+          {/* Update banner */}
+          {updateAvailable && (
+            <div className="flex-shrink-0 flex items-center justify-between gap-2 bg-indigo-600 text-white text-xs font-semibold py-2 px-4">
+              <span>🆕 A new version is available</span>
+              <button onClick={applyUpdate}
+                className="flex items-center gap-1.5 px-3 py-1 bg-white text-indigo-600 rounded-full font-bold hover:bg-indigo-50 transition-colors">
+                <RefreshCw size={11} />Update now
+              </button>
+            </div>
+          )}
+
+          <div className="flex-1 overflow-auto">
+            <Outlet />
+          </div>
+        </main>
+      </div>
+
+      {/* Install App prompt */}
+      {installPrompt && (
+        <div className="fixed bottom-4 left-4 right-4 z-50 md:left-auto md:right-6 md:max-w-sm">
+          <div className="bg-slate-900 text-white rounded-2xl shadow-2xl p-4 flex items-center gap-3 border border-slate-700">
+            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center flex-shrink-0">
+              <Download size={18} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold">Install MEP Platform</p>
+              <p className="text-xs text-slate-400 mt-0.5">Add to home screen for quick access</p>
+            </div>
+            <button onClick={promptInstall}
+              className="flex-shrink-0 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg transition-colors">
+              Install
             </button>
           </div>
         </div>
-      </aside>
-
-      {/* Main */}
-      <main className="flex-1 overflow-auto bg-slate-50">
-        <Outlet />
-      </main>
-    </div>
+      )}
+    </>
   )
 }
