@@ -7,7 +7,8 @@ import {
   Map as MapIcon, Search, RefreshCw, ArrowLeftRight
 } from 'lucide-react'
 
-const todayStr = () => new Date().toISOString().split('T')[0]
+const todayStr    = () => new Date().toISOString().split('T')[0]
+const tomorrowStr = () => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().split('T')[0] }
 
 function fmt(d, opts = { month: 'short', day: 'numeric' }) {
   if (!d) return '—'
@@ -398,14 +399,21 @@ function NewAssignmentModal({ projects, onClose, onSaved }) {
   const [form, setForm] = useState({
     project_id:      '',
     employee_id:     '',
-    start_date:      todayStr(),
-    end_date:        todayStr(),
+    start_date:      tomorrowStr(),
+    end_date:        tomorrowStr(),
     shift_start:     '06:00',
     shift_end:       '14:30',
     assignment_role: 'WORKER',
     notes:           '',
   })
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+  const set = (k, v) => setForm(f => {
+    const updated = { ...f, [k]: v }
+    // Rule 1: end_date auto-follows start_date if it was equal or behind
+    if (k === 'start_date' && updated.end_date < v) updated.end_date = v
+    // Rule 2: start_date cannot go after end_date
+    if (k === 'end_date' && v < updated.start_date) return f
+    return updated
+  })
 
   useEffect(() => {
     api.get('/assignments/employees')
@@ -513,13 +521,16 @@ function NewAssignmentModal({ projects, onClose, onSaved }) {
 
           {/* Dates */}
           <div className="grid grid-cols-2 gap-3">
-            {[['Start Date','start_date'],['End Date','end_date']].map(([label, key]) => (
-              <div key={key}>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">{label}</label>
-                <input type="date" value={form[key]} onChange={e => set(key, e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-              </div>
-            ))}
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Start Date</label>
+              <input type="date" value={form.start_date} onChange={e => set('start_date', e.target.value)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">End Date</label>
+              <input type="date" value={form.end_date} min={form.start_date} onChange={e => set('end_date', e.target.value)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+            </div>
           </div>
 
           {/* Shift */}
@@ -582,7 +593,11 @@ function ListTab({ projects, assignments, loadingAsgn, onModify, modifying, succ
     if (filterProject  && !String(a.project_code).toLowerCase().includes(filterProject.toLowerCase())
                        && !String(a.project_name || '').toLowerCase().includes(filterProject.toLowerCase())) return false
     if (filterEmployee && !String(a.employee_name).toLowerCase().includes(filterEmployee.toLowerCase())) return false
-    if (filterDate     && !(a.start_date <= filterDate && a.end_date >= filterDate)) return false
+    if (filterDate) {
+      const start = (a.start_date || '').slice(0, 10)
+      const end   = (a.end_date   || '').slice(0, 10)
+      if (!(start <= filterDate && end >= filterDate)) return false
+    }
     return true
   })
 
@@ -648,7 +663,7 @@ function ListTab({ projects, assignments, loadingAsgn, onModify, modifying, succ
               </div>
             : groupList.map(group => {
                 const isOpen = !collapsed[group.project_id]
-                const onSiteNow = group.employees.filter(a => a.start_date <= today && a.end_date >= today).length
+                const onSiteNow = group.employees.filter(a => (a.start_date || '').slice(0,10) <= today && (a.end_date || '').slice(0,10) >= today).length
                 return (
                   <div key={group.project_id} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
                     {/* Project header */}
@@ -686,7 +701,7 @@ function ListTab({ projects, assignments, loadingAsgn, onModify, modifying, succ
                           <span>Actions</span>
                         </div>
                         {group.employees.map(a => {
-                          const isToday = a.start_date <= today && a.end_date >= today
+                          const isToday = (a.start_date || '').slice(0,10) <= today && (a.end_date || '').slice(0,10) >= today
                           const c = trade(a.trade_code)
                           return (
                             <div key={a.id} className="grid grid-cols-[1fr_120px_80px_160px_auto] items-center px-4 py-2.5 border-t border-slate-50 hover:bg-slate-50/70 transition-colors">
@@ -739,7 +754,7 @@ export default function AssignmentsPage() {
   const [assigning, setAssigning] = useState(null)
   const [successMsg, setSuccessMsg] = useState('')
   const [mapProj, setMapProj] = useState(null)
-  const [mapForm,        setMapForm]        = useState({ start_date: todayStr(), end_date: todayStr() })
+  const [mapForm, setMapForm] = useState({ start_date: tomorrowStr(), end_date: tomorrowStr() })
   const [reassignModal,  setReassignModal]  = useState(null)
   const [modifying,    setModifying]    = useState(null)
   const [newAssignModal, setNewAssignModal] = useState(false)
@@ -848,13 +863,24 @@ export default function AssignmentsPage() {
                 ))}
               </div>
               <div className="px-4 py-3 border-t border-slate-100 space-y-2">
-                {[['Start','start_date'],['End','end_date']].map(([label, key]) => (
-                  <div key={key}>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">{label}</label>
-                    <input type="date" value={mapForm[key]} onChange={e => setMapForm(f => ({ ...f, [key]: e.target.value }))}
-                      className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-                  </div>
-                ))}
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Start</label>
+                  <input type="date" value={mapForm.start_date}
+                    onChange={e => {
+                      const v = e.target.value
+                      setMapForm(f => ({ start_date: v, end_date: f.end_date < v ? v : f.end_date }))
+                    }}
+                    className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">End</label>
+                  <input type="date" value={mapForm.end_date} min={mapForm.start_date}
+                    onChange={e => {
+                      const v = e.target.value
+                      if (v >= mapForm.start_date) setMapForm(f => ({ ...f, end_date: v }))
+                    }}
+                    className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                </div>
               </div>
             </div>
             <MapTab selectedProj={mapProj} form={{ ...mapForm, shift_start: '06:00', shift_end: '14:30', notes: '' }}

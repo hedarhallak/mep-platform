@@ -1,329 +1,350 @@
 "use strict";
 
+/**
+ * routes/reports.js
+ *
+ * All reports use attendance_records + assignment_requests tables.
+ * Filters: ?from=YYYY-MM-DD&to=YYYY-MM-DD  (both required)
+ *          &project_id=N  (optional)
+ *          &employee_id=N (optional)
+ *
+ * GET /api/reports/hours            — Regular + OT per employee
+ * GET /api/reports/attendance       — Presence/absence summary per project
+ * GET /api/reports/travel           — CCQ travel allowance (distance-based)
+ * GET /api/reports/assignments      — Assignment roster (from → to)
+ * GET /api/reports/distance         — Employees 41km+ from project site
+ */
+
 const express = require("express");
-const router = express.Router();
-const db = require("../db");
-const pool = db && db.pool ? db.pool : db;
-const auth = require("../middleware/auth");
-const { can } = require("../middleware/permissions");
+const router  = express.Router();
+const { pool } = require("../db");
+const { can }  = require("../middleware/permissions");
 
-if (!pool || typeof pool.query !== "function") {
-  throw new Error("DB pool is not initialized correctly. Expected pool.query to be a function.");
-}
-
-function requireRoles(req, res, allowed) {
-  const role = String(req.user?.role || "").toUpperCase();
-  if (!allowed.includes(role)) {
-    res.status(403).json({ ok: false, error: "FORBIDDEN_ROLE" });
-    return false;
-  }
-  return true;
-}
-
-function requireCompany(req, res) {
-  const raw = req.user?.company_id;
-  if (raw === undefined || raw === null || raw === "") {
-    res.status(400).json({ ok: false, error: "COMPANY_REQUIRED" });
+// ── Date helpers ───────────────────────────────────────────────
+function parseRange(req, res) {
+  const { from, to } = req.query;
+  if (!from || !to) {
+    res.status(400).json({ ok: false, error: "from and to dates are required" });
     return null;
   }
-  const companyId = Number(raw);
-  if (!Number.isFinite(companyId) || companyId <= 0) {
-    res.status(400).json({ ok: false, error: "COMPANY_REQUIRED" });
+  if (from > to) {
+    res.status(400).json({ ok: false, error: "from must be <= to" });
     return null;
   }
-  return companyId;
+  return { from, to };
 }
 
-function csvValue(value) {
-  if (value === null || value === undefined) return "";
-  const s = String(value);
-  if (/[",\n\r]/.test(s)) {
-    return `"${s.replace(/"/g, '""')}"`;
-  }
-  return s;
+// ── CCQ Travel Allowance rates (per day, CAD) ─────────────────
+// Source: ACQ/CCQ collective agreement schedule
+// Zone determined by distance_km from employee home to project site
+// 41-65 km  → T2200 tax form only (no direct payment)
+// 65-75 km  → $15.61 / day
+// 76-100 km → $20.82 / day
+// 101-125   → $26.02 / day
+// 126-150   → $31.23 / day
+// 151-175   → $36.43 / day
+// 176-200   → $41.64 / day
+// 200+      → $46.84 / day
+function ccqZone(km) {
+  if (!km || km < 41)  return { zone: null,   rate: 0,     label: "N/A" };
+  if (km < 65)         return { zone: "T2200", rate: 0,     label: "41–65 km — T2200 form" };
+  if (km < 76)         return { zone: "A",     rate: 15.61, label: "65–75 km" };
+  if (km < 101)        return { zone: "B",     rate: 20.82, label: "76–100 km" };
+  if (km < 126)        return { zone: "C",     rate: 26.02, label: "101–125 km" };
+  if (km < 151)        return { zone: "D",     rate: 31.23, label: "126–150 km" };
+  if (km < 176)        return { zone: "E",     rate: 36.43, label: "151–175 km" };
+  if (km < 201)        return { zone: "F",     rate: 41.64, label: "176–200 km" };
+  return               { zone: "G",     rate: 46.84, label: "200+ km" };
 }
 
-function csvRow(values) {
-  return `${values.map(csvValue).join(",")}\n`;
-}
-
-let schemaCache = null;
-
-async function getSchemaInfo() {
-  if (schemaCache) return schemaCache;
-
-  const { rows } = await pool.query(`
-    SELECT table_name, column_name
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name IN ('attendance_logs', 'attendance', 'projects', 'employees', 'parking_claims')
-    ORDER BY table_name, ordinal_position
-  `);
-
-  const tables = new Map();
-  for (const row of rows) {
-    const t = String(row.table_name);
-    const c = String(row.column_name);
-    if (!tables.has(t)) tables.set(t, new Set());
-    tables.get(t).add(c);
-  }
-
-  const attendanceTable = tables.has("attendance_logs")
-    ? "attendance_logs"
-    : (tables.has("attendance") ? "attendance" : null);
-
-  if (!attendanceTable) {
-    throw new Error("ATTENDANCE_TABLE_MISSING");
-  }
-
-  schemaCache = {
-    tables,
-    attendanceTable,
-    attendanceCols: tables.get(attendanceTable) || new Set(),
-    projectCols: tables.get("projects") || new Set(),
-    employeeCols: tables.get("employees") || new Set(),
-    parkingCols: tables.get("parking_claims") || new Set(),
-  };
-
-  return schemaCache;
-}
-
-async function queryTimesheet(companyId) {
-  const { attendanceTable, attendanceCols } = await getSchemaInfo();
-
-  if (!attendanceCols.has("company_id")) {
-    throw new Error(`${attendanceTable}.company_id missing`);
-  }
-
-  const projectJoin = attendanceCols.has("project_id")
-    ? `LEFT JOIN public.projects p ON p.id = a.project_id AND p.company_id = $1`
-    : `LEFT JOIN public.projects p ON 1 = 0`;
-
-  const sql = `
-    SELECT
-      a.work_date,
-      e.employee_code,
-      e.first_name,
-      e.last_name,
-      p.project_code,
-      p.project_name,
-      a.check_in_at,
-      a.check_out_at
-    FROM public.${attendanceTable} a
-    JOIN public.employees e
-      ON e.id = a.employee_id
-     AND e.company_id = $1
-    ${projectJoin}
-    WHERE a.company_id = $1
-    ORDER BY a.work_date DESC, a.check_in_at DESC NULLS LAST, e.employee_code ASC
-  `;
-
-  const { rows } = await pool.query(sql, [companyId]);
-  return rows;
-}
-
-async function queryProjectSummary(companyId) {
-  const { attendanceTable, attendanceCols } = await getSchemaInfo();
-
-  if (!attendanceCols.has("company_id") || !attendanceCols.has("project_id")) {
-    throw new Error(`${attendanceTable} missing company_id/project_id`);
-  }
-
-  const sql = `
-    SELECT
-      p.project_code,
-      p.project_name,
-      COUNT(a.*)::int AS entries
-    FROM public.projects p
-    LEFT JOIN public.${attendanceTable} a
-      ON a.project_id = p.id
-     AND a.company_id = $1
-    WHERE p.company_id = $1
-    GROUP BY p.project_code, p.project_name
-    ORDER BY p.project_code
-  `;
-
-  const { rows } = await pool.query(sql, [companyId]);
-  return rows;
-}
-
-async function queryTravelAllowance(companyId) {
-  const { attendanceTable, attendanceCols } = await getSchemaInfo();
-
-  if (!attendanceCols.has("company_id")) {
-    throw new Error(`${attendanceTable}.company_id missing`);
-  }
-
-  const sql = `
-    SELECT
-      employee_id,
-      COUNT(*)::int AS trips
-    FROM public.${attendanceTable}
-    WHERE company_id = $1
-    GROUP BY employee_id
-    ORDER BY employee_id
-  `;
-
-  const { rows } = await pool.query(sql, [companyId]);
-  return rows;
-}
-
-async function queryParkingClaims(companyId) {
-  const { parkingCols } = await getSchemaInfo();
-
-  if (!parkingCols.size) {
-    throw new Error("parking_claims table missing");
-  }
-
-  const workDateSelect = parkingCols.has("work_date")
-    ? `pc.work_date`
-    : `COALESCE(substring(COALESCE(pc.note, '') from '\\[work_date=([0-9]{4}-[0-9]{2}-[0-9]{2})\\]'), '')`;
-
-  let joins = "";
-  const where = [];
-  const params = [companyId];
-
-  if (parkingCols.has("company_id")) {
-    where.push(`pc.company_id = $1`);
-  } else if (parkingCols.has("project_id")) {
-    joins += `\n      JOIN public.projects p ON p.id = pc.project_id`;
-    where.push(`p.company_id = $1`);
-  } else if (parkingCols.has("employee_id")) {
-    joins += `\n      JOIN public.employees e ON e.id = pc.employee_id`;
-    where.push(`e.company_id = $1`);
-  } else {
-    throw new Error("parking_claims missing company isolation path");
-  }
-
-  const projectIdSelect = parkingCols.has("project_id") ? `pc.project_id` : `NULL::int`;
-  const employeeIdSelect = parkingCols.has("employee_id") ? `pc.employee_id` : `NULL::int`;
-  const amountSelect = parkingCols.has("amount") ? `pc.amount` : `NULL::numeric`;
-  const noteSelect = parkingCols.has("note") ? `pc.note` : `NULL::text`;
-
-  const sql = `
-    SELECT
-      ${employeeIdSelect} AS employee_id,
-      ${workDateSelect} AS work_date,
-      ${projectIdSelect} AS project_id,
-      ${amountSelect} AS amount,
-      ${noteSelect} AS note
-    FROM public.parking_claims pc
-    ${joins}
-    WHERE ${where.join(" AND ")}
-    ORDER BY work_date DESC NULLS LAST, employee_id ASC NULLS LAST
-  `;
-
-  const { rows } = await pool.query(sql, params);
-  return rows;
-}
-
-router.get("/timesheet.csv", auth, can("bi.access_full"), async (req, res) => {
-  if (!requireRoles(req, res, ["ADMIN", "FOREMAN"])) return;
-
-  const companyId = requireCompany(req, res);
-  if (companyId === null) return;
-
+// ─────────────────────────────────────────────────────────────
+// GET /api/reports/hours
+// Regular + OT per employee over date range
+// ─────────────────────────────────────────────────────────────
+router.get("/hours", can("reports.view"), async (req, res) => {
   try {
-    const rows = await queryTimesheet(companyId);
+    const range = parseRange(req, res); if (!range) return;
+    const { from, to } = range;
+    const companyId = req.user.company_id;
+    const params = [companyId, from, to];
+    let extra = "";
+    if (req.query.project_id)  { params.push(req.query.project_id);  extra += ` AND atr.project_id = $${params.length}`; }
+    if (req.query.employee_id) { params.push(req.query.employee_id); extra += ` AND atr.employee_id = $${params.length}`; }
 
-    res.setHeader("Content-Type", "text/csv");
-    res.setHeader("Content-Disposition", "attachment; filename=timesheet.csv");
-    res.write(csvRow([
-      "work_date",
-      "employee_code",
-      "first_name",
-      "last_name",
-      "project_code",
-      "project_name",
-      "check_in_at",
-      "check_out_at",
-    ]));
+    const { rows } = await pool.query(`
+      SELECT
+        ep.employee_id,
+        ep.full_name,
+        ep.trade_code,
+        p.project_code,
+        p.project_name,
+        COUNT(atr.id)::int                                                AS days_worked,
+        SUM(COALESCE(atr.confirmed_regular_hours,  atr.regular_hours,  0))::numeric(10,2) AS total_regular,
+        SUM(COALESCE(atr.confirmed_overtime_hours, atr.overtime_hours, 0))::numeric(10,2) AS total_overtime,
+        SUM(COALESCE(atr.confirmed_regular_hours,  atr.regular_hours,  0)
+          + COALESCE(atr.confirmed_overtime_hours, atr.overtime_hours, 0))::numeric(10,2) AS total_hours,
+        COUNT(CASE WHEN atr.status IN ('CONFIRMED','ADJUSTED') THEN 1 END)::int AS confirmed_days,
+        COUNT(CASE WHEN atr.late_minutes > 15 THEN 1 END)::int AS late_days
+      FROM public.attendance_records atr
+      JOIN public.employee_profiles ep ON ep.employee_id = atr.employee_id
+      JOIN public.projects p           ON p.id = atr.project_id
+      WHERE atr.company_id      = $1
+        AND atr.attendance_date >= $2
+        AND atr.attendance_date <= $3
+        AND atr.status NOT IN ('OPEN')
+        ${extra}
+      GROUP BY ep.employee_id, ep.full_name, ep.trade_code, p.project_code, p.project_name
+      ORDER BY p.project_code, ep.full_name
+    `, params);
 
-    for (const r of rows) {
-      res.write(csvRow([
-        r.work_date,
-        r.employee_code,
-        r.first_name,
-        r.last_name,
-        r.project_code,
-        r.project_name,
-        r.check_in_at,
-        r.check_out_at,
-      ]));
-    }
-    res.end();
+    const totals = rows.reduce((acc, r) => ({
+      days_worked:   acc.days_worked   + Number(r.days_worked),
+      total_regular: acc.total_regular + Number(r.total_regular),
+      total_overtime:acc.total_overtime+ Number(r.total_overtime),
+      total_hours:   acc.total_hours   + Number(r.total_hours),
+    }), { days_worked: 0, total_regular: 0, total_overtime: 0, total_hours: 0 });
+
+    return res.json({ ok: true, from, to, records: rows, totals });
   } catch (err) {
-    console.error("timesheet.csv error:", err);
-    res.status(500).json({ ok: false, error: "TIMESHEET_FAILED" });
+    console.error("GET /reports/hours error:", err);
+    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
   }
 });
 
-router.get("/project_summary.csv", auth, can("bi.access_full"), async (req, res) => {
-  if (!requireRoles(req, res, ["ADMIN", "FOREMAN"])) return;
-
-  const companyId = requireCompany(req, res);
-  if (companyId === null) return;
-
+// ─────────────────────────────────────────────────────────────
+// GET /api/reports/attendance
+// Daily presence/absence summary per project
+// ─────────────────────────────────────────────────────────────
+router.get("/attendance", can("reports.view"), async (req, res) => {
   try {
-    const rows = await queryProjectSummary(companyId);
+    const range = parseRange(req, res); if (!range) return;
+    const { from, to } = range;
+    const companyId = req.user.company_id;
+    const params = [companyId, from, to];
+    let extra = "";
+    if (req.query.project_id) { params.push(req.query.project_id); extra += ` AND ar.project_id = $${params.length}`; }
 
-    res.setHeader("Content-Type", "text/csv");
-    res.setHeader("Content-Disposition", "attachment; filename=project_summary.csv");
-    res.write(csvRow(["project_code", "project_name", "entries"]));
+    const { rows } = await pool.query(`
+      SELECT
+        p.id AS project_id,
+        p.project_code,
+        p.project_name,
+        ep.employee_id,
+        ep.full_name,
+        ep.trade_code,
+        ar.assignment_role,
+        ar.start_date,
+        ar.end_date,
+        COUNT(DISTINCT d.day)::int                  AS scheduled_days,
+        COUNT(DISTINCT atr.attendance_date)::int     AS present_days,
+        COUNT(DISTINCT d.day)::int
+          - COUNT(DISTINCT atr.attendance_date)::int AS absent_days,
+        COUNT(CASE WHEN atr.late_minutes > 15 THEN 1 END)::int AS late_days
+      FROM public.assignment_requests ar
+      JOIN public.employee_profiles ep ON ep.employee_id = ar.requested_for_employee_id
+      JOIN public.projects p           ON p.id = ar.project_id
+      -- generate scheduled working days in range
+      JOIN LATERAL (
+        SELECT generate_series(
+          GREATEST(ar.start_date, $2::date),
+          LEAST(ar.end_date,      $3::date),
+          '1 day'
+        )::date AS day
+      ) d ON EXTRACT(DOW FROM d.day) NOT IN (0, 6) -- exclude weekends
+      LEFT JOIN public.attendance_records atr
+        ON atr.assignment_request_id = ar.id
+       AND atr.attendance_date = d.day
+       AND atr.status NOT IN ('OPEN')
+      WHERE ar.company_id = $1
+        AND ar.status     = 'APPROVED'
+        AND ar.start_date <= $3
+        AND ar.end_date   >= $2
+        ${extra}
+      GROUP BY p.id, p.project_code, p.project_name,
+               ep.employee_id, ep.full_name, ep.trade_code,
+               ar.assignment_role, ar.start_date, ar.end_date
+      ORDER BY p.project_code, ep.full_name
+    `, params);
 
-    for (const r of rows) {
-      res.write(csvRow([r.project_code, r.project_name, r.entries]));
-    }
-    res.end();
+    return res.json({ ok: true, from, to, records: rows });
   } catch (err) {
-    console.error("project_summary.csv error:", err);
-    res.status(500).json({ ok: false, error: "PROJECT_SUMMARY_FAILED" });
+    console.error("GET /reports/attendance error:", err);
+    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
   }
 });
 
-router.get("/travel_allowance.csv", auth, can("bi.access_full"), async (req, res) => {
-  if (!requireRoles(req, res, ["ADMIN", "FOREMAN"])) return;
-
-  const companyId = requireCompany(req, res);
-  if (companyId === null) return;
-
+// ─────────────────────────────────────────────────────────────
+// GET /api/reports/travel
+// CCQ travel allowance — employees who worked + have distance_km
+// ─────────────────────────────────────────────────────────────
+router.get("/travel", can("reports.view"), async (req, res) => {
   try {
-    const rows = await queryTravelAllowance(companyId);
+    const range = parseRange(req, res); if (!range) return;
+    const { from, to } = range;
+    const companyId = req.user.company_id;
+    const params = [companyId, from, to];
+    let extra = "";
+    if (req.query.project_id)  { params.push(req.query.project_id);  extra += ` AND ar.project_id = $${params.length}`; }
+    if (req.query.employee_id) { params.push(req.query.employee_id); extra += ` AND ar.requested_for_employee_id = $${params.length}`; }
 
-    res.setHeader("Content-Type", "text/csv");
-    res.setHeader("Content-Disposition", "attachment; filename=travel_allowance.csv");
-    res.write(csvRow(["employee_id", "trips"]));
+    const { rows } = await pool.query(`
+      SELECT
+        ep.employee_id,
+        ep.full_name,
+        ep.trade_code,
+        p.project_code,
+        p.project_name,
+        ar.distance_km,
+        COUNT(DISTINCT atr.attendance_date)::int AS days_worked
+      FROM public.assignment_requests ar
+      JOIN public.employee_profiles ep ON ep.employee_id = ar.requested_for_employee_id
+      JOIN public.projects p           ON p.id = ar.project_id
+      JOIN public.attendance_records atr
+        ON atr.assignment_request_id = ar.id
+       AND atr.attendance_date >= $2
+       AND atr.attendance_date <= $3
+       AND atr.status NOT IN ('OPEN')
+      WHERE ar.company_id = $1
+        AND ar.status     = 'APPROVED'
+        AND ar.distance_km IS NOT NULL
+        ${extra}
+      GROUP BY ep.employee_id, ep.full_name, ep.trade_code,
+               p.project_code, p.project_name, ar.distance_km
+      ORDER BY ar.distance_km DESC NULLS LAST, ep.full_name
+    `, params);
 
-    for (const r of rows) {
-      res.write(csvRow([r.employee_id, r.trips]));
-    }
-    res.end();
+    // Add CCQ zone + computed allowance
+    const enriched = rows.map(r => {
+      const { zone, rate, label } = ccqZone(parseFloat(r.distance_km));
+      const days        = Number(r.days_worked);
+      const total_allowance = parseFloat((rate * days).toFixed(2));
+      return { ...r, zone, rate_per_day: rate, zone_label: label, total_allowance };
+    });
+
+    const grand_total = parseFloat(
+      enriched.reduce((s, r) => s + r.total_allowance, 0).toFixed(2)
+    );
+
+    return res.json({ ok: true, from, to, records: enriched, grand_total });
   } catch (err) {
-    console.error("travel_allowance.csv error:", err);
-    res.status(500).json({ ok: false, error: "TRAVEL_FAILED" });
+    console.error("GET /reports/travel error:", err);
+    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
   }
 });
 
-router.get("/parking_claims.csv", auth, can("bi.access_full"), async (req, res) => {
-  if (!requireRoles(req, res, ["ADMIN", "FOREMAN"])) return;
-
-  const companyId = requireCompany(req, res);
-  if (companyId === null) return;
-
+// ─────────────────────────────────────────────────────────────
+// GET /api/reports/assignments
+// Full assignment roster with dates + shifts
+// ─────────────────────────────────────────────────────────────
+router.get("/assignments", can("reports.view"), async (req, res) => {
   try {
-    const rows = await queryParkingClaims(companyId);
+    const range = parseRange(req, res); if (!range) return;
+    const { from, to } = range;
+    const companyId = req.user.company_id;
+    const params = [companyId, from, to];
+    let extra = "";
+    if (req.query.project_id)  { params.push(req.query.project_id);  extra += ` AND ar.project_id = $${params.length}`; }
+    if (req.query.employee_id) { params.push(req.query.employee_id); extra += ` AND ar.requested_for_employee_id = $${params.length}`; }
 
-    res.setHeader("Content-Type", "text/csv");
-    res.setHeader("Content-Disposition", "attachment; filename=parking_claims.csv");
-    res.write(csvRow(["employee_id", "work_date", "project_id", "amount", "note"]));
+    const { rows } = await pool.query(`
+      SELECT
+        ar.id AS assignment_id,
+        ep.full_name,
+        ep.trade_code,
+        ar.assignment_role,
+        p.project_code,
+        p.project_name,
+        p.site_address,
+        ar.start_date,
+        ar.end_date,
+        ar.shift_start,
+        ar.shift_end,
+        ar.distance_km,
+        ar.notes,
+        au_req.username AS requested_by_username,
+        ar.created_at
+      FROM public.assignment_requests ar
+      JOIN public.employee_profiles ep ON ep.employee_id = ar.requested_for_employee_id
+      JOIN public.projects p           ON p.id = ar.project_id
+      LEFT JOIN public.app_users au_req ON au_req.id = ar.requested_by
+      WHERE ar.company_id = $1
+        AND ar.status     = 'APPROVED'
+        AND ar.start_date <= $3
+        AND ar.end_date   >= $2
+        ${extra}
+      ORDER BY p.project_code, ar.start_date, ep.full_name
+    `, params);
 
-    for (const r of rows) {
-      res.write(csvRow([r.employee_id, r.work_date, r.project_id, r.amount, r.note || ""]));
-    }
-    res.end();
+    return res.json({ ok: true, from, to, records: rows });
   } catch (err) {
-    console.error("parking_claims.csv error:", err);
-    res.status(500).json({ ok: false, error: "PARKING_FAILED" });
+    console.error("GET /reports/assignments error:", err);
+    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// GET /api/reports/distance
+// Employees with distance >= 41km (T2200 or company allowance)
+// ─────────────────────────────────────────────────────────────
+router.get("/distance", can("reports.view"), async (req, res) => {
+  try {
+    const range = parseRange(req, res); if (!range) return;
+    const { from, to } = range;
+    const companyId = req.user.company_id;
+    const params = [companyId, from, to];
+    let extra = "";
+    if (req.query.project_id) { params.push(req.query.project_id); extra += ` AND ar.project_id = $${params.length}`; }
+
+    const { rows } = await pool.query(`
+      SELECT
+        ep.employee_id,
+        ep.full_name,
+        ep.trade_code,
+        ep.home_address,
+        p.project_code,
+        p.project_name,
+        p.site_address,
+        ar.distance_km,
+        ar.start_date,
+        ar.end_date,
+        COUNT(DISTINCT atr.attendance_date)::int AS days_worked
+      FROM public.assignment_requests ar
+      JOIN public.employee_profiles ep ON ep.employee_id = ar.requested_for_employee_id
+      JOIN public.projects p           ON p.id = ar.project_id
+      LEFT JOIN public.attendance_records atr
+        ON atr.assignment_request_id = ar.id
+       AND atr.attendance_date >= $2
+       AND atr.attendance_date <= $3
+       AND atr.status NOT IN ('OPEN')
+      WHERE ar.company_id   = $1
+        AND ar.status       = 'APPROVED'
+        AND ar.distance_km  >= 41
+        AND ar.start_date   <= $3
+        AND ar.end_date     >= $2
+        ${extra}
+      GROUP BY ep.employee_id, ep.full_name, ep.trade_code, ep.home_address,
+               p.project_code, p.project_name, p.site_address,
+               ar.distance_km, ar.start_date, ar.end_date
+      ORDER BY ar.distance_km DESC, ep.full_name
+    `, params);
+
+    const enriched = rows.map(r => {
+      const { zone, rate, label } = ccqZone(parseFloat(r.distance_km));
+      return {
+        ...r,
+        zone,
+        zone_label:    label,
+        rate_per_day:  rate,
+        needs_t2200:   parseFloat(r.distance_km) >= 41 && parseFloat(r.distance_km) < 65,
+        needs_allowance: parseFloat(r.distance_km) >= 65,
+        total_allowance: parseFloat((rate * Number(r.days_worked)).toFixed(2)),
+      };
+    });
+
+    return res.json({ ok: true, from, to, records: enriched });
+  } catch (err) {
+    console.error("GET /reports/distance error:", err);
+    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
   }
 });
 

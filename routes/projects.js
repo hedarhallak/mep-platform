@@ -290,8 +290,8 @@ router.post("/", can("projects.create"), async (req, res) => {
     const { rows } = await pool.query(
       `INSERT INTO public.projects
          (project_code, project_name, trade_type_id, status_id, site_address,
-          start_date, end_date, client_id, company_id, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
+          start_date, end_date, client_id, company_id, ccq_sector, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
        RETURNING *`,
       [
         project_code,
@@ -303,6 +303,7 @@ router.post("/", can("projects.create"), async (req, res) => {
         end_date     || null,
         client_id    || null,
         companyId,
+        ['IC','INDUSTRIAL','RESIDENTIAL'].includes(req.body.ccq_sector) ? req.body.ccq_sector : 'IC',
       ]
     );
 
@@ -359,8 +360,9 @@ router.patch("/:id", can("projects.edit"), async (req, res) => {
          site_lng      = COALESCE($6, site_lng),
          start_date    = COALESCE($7, start_date),
          end_date      = COALESCE($8, end_date),
-         client_id     = COALESCE($9, client_id)
-       WHERE id = $10 AND company_id = $11
+         client_id     = COALESCE($9, client_id),
+         ccq_sector    = COALESCE($10, ccq_sector)
+       WHERE id = $11 AND company_id = $12
        RETURNING *`,
       [
         project_name  ? String(project_name).trim() : null,
@@ -372,6 +374,7 @@ router.patch("/:id", can("projects.edit"), async (req, res) => {
         start_date    || null,
         end_date      || null,
         client_id     || null,
+        ['IC','INDUSTRIAL','RESIDENTIAL'].includes(req.body.ccq_sector) ? req.body.ccq_sector : null,
         projectId,
         companyId,
       ]

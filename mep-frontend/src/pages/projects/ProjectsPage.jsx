@@ -94,6 +94,7 @@ function ProjectModal({ project, meta, onClose, onSaved }) {
     start_date: project?.start_date?.slice(0, 10) || '',
     end_date: project?.end_date?.slice(0, 10) || '',
     client_id: project?.client_id || '',
+    ccq_sector: project?.ccq_sector || 'IC',
   })
   const [coords, setCoords] = useState(
     project?.site_lat ? { lat: project.site_lat, lng: project.site_lng } : null
@@ -251,6 +252,22 @@ function ProjectModal({ project, meta, onClose, onSaved }) {
               </select>
             </div>
           )}
+
+          {/* CCQ Sector */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+              CCQ Sector <span className="font-normal normal-case text-slate-400">(for travel allowance calculation)</span>
+            </label>
+            <select
+              value={form.ccq_sector}
+              onChange={e => set('ccq_sector', e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+            >
+              <option value="IC">Institutionnel / Commercial (IC)</option>
+              <option value="INDUSTRIAL">Industriel (I)</option>
+              <option value="RESIDENTIAL">Résidentiel (R)</option>
+            </select>
+          </div>
 
           {/* Error */}
           {error && (

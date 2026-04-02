@@ -1,545 +1,404 @@
-const express = require("express");
-const router = express.Router();
-// DB (robust import)
-const db = require("../db");
-const pool = db && db.pool ? db.pool : db;
+"use strict";
 
-// Optional guard (keeps crash message clear)
-if (!pool || typeof pool.query !== "function") {
-  throw new Error("DB pool is not initialized correctly. Expected pool.query to be a function.");
-}
-
-
-const { can } = require("../middleware/permissions");
-
-// ---------- Auth middleware (robust) ----------
-let requireAuth = null;
-try {
-  const mod = require("../middleware/auth");
-  if (typeof mod === "function") requireAuth = mod;
-  else if (mod && typeof mod === "object") {
-    const candidates = ["requireAuth","authMiddleware","authenticateToken","verifyToken","tokenMiddleware","authenticate"];
-    for (const k of candidates) {
-      if (typeof mod[k] === "function") { requireAuth = mod[k]; break; }
-    }
-  }
-} catch (e) {
-  console.error("[attendance] auth middleware load failed:", e.message);
-}
-
-router.use((req, res, next) => {
-  if (!requireAuth) return res.status(500).json({ ok: false, error: "AUTH_MIDDLEWARE_NOT_FOUND" });
-  return requireAuth(req, res, next);
-});
-
-// ---------- Helpers ----------
-const UNKNOWN_POINT_SQL = "ST_SetSRID(ST_MakePoint(0,0),4326)";
-
-async function resolveEmployeeId(req) {
-  if (req.user?.employee_id) return Number(req.user.employee_id);
-  const userId = req.user?.user_id || req.user?.id;
-  if (userId) {
-    const r = await pool.query(`SELECT employee_id FROM public.app_users WHERE id = $1 LIMIT 1`, [userId]);
-    const emp = r.rows[0]?.employee_id;
-    if (emp) return Number(emp);
-  }
-  return null;
-}
-
-async function resolveUserId(req) {
-  return req.user?.id || req.user?.user_id || null;
-}
-
-async function getOpenRow(employeeId, companyId) {
-  const r = await pool.query(
-    `
-    SELECT attendance_id, employee_id, project_id, check_in_at, check_out_at, status, work_date
-    FROM public.attendance_logs
-    WHERE employee_id = $1
-      AND company_id = $2
-      AND check_out_at IS NULL
-    ORDER BY check_in_at DESC
-    LIMIT 1
-    `,
-    [employeeId, companyId]
-  );
-  return r.rows[0] || null;
-}
-
-async function getTodayRows(employeeId, companyId) {
-  const r = await pool.query(
-    `
-    SELECT attendance_id, employee_id, project_id, check_in_at, check_out_at, status, work_date, approval_note
-    FROM public.attendance_logs
-    WHERE employee_id = $1
-      AND company_id = $2
-      AND work_date = CURRENT_DATE
-    ORDER BY created_at ASC
-    `,
-    [employeeId, companyId]
-  );
-  return r.rows;
-}
-
-// Assignment lookup — source of truth is assignment_requests
-async function getTodayAssignment(employeeId, companyId) {
-  const r = await pool.query(
-    `SELECT
-       ar.id           AS assignment_id,
-       ar.project_id,
-       ar.shift_start  AS shift_start_time,
-       ar.shift_end    AS shift_end_time,
-       ar.assignment_role,
-       ar.notes
-     FROM public.assignment_requests ar
-     WHERE ar.requested_for_employee_id = $1
-       AND ar.company_id  = $2
-       AND ar.status      = 'APPROVED'
-       AND ar.start_date <= CURRENT_DATE
-       AND ar.end_date   >= CURRENT_DATE
-     ORDER BY ar.start_date DESC
-     LIMIT 1`,
-    [employeeId, companyId]
-  );
-  return r.rows[0] || null;
-}
-
-function computeStep(openRow) {
-  return openRow ? "ON_SITE" : "NOT_ARRIVED";
-}
-
-function nextAction(openRow) {
-  return openRow ? { key: "END", label: "End" } : { key: "ARRIVE", label: "Arrive" };
-}
-
-// ---------- GET /today ----------
-router.get("/today", can("attendance.view_self"), async (req, res) => {
-  try {
-    const employeeId = await resolveEmployeeId(req);
-    if (!employeeId) return res.status(400).json({ ok: false, error: "MISSING_EMPLOYEE" });
-
-    const companyId = req.user.company_id;
-    if (!companyId) return res.status(400).json({ ok: false, error: "NO_COMPANY_ID" });
-
-    const openRow = await getOpenRow(employeeId, req.user.company_id);
-    const log = await getTodayRows(employeeId, req.user.company_id);
-
-    const assignment = await getTodayAssignment(employeeId, req.user.company_id);
-
-    return res.json({
-      ok: true,
-      step: computeStep(openRow),
-      action: nextAction(openRow),
-      today_project_id: openRow?.project_id || assignment?.project_id || null,
-      shift_start_time: assignment?.shift_start_time || null,
-      shift_end_time: assignment?.shift_end_time || null,
-      assignment_id: assignment?.assignment_id || null,
-      has_assignment_today: !!assignment,
-      log,
-      open_row: openRow,
-    });
-  } catch (e) {
-    console.error(e);
-    return res.status(500).json({ ok: false, error: "TODAY_FAILED" });
-  }
-});
-
-// ---------- POST /today/action ----------
-router.post("/today/action", can("attendance.checkin"), async (req, res) => {
-  try {
-    const employeeId = await resolveEmployeeId(req);
-    if (!employeeId) return res.status(400).json({ ok: false, error: "MISSING_EMPLOYEE" });
-
-    const companyId = req.user.company_id;
-    if (!companyId) return res.status(400).json({ ok: false, error: "NO_COMPANY_ID" });
-
-    const openRow = await getOpenRow(employeeId, req.user.company_id);
-
-    if (!openRow) {
-      const assignment = await getTodayAssignment(employeeId, req.user.company_id);
-      if (!assignment?.project_id) {
-        return res.status(409).json({ ok: false, error: "NO_ASSIGNMENT_TODAY" });
-      }
-
-      await pool.query(
-        `INSERT INTO public.attendance_logs
-           (employee_id, company_id, project_id, assignment_request_id,
-            check_in_at, check_in_location, status, approval_note,
-            created_at, inside_geofence, distance_to_site_m)
-         VALUES
-           ($1, $2, $3, $4, NOW(), ${UNKNOWN_POINT_SQL}, 'PENDING', 'UI_ARRIVE', NOW(), false, NULL)`,
-        [employeeId, req.user.company_id, assignment.project_id, assignment.assignment_id]
-      );
-
-      return res.json({ ok: true, did: "ARRIVE", project_id: assignment.project_id });
-    }
-
-    await pool.query(
-      `
-      UPDATE public.attendance_logs
-      SET check_out_at = NOW(),
-          check_out_location = ${UNKNOWN_POINT_SQL},
-          auto_closed_at = NULL,
-          auto_close_reason = NULL
-      WHERE attendance_id = $1
-        AND company_id = $2
-      `,
-      [openRow.attendance_id, req.user.company_id]
-    );
-
-    return res.json({ ok: true, did: "END", closed_attendance_id: openRow.attendance_id });
-  } catch (e) {
-    console.error(e);
-    return res.status(500).json({ ok: false, error: "TODAY_ACTION_FAILED" });
-  }
-});
-
-// ---------- NEW: POST /absence (assignment_id based) ----------
 /**
- * Body:
- * {
- *   assignment_id: number,
- *   work_date: "YYYY-MM-DD" (optional, default CURRENT_DATE),
- *   reason_code: "SICK" | ...,
- *   note: "optional"
- * }
+ * routes/attendance.js
  *
- * DB triggers enforce:
- * - assignment exists
- * - work_date within assignment range
- * - cannot submit after check-in
- * - cannot check-in after absence (via attendance_logs trigger)
+ * Daily attendance workflow:
+ *   WORKER  -> POST   /api/attendance/checkin          (check in)
+ *   WORKER  -> PATCH  /api/attendance/:id/checkout     (check out)
+ *   FOREMAN -> PATCH  /api/attendance/:id/confirm      (confirm or adjust hours)
+ *   ALL     -> GET    /api/attendance                  (list by date + project)
+ *   ALL     -> GET    /api/attendance/projects         (projects with assignments today)
+ *
+ * Hours calculation:
+ *   raw     = checkout - checkin (minutes)
+ *   paid    = raw + 15           (paid break always added)
+ *   if raw >= 480: paid -= 30    (unpaid 30min lunch deducted for full shift)
+ *   regular = min(8h, paid)
+ *   overtime= max(0, paid - 8h)
  */
-router.post("/absence", can("attendance.checkin"), async (req, res) => {
+
+const express = require("express");
+const router  = express.Router();
+const { pool }           = require("../db");
+const { can, canAny }    = require("../middleware/permissions");
+const { audit, ACTIONS } = require("../lib/audit");
+
+// ── Hours calculation ─────────────────────────────────────────
+function timeToMin(t) {
+  if (!t) return 0;
+  const str = String(t).substring(0, 5);
+  const [h, m] = str.split(":").map(Number);
+  return h * 60 + m;
+}
+
+function calcHours(shiftStart, checkInTime, checkOutTime) {
+  const shiftStartMin = timeToMin(shiftStart);
+  const checkInMin    = timeToMin(checkInTime);
+  const checkOutMin   = timeToMin(checkOutTime);
+
+  const rawMinutes = checkOutMin - checkInMin;
+  if (rawMinutes <= 0) return { rawMinutes: 0, paidMinutes: 0, regularHours: 0, overtimeHours: 0, lateMinutes: 0 };
+
+  let paidMinutes = rawMinutes + 15;
+  if (rawMinutes >= 480) paidMinutes -= 30;
+
+  const totalHours     = paidMinutes / 60;
+  const regularHours   = parseFloat(Math.min(8, totalHours).toFixed(2));
+  const overtimeHours  = parseFloat(Math.max(0, totalHours - 8).toFixed(2));
+  const lateMinutes    = Math.max(0, checkInMin - shiftStartMin);
+
+  return { rawMinutes, paidMinutes, regularHours, overtimeHours, lateMinutes };
+}
+
+// ── Foreman notification (fire and forget) ────────────────────
+async function notifyForeman(pool, attendanceId, eventType) {
   try {
-    const userId = await resolveUserId(req);
-    const assignmentId = Number(req.body?.assignment_id);
-    const reasonCode = String(req.body?.reason_code || "").trim();
-    const note = req.body?.note !== undefined ? String(req.body.note || "").trim() : null;
-    const workDate = req.body?.work_date ? String(req.body.work_date).slice(0,10) : null;
-
-    if (!Number.isFinite(assignmentId) || assignmentId <= 0) {
-      return res.status(400).json({ ok: false, error: "BAD_ASSIGNMENT_ID" });
-    }
-    if (!reasonCode) {
-      return res.status(400).json({ ok: false, error: "MISSING_REASON" });
-    }
-
-    const q = `
-      INSERT INTO public.attendance_absences
-        (assignment_id, work_date, reason_code, note, submitted_by_user_id, company_id)
-      VALUES
-        ($1, COALESCE($2::date, CURRENT_DATE), $3, $4, $5, $6)
-      RETURNING absence_id, assignment_id, work_date, employee_id, project_id, reason_code, note, submitted_at
-    `;
-    const r = await pool.query(q, [assignmentId, workDate, reasonCode, note, userId, req.user.company_id]);
-
-    return res.json({ ok: true, absence: r.rows[0] });
-  } catch (e) {
-    // Surface trigger errors clearly
-    const msg = String(e.message || "");
-    if (msg.includes("NO_ASSIGNMENT_FOR_ABSENCE") || msg.includes("ASSIGNMENT_NOT_FOUND")) {
-      return res.status(409).json({ ok: false, error: "ASSIGNMENT_NOT_FOUND" });
-    }
-    if (msg.includes("ABSENCE_DATE_OUTSIDE_ASSIGNMENT_RANGE")) {
-      return res.status(409).json({ ok: false, error: "ABSENCE_DATE_OUTSIDE_ASSIGNMENT_RANGE" });
-    }
-    if (msg.includes("CANNOT_SUBMIT_ABSENCE_AFTER_CHECKIN")) {
-      return res.status(409).json({ ok: false, error: "CANNOT_SUBMIT_ABSENCE_AFTER_CHECKIN" });
-    }
-    console.error(e);
-    return res.status(500).json({ ok: false, error: "ABSENCE_SUBMIT_FAILED" });
-  }
-});
-
-// ---------- SHIFT + CLOCKIN (kept) ----------
-router.get("/shift", can("attendance.view_self"), async (req, res) => {
-  try {
-    const employeeId = await resolveEmployeeId(req);
-    if (!employeeId) return res.status(400).json({ ok: false, error: "Missing employee" });
-
-    const companyId = req.user.company_id;
-    if (!companyId) return res.status(400).json({ ok: false, error: "NO_COMPANY_ID" });
-
-    const a = await getTodayAssignment(employeeId, req.user.company_id);
-    if (!a) return res.json({ ok: true, project_id: null, shift_start_time: null });
-
-    return res.json({ ok: true, project_id: a.project_id, shift_start_time: a.shift_start_time });
-  } catch (e) {
-    console.error(e);
-    return res.status(500).json({ ok: false, error: "SHIFT_LOOKUP_FAILED" });
-  }
-});
-
-router.post("/clockin", can("attendance.checkin"), async (req, res) => {
-  try {
-    const employeeId = await resolveEmployeeId(req);
-    if (!employeeId) return res.status(400).json({ ok: false, error: "Missing employee" });
-
-    const companyId = req.user.company_id;
-    if (!companyId) return res.status(400).json({ ok: false, error: "NO_COMPANY_ID" });
-
-    const projectId = Number(req.body?.project_id);
-    const startTime = String(req.body?.start_time || "").trim();
-    if (!Number.isFinite(projectId) || projectId <= 0) return res.status(400).json({ ok: false, error: "BAD_PROJECT_ID" });
-    if (!/^\d{2}:\d{2}(:\d{2})?$/.test(startTime)) return res.status(400).json({ ok: false, error: "BAD_START_TIME" });
-
-    const open = await pool.query(
-      `
-      SELECT attendance_id, project_id, check_in_at, status
-      FROM public.attendance_logs
-      WHERE employee_id = $1 AND company_id = $2 AND check_out_at IS NULL
-      ORDER BY check_in_at DESC
-      LIMIT 1
-      `,
-      [employeeId, companyId]
+    const { rows } = await pool.query(
+      `SELECT
+         atr.check_in_time, atr.check_out_time,
+         atr.regular_hours, atr.overtime_hours,
+         atr.attendance_date,
+         ep.full_name    AS employee_name,
+         p.project_code, p.project_name,
+         fe.contact_email AS foreman_email,
+         fe.full_name     AS foreman_name
+       FROM public.attendance_records atr
+       JOIN public.employee_profiles ep ON ep.employee_id = atr.employee_id
+       JOIN public.projects p ON p.id = atr.project_id
+       LEFT JOIN (
+         SELECT ar2.project_id, ar2.company_id,
+                ep2.full_name, ep2.contact_email
+         FROM public.assignment_requests ar2
+         JOIN public.employee_profiles ep2 ON ep2.employee_id = ar2.requested_for_employee_id
+         WHERE ar2.assignment_role = 'FOREMAN' AND ar2.status = 'APPROVED'
+       ) fe ON fe.project_id = atr.project_id AND fe.company_id = atr.company_id
+       WHERE atr.id = $1 LIMIT 1`,
+      [attendanceId]
     );
-    if (open.rowCount > 0) return res.json({ ok: true, duplicate_open: true, open_row: open.rows[0] });
+    if (!rows.length || !rows[0].foreman_email) return;
+    const r = rows[0];
 
-    const insQ = `
-      INSERT INTO public.attendance_logs
-        (employee_id, company_id, project_id, check_in_at, check_in_location, status, approval_note, created_at, inside_geofence, distance_to_site_m)
-      VALUES
-        ($1, $2, $3, (CURRENT_DATE::timestamp + $4::time), ${UNKNOWN_POINT_SQL}, 'PENDING', 'AUTO_CLOCKIN', NOW(), false, NULL)
-      RETURNING attendance_id, employee_id, project_id, check_in_at, status, work_date, approval_note
-    `;
-    const r = await pool.query(insQ, [employeeId, companyId, projectId, startTime]);
-    return res.json({ ok: true, row: r.rows[0] });
-  } catch (e) {
-    console.error(e);
-    return res.status(500).json({ ok: false, error: "CLOCKIN_FAILED" });
+    const sgMail = require("@sendgrid/mail");
+    sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+
+    const subject = eventType === "CHECKIN"
+      ? `[MEP Platform] Check-In — ${r.employee_name} @ ${r.project_code}`
+      : `[MEP Platform] Check-Out — ${r.employee_name} @ ${r.project_code}`;
+
+    const timeStr = eventType === "CHECKIN"
+      ? `Checked in at: ${String(r.check_in_time).substring(0,5)}`
+      : `Checked out at: ${String(r.check_out_time).substring(0,5)}\nRegular hours: ${r.regular_hours}h\nOvertime: ${r.overtime_hours}h`;
+
+    await sgMail.send({
+      to:      r.foreman_email,
+      from:    process.env.SENDGRID_FROM_EMAIL,
+      subject,
+      text:    `Hi ${r.foreman_name},\n\n${r.employee_name} — ${r.project_code} (${r.attendance_date})\n\n${timeStr}\n\nPlease confirm hours on the MEP Platform.\n\n— MEP Platform`,
+    });
+  } catch (err) {
+    console.error("[attendance notify] error:", err.message);
   }
-});
+}
 
-// ── POST /foreman-checkin ────────────────────────────────────
-// Foreman checks in an employee on their behalf
-router.post("/foreman-checkin", can("attendance.checkin"), async (req, res) => {
+// ── GET /api/attendance/projects ─────────────────────────────
+// Projects that have assignments on a given date (for tabs)
+router.get("/projects", can("attendance.view"), async (req, res) => {
   try {
     const companyId  = req.user.company_id;
-    const projectId  = Number(req.body?.project_id);
-    const employeeId = Number(req.body?.employee_id);
-    const startTime  = String(req.body?.start_time || "").trim();
-
-    if (!projectId)  return res.status(400).json({ ok: false, error: "BAD_PROJECT_ID" });
-    if (!employeeId) return res.status(400).json({ ok: false, error: "BAD_EMPLOYEE_ID" });
-    if (!/^\d{2}:\d{2}(:\d{2})?$/.test(startTime))
-      return res.status(400).json({ ok: false, error: "BAD_START_TIME" });
-
-    // Check no open session
-    const open = await pool.query(
-      `SELECT attendance_id FROM public.attendance_logs
-       WHERE employee_id = $1 AND company_id = $2 AND check_out_at IS NULL LIMIT 1`,
-      [employeeId, companyId]
-    );
-    if (open.rowCount > 0)
-      return res.json({ ok: true, duplicate_open: true, open_row: open.rows[0] });
-
-    // Get assignment_request_id for today
-    const asgn = await pool.query(
-      `SELECT id FROM public.assignment_requests
-       WHERE requested_for_employee_id = $1 AND company_id = $2
-         AND status = 'APPROVED' AND start_date <= CURRENT_DATE AND end_date >= CURRENT_DATE
-       ORDER BY start_date DESC LIMIT 1`,
-      [employeeId, companyId]
-    );
+    const date       = req.query.date || new Date().toISOString().split("T")[0];
 
     const { rows } = await pool.query(
-      `INSERT INTO public.attendance_logs
-         (employee_id, company_id, project_id, assignment_request_id,
-          check_in_at, check_in_location, status, approval_note,
-          created_at, inside_geofence, distance_to_site_m)
-       VALUES
-         ($1, $2, $3, $4,
-          (CURRENT_DATE::timestamp + $5::time), ${UNKNOWN_POINT_SQL},
-          'PENDING', 'FOREMAN_CHECKIN', NOW(), false, NULL)
-       RETURNING attendance_id, employee_id, project_id, check_in_at`,
-      [employeeId, companyId, projectId, asgn.rows[0]?.id || null, startTime]
+      `SELECT DISTINCT p.id, p.project_code, p.project_name
+       FROM public.assignment_requests ar
+       JOIN public.projects p ON p.id = ar.project_id
+       WHERE ar.company_id = $1
+         AND ar.status     = 'APPROVED'
+         AND ar.start_date <= $2
+         AND ar.end_date   >= $2
+       ORDER BY p.project_code`,
+      [companyId, date]
     );
-    return res.json({ ok: true, row: rows[0] });
-  } catch (e) {
-    console.error("POST /foreman-checkin error:", e);
-    return res.status(500).json({ ok: false, error: "FOREMAN_CHECKIN_FAILED" });
+
+    return res.json({ ok: true, projects: rows });
+  } catch (err) {
+    console.error("GET /attendance/projects error:", err);
+    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
   }
 });
 
-// ── POST /foreman-checkout ───────────────────────────────────
-// Foreman checks out an employee on their behalf
-router.post("/foreman-checkout", can("attendance.checkin"), async (req, res) => {
+// ── GET /api/attendance ───────────────────────────────────────
+// List assignments + attendance records for a project/date
+router.get("/", canAny(["attendance.view", "attendance.view_self"]), async (req, res) => {
   try {
-    const companyId    = req.user.company_id;
-    const employeeId   = Number(req.body?.employee_id);
-    const overtimeHours = req.body?.overtime_hours ? Number(req.body.overtime_hours) : null;
+    const { project_id, date } = req.query;
+    const companyId   = req.user.company_id;
+    const targetDate  = date || new Date().toISOString().split("T")[0];
+    const currentUserId = Number(req.user.user_id);
 
-    if (!employeeId) return res.status(400).json({ ok: false, error: "BAD_EMPLOYEE_ID" });
+    const params = [companyId, targetDate, currentUserId];
+    let extraFilters = "";
 
-    // Find open session
-    const open = await pool.query(
-      `SELECT attendance_id FROM public.attendance_logs
-       WHERE employee_id = $1 AND company_id = $2 AND check_out_at IS NULL
-       ORDER BY check_in_at DESC LIMIT 1`,
-      [employeeId, companyId]
-    );
-    if (!open.rowCount)
-      return res.status(409).json({ ok: false, error: "NO_OPEN_SESSION" });
-
-    const attendanceId = open.rows[0].attendance_id;
-
-    await pool.query(
-      `UPDATE public.attendance_logs
-       SET check_out_at = NOW(),
-           check_out_location = ${UNKNOWN_POINT_SQL},
-           overtime_hours = COALESCE($1, overtime_hours)
-       WHERE attendance_id = $2 AND company_id = $3`,
-      [overtimeHours, attendanceId, companyId]
-    );
-
-    return res.json({ ok: true, attendance_id: attendanceId });
-  } catch (e) {
-    console.error("POST /foreman-checkout error:", e);
-    return res.status(500).json({ ok: false, error: "FOREMAN_CHECKOUT_FAILED" });
-  }
-});
-// Foreman requests overtime approval for a completed attendance log
-router.post("/overtime/request", can("attendance.checkin"), async (req, res) => {
-  try {
-    const companyId      = req.user.company_id;
-    const { attendance_id, overtime_hours, note } = req.body || {};
-
-    if (!attendance_id || !overtime_hours)
-      return res.status(400).json({ ok: false, error: "MISSING_FIELDS" });
-
-    const hours = Number(overtime_hours);
-    if (!Number.isFinite(hours) || hours <= 0 || hours > 12)
-      return res.status(400).json({ ok: false, error: "INVALID_OVERTIME_HOURS" });
-
-    // Verify log exists and is closed
-    const { rows } = await pool.query(
-      `SELECT attendance_id, check_in_at, check_out_at, employee_id
-       FROM public.attendance_logs
-       WHERE attendance_id = $1 AND company_id = $2 LIMIT 1`,
-      [attendance_id, companyId]
-    );
-    if (!rows.length)
-      return res.status(404).json({ ok: false, error: "LOG_NOT_FOUND" });
-    if (!rows[0].check_out_at)
-      return res.status(409).json({ ok: false, error: "SESSION_STILL_OPEN" });
-
-    await pool.query(
-      `UPDATE public.attendance_logs
-       SET overtime_hours = $1, approval_note = $2
-       WHERE attendance_id = $3 AND company_id = $4`,
-      [hours, note || null, attendance_id, companyId]
-    );
-
-    return res.json({ ok: true, attendance_id, overtime_hours: hours });
-  } catch (e) {
-    console.error("POST /overtime/request error:", e);
-    return res.status(500).json({ ok: false, error: "OVERTIME_REQUEST_FAILED" });
-  }
-});
-
-// ── PATCH /overtime/:id/approve ──────────────────────────────
-// Admin approves overtime
-router.patch("/overtime/:id/approve", can("attendance.overtime_approve"), async (req, res) => {
-  try {
-    const companyId    = req.user.company_id;
-    const attendanceId = Number(req.params.id);
-    const { approved, note } = req.body || {};
-
-    const { rows } = await pool.query(
-      `UPDATE public.attendance_logs
-       SET overtime_approved    = $1,
-           overtime_approved_by = $2,
-           approval_note        = COALESCE($3, approval_note)
-       WHERE attendance_id = $4 AND company_id = $5
-       RETURNING attendance_id, overtime_hours, overtime_approved`,
-      [!!approved, req.user.user_id, note || null, attendanceId, companyId]
-    );
-    if (!rows.length)
-      return res.status(404).json({ ok: false, error: "LOG_NOT_FOUND" });
-
-    return res.json({ ok: true, log: rows[0] });
-  } catch (e) {
-    console.error("PATCH /overtime/approve error:", e);
-    return res.status(500).json({ ok: false, error: "OVERTIME_APPROVE_FAILED" });
-  }
-});
-
-// ── GET /report/daily ────────────────────────────────────────
-// Daily attendance report for a project on a given date
-// Query params: project_id, date (YYYY-MM-DD, default today)
-router.get("/report/daily", can("attendance.view"), async (req, res) => {
-  try {
-    const companyId  = req.user.company_id;
-    const projectId  = req.query.project_id ? Number(req.query.project_id) : null;
-    const reportDate = req.query.date || new Date().toISOString().split("T")[0];
-
-    let query = `
-      SELECT
-        al.attendance_id,
-        al.work_date,
-        al.check_in_at,
-        al.check_out_at,
-        al.overtime_hours,
-        al.overtime_approved,
-        al.manager_approved,
-        al.attendance_id,
-        al.overtime_approved,
-        al.break_minutes,
-        ep.full_name   AS employee_name,
-        ep.trade_code,
-        ar.assignment_role,
-        p.project_code,
-        p.project_name,
-        CASE
-          WHEN al.check_in_at IS NOT NULL AND al.check_out_at IS NOT NULL THEN
-            ROUND(
-              (EXTRACT(EPOCH FROM (al.check_out_at - al.check_in_at)) / 3600
-               - COALESCE(al.break_minutes, 0) / 60.0
-              )::numeric, 2
-            )
-          ELSE NULL
-        END AS worked_hours
-      FROM public.attendance_logs al
-      JOIN public.employee_profiles ep ON ep.employee_id = al.employee_id
-      JOIN public.projects            p  ON p.id          = al.project_id
-      LEFT JOIN public.assignment_requests ar
-             ON ar.id = al.assignment_request_id
-      WHERE al.company_id = $1
-        AND al.work_date  = $2::date
-    `;
-
-    const params = [companyId, reportDate];
-
-    if (projectId) {
-      params.push(projectId);
-      query += ` AND al.project_id = $${params.length}`;
+    if (project_id) {
+      params.push(Number(project_id));
+      extraFilters += ` AND ar.project_id = $${params.length}`;
     }
 
-    query += " ORDER BY p.project_code, ep.full_name";
+    // Workers see only themselves
+    const role = (req.user.role || "").toUpperCase();
+    if (role === "WORKER" || role === "JOURNEYMAN") {
+      extraFilters += " AND au.id = $3";
+    }
 
-    const { rows } = await pool.query(query, params);
+    const { rows } = await pool.query(
+      `SELECT
+         ar.id              AS assignment_request_id,
+         ar.requested_for_employee_id AS employee_id,
+         ar.shift_start,
+         ar.shift_end,
+         ar.assignment_role,
+         ar.project_id,
+         ep.full_name,
+         ep.trade_code,
+         p.project_code,
+         p.project_name,
+         au.id              AS user_id,
+         atr.id             AS attendance_id,
+         atr.check_in_time,
+         atr.check_out_time,
+         atr.raw_minutes,
+         atr.paid_minutes,
+         atr.regular_hours,
+         atr.overtime_hours,
+         atr.late_minutes,
+         atr.status         AS attendance_status,
+         atr.confirmed_by,
+         atr.confirmed_at,
+         atr.confirmed_regular_hours,
+         atr.confirmed_overtime_hours,
+         atr.foreman_note,
+         confirmer.username AS confirmed_by_name,
+         (au.id = $3)       AS is_mine
+       FROM public.assignment_requests ar
+       JOIN public.employee_profiles ep ON ep.employee_id = ar.requested_for_employee_id
+       JOIN public.app_users         au ON au.employee_id = ep.employee_id
+       JOIN public.projects           p ON p.id           = ar.project_id
+       LEFT JOIN public.attendance_records atr
+         ON atr.assignment_request_id = ar.id
+        AND atr.attendance_date = $2
+       LEFT JOIN public.app_users confirmer ON confirmer.id = atr.confirmed_by
+       WHERE ar.company_id = $1
+         AND ar.status     = 'APPROVED'
+         AND ar.start_date <= $2
+         AND ar.end_date   >= $2
+         ${extraFilters}
+       ORDER BY p.project_code, ep.full_name`,
+      params
+    );
 
-    // Summary per project
-    const summary = rows.reduce((acc, r) => {
-      const key = r.project_code;
-      if (!acc[key]) acc[key] = { project_code: key, project_name: r.project_name, present: 0, total_hours: 0, total_overtime: 0 };
-      acc[key].present++;
-      acc[key].total_hours    += Number(r.worked_hours || 0);
-      acc[key].total_overtime += Number(r.overtime_hours || 0);
-      return acc;
-    }, {});
+    // Summary counts
+    const total     = rows.length;
+    const checkedIn = rows.filter(r => r.attendance_status === "CHECKED_IN").length;
+    const checkedOut= rows.filter(r => ["CHECKED_OUT","CONFIRMED","ADJUSTED"].includes(r.attendance_status)).length;
+    const confirmed = rows.filter(r => ["CONFIRMED","ADJUSTED"].includes(r.attendance_status)).length;
 
     return res.json({
       ok: true,
-      date: reportDate,
+      date: targetDate,
       records: rows,
-      summary: Object.values(summary),
+      summary: { total, checked_in: checkedIn, checked_out: checkedOut, confirmed },
     });
-  } catch (e) {
-    console.error("GET /report/daily error:", e);
-    return res.status(500).json({ ok: false, error: "REPORT_FAILED" });
+  } catch (err) {
+    console.error("GET /attendance error:", err);
+    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
   }
 });
 
-module.exports = { router };
+// ── POST /api/attendance/checkin ──────────────────────────────
+router.post("/checkin", can("attendance.checkin"), async (req, res) => {
+  try {
+    const { assignment_request_id } = req.body || {};
+    const companyId   = req.user.company_id;
+    const currentUserId = Number(req.user.user_id);
+    const today       = new Date().toISOString().split("T")[0];
+
+    if (!assignment_request_id)
+      return res.status(400).json({ ok: false, error: "ASSIGNMENT_REQUIRED" });
+
+    // Verify assignment belongs to current user and is active today
+    const asgn = await pool.query(
+      `SELECT ar.id, ar.project_id, ar.requested_for_employee_id AS employee_id,
+              ar.shift_start, ar.company_id
+       FROM public.assignment_requests ar
+       JOIN public.app_users au ON au.employee_id = ar.requested_for_employee_id
+       WHERE ar.id = $1
+         AND ar.company_id = $2
+         AND ar.status = 'APPROVED'
+         AND ar.start_date <= $3
+         AND ar.end_date   >= $3
+         AND au.id = $4
+       LIMIT 1`,
+      [assignment_request_id, companyId, today, currentUserId]
+    );
+
+    if (!asgn.rows.length)
+      return res.status(403).json({ ok: false, error: "ASSIGNMENT_NOT_FOUND_OR_NOT_YOURS" });
+
+    const a = asgn.rows[0];
+    const checkInTime = new Date().toTimeString().substring(0, 5); // HH:MM
+
+    // Upsert attendance record
+    const { rows } = await pool.query(
+      `INSERT INTO public.attendance_records
+         (company_id, project_id, assignment_request_id, employee_id,
+          attendance_date, shift_start, check_in_time, status, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'CHECKED_IN', NOW(), NOW())
+       ON CONFLICT (company_id, employee_id, project_id, attendance_date)
+       DO UPDATE SET
+         check_in_time = EXCLUDED.check_in_time,
+         status        = 'CHECKED_IN',
+         updated_at    = NOW()
+       RETURNING *`,
+      [companyId, a.project_id, a.id, a.employee_id, today,
+       a.shift_start || null, checkInTime]
+    );
+
+    await audit(pool, req, {
+      action:      ACTIONS.ATTENDANCE_CHECKIN || "ATTENDANCE_CHECKIN",
+      entity_type: "attendance_record",
+      entity_id:   rows[0].id,
+      new_values:  { check_in_time: checkInTime, date: today },
+    });
+
+    notifyForeman(pool, rows[0].id, "CHECKIN");
+
+    return res.status(201).json({ ok: true, record: rows[0] });
+  } catch (err) {
+    console.error("POST /attendance/checkin error:", err);
+    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+  }
+});
+
+// ── PATCH /api/attendance/:id/checkout ───────────────────────
+router.patch("/:id/checkout", can("attendance.checkin"), async (req, res) => {
+  try {
+    const recordId    = Number(req.params.id);
+    const companyId   = req.user.company_id;
+    const currentUserId = Number(req.user.user_id);
+
+    // Verify record belongs to current user
+    const existing = await pool.query(
+      `SELECT atr.*, au.id AS user_id
+       FROM public.attendance_records atr
+       JOIN public.app_users au ON au.employee_id = atr.employee_id
+       WHERE atr.id = $1 AND atr.company_id = $2 AND au.id = $3
+       LIMIT 1`,
+      [recordId, companyId, currentUserId]
+    );
+
+    if (!existing.rows.length)
+      return res.status(403).json({ ok: false, error: "RECORD_NOT_FOUND_OR_NOT_YOURS" });
+
+    const rec = existing.rows[0];
+
+    if (rec.status !== "CHECKED_IN")
+      return res.status(409).json({ ok: false, error: "NOT_CHECKED_IN" });
+
+    const checkOutTime = new Date().toTimeString().substring(0, 5);
+
+    // Calculate hours
+    const { rawMinutes, paidMinutes, regularHours, overtimeHours, lateMinutes } =
+      calcHours(rec.shift_start, rec.check_in_time, checkOutTime);
+
+    const { rows } = await pool.query(
+      `UPDATE public.attendance_records
+       SET check_out_time = $1,
+           raw_minutes    = $2,
+           paid_minutes   = $3,
+           regular_hours  = $4,
+           overtime_hours = $5,
+           late_minutes   = $6,
+           status         = 'CHECKED_OUT',
+           updated_at     = NOW()
+       WHERE id = $7 AND company_id = $8
+       RETURNING *`,
+      [checkOutTime, rawMinutes, paidMinutes, regularHours, overtimeHours,
+       lateMinutes, recordId, companyId]
+    );
+
+    await audit(pool, req, {
+      action:      ACTIONS.ATTENDANCE_CHECKOUT || "ATTENDANCE_CHECKOUT",
+      entity_type: "attendance_record",
+      entity_id:   recordId,
+      new_values:  { check_out_time: checkOutTime, regular_hours: regularHours, overtime_hours: overtimeHours },
+    });
+
+    notifyForeman(pool, recordId, "CHECKOUT");
+
+    return res.json({ ok: true, record: rows[0] });
+  } catch (err) {
+    console.error("PATCH /attendance/:id/checkout error:", err);
+    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+  }
+});
+
+// ── PATCH /api/attendance/:id/confirm ────────────────────────
+// Foreman confirms or adjusts hours
+router.patch("/:id/confirm", can("attendance.approve"), async (req, res) => {
+  try {
+    const recordId  = Number(req.params.id);
+    const companyId = req.user.company_id;
+    const { regular_hours, overtime_hours, note } = req.body || {};
+
+    const existing = await pool.query(
+      "SELECT * FROM public.attendance_records WHERE id = $1 AND company_id = $2 LIMIT 1",
+      [recordId, companyId]
+    );
+
+    if (!existing.rows.length)
+      return res.status(404).json({ ok: false, error: "RECORD_NOT_FOUND" });
+
+    const rec = existing.rows[0];
+
+    if (!["CHECKED_OUT", "CONFIRMED", "ADJUSTED"].includes(rec.status))
+      return res.status(409).json({ ok: false, error: "NOT_CHECKED_OUT_YET" });
+
+    // Determine if foreman is adjusting or just confirming
+    const isAdjusted =
+      (regular_hours  !== undefined && parseFloat(regular_hours)  !== parseFloat(rec.regular_hours)) ||
+      (overtime_hours !== undefined && parseFloat(overtime_hours) !== parseFloat(rec.overtime_hours));
+
+    const confirmedRegular  = regular_hours  !== undefined ? parseFloat(regular_hours)  : rec.regular_hours;
+    const confirmedOvertime = overtime_hours !== undefined ? parseFloat(overtime_hours) : rec.overtime_hours;
+    const newStatus = isAdjusted ? "ADJUSTED" : "CONFIRMED";
+
+    const { rows } = await pool.query(
+      `UPDATE public.attendance_records
+       SET confirmed_by             = $1,
+           confirmed_at             = NOW(),
+           confirmed_regular_hours  = $2,
+           confirmed_overtime_hours = $3,
+           foreman_note             = $4,
+           status                   = $5,
+           updated_at               = NOW()
+       WHERE id = $6 AND company_id = $7
+       RETURNING *`,
+      [req.user.user_id, confirmedRegular, confirmedOvertime,
+       note || null, newStatus, recordId, companyId]
+    );
+
+    await audit(pool, req, {
+      action:      ACTIONS.ATTENDANCE_CONFIRMED || "ATTENDANCE_CONFIRMED",
+      entity_type: "attendance_record",
+      entity_id:   recordId,
+      new_values:  { status: newStatus, confirmed_regular_hours: confirmedRegular, confirmed_overtime_hours: confirmedOvertime },
+    });
+
+    return res.json({ ok: true, record: rows[0] });
+  } catch (err) {
+    console.error("PATCH /attendance/:id/confirm error:", err);
+    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+  }
+});
+
+module.exports = router;

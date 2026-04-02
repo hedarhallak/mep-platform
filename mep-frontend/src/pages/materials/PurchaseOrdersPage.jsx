@@ -26,14 +26,14 @@ function generatePOHtml(d) {
   `).join('')
 
   const toSection = !d.is_procurement && d.supplier_name
-    ? `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin-bottom:20px">
+    ? `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin-bottom:16px">
         <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">To — Supplier</div>
         <div style="font-size:14px;font-weight:700;color:#1e293b">${d.supplier_name}</div>
-        ${d.supplier_email ? `<div style="font-size:12px;color:#64748b;margin-top:2px">✉ ${d.supplier_email}</div>` : ''}
-        ${d.supplier_phone ? `<div style="font-size:12px;color:#64748b">📞 ${d.supplier_phone}</div>` : ''}
+        ${d.supplier_email   ? `<div style="font-size:12px;color:#64748b;margin-top:2px">✉ ${d.supplier_email}</div>` : ''}
+        ${d.supplier_phone   ? `<div style="font-size:12px;color:#64748b">📞 ${d.supplier_phone}</div>` : ''}
         ${d.supplier_address ? `<div style="font-size:12px;color:#64748b">📍 ${d.supplier_address}</div>` : ''}
       </div>`
-    : `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px;margin-bottom:20px">
+    : `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px;margin-bottom:16px">
         <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">To — Internal</div>
         <div style="font-size:14px;font-weight:700;color:#1e293b">Procurement Department</div>
       </div>`
@@ -60,30 +60,44 @@ function generatePOHtml(d) {
       🖨 Print / Save as PDF
     </button>
   </div>
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;padding-bottom:24px;border-bottom:2px solid #4f46e5">
+
+  <!-- Header -->
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;padding-bottom:20px;border-bottom:2px solid #4f46e5">
     <div>
       <div style="font-size:22px;font-weight:800;color:#4f46e5">${d.company_name || 'Company'}</div>
       ${d.company_address ? `<div style="font-size:12px;color:#64748b;margin-top:4px">📍 ${d.company_address}</div>` : ''}
-      ${d.company_phone ? `<div style="font-size:12px;color:#64748b">📞 ${d.company_phone}</div>` : ''}
+      ${d.company_phone   ? `<div style="font-size:12px;color:#64748b">📞 ${d.company_phone}</div>` : ''}
     </div>
     <div style="text-align:right">
       <div style="font-size:20px;font-weight:800;color:#1e293b">Purchase Order</div>
       <div style="font-size:13px;color:#64748b;margin-top:4px">Ref: <strong>${d.ref}</strong></div>
       <div style="font-size:13px;color:#64748b">Date: ${sentDate}</div>
+      ${d.po_number ? `<div style="font-size:15px;font-weight:800;color:#4f46e5;margin-top:6px">PO # ${d.po_number}</div>` : ''}
     </div>
   </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
-    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px">
-      <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Project</div>
-      <div style="font-size:14px;font-weight:700;color:#1e293b">${d.project_code} ${d.project_name ? '— ' + d.project_name : ''}</div>
-      ${d.site_address ? `<div style="font-size:12px;color:#64748b;margin-top:4px">📍 ${d.site_address}</div>` : ''}
-    </div>
-    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px">
-      <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Requested By</div>
-      <div style="font-size:14px;font-weight:700;color:#1e293b">${d.foreman_name || ''}</div>
+
+  <!-- Delivery Location (most important for driver) -->
+  <div style="background:#fefce8;border:2px solid #fbbf24;border-radius:10px;padding:16px;margin-bottom:16px">
+    <div style="font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">📦 Delivery Location</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div>
+        <div style="font-size:11px;font-weight:600;color:#92400e;margin-bottom:4px">Project</div>
+        <div style="font-size:15px;font-weight:800;color:#1e293b">${d.project_code}${d.project_name ? ' — ' + d.project_name : ''}</div>
+        ${d.site_address ? `<div style="font-size:13px;color:#64748b;margin-top:6px">📍 ${d.site_address}</div>` : '<div style="font-size:12px;color:#94a3b8;margin-top:4px">No site address on file</div>'}
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:600;color:#92400e;margin-bottom:4px">On-Site Contact (Foreman)</div>
+        <div style="font-size:15px;font-weight:800;color:#1e293b">${d.foreman_name || '—'}</div>
+        ${d.foreman_phone ? `<div style="font-size:14px;font-weight:700;color:#4f46e5;margin-top:6px">📞 ${d.foreman_phone}</div>` : ''}
+        ${d.foreman_email ? `<div style="font-size:12px;color:#64748b;margin-top:2px">✉ ${d.foreman_email}</div>` : ''}
+      </div>
     </div>
   </div>
+
+  <!-- To (supplier or procurement) -->
   ${toSection}
+
+  <!-- Items table -->
   <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
     <thead>
       <tr style="background:#4f46e5">
@@ -95,10 +109,12 @@ function generatePOHtml(d) {
     </thead>
     <tbody>${itemRows}</tbody>
   </table>
+
   ${d.note ? `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:14px;margin-bottom:24px">
     <div style="font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Notes</div>
     <div style="font-size:13px;color:#78350f">${d.note}</div>
   </div>` : ''}
+
   <div style="border-top:1px solid #e2e8f0;padding-top:16px;display:flex;justify-content:space-between;align-items:center">
     <div style="font-size:11px;color:#94a3b8">Generated by MEP Platform · ${sentDate}</div>
     <div style="font-size:11px;color:#94a3b8">${d.ref}</div>
@@ -192,6 +208,7 @@ export default function PurchaseOrdersPage() {
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-100">
                   <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">Ref</th>
+                  <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">PO #</th>
                   <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">Date</th>
                   <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">Project</th>
                   <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">Foreman</th>
@@ -205,6 +222,11 @@ export default function PurchaseOrdersPage() {
                   <tr key={o.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60 transition-colors">
                     <td className="px-4 py-3">
                       <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg">{o.ref}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {o.po_number
+                        ? <span className="text-xs font-bold text-slate-700">{o.po_number}</span>
+                        : <span className="text-xs text-slate-300">—</span>}
                     </td>
                     <td className="px-4 py-3 text-xs text-slate-500">{fmtDateTime(o.sent_at)}</td>
                     <td className="px-4 py-3">

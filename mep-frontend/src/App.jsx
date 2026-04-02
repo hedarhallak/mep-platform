@@ -20,6 +20,7 @@ import PermissionsPage       from '@/pages/PermissionsPage'
 import UserManagementPage  from '@/pages/UserManagementPage'
 import TaskRequestPage     from '@/pages/TaskRequestPage'
 import StandupPage         from '@/pages/StandupPage'
+import ReportsPage          from '@/pages/ReportsPage'
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
@@ -105,6 +106,7 @@ function AppRoutes() {
             <StandupPage />
           </RequirePermission>
         }/>
+        <Route path="reports" element={<ReportsPage />} />
         <Route path="task-request" element={
           <RequirePermission module="hub" action="send_tasks">
             <TaskRequestPage />

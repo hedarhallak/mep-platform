@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import api from '@/lib/api'
+import { usePermissions } from '@/hooks/usePermissions.jsx'
 import {
   Package, Plus, Send, Loader2, Check,
   AlertCircle, Trash2, ChevronDown, ClipboardList,
@@ -271,6 +272,7 @@ function ItemRow({ item, index, onChange, onRemove }) {
 }
 
 export default function MaterialRequestPage() {
+  const { can, loading: permsLoading } = usePermissions()
   const [tab, setTab]           = useState('new')
   const [projects, setProjects]     = useState([])
   const [selectedProj, setSelectedProj] = useState('')
@@ -282,6 +284,8 @@ export default function MaterialRequestPage() {
   const [showNotes, setShowNotes]   = useState(false)
 
   useEffect(() => {
+    if (permsLoading) return
+    if (!can('projects', 'view') && !can('materials', 'request_submit')) return
     api.get('/projects?status=ACTIVE')
       .then(r => {
         const list = r.data.projects || r.data.rows || []
@@ -289,7 +293,7 @@ export default function MaterialRequestPage() {
         if (list.length) setSelectedProj(String(list[0].id))
       })
       .catch(() => {})
-  }, [])
+  }, [permsLoading])
 
   const addItem = () =>
     setItems(prev => [...prev, { item_name: '', quantity: '', unit: 'pcs', note: undefined }])

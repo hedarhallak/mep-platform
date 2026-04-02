@@ -32,39 +32,72 @@ const TYPE_ICON = { TASK: ClipboardList, BLUEPRINT: FileText, NOTE: Briefcase }
 
 // ── Attendance Tab ────────────────────────────────────────────
 function AttendanceApprovalTab() {
-  const [date, setDate] = useState(todayStr())
-  const [records, setRecords] = useState([])
-  const [loading, setLoading] = useState(false)
-  const [approving, setApproving] = useState(false)
-  const [msg, setMsg] = useState(null)
-
-  const fetchRecords = useCallback(async () => {
-    setLoading(true); setMsg(null)
-    try { const r = await api.get(`/attendance/report/daily?date=${date}`); setRecords(r.data.records || []) }
-    catch (e) { setMsg({ type:'error', text: e.response?.data?.message || e.message }) }
-    finally { setLoading(false) }
-  }, [date])
-  useEffect(() => { fetchRecords() }, [fetchRecords])
+  const [date,      setDate]      = useState(todayStr())
+  const [records,   setRecords]   = useState([])
+  const [loading,   setLoading]   = useState(false)
+  const [confirming,setConfirming]= useState(null)
+  const [msg,       setMsg]       = useState(null)
 
   const flash = (text, type='success') => { setMsg({ type, text }); setTimeout(() => setMsg(null), 4000) }
 
-  const approveAll = async () => {
-    const rows = records.filter(r => r.check_in_at && r.check_out_at && !r.manager_approved)
-    if (!rows.length) return
-    setApproving(true)
+  const fetchRecords = useCallback(async () => {
+    setLoading(true); setMsg(null)
     try {
-      await Promise.all(rows.map(r => api.patch(`/attendance/overtime/${r.attendance_id}/approve`, { approved: true })))
-      flash(`${rows.length} records approved ✓`)
+      const r = await api.get(`/attendance?date=${date}`)
+      setRecords(r.data.records || [])
+    } catch (e) { setMsg({ type:'error', text: e.response?.data?.message || e.message }) }
+    finally { setLoading(false) }
+  }, [date])
+
+  useEffect(() => { fetchRecords() }, [fetchRecords])
+
+  const handleConfirm = async (rec) => {
+    setConfirming(rec.attendance_id)
+    try {
+      await api.patch(`/attendance/${rec.attendance_id}/confirm`, {
+        regular_hours:  rec.regular_hours,
+        overtime_hours: rec.overtime_hours,
+      })
+      flash('Confirmed ✓')
       fetchRecords()
     } catch (e) { flash(e.response?.data?.message || e.message, 'error') }
-    finally { setApproving(false) }
+    finally { setConfirming(null) }
   }
 
-  const pendingCount = records.filter(r => r.check_in_at && r.check_out_at && !r.manager_approved).length
+  const handleConfirmAll = async () => {
+    const pending = records.filter(r => r.attendance_status === 'CHECKED_OUT' && r.attendance_id)
+    if (!pending.length) return
+    setConfirming('all')
+    try {
+      await Promise.all(pending.map(r =>
+        api.patch(`/attendance/${r.attendance_id}/confirm`, {
+          regular_hours:  r.regular_hours,
+          overtime_hours: r.overtime_hours,
+        })
+      ))
+      flash(`${pending.length} records confirmed ✓`)
+      fetchRecords()
+    } catch (e) { flash(e.response?.data?.message || e.message, 'error') }
+    finally { setConfirming(null) }
+  }
+
+  const pendingCount = records.filter(r => r.attendance_status === 'CHECKED_OUT').length
+
   const groups = Object.values(records.reduce((acc, r) => {
-    if (!acc[r.project_code]) acc[r.project_code] = { project_code: r.project_code, project_name: r.project_name, records: [] }
-    acc[r.project_code].records.push(r); return acc
+    const k = r.project_code || 'Unknown'
+    if (!acc[k]) acc[k] = { project_code: r.project_code, project_name: r.project_name, records: [] }
+    acc[k].records.push(r)
+    return acc
   }, {}))
+
+  const fmtT = (t) => {
+    if (!t) return '—'
+    const str = String(t).substring(0, 5)
+    const [h, m] = str.split(':').map(Number)
+    const ap = h < 12 ? 'AM' : 'PM'
+    const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h
+    return `${String(h12).padStart(2,'0')}:${String(m).padStart(2,'0')} ${ap}`
+  }
 
   return (
     <div className="space-y-4">
@@ -75,63 +108,98 @@ function AttendanceApprovalTab() {
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
         </button>
         {pendingCount > 0 && (
-          <button onClick={approveAll} disabled={approving}
+          <button onClick={handleConfirmAll} disabled={confirming === 'all'}
             className="ml-auto flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 disabled:opacity-60">
-            {approving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><CheckCheck className="w-3.5 h-3.5" />Approve All ({pendingCount})</>}
+            {confirming === 'all' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><CheckCheck className="w-3.5 h-3.5" />Confirm All ({pendingCount})</>}
           </button>
         )}
       </div>
-      {msg && <div className={`flex items-center gap-2 p-3 rounded-xl text-xs font-semibold ${msg.type==='error' ? 'bg-red-50 border border-red-100 text-red-600' : 'bg-emerald-50 border border-emerald-100 text-emerald-700'}`}>{msg.text}</div>}
+
+      {msg && (
+        <div className={`flex items-center gap-2 p-3 rounded-xl text-xs font-semibold ${msg.type==='error' ? 'bg-red-50 border border-red-100 text-red-600' : 'bg-emerald-50 border border-emerald-100 text-emerald-700'}`}>
+          {msg.text}
+        </div>
+      )}
+
       {loading && <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-slate-300" /></div>}
+
       {!loading && records.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <CalendarCheck className="w-10 h-10 text-slate-200 mb-3" />
           <p className="text-sm font-semibold text-slate-400">No records for {date}</p>
         </div>
       )}
+
       {!loading && groups.map(group => (
         <div key={group.project_code} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
           <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center gap-2">
-            <div className="w-7 h-7 bg-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0"><Briefcase className="w-3.5 h-3.5 text-white" /></div>
+            <div className="w-7 h-7 bg-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0">
+              <Briefcase className="w-3.5 h-3.5 text-white" />
+            </div>
             <span className="text-sm font-bold text-slate-800">{group.project_code}</span>
             {group.project_name && <span className="text-xs text-slate-400">{group.project_name}</span>}
-            <span className="ml-auto text-[10px] font-semibold px-2 py-1 bg-indigo-50 text-indigo-600 rounded-lg">{group.records.length} employees</span>
+            <span className="ml-auto text-[10px] font-semibold px-2 py-1 bg-indigo-50 text-indigo-600 rounded-lg">
+              {group.records.length} employees
+            </span>
           </div>
           <table className="w-full">
-            <thead><tr className="border-b border-slate-100">
-              {['Employee','In','Out','Hours','OT','Status',''].map(h => (
-                <th key={h} className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">{h}</th>
-              ))}
-            </tr></thead>
+            <thead>
+              <tr className="border-b border-slate-100">
+                {['Employee','In','Out','Regular','OT','Status',''].map(h => (
+                  <th key={h} className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">{h}</th>
+                ))}
+              </tr>
+            </thead>
             <tbody>
-              {group.records.map((r, i) => (
-                <tr key={i} className="border-b border-slate-50 hover:bg-slate-50/60 last:border-0">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white" style={{ background: dot(r.trade_code) }}>{(r.employee_name||'?')[0]}</div>
-                      <div><div className="text-sm font-semibold text-slate-700">{r.employee_name}</div><div className="text-[10px] text-slate-400">{r.assignment_role||'WORKER'}</div></div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-xs text-slate-600">{fmtTime(r.check_in_at)}</td>
-                  <td className="px-4 py-3 text-xs text-slate-600">{fmtTime(r.check_out_at)}</td>
-                  <td className="px-4 py-3 text-xs font-semibold text-slate-700">{fmtHours(r.worked_hours)}</td>
-                  <td className="px-4 py-3">{r.overtime_hours > 0 ? <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">+{r.overtime_hours}h</span> : <span className="text-xs text-slate-300">—</span>}</td>
-                  <td className="px-4 py-3">
-                    {!r.check_in_at ? <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-400">Absent</span>
-                      : !r.check_out_at ? <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-600">On Site</span>
-                      : r.manager_approved ? <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">✓ Approved</span>
-                      : <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-600">Pending</span>}
-                  </td>
-                  <td className="px-4 py-3">
-                    {r.check_in_at && r.check_out_at && !r.manager_approved && (
-                      <button onClick={async () => { await api.patch(`/attendance/overtime/${r.attendance_id}/approve`, { approved: true }); flash('Approved ✓'); fetchRecords() }}
-                        className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-600 border border-emerald-200 hover:bg-emerald-50 rounded-lg whitespace-nowrap">
-                        <Check className="w-3 h-3" />Approve
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {group.records.map((r, i) => {
+                const status = r.attendance_status || 'OPEN'
+                const finalReg = r.confirmed_regular_hours  ?? r.regular_hours
+                const finalOT  = r.confirmed_overtime_hours ?? r.overtime_hours
+                return (
+                  <tr key={i} className="border-b border-slate-50 hover:bg-slate-50/60 last:border-0">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white"
+                          style={{ background: dot(r.trade_code) }}>
+                          {(r.full_name||'?')[0]}
+                        </div>
+                        <div>
+                          <div className="text-sm font-semibold text-slate-700">{r.full_name}</div>
+                          <div className="text-[10px] text-slate-400">{r.assignment_role||'WORKER'}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-slate-600">{fmtT(r.check_in_time)}</td>
+                    <td className="px-4 py-3 text-xs text-slate-600">{fmtT(r.check_out_time)}</td>
+                    <td className="px-4 py-3 text-xs font-semibold text-slate-700">
+                      {finalReg != null ? `${finalReg}h` : '—'}
+                    </td>
+                    <td className="px-4 py-3">
+                      {parseFloat(finalOT) > 0
+                        ? <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">+{finalOT}h</span>
+                        : <span className="text-xs text-slate-300">—</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      {status === 'OPEN'        && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-400">Absent</span>}
+                      {status === 'CHECKED_IN'  && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-600">On Site</span>}
+                      {status === 'CHECKED_OUT' && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-600">Pending</span>}
+                      {status === 'CONFIRMED'   && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">Confirmed</span>}
+                      {status === 'ADJUSTED'    && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">Adjusted</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      {status === 'CHECKED_OUT' && r.attendance_id && (
+                        <button onClick={() => handleConfirm(r)} disabled={confirming === r.attendance_id}
+                          className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-600 border border-emerald-200 hover:bg-emerald-50 rounded-lg whitespace-nowrap disabled:opacity-60">
+                          {confirming === r.attendance_id ? <Loader2 className="w-3 h-3 animate-spin" /> : <><Check className="w-3 h-3" />Confirm</>}
+                        </button>
+                      )}
+                      {(status === 'CONFIRMED' || status === 'ADJUSTED') && (
+                        <span className="text-[10px] text-slate-400">{r.confirmed_by_name || '✓'}</span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -572,6 +640,7 @@ function InboxTab() {
   const [sendModal, setSendModal] = useState(false)
   const [sendTarget, setSendTarget] = useState('')
   const [sendNote, setSendNote] = useState('')
+  const [sendPoNumber, setSendPoNumber] = useState('')
   const [sending, setSending] = useState(false)
   const [successMsg, setSuccessMsg] = useState('')
 
@@ -606,26 +675,98 @@ function InboxTab() {
   }
 
   const handleSend = async () => {
-    if (!sendTarget) return; setSending(true)
+    if (!sendTarget) return
+    // PO Number required when sending to supplier
+    if (sendTarget !== 'procurement' && !sendPoNumber.trim()) {
+      alert('PO Number is required when sending to a supplier.')
+      return
+    }
+    setSending(true)
     try {
       const ids = pending.map(r => r.id).join(',')
       const params = new URLSearchParams({ request_ids: ids })
       if (sendTarget !== 'procurement') params.set('supplier_id', sendTarget)
       if (sendNote) params.set('note', sendNote)
+      if (sendPoNumber.trim()) params.set('po_number', sendPoNumber.trim())
       const d = (await api.get(`/materials/pdf-data?${params}`)).data.pdf_data
-      const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>PO ${d.ref}</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,sans-serif;padding:40px;max-width:800px;margin:0 auto}@media print{.noprint{display:none}}</style></head><body>
-        <div class="noprint" style="margin-bottom:20px;text-align:right"><button onclick="window.print()" style="background:#4f46e5;color:#fff;border:none;padding:10px 24px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">🖨 Print / Save PDF</button></div>
-        <div style="display:flex;justify-content:space-between;margin-bottom:32px;padding-bottom:24px;border-bottom:2px solid #4f46e5">
-          <div style="font-size:22px;font-weight:800;color:#4f46e5">${d.company?.name||'Company'}</div>
-          <div style="text-align:right"><div style="font-size:20px;font-weight:800">Purchase Order</div><div style="font-size:13px;color:#64748b">Ref: <strong>${d.ref}</strong> · ${d.date}</div></div>
-        </div>
-        ${d.supplier ? `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin-bottom:20px"><div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:8px">To — Supplier</div><div style="font-size:14px;font-weight:700">${d.supplier.name}</div>${d.supplier.email?`<div style="font-size:12px;color:#64748b">✉ ${d.supplier.email}</div>`:''}</div>` : `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px;margin-bottom:20px"><div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:8px">To — Internal</div><div style="font-size:14px;font-weight:700">Procurement Department</div></div>`}
-        <table style="width:100%;border-collapse:collapse;margin-bottom:20px"><thead><tr style="background:#4f46e5">${['#','Item','Qty','Unit'].map(h=>`<th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:700;color:#fff">${h}</th>`).join('')}</tr></thead>
-        <tbody>${(d.items||[]).map((it,i)=>`<tr style="background:${i%2===0?'#f8fafc':'#fff'}"><td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-size:13px">${i+1}</td><td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-size:13px;font-weight:500">${it.item_name}</td><td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#4f46e5;font-weight:700;text-align:center">${it.quantity}</td><td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-size:13px;text-align:center">${it.unit}</td></tr>`).join('')}</tbody></table>
-        <div style="border-top:1px solid #e2e8f0;padding-top:16px;font-size:11px;color:#94a3b8">Generated by MEP Platform · ${d.date} · ${d.ref}</div></body></html>`
+      const html = (() => {
+        const itemRows = (d.items||[]).map((it,i) => `
+          <tr style="background:${i%2===0?'#f8fafc':'#fff'}">
+            <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-size:13px">${i+1}</td>
+            <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-size:13px;font-weight:500">${it.item_name}</td>
+            <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#4f46e5;font-weight:700;text-align:center">${it.quantity}</td>
+            <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-size:13px;text-align:center">${it.unit}</td>
+          </tr>`).join('')
+
+        const toSection = d.supplier
+          ? `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin-bottom:16px">
+              <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:8px">To — Supplier</div>
+              <div style="font-size:14px;font-weight:700">${d.supplier.name}</div>
+              ${d.supplier.email ? `<div style="font-size:12px;color:#64748b">✉ ${d.supplier.email}</div>` : ''}
+              ${d.supplier.phone ? `<div style="font-size:12px;color:#64748b">📞 ${d.supplier.phone}</div>` : ''}
+              ${d.supplier.address ? `<div style="font-size:12px;color:#64748b">📍 ${d.supplier.address}</div>` : ''}
+            </div>`
+          : `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px;margin-bottom:16px">
+              <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:8px">To — Internal</div>
+              <div style="font-size:14px;font-weight:700">Procurement Department</div>
+            </div>`
+
+        return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>PO ${d.ref}</title>
+          <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,sans-serif;padding:40px;max-width:800px;margin:0 auto}@media print{.noprint{display:none}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style>
+        </head><body>
+          <div class="noprint" style="margin-bottom:20px;text-align:right">
+            <button onclick="window.print()" style="background:#4f46e5;color:#fff;border:none;padding:10px 24px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">🖨 Print / Save PDF</button>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:28px;padding-bottom:20px;border-bottom:2px solid #4f46e5">
+            <div>
+              <div style="font-size:22px;font-weight:800;color:#4f46e5">${d.company?.name||'Company'}</div>
+              ${d.company?.address ? `<div style="font-size:12px;color:#64748b;margin-top:4px">📍 ${d.company.address}</div>` : ''}
+              ${d.company?.phone   ? `<div style="font-size:12px;color:#64748b">📞 ${d.company.phone}</div>` : ''}
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:20px;font-weight:800">Purchase Order</div>
+              <div style="font-size:13px;color:#64748b;margin-top:4px">Ref: <strong>${d.ref}</strong> · ${d.date}</div>
+              ${d.po_number ? `<div style="font-size:14px;font-weight:800;color:#4f46e5;margin-top:4px">PO # ${d.po_number}</div>` : ''}
+            </div>
+          </div>
+
+          <!-- Delivery Location -->
+          <div style="background:#fefce8;border:2px solid #fbbf24;border-radius:10px;padding:16px;margin-bottom:16px">
+            <div style="font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">📦 Delivery Location</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <div>
+                <div style="font-size:11px;font-weight:600;color:#92400e;margin-bottom:4px">Project</div>
+                <div style="font-size:15px;font-weight:800;color:#1e293b">${d.project?.project_code||''}${d.project?.project_name?' — '+d.project.project_name:''}</div>
+                ${d.project?.site_address
+                  ? `<div style="font-size:13px;color:#64748b;margin-top:6px">📍 ${d.project.site_address}</div>`
+                  : '<div style="font-size:12px;color:#94a3b8;margin-top:4px">No site address on file</div>'}
+              </div>
+              <div>
+                <div style="font-size:11px;font-weight:600;color:#92400e;margin-bottom:4px">On-Site Contact (Foreman)</div>
+                <div style="font-size:15px;font-weight:800;color:#1e293b">${d.foreman?.full_name||'—'}</div>
+                ${d.foreman?.foreman_phone ? `<div style="font-size:14px;font-weight:700;color:#4f46e5;margin-top:6px">📞 ${d.foreman.foreman_phone}</div>` : ''}
+                ${d.foreman?.contact_email ? `<div style="font-size:12px;color:#64748b;margin-top:2px">✉ ${d.foreman.contact_email}</div>` : ''}
+              </div>
+            </div>
+          </div>
+
+          ${toSection}
+          <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
+            <thead><tr style="background:#4f46e5">
+              ${['#','Item','Qty','Unit'].map(h=>`<th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:700;color:#fff;text-transform:uppercase">${h}</th>`).join('')}
+            </tr></thead>
+            <tbody>${itemRows}</tbody>
+          </table>
+          ${d.note ? `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:14px;margin-bottom:20px"><div style="font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;margin-bottom:6px">Notes</div><div style="font-size:13px;color:#78350f">${d.note}</div></div>` : ''}
+          <div style="border-top:1px solid #e2e8f0;padding-top:16px;display:flex;justify-content:space-between">
+            <div style="font-size:11px;color:#94a3b8">Generated by MEP Platform · ${d.date}</div>
+            <div style="font-size:11px;color:#94a3b8">${d.ref}</div>
+          </div>
+        </body></html>`
+      })()
       const win = window.open('','_blank','width=900,height=700'); win.document.write(html); win.document.close(); win.focus()
       await Promise.all(pending.map(r => api.patch(`/materials/requests/${r.id}/review`, { status: 'SENT' })))
-      setSendModal(false); setSendNote(''); setMergedItems(null); flash('Sent ✓'); fetchInbox()
+      setSendModal(false); setSendNote(''); setSendPoNumber(''); setMergedItems(null); flash('Sent ✓'); fetchInbox()
     } catch (e) { alert(e.response?.data?.message || e.message) }
     finally { setSending(false) }
   }
@@ -708,10 +849,32 @@ function InboxTab() {
                   {sendTarget===String(s.id) && <Check className="w-4 h-4 text-indigo-600 ml-auto" />}
                 </button>)}</>)}
             </div>
-            <div className="px-6 py-3 border-t border-slate-100"><textarea value={sendNote} onChange={e=>setSendNote(e.target.value)} rows={2} placeholder="Notes (optional)" className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none" /></div>
+            <div className="px-6 py-3 border-t border-slate-100 space-y-2">
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-widest mb-1">
+                  <span className={sendTarget && sendTarget !== 'procurement' ? 'text-red-500' : 'text-slate-400'}>
+                    PO Number
+                  </span>
+                  {sendTarget && sendTarget !== 'procurement'
+                    ? <span className="text-red-400 font-semibold"> *required for supplier</span>
+                    : <span className="text-slate-300 font-normal normal-case"> (optional)</span>
+                  }
+                </label>
+                <input type="text" value={sendPoNumber} onChange={e=>setSendPoNumber(e.target.value)}
+                  placeholder="e.g. PO-2026-001"
+                  className={`w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:ring-2 placeholder:text-slate-300 ${
+                    sendTarget && sendTarget !== 'procurement' && !sendPoNumber.trim()
+                      ? 'border-red-300 focus:ring-red-400'
+                      : 'border-slate-200 focus:ring-indigo-400'
+                  }`} />
+              </div>
+              <textarea value={sendNote} onChange={e=>setSendNote(e.target.value)} rows={2} placeholder="Notes (optional)" className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none" />
+            </div>
             <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3">
               <button onClick={()=>setSendModal(false)} className="px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 rounded-xl">Cancel</button>
-              <button onClick={handleSend} disabled={!sendTarget||sending} className="flex items-center gap-2 px-5 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 disabled:opacity-60">
+              <button onClick={handleSend}
+                disabled={!sendTarget || sending || (sendTarget !== 'procurement' && !sendPoNumber.trim())}
+                className="flex items-center gap-2 px-5 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 disabled:opacity-60">
                 {sending?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<><Check className="w-3.5 h-3.5"/>Confirm Send</>}
               </button>
             </div>

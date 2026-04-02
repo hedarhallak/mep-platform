@@ -18,6 +18,7 @@ const mainNav = [
   { to: '/suppliers',        icon: Truck,           label: 'Suppliers',        permission: { module: 'suppliers',       action: 'view'           } },
   { to: '/assignments',      icon: ClipboardList,   label: 'Assignments',      permission: { module: 'assignments',     action: 'view'           } },
   { to: '/attendance',       icon: CalendarCheck,   label: 'Attendance',       permission: { module: 'attendance',      action: 'view_self'      } },
+  { to: '/reports',          icon: BarChart2,       label: 'Reports',          permission: { module: 'reports',         action: 'view'           } },
   { to: '/standup',          icon: ClipboardList,   label: 'Daily Standup',    permission: { module: 'standup',         action: 'manage'         } },
   { to: '/task-request',     icon: Send,            label: 'Task Request',     permission: { module: 'hub',             action: 'send_tasks'     } },
   { to: '/material-request', icon: Package,         label: 'Material Request', permission: { module: 'materials',       action: 'request_submit' } },
@@ -38,17 +39,44 @@ export default function AppLayout() {
   const [biOpen, setBiOpen] = useState(location.pathname.startsWith('/bi'))
   const [hubCount, setHubCount] = useState(0)
 
+  const canMaterialsInbox  = !permsLoading && can('hub', 'materials_inbox')
+  const canAttendanceApprove = !permsLoading && can('attendance', 'approve')
+
+  // Materials inbox count
   useEffect(() => {
+    if (!canMaterialsInbox) return
     const fetchCount = async () => {
       try {
         const r = await api.get('/materials/inbox/count')
-        setHubCount(r.data.count || 0)
+        setHubCount(prev => {
+          // preserve attendance portion — recalculate below
+          return r.data.count || 0
+        })
       } catch (_) {}
     }
     fetchCount()
     const interval = setInterval(fetchCount, 60_000)
     return () => clearInterval(interval)
-  }, [])
+  }, [canMaterialsInbox])
+
+  // Attendance pending count (CHECKED_OUT awaiting foreman confirm)
+  const [attendancePending, setAttendancePending] = useState(0)
+  useEffect(() => {
+    if (!canAttendanceApprove) return
+    const fetchAttendance = async () => {
+      try {
+        const today = new Date().toISOString().split('T')[0]
+        const r = await api.get(`/attendance?date=${today}`)
+        const count = (r.data.records || []).filter(rec => rec.attendance_status === 'CHECKED_OUT').length
+        setAttendancePending(count)
+      } catch (_) {}
+    }
+    fetchAttendance()
+    const interval = setInterval(fetchAttendance, 30_000)
+    return () => clearInterval(interval)
+  }, [canAttendanceApprove])
+
+  const totalHubCount = hubCount + attendancePending
 
   const handleLogout = () => { logout(); navigate('/login') }
   const isBiActive = location.pathname.startsWith('/bi')
@@ -112,9 +140,9 @@ export default function AppLayout() {
               >
                 <Icon size={16} />
                 <span className="flex-1">{label}</span>
-                {badge && hubCount > 0 && (
+                {badge && totalHubCount > 0 && (
                   <span className="flex-shrink-0 min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                    {hubCount > 99 ? '99+' : hubCount}
+                    {totalHubCount > 99 ? '99+' : totalHubCount}
                   </span>
                 )}
               </NavLink>

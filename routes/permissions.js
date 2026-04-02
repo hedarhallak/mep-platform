@@ -62,6 +62,9 @@ router.get('/my-permissions', async (req, res) => {
   try {
     if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
 
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.set('Pragma', 'no-cache');
+
     const result = await pool.query(`
       SELECT permission_code
       FROM public.role_permissions

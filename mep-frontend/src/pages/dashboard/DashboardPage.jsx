@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import api from '@/lib/api'
 import { useAuth } from '@/hooks/useAuth'
+import { usePermissions } from '@/hooks/usePermissions.jsx'
 import { FolderKanban, Users, ClipboardList, TrendingUp } from 'lucide-react'
 
 function StatCard({ icon: Icon, label, value, color, sub }) {
@@ -20,20 +21,28 @@ function StatCard({ icon: Icon, label, value, color, sub }) {
 
 export default function DashboardPage() {
   const { user } = useAuth()
+  const { can, loading: permsLoading } = usePermissions()
+
+  const canViewProjects    = !permsLoading && can('projects',    'view')
+  const canViewAssignments = !permsLoading && can('assignments', 'view')
+  const canViewEmployees   = !permsLoading && can('employees',   'view')
 
   const { data: projects } = useQuery({
     queryKey: ['projects'],
     queryFn: () => api.get('/projects').then(r => r.data.projects),
+    enabled: canViewProjects,
   })
 
   const { data: assignments } = useQuery({
     queryKey: ['assignments'],
     queryFn: () => api.get('/assignments').then(r => r.data.assignments),
+    enabled: canViewAssignments,
   })
 
   const { data: employees } = useQuery({
     queryKey: ['employees'],
     queryFn: () => api.get('/assignments/employees').then(r => r.data.employees),
+    enabled: canViewEmployees,
   })
 
   const activeProjects  = projects?.filter(p => p.status_code === 'ACTIVE').length ?? 0

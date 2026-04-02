@@ -308,7 +308,7 @@ router.get("/pdf-data", can("purchase_orders.print"), async (req, res) => {
   try {
     const companyId  = req.user.company_id;
     const employeeId = await resolveEmployeeId(req);
-    const { request_ids, supplier_id, note } = req.query;
+    const { request_ids, supplier_id, note, po_number } = req.query;
 
     if (!request_ids)
       return res.status(400).json({ ok: false, error: "REQUEST_IDS_REQUIRED" });
@@ -364,8 +364,8 @@ router.get("/pdf-data", can("purchase_orders.print"), async (req, res) => {
     // 7. Save purchase order record
     await pool.query(
       `INSERT INTO public.purchase_orders
-         (company_id, ref, project_id, foreman_id, supplier_id, is_procurement, items, note)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+         (company_id, ref, project_id, foreman_id, supplier_id, is_procurement, items, note, po_number)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
       [
         companyId,
         ref,
@@ -375,6 +375,7 @@ router.get("/pdf-data", can("purchase_orders.print"), async (req, res) => {
         !supplier_id || supplier_id === 'procurement',
         JSON.stringify(items),
         note || null,
+        po_number || null,
       ]
     );
 
@@ -399,6 +400,7 @@ router.get("/pdf-data", can("purchase_orders.print"), async (req, res) => {
         foremanPhone:   foreman?.foreman_phone,
         items,
         note:           note || null,
+        poNumber:       po_number || null,
         isProcurement:  !supplier_id || supplier_id === 'procurement',
         supplierName:   supplier?.name,
       }).catch(e => console.error('[PO email error]', e.message));
@@ -408,6 +410,7 @@ router.get("/pdf-data", can("purchase_orders.print"), async (req, res) => {
       ok: true,
       pdf_data: {
         ref,
+        po_number: po_number || null,
         date: new Date().toLocaleDateString('en-CA'),
         company,
         foreman,
@@ -669,6 +672,8 @@ router.get("/purchase-orders/:id", can("purchase_orders.view"), async (req, res)
     const { rows: [po] } = await pool.query(
       `SELECT po.*, p.project_code, p.project_name, p.site_address,
               ep.full_name AS foreman_name,
+              ep.phone     AS foreman_phone,
+              ep.contact_email AS foreman_email,
               s.name AS supplier_name, s.email AS supplier_email,
               s.phone AS supplier_phone, s.address AS supplier_address,
               c.name AS company_name, c.address AS company_address, c.phone AS company_phone

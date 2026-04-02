@@ -458,9 +458,18 @@ router.post("/requests", can("assignments.create"), async (req, res) => {
       new_values:  { status, start_date, end_date, shift_start, shift_end },
     });
 
-    // Send notification emails if auto-approved
+    // Calculate and store distance for auto-approved assignments
     if (isAdmin) {
-      notifyAssignment(pool, rows[0].id, companyId);
+      notifyAssignment(pool, rows[0].id, companyId)
+      // Fire and forget distance calculation
+      calcDistanceKm(employee_id, project_id, companyId).then(km => {
+        if (km !== null) {
+          pool.query(
+            "UPDATE public.assignment_requests SET distance_km = $1 WHERE id = $2",
+            [km, rows[0].id]
+          ).catch(e => console.error("distance update error:", e.message))
+        }
+      })
     }
 
     return res.status(201).json({ ok: true, request: rows[0], auto_approved: isAdmin });
@@ -469,6 +478,60 @@ router.post("/requests", can("assignments.create"), async (req, res) => {
     return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
   }
 });
+
+// ── Mapbox Distance Helper ────────────────────────────────
+const MAPBOX_TOKEN = process.env.MAPBOX_ACCESS_TOKEN || ""
+
+async function calcDistanceKm(employeeId, projectId, companyId) {
+  try {
+    const empRes = await pool.query(
+      `SELECT ST_Y(home_location::geometry) AS home_lat,
+              ST_X(home_location::geometry) AS home_lng
+       FROM public.employee_profiles
+       WHERE employee_id = $1
+         AND home_location IS NOT NULL
+       LIMIT 1`,
+      [employeeId]
+    )
+    const emp = empRes.rows[0]
+    if (!emp || !emp.home_lat || !emp.home_lng) return null
+
+    // Get project site coords
+    const projRes = await pool.query(
+      `SELECT site_lat, site_lng FROM public.projects
+       WHERE id = $1 AND company_id = $2 LIMIT 1`,
+      [projectId, companyId]
+    )
+    const proj = projRes.rows[0]
+    if (!proj || !proj.site_lat || !proj.site_lng) return null
+
+    // Call Mapbox Directions API (driving distance)
+    const url = `https://api.mapbox.com/directions/v5/mapbox/driving/` +
+      `${emp.home_lng},${emp.home_lat};${proj.site_lng},${proj.site_lat}` +
+      `?access_token=${MAPBOX_TOKEN}&overview=false`
+
+    const https = require("https")
+    const data = await new Promise((resolve, reject) => {
+      https.get(url, (res) => {
+        let body = ""
+        res.on("data", chunk => body += chunk)
+        res.on("end", () => {
+          try { resolve(JSON.parse(body)) }
+          catch(e) { reject(e) }
+        })
+      }).on("error", reject)
+    })
+
+    if (data.routes && data.routes[0]) {
+      const meters = data.routes[0].distance
+      return Math.round((meters / 1000) * 100) / 100 // km rounded to 2 decimals
+    }
+    return null
+  } catch (err) {
+    console.error("calcDistanceKm error:", err.message)
+    return null
+  }
+}
 
 // ── PATCH /api/assignments/requests/:id/approve ──────────
 router.patch("/requests/:id/approve", can("assignments.edit"), async (req, res) => {
@@ -518,7 +581,17 @@ router.patch("/requests/:id/approve", can("assignments.edit"), async (req, res) 
     });
 
     // Send notification emails
-    notifyAssignment(pool, reqId, companyId);
+    notifyAssignment(pool, reqId, companyId)
+
+    // Calculate and store distance
+    calcDistanceKm(r.requested_for_employee_id, r.project_id, companyId).then(km => {
+      if (km !== null) {
+        pool.query(
+          "UPDATE public.assignment_requests SET distance_km = $1 WHERE id = $2",
+          [km, reqId]
+        ).catch(e => console.error("distance update error:", e.message))
+      }
+    })
 
     return res.json({ ok: true, request: rows[0] });
   } catch (err) {
