@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -l \"showSuccess\\\\|flash\\\\|formstate\\\\|const \\\\[loading\" /c/Users/Lenovo/Desktop/mep-site-backend-fixed/mep-fixed/mep-frontend/src/pages/**/*.jsx)",
+      "Bash(npx vite:*)"
+    ]
+  }
+}

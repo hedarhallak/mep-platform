@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import api from '@/lib/api'
+import { todayStr, tomorrowStr, fmtTime, fmtHours, fmtDate } from '@/utils/formatters'
 import {
   BarChart2, Clock, MapPin, CalendarCheck, Users,
   Loader2, AlertCircle, Download, ChevronDown,
@@ -7,8 +8,6 @@ import {
 } from 'lucide-react'
 
 // ── Helpers ───────────────────────────────────────────────────
-const todayStr    = () => new Date().toISOString().split('T')[0]
-const tomorrowStr = () => { const d = new Date(); d.setDate(d.getDate()+1); return d.toISOString().split('T')[0] }
 
 function weekRange() {
   const now = new Date()
@@ -22,25 +21,6 @@ function monthRange() {
   const first = new Date(now.getFullYear(), now.getMonth(), 1)
   const last  = new Date(now.getFullYear(), now.getMonth()+1, 0)
   return { from: first.toISOString().split('T')[0], to: last.toISOString().split('T')[0] }
-}
-
-function fmtHours(h) {
-  if (h == null || h === '') return '—'
-  const n = parseFloat(h); if (isNaN(n)) return '—'
-  const hrs = Math.floor(n); const mins = Math.round((n - hrs) * 60)
-  return mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`
-}
-function fmtDate(d) {
-  if (!d) return '—'
-  return new Date(d).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })
-}
-function fmtTime(t) {
-  if (!t) return '—'
-  const s = String(t).substring(0,5)
-  const [h,m] = s.split(':').map(Number)
-  const ap = h < 12 ? 'AM' : 'PM'
-  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h
-  return `${String(h12).padStart(2,'0')}:${String(m).padStart(2,'0')} ${ap}`
 }
 function fmtKm(km) {
   if (!km) return '—'

@@ -276,6 +276,48 @@ router.get("/defaults", can("assignments.view"), async (req, res) => {
   }
 });
 
+// ── GET /api/assignments/my-today ────────────────────────
+// Returns the current user's active assignment for today
+// Used by MaterialRequest, TaskRequest, Standup to auto-select project
+router.get("/my-today", async (req, res) => {
+  try {
+    const companyId = req.user.company_id;
+    const userId    = req.user.user_id;
+    const today     = new Date().toISOString().split("T")[0];
+
+    const { rows } = await pool.query(
+      `SELECT
+         ar.id AS assignment_id,
+         ar.project_id,
+         ar.assignment_role,
+         ar.shift_start,
+         ar.shift_end,
+         p.project_code,
+         p.project_name,
+         p.site_address
+       FROM public.assignment_requests ar
+       JOIN public.app_users au ON au.employee_id = ar.requested_for_employee_id
+       JOIN public.projects   p  ON p.id = ar.project_id
+       WHERE ar.company_id = $1
+         AND au.id         = $2
+         AND ar.status     = 'APPROVED'
+         AND ar.start_date <= $3
+         AND ar.end_date   >= $3
+       ORDER BY ar.start_date DESC
+       LIMIT 1`,
+      [companyId, userId, today]
+    );
+
+    return res.json({
+      ok:         true,
+      assignment: rows[0] || null,
+    });
+  } catch (err) {
+    console.error("GET /assignments/my-today error:", err);
+    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+  }
+});
+
 // ── GET /api/assignments/requests ────────────────────────
 router.get("/requests", can("assignments.view"), async (req, res) => {
   try {

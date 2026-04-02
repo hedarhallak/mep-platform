@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import api from '@/lib/api'
+import { trade as tradeLookup } from '@/constants/trades'
 import {
   ClipboardList, Users, Package, Check, Plus, Trash2,
   Loader2, AlertCircle, ChevronDown, ChevronRight,
@@ -8,16 +9,8 @@ import {
 
 const UNITS = ['pcs', 'm', 'ft', 'kg', 'lb', 'box', 'roll', 'bag', 'set', 'L', 'gal']
 
-const TRADE_COLORS = {
-  PLUMBING:   'bg-sky-500',
-  ELECTRICAL: 'bg-amber-500',
-  HVAC:       'bg-emerald-500',
-  CARPENTRY:  'bg-orange-500',
-  GENERAL:    'bg-slate-400',
-}
-
 function Avatar({ name, trade }) {
-  const color = TRADE_COLORS[(trade || '').toUpperCase()] || 'bg-indigo-500'
+  const color = tradeLookup(trade).bg
   return (
     <div className={`w-8 h-8 rounded-full ${color} flex items-center justify-center text-xs font-bold text-white flex-shrink-0`}>
       {name?.[0]?.toUpperCase() || '?'}

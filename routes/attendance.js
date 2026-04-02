@@ -247,6 +247,35 @@ router.post("/checkin", can("attendance.checkin"), async (req, res) => {
     const a = asgn.rows[0];
     const checkInTime = new Date().toTimeString().substring(0, 5); // HH:MM
 
+    // ── Shift time validation ──────────────────────────────────
+    if (a.shift_end) {
+      const toMin = (t) => {
+        const [h, m] = String(t).substring(0, 5).split(":").map(Number);
+        return h * 60 + m;
+      };
+      const nowMin      = toMin(checkInTime);
+      const shiftEndMin = toMin(a.shift_end);
+
+      // Block check-in after shift end
+      if (nowMin > shiftEndMin) {
+        return res.status(409).json({
+          ok:      false,
+          error:   "SHIFT_ENDED",
+          message: `Check-in not allowed after shift end (${String(a.shift_end).substring(0, 5)}).`,
+        });
+      }
+
+      // Warn if more than 120 minutes late (still allows check-in)
+      if (a.shift_start) {
+        const shiftStartMin = toMin(a.shift_start);
+        const lateMinutes   = nowMin - shiftStartMin;
+        if (lateMinutes > 120) {
+          // Allowed but flagged — late_minutes will be recorded automatically
+        }
+      }
+    }
+    // ─────────────────────────────────────────────────────────
+
     // Upsert attendance record
     const { rows } = await pool.query(
       `INSERT INTO public.attendance_records

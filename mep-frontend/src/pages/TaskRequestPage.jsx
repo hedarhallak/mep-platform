@@ -17,9 +17,9 @@ const AVATAR_COLORS = ['bg-indigo-500','bg-emerald-500','bg-amber-500','bg-rose-
 const avatarColor = name => AVATAR_COLORS[(name?.charCodeAt(0)||0) % AVATAR_COLORS.length]
 
 // ── New Task Form ─────────────────────────────────────────────
-function NewTaskTab({ workers, projects, onSent }) {
+function NewTaskTab({ workers, projects, defaultProject, onSent }) {
   const [form, setForm] = useState({
-    title: '', body: '', priority: 'NORMAL', project_id: '', due_date: ''
+    title: '', body: '', priority: 'NORMAL', project_id: defaultProject || '', due_date: ''
   })
   const [recipients, setRecipients] = useState([])
   const [file, setFile]             = useState(null)
@@ -389,13 +389,26 @@ function SentTasksTab() {
 
 // ── Main Page ─────────────────────────────────────────────────
 export default function TaskRequestPage() {
-  const [tab, setTab]           = useState('new')
-  const [workers, setWorkers]   = useState([])
-  const [projects, setProjects] = useState([])
-  const [flash, setFlash]       = useState(null)
+  const [tab, setTab]               = useState('new')
+  const [workers, setWorkers]       = useState([])
+  const [projects, setProjects]     = useState([])
+  const [defaultProject, setDefaultProject] = useState('')
+  const [flash, setFlash]           = useState(null)
 
   useEffect(() => {
-    api.get('/hub/my-projects').then(r => setProjects(r.data.projects||[])).catch(()=>{})
+    api.get('/assignments/my-today')
+      .then(r => {
+        const asgn = r.data.assignment
+        if (asgn) {
+          setDefaultProject(String(asgn.project_id))
+          setProjects([{ id: asgn.project_id, project_code: asgn.project_code, project_name: asgn.project_name }])
+        } else {
+          api.get('/hub/my-projects')
+            .then(pr => setProjects(pr.data.projects || []))
+            .catch(() => {})
+        }
+      })
+      .catch(() => {})
     api.get('/hub/workers').then(r => setWorkers(r.data.workers||[])).catch(()=>{})
   }, [])
 
@@ -444,7 +457,7 @@ export default function TaskRequestPage() {
             <Check size={15}/>{flash}
           </div>
         )}
-        {tab==='new'  && <NewTaskTab workers={workers} projects={projects} onSent={handleSent}/>}
+        {tab==='new'  && <NewTaskTab workers={workers} projects={projects} defaultProject={defaultProject} onSent={handleSent}/>}
         {tab==='sent' && <SentTasksTab/>}
       </div>
     </div>

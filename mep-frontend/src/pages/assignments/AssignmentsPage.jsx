@@ -1,41 +1,21 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import api from '@/lib/api'
 import WorkerPicker from '@/components/shared/WorkerPicker'
+import { todayStr, tomorrowStr, fmtTime } from '@/utils/formatters'
+import { trade } from '@/constants/trades'
 import {
   Briefcase, MapPin, User, Check, X, Loader2,
   ChevronRight, AlertCircle, Plus, Calendar, List,
   Map as MapIcon, Search, RefreshCw, ArrowLeftRight
 } from 'lucide-react'
 
-const todayStr    = () => new Date().toISOString().split('T')[0]
-const tomorrowStr = () => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().split('T')[0] }
-
 function fmt(d, opts = { month: 'short', day: 'numeric' }) {
   if (!d) return '—'
   return new Date(d).toLocaleDateString('en-CA', opts)
 }
 
-
-const TRADE_MAP = {
-  PLUMBING:      { bg: 'bg-sky-500',     light: 'bg-sky-100 text-sky-700',        dot: '#0ea5e9' },
-  ELECTRICAL:    { bg: 'bg-amber-500',   light: 'bg-amber-100 text-amber-700',    dot: '#f59e0b' },
-  HVAC:          { bg: 'bg-emerald-500', light: 'bg-emerald-100 text-emerald-700', dot: '#10b981' },
-  CARPENTRY:     { bg: 'bg-orange-500',  light: 'bg-orange-100 text-orange-700',  dot: '#f97316' },
-  ELEVATOR_TECH: { bg: 'bg-rose-500',    light: 'bg-rose-100 text-rose-700',      dot: '#f43f5e' },
-  GENERAL:       { bg: 'bg-slate-500',   light: 'bg-slate-100 text-slate-600',    dot: '#64748b' },
-  DEFAULT:       { bg: 'bg-slate-400',   light: 'bg-slate-100 text-slate-600',    dot: '#94a3b8' },
-}
-const trade = (code) => TRADE_MAP[(code || '').toUpperCase()] || TRADE_MAP.DEFAULT
-
 const SHIFTS = ['05:00','06:00','07:00','08:00','09:00','12:00',
                 '14:00','14:30','15:00','16:00','18:00','20:00','22:00']
-const fmtTime = (t) => {
-  if (!t) return t
-  const [h, m] = t.split(':').map(Number)
-  const ap = h < 12 ? 'AM' : 'PM'
-  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h
-  return `${String(h12).padStart(2,'0')}:${String(m).padStart(2,'0')} ${ap}`
-}
 
 function TradePill({ code }) {
   if (!code) return null

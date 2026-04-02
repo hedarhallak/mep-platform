@@ -1,25 +1,16 @@
 import { useState, useEffect } from 'react'
 import api from '@/lib/api'
+import { trade } from '@/constants/trades'
 import {
   Brain, MapPin, TrendingDown, AlertTriangle, Check,
   Loader2, RefreshCw, ArrowRight, Users, Route, Zap, X
 } from 'lucide-react'
 
-const TRADE_COLORS = {
-  PLUMBING:   { bg: 'bg-sky-100',     text: 'text-sky-700',     dot: '#0ea5e9' },
-  ELECTRICAL: { bg: 'bg-amber-100',   text: 'text-amber-700',   dot: '#f59e0b' },
-  HVAC:       { bg: 'bg-emerald-100', text: 'text-emerald-700', dot: '#10b981' },
-  CARPENTRY:  { bg: 'bg-orange-100',  text: 'text-orange-700',  dot: '#f97316' },
-  GENERAL:    { bg: 'bg-slate-100',   text: 'text-slate-600',   dot: '#64748b' },
-  DEFAULT:    { bg: 'bg-slate-100',   text: 'text-slate-600',   dot: '#94a3b8' },
-}
-const tradeColor = (code) => TRADE_COLORS[(code||'').toUpperCase()] || TRADE_COLORS.DEFAULT
-
 function TradePill({ code }) {
   if (!code) return null
-  const c = tradeColor(code)
+  const c = trade(code)
   return (
-    <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${c.bg} ${c.text}`}>
+    <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${c.light}`}>
       <span className="w-1.5 h-1.5 rounded-full" style={{ background: c.dot }} />
       {code}
     </span>

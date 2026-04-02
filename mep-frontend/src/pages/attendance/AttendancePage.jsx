@@ -1,30 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import api from '@/lib/api'
 import { usePermissions } from '@/hooks/usePermissions.jsx'
+import { todayStr, fmtTime, fmtHours } from '@/utils/formatters'
 import {
   Calendar, CheckCircle, Clock, AlertTriangle,
   Loader2, Check, X, ChevronDown, Edit2, Users
 } from 'lucide-react'
-
-const todayStr = () => new Date().toISOString().split('T')[0]
-
-function fmtTime(t) {
-  if (!t) return '—'
-  const str = String(t).substring(0, 5)
-  const [h, m] = str.split(':').map(Number)
-  const ap = h < 12 ? 'AM' : 'PM'
-  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h
-  return `${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${ap}`
-}
-
-function fmtHours(h) {
-  if (h === null || h === undefined || h === '') return '—'
-  const num = parseFloat(h)
-  if (isNaN(num)) return '—'
-  const hrs  = Math.floor(num)
-  const mins = Math.round((num - hrs) * 60)
-  return mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`
-}
 
 // Round to nearest 0.5
 const roundHalf = v => Math.round(parseFloat(v || 0) * 2) / 2
@@ -270,20 +251,36 @@ function AttendanceRow({ record, canApprove, onCheckin, onCheckout, onConfirm, a
 // ── Main Page ────────────────────────────────────────────────
 export default function AttendancePage() {
   const { can } = usePermissions()
-  const [date,          setDate]          = useState(todayStr())
-  const [projects,      setProjects]      = useState([])
-  const [selectedProj,  setSelectedProj]  = useState(null)
-  const [records,       setRecords]       = useState([])
-  const [summary,       setSummary]       = useState({ total: 0, checked_in: 0, checked_out: 0, confirmed: 0 })
-  const [loading,       setLoading]       = useState(true)
-  const [actionLoading, setActionLoading] = useState(null)
-  const [successMsg,    setSuccessMsg]    = useState('')
-  const [confirmModal,  setConfirmModal]  = useState(null)
+  const [date,            setDate]            = useState(todayStr())
+  const [projects,        setProjects]        = useState([])
+  const [selectedProj,    setSelectedProj]    = useState(null)
+  const [todayAssignment, setTodayAssignment] = useState(null)
+  const [records,         setRecords]         = useState([])
+  const [summary,         setSummary]         = useState({ total: 0, checked_in: 0, checked_out: 0, confirmed: 0 })
+  const [loading,         setLoading]         = useState(true)
+  const [actionLoading,   setActionLoading]   = useState(null)
+  const [successMsg,      setSuccessMsg]      = useState('')
+  const [confirmModal,    setConfirmModal]    = useState(null)
 
   const canApprove = can('attendance', 'approve')
 
-  // Load projects for tabs
+  // For WORKER: auto-select today's assigned project
+  useEffect(() => {
+    if (canApprove) return // FOREMAN/ADMIN uses tabs
+    api.get('/assignments/my-today')
+      .then(r => {
+        const asgn = r.data.assignment
+        if (asgn) {
+          setTodayAssignment(asgn)
+          setSelectedProj(asgn.project_id)
+        }
+      })
+      .catch(() => {})
+  }, [canApprove])
+
+  // Load projects for tabs (FOREMAN/ADMIN only)
   const fetchProjects = useCallback(async () => {
+    if (!canApprove) return
     try {
       const r = await api.get(`/attendance/projects?date=${date}`)
       const projs = r.data.projects || []
@@ -292,7 +289,7 @@ export default function AttendancePage() {
         setSelectedProj(projs[0].id)
       }
     } catch { setProjects([]) }
-  }, [date])
+  }, [date, canApprove])
 
   useEffect(() => { fetchProjects() }, [fetchProjects])
 
@@ -322,7 +319,14 @@ export default function AttendancePage() {
       await api.post('/attendance/checkin', { assignment_request_id: record.assignment_request_id })
       fetchRecords()
       showSuccess('Checked in successfully!')
-    } catch (e) { alert(e.response?.data?.message || e.message) }
+    } catch (e) {
+      const err = e.response?.data
+      if (err?.error === 'SHIFT_ENDED') {
+        alert(`⛔ ${err.message}`)
+      } else {
+        alert(err?.message || e.message)
+      }
+    }
     finally { setActionLoading(null) }
   }
 
@@ -368,20 +372,36 @@ export default function AttendancePage() {
           </div>
         </div>
 
-        {/* Project tabs */}
+        {/* Project tabs (FOREMAN/ADMIN) or badge (WORKER) */}
         <div className="flex items-center gap-1 overflow-x-auto">
-          {projects.map(p => (
-            <button key={p.id} onClick={() => setSelectedProj(p.id)}
-              className={`flex-shrink-0 px-4 py-2 rounded-lg text-xs font-bold transition-colors ${
-                selectedProj === p.id
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
-              }`}>
-              {p.project_code}
-            </button>
-          ))}
-          {projects.length === 0 && !loading && (
-            <span className="text-xs text-slate-400 px-2">No active projects for this date</span>
+          {!canApprove && todayAssignment ? (
+            <div className="flex items-center gap-3 px-4 py-2 bg-indigo-50 border border-indigo-200 rounded-lg">
+              <div className="w-2 h-2 rounded-full bg-indigo-500 flex-shrink-0" />
+              <div>
+                <span className="text-xs font-bold text-indigo-800">
+                  {todayAssignment.project_code}{todayAssignment.project_name ? ` — ${todayAssignment.project_name}` : ''}
+                </span>
+                <span className="text-[10px] text-indigo-400 ml-2">Today's assignment</span>
+              </div>
+            </div>
+          ) : canApprove ? (
+            <>
+              {projects.map(p => (
+                <button key={p.id} onClick={() => setSelectedProj(p.id)}
+                  className={`flex-shrink-0 px-4 py-2 rounded-lg text-xs font-bold transition-colors ${
+                    selectedProj === p.id
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
+                  }`}>
+                  {p.project_code}
+                </button>
+              ))}
+              {projects.length === 0 && !loading && (
+                <span className="text-xs text-slate-400 px-2">No active projects for this date</span>
+              )}
+            </>
+          ) : (
+            <span className="text-xs text-slate-400 px-2">No assignment today</span>
           )}
         </div>
       </div>

@@ -1,18 +1,11 @@
 import { useState, useEffect } from 'react'
 import api from '@/lib/api'
+import { fmtDate, fmtDateTime } from '@/utils/formatters'
 import {
   FileText, Loader2, AlertCircle, Search,
   Building2, Package, Calendar, ChevronRight,
   Printer, X
 } from 'lucide-react'
-
-function fmtDate(ts) {
-  return new Date(ts).toLocaleDateString('en-CA', { year: 'numeric', month: 'short', day: 'numeric' })
-}
-
-function fmtDateTime(ts) {
-  return new Date(ts).toLocaleString('en-CA', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-}
 
 // Reuse the same PDF generator from MyHub
 function generatePOHtml(d) {

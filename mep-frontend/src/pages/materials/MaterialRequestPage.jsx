@@ -273,7 +273,8 @@ function ItemRow({ item, index, onChange, onRemove }) {
 
 export default function MaterialRequestPage() {
   const { can, loading: permsLoading } = usePermissions()
-  const [tab, setTab]           = useState('new')
+  const [tab, setTab]               = useState('new')
+  const [todayAssignment, setTodayAssignment] = useState(null)
   const [projects, setProjects]     = useState([])
   const [selectedProj, setSelectedProj] = useState('')
   const [items, setItems]           = useState([{ item_name: '', quantity: '', unit: 'pcs', note: undefined }])
@@ -285,12 +286,24 @@ export default function MaterialRequestPage() {
 
   useEffect(() => {
     if (permsLoading) return
-    if (!can('projects', 'view') && !can('materials', 'request_submit')) return
-    api.get('/projects?status=ACTIVE')
+    if (!can('materials', 'request_submit')) return
+    // Get today's assignment — if found, use it directly (no dropdown needed)
+    api.get('/assignments/my-today')
       .then(r => {
-        const list = r.data.projects || r.data.rows || []
-        setProjects(list)
-        if (list.length) setSelectedProj(String(list[0].id))
+        const asgn = r.data.assignment
+        if (asgn) {
+          setTodayAssignment(asgn)
+          setSelectedProj(String(asgn.project_id))
+        } else {
+          // Fallback: load all active projects for manual selection
+          api.get('/projects?status=ACTIVE')
+            .then(pr => {
+              const list = pr.data.projects || pr.data.rows || []
+              setProjects(list)
+              if (list.length) setSelectedProj(String(list[0].id))
+            })
+            .catch(() => {})
+        }
       })
       .catch(() => {})
   }, [permsLoading])
@@ -406,15 +419,27 @@ export default function MaterialRequestPage() {
         {/* Project */}
         <div>
           <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Project</label>
-          <select value={selectedProj} onChange={e => setSelectedProj(e.target.value)}
-            className="w-full max-w-sm px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
-            <option value="">Select project...</option>
-            {projects.map(p => (
-              <option key={p.id} value={p.id}>
-                {p.project_code}{p.project_name ? ` — ${p.project_name}` : ''}
-              </option>
-            ))}
-          </select>
+          {todayAssignment ? (
+            <div className="flex items-center gap-3 px-4 py-3 bg-indigo-50 border border-indigo-200 rounded-xl max-w-sm">
+              <div className="w-2 h-2 rounded-full bg-indigo-500 flex-shrink-0" />
+              <div>
+                <div className="text-sm font-bold text-indigo-800">
+                  {todayAssignment.project_code}{todayAssignment.project_name ? ` — ${todayAssignment.project_name}` : ''}
+                </div>
+                <div className="text-[10px] text-indigo-500 mt-0.5">Today's assignment · {todayAssignment.assignment_role}</div>
+              </div>
+            </div>
+          ) : (
+            <select value={selectedProj} onChange={e => setSelectedProj(e.target.value)}
+              className="w-full max-w-sm px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
+              <option value="">Select project...</option>
+              {projects.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.project_code}{p.project_name ? ` — ${p.project_name}` : ''}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
 
         {/* Items */}

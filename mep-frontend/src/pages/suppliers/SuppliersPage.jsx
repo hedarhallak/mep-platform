@@ -1,27 +1,10 @@
 import { useState, useEffect } from 'react'
 import api from '@/lib/api'
+import { TRADES, tradeBadge } from '@/constants/trades'
 import {
   Truck, Plus, X, Check, Loader2, AlertCircle,
   Edit2, Trash2, Phone, Mail, MapPin, Search
 } from 'lucide-react'
-
-const TRADES = [
-  { value: 'ALL',        label: 'All Trades'  },
-  { value: 'PLUMBING',   label: 'Plumbing'    },
-  { value: 'ELECTRICAL', label: 'Electrical'  },
-  { value: 'HVAC',       label: 'HVAC'        },
-  { value: 'CARPENTRY',  label: 'Carpentry'   },
-  { value: 'GENERAL',    label: 'General'     },
-]
-
-const TRADE_COLORS = {
-  ALL:        'bg-slate-100 text-slate-600',
-  PLUMBING:   'bg-sky-100 text-sky-700',
-  ELECTRICAL: 'bg-amber-100 text-amber-700',
-  HVAC:       'bg-emerald-100 text-emerald-700',
-  CARPENTRY:  'bg-orange-100 text-orange-700',
-  GENERAL:    'bg-slate-100 text-slate-600',
-}
 
 function SupplierModal({ supplier, onClose, onSaved }) {
   const isEdit = !!supplier?.id
@@ -226,7 +209,7 @@ export default function SuppliersPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-bold text-slate-800">{s.name}</span>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${TRADE_COLORS[s.trade_code] || TRADE_COLORS.ALL}`}>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${tradeBadge(s.trade_code)}`}>
                       {s.trade_code}
                     </span>
                   </div>
