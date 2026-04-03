@@ -157,6 +157,22 @@ function ProjectModal({ project, meta, onClose, onSaved }) {
             />
           </div>
 
+          {/* CCQ Sector */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+              CCQ Sector <span className="font-normal normal-case text-slate-400">(for travel allowance calculation)</span>
+            </label>
+            <select
+              value={form.ccq_sector}
+              onChange={e => set('ccq_sector', e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+            >
+              <option value="IC">Institutionnel / Commercial (IC)</option>
+              <option value="INDUSTRIAL">Industriel (I)</option>
+              <option value="RESIDENTIAL">Résidentiel (R)</option>
+            </select>
+          </div>
+
           {/* Trade + Status */}
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -252,22 +268,6 @@ function ProjectModal({ project, meta, onClose, onSaved }) {
               </select>
             </div>
           )}
-
-          {/* CCQ Sector */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
-              CCQ Sector <span className="font-normal normal-case text-slate-400">(for travel allowance calculation)</span>
-            </label>
-            <select
-              value={form.ccq_sector}
-              onChange={e => set('ccq_sector', e.target.value)}
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-            >
-              <option value="IC">Institutionnel / Commercial (IC)</option>
-              <option value="INDUSTRIAL">Industriel (I)</option>
-              <option value="RESIDENTIAL">Résidentiel (R)</option>
-            </select>
-          </div>
 
           {/* Error */}
           {error && (

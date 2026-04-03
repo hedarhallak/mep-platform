@@ -1,8 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import api from '@/lib/api'
 import { usePermissions } from '@/hooks/usePermissions.jsx'
-import { todayStr } from '@/utils/formatters'
-import { tradeDot } from '@/constants/trades'
 import {
   Inbox, CalendarCheck, CheckCheck, Loader2, AlertCircle,
   Check, X, Clock, ChevronRight, RefreshCw, Briefcase, Package,
@@ -11,6 +9,19 @@ import {
 } from 'lucide-react'
 
 // ── Helpers ───────────────────────────────────────────────────
+const todayStr = () => new Date().toISOString().split('T')[0]
+function fmtTime(ts) {
+  if (!ts) return '—'
+  return new Date(ts).toLocaleTimeString('en-CA', { hour: '2-digit', minute: '2-digit', hour12: true })
+}
+function fmtHours(h) {
+  if (h == null) return '—'
+  const n = Number(h); if (isNaN(n)) return '—'
+  const hrs = Math.floor(n); const mins = Math.round((n - hrs) * 60)
+  return mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`
+}
+const TRADE_DOT = { PLUMBING:'#0ea5e9', ELECTRICAL:'#f59e0b', HVAC:'#10b981', CARPENTRY:'#f97316', GENERAL:'#64748b' }
+const dot = c => TRADE_DOT[(c||'').toUpperCase()] || '#94a3b8'
 const PRIORITY_STYLE = {
   LOW:'bg-slate-100 text-slate-500 border-slate-200',
   NORMAL:'bg-blue-50 text-blue-600 border-blue-200',
@@ -149,7 +160,7 @@ function AttendanceApprovalTab() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2.5">
                         <div className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white"
-                          style={{ background: tradeDot(r.trade_code) }}>
+                          style={{ background: dot(r.trade_code) }}>
                           {(r.full_name||'?')[0]}
                         </div>
                         <div>

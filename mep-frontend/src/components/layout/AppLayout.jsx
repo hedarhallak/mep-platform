@@ -18,7 +18,7 @@ const mainNav = [
   { to: '/suppliers',        icon: Truck,           label: 'Suppliers',        permission: { module: 'suppliers',       action: 'view'           } },
   { to: '/assignments',      icon: ClipboardList,   label: 'Assignments',      permission: { module: 'assignments',     action: 'view'           } },
   { to: '/attendance',       icon: CalendarCheck,   label: 'Attendance',       permission: { module: 'attendance',      action: 'view_self'      } },
-  { to: '/reports',          icon: BarChart2,       label: 'Reports',          permission: { module: 'reports',         action: 'view'           } },
+  { to: '/reports',          icon: BarChart2,       label: 'Reports',          permission: { module: 'reports', action: 'view_self' } },
   { to: '/standup',          icon: ClipboardList,   label: 'Daily Standup',    permission: { module: 'standup',         action: 'manage'         } },
   { to: '/task-request',     icon: Send,            label: 'Task Request',     permission: { module: 'hub',             action: 'send_tasks'     } },
   { to: '/material-request', icon: Package,         label: 'Material Request', permission: { module: 'materials',       action: 'request_submit' } },
@@ -81,6 +81,10 @@ export default function AppLayout() {
   const handleLogout = () => { logout(); navigate('/login') }
   const isBiActive = location.pathname.startsWith('/bi')
 
+  const canSeeReports = !permsLoading && (
+    can('reports', 'view') ||
+    can('reports', 'view_self')
+  )
   const canSeeAttendance = !permsLoading && (
     can('attendance', 'view_self') ||
     can('attendance', 'view') ||
@@ -101,6 +105,7 @@ export default function AppLayout() {
   const visibleMain = mainNav.filter(item => {
     if (!item.permission) return true
     if (permsLoading) return false
+    if (item.to === '/reports')          return canSeeReports
     if (item.to === '/attendance')       return canSeeAttendance
     if (item.to === '/material-request') return canSeeMaterials
     if (item.to === '/purchase-orders')  return canSeePurchaseOrders

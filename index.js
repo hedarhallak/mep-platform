@@ -92,7 +92,8 @@ app.use("/api/onboarding", require("./routes/onboarding")); // public — no aut
 app.use("/activate",       loadRouter("./routes/activate")); // public — activation link
 
 // ── Super admin ───────────────────────────────────────────────
-app.use("/api/super", auth, superAdmin, loadRouter("./routes/super_admin"));
+app.use("/api/super",           auth, superAdmin, loadRouter("./routes/super_admin"));
+app.use("/api/super/ccq-rates", auth, superAdmin, require("./routes/ccq_rates"));
 
 // ── Core business routes ──────────────────────────────────────
 app.use("/api/employees",       auth, loadRouter("./routes/employees"));
@@ -143,4 +144,7 @@ app.listen(PORT, () => {
 
   // Weekly employee report job (every Monday 18:00 Quebec time)
   require("./jobs/weeklyReportJob")(pool);
+
+  // Monthly CCQ travel rates expiry reminder (1st of month, 09:00 Quebec)
+  require("./jobs/ccqRatesReminderJob")(pool);
 });

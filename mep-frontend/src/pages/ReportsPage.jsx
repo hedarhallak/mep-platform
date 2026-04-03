@@ -1,10 +1,11 @@
 import { useState, useCallback } from 'react'
 import api from '@/lib/api'
+import { usePermissions } from '@/hooks/usePermissions.jsx'
 import { todayStr, tomorrowStr, fmtTime, fmtHours, fmtDate } from '@/utils/formatters'
 import {
   BarChart2, Clock, MapPin, CalendarCheck, Users,
   Loader2, AlertCircle, Download, ChevronDown,
-  TrendingUp, AlertTriangle, Check
+  TrendingUp, AlertTriangle, Check, User
 } from 'lucide-react'
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -702,19 +703,205 @@ function DistanceReport() {
   )
 }
 
+function yearRange() {
+  const y = new Date().getFullYear()
+  return { from: `${y}-01-01`, to: `${y}-12-31` }
+}
+
+// ─────────────────────────────────────────────────────────────
+// My Report — Employee self-service weekly report
+// ─────────────────────────────────────────────────────────────
+function MyReport() {
+  const wr = weekRange()
+  const [from, setFrom]             = useState(wr.from)
+  const [to,   setTo]               = useState(wr.to)
+  const [distFilter, setDistFilter] = useState('all') // 'all' | '41plus'
+  const [data,    setData]    = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState('')
+
+  const run = useCallback(async () => {
+    setLoading(true); setError('')
+    try {
+      const r = await api.get(`/reports/my-daily?from=${from}&to=${to}`)
+      setData(r.data)
+    } catch (e) { setError(e.response?.data?.error || e.message) }
+    finally { setLoading(false) }
+  }, [from, to])
+
+  const ZONE_COLOR = {
+    'T2200': 'bg-blue-100 text-blue-700',
+    'A': 'bg-amber-100 text-amber-700',
+    'B': 'bg-amber-100 text-amber-700',
+    'C': 'bg-orange-100 text-orange-700',
+    'D': 'bg-orange-100 text-orange-700',
+    'E': 'bg-red-100 text-red-700',
+    'F': 'bg-red-100 text-red-700',
+    'G': 'bg-red-100 text-red-700',
+  }
+
+  const STATUS_BADGE = {
+    CHECKED_IN:  'bg-emerald-100 text-emerald-700',
+    CHECKED_OUT: 'bg-amber-100 text-amber-700',
+    CONFIRMED:   'bg-indigo-100 text-indigo-700',
+    ADJUSTED:    'bg-purple-100 text-purple-700',
+  }
+
+  // Apply distance filter on frontend
+  const visibleRecords = distFilter === '41plus'
+    ? (data?.records || []).filter(r => parseFloat(r.distance_km || 0) >= 41)
+    : (data?.records || [])
+
+  const t = data?.totals
+
+  const distFilterExtra = (
+    <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
+      <button onClick={() => setDistFilter('all')}
+        className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${distFilter === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:bg-white hover:text-slate-900'}`}>
+        All Days
+      </button>
+      <button onClick={() => { setDistFilter('41plus'); setFrom(yearRange().from); setTo(yearRange().to) }}
+        className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${distFilter === '41plus' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:bg-white hover:text-slate-900'}`}>
+        🚗 41km+ (T2200)
+      </button>
+    </div>
+  )
+
+  return (
+    <div className="space-y-4">
+      <FilterBar from={from} to={to} setFrom={setFrom} setTo={setTo} onRun={run} loading={loading} extra={distFilterExtra} />
+
+      {distFilter === '41plus' && (
+        <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-100 rounded-xl text-xs text-blue-700">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+          Showing only days where your worksite was 41km+ from home — eligible for T2200 tax declaration or company travel allowance.
+        </div>
+      )}
+
+      {error && (
+        <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-100 rounded-xl text-xs text-red-600">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />{error}
+        </div>
+      )}
+
+      {t && (
+        <div className="grid grid-cols-4 gap-3">
+          <div className="bg-white border border-slate-200 rounded-xl px-4 py-3">
+            <p className="text-xs font-semibold text-slate-400">Days Worked</p>
+            <p className="text-2xl font-extrabold text-slate-700 mt-1">{distFilter === '41plus' ? visibleRecords.length : t.days_worked}</p>
+          </div>
+          <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-3">
+            <p className="text-xs font-semibold text-indigo-400">Regular Hours</p>
+            <p className="text-2xl font-extrabold text-indigo-700 mt-1">{fmtHours(t.total_regular)}</p>
+          </div>
+          <div className={`border rounded-xl px-4 py-3 ${t.total_overtime > 0 ? 'bg-amber-50 border-amber-100' : 'bg-slate-50 border-slate-200'}`}>
+            <p className={`text-xs font-semibold ${t.total_overtime > 0 ? 'text-amber-400' : 'text-slate-400'}`}>Overtime</p>
+            <p className={`text-2xl font-extrabold mt-1 ${t.total_overtime > 0 ? 'text-amber-700' : 'text-slate-400'}`}>{fmtHours(t.total_overtime)}</p>
+          </div>
+          <div className={`border rounded-xl px-4 py-3 ${t.total_allowance > 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-200'}`}>
+            <p className={`text-xs font-semibold ${t.total_allowance > 0 ? 'text-emerald-500' : 'text-slate-400'}`}>Travel Allowance</p>
+            <p className={`text-2xl font-extrabold mt-1 ${t.total_allowance > 0 ? 'text-emerald-700' : 'text-slate-400'}`}>
+              {t.total_allowance > 0 ? fmtCAD(t.total_allowance) : '—'}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {visibleRecords.length > 0 && (
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <table className="w-full">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200">
+                {['Date','Project','Check In','Check Out','Regular','Overtime','Status','Distance','Travel Allowance'].map(h => (
+                  <th key={h} className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5 whitespace-nowrap">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {visibleRecords.map((r, i) => (
+                <tr key={i} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
+                  <td className="px-4 py-2.5 text-xs font-semibold text-slate-700 whitespace-nowrap">
+                    {new Date(r.attendance_date + 'T00:00:00').toLocaleDateString('en-CA', { weekday: 'short', month: 'short', day: 'numeric' })}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <div className="text-xs font-semibold text-slate-700">{r.project_code}</div>
+                    {r.project_name && <div className="text-[10px] text-slate-400">{r.project_name}</div>}
+                  </td>
+                  <td className="px-4 py-2.5 text-xs text-slate-600">{fmtTime(r.check_in_time)}</td>
+                  <td className="px-4 py-2.5 text-xs text-slate-600">{r.check_out_time ? fmtTime(r.check_out_time) : '—'}</td>
+                  <td className="px-4 py-2.5 text-xs font-bold text-indigo-600">{fmtHours(r.regular_hours)}</td>
+                  <td className="px-4 py-2.5">
+                    {parseFloat(r.overtime_hours) > 0
+                      ? <span className="text-xs font-bold text-amber-600">+{fmtHours(r.overtime_hours)}</span>
+                      : <span className="text-xs text-slate-300">—</span>}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${STATUS_BADGE[r.status] || 'bg-slate-100 text-slate-500'}`}>
+                      {r.status === 'CONFIRMED' ? '✓ Confirmed' : r.status === 'ADJUSTED' ? '✓ Adjusted' : r.status === 'CHECKED_OUT' ? 'Pending' : r.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2.5 text-xs font-semibold text-slate-600">
+                    {r.distance_km ? fmtKm(r.distance_km) : '—'}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    {r.eligible_travel ? (
+                      r.needs_t2200
+                        ? <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${ZONE_COLOR['T2200']}`}>T2200</span>
+                        : <span className="text-xs font-bold text-emerald-700">{fmtCAD(r.daily_allowance)}</span>
+                    ) : <span className="text-xs text-slate-300">—</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {data && visibleRecords.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-16 text-center bg-white rounded-xl border border-slate-200">
+          <Clock className="w-10 h-10 text-slate-200 mb-3" />
+          <p className="text-sm font-semibold text-slate-400">
+            {distFilter === '41plus' ? 'No days with 41km+ distance for this period' : 'No attendance records for this period'}
+          </p>
+        </div>
+      )}
+
+      {!loading && !error && !data && (
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <User className="w-10 h-10 text-slate-200 mb-3" />
+          <p className="text-sm font-semibold text-slate-400">Select a date range and press Run</p>
+        </div>
+      )}
+
+      {visibleRecords.length > 0 && (
+        <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[10px] text-slate-400">
+          This report is generated from your confirmed attendance records. Hours marked as "Pending" may still be adjusted by your foreman.
+          For official documentation, please contact your HR department.
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─────────────────────────────────────────────────────────────
 // Main Page
 // ─────────────────────────────────────────────────────────────
-const TABS = [
-  { id: 'hours',       icon: Clock,         label: 'Work Hours'       },
-  { id: 'attendance',  icon: CalendarCheck, label: 'Attendance'       },
-  { id: 'travel',      icon: MapPin,        label: 'CCQ Travel'       },
-  { id: 'assignments', icon: Users,         label: 'Assignments'      },
-  { id: 'distance',    icon: TrendingUp,    label: 'Distance 41km+'   },
+const ADMIN_TABS = [
+  { id: 'hours',       icon: Clock,         label: 'Work Hours'     },
+  { id: 'attendance',  icon: CalendarCheck, label: 'Attendance'     },
+  { id: 'travel',      icon: MapPin,        label: 'CCQ Travel'     },
+  { id: 'assignments', icon: Users,         label: 'Assignments'    },
+  { id: 'distance',    icon: TrendingUp,    label: 'Distance 41km+' },
 ]
 
 export default function ReportsPage() {
-  const [tab, setTab] = useState('hours')
+  const { can, loading: permsLoading } = usePermissions()
+  const canViewAll = !permsLoading && can('reports', 'view')
+  const TABS = canViewAll
+    ? [{ id: 'my', icon: User, label: 'My Report' }, ...ADMIN_TABS]
+    : [{ id: 'my', icon: User, label: 'My Report' }]
+
+  const [tab, setTab] = useState('my')
 
   return (
     <div className="flex flex-col h-screen bg-slate-50 overflow-hidden">
@@ -743,6 +930,7 @@ export default function ReportsPage() {
 
       {/* Body */}
       <div className="flex-1 overflow-y-auto px-6 py-5">
+        {tab === 'my'          && <MyReport />}
         {tab === 'hours'       && <HoursReport />}
         {tab === 'attendance'  && <AttendanceReport />}
         {tab === 'travel'      && <TravelReport />}
