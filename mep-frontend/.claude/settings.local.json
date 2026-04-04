@@ -2,7 +2,12 @@
   "permissions": {
     "allow": [
       "Bash(grep -l \"showSuccess\\\\|flash\\\\|formstate\\\\|const \\\\[loading\" /c/Users/Lenovo/Desktop/mep-site-backend-fixed/mep-fixed/mep-frontend/src/pages/**/*.jsx)",
-      "Bash(npx vite:*)"
+      "Bash(npx vite:*)",
+      "Bash(node -e ':*)",
+      "Bash(node seed.js)",
+      "Read(//tmp/**)",
+      "Bash(bash /tmp/check_endpoints.sh)",
+      "Bash(find:*)"
     ]
   }
 }
