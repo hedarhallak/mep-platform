@@ -275,7 +275,7 @@ export default function AttendancePage() {
           setSelectedProj(asgn.project_id)
         }
       })
-      .catch(() => {})
+      .catch(e => console.error('Failed to load today assignment:', e))
   }, [canApprove])
 
   // Load projects for tabs (FOREMAN/ADMIN only)
@@ -288,7 +288,7 @@ export default function AttendancePage() {
       if (projs.length > 0 && !selectedProj) {
         setSelectedProj(projs[0].id)
       }
-    } catch { setProjects([]) }
+    } catch (e) { console.error('Failed to load projects:', e); setProjects([]) }
   }, [date, canApprove])
 
   useEffect(() => { fetchProjects() }, [fetchProjects])
@@ -302,7 +302,7 @@ export default function AttendancePage() {
       const r = await api.get(`/attendance?${params}`)
       setRecords(r.data.records || [])
       setSummary(r.data.summary || { total: 0, checked_in: 0, checked_out: 0, confirmed: 0 })
-    } catch { setRecords([]); setSummary({ total: 0, checked_in: 0, checked_out: 0, confirmed: 0 }) }
+    } catch (e) { console.error('Failed to load attendance records:', e); setRecords([]); setSummary({ total: 0, checked_in: 0, checked_out: 0, confirmed: 0 }) }
     finally { setLoading(false) }
   }, [date, selectedProj])
 

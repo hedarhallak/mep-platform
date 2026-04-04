@@ -230,20 +230,20 @@ function SendTaskTab() {
     : workers
 
   useEffect(() => {
-    api.get('/hub/my-projects').then(r => setProjects(r.data.projects || [])).catch(() => {})
-    api.get('/hub/workers').then(r => setWorkers(r.data.workers || [])).catch(() => {})
+    api.get('/hub/my-projects').then(r => setProjects(r.data.projects || [])).catch(e => console.error('Failed to load projects:', e))
+    api.get('/hub/workers').then(r => setWorkers(r.data.workers || [])).catch(e => console.error('Failed to load workers:', e))
     fetchSent()
   }, [])
 
   useEffect(() => {
     if (!form.project_id) return
-    api.get(`/hub/workers?project_id=${form.project_id}`).then(r => setWorkers(r.data.workers || [])).catch(() => {})
+    api.get(`/hub/workers?project_id=${form.project_id}`).then(r => setWorkers(r.data.workers || [])).catch(e => console.error('Failed to load project workers:', e))
   }, [form.project_id])
 
   const fetchSent = async () => {
     setLoadingSent(true)
     try { const r = await api.get('/hub/messages/sent'); setSent(r.data.messages || []) }
-    catch (_) {} finally { setLoadingSent(false) }
+    catch (e) { console.error('Failed to load sent messages:', e) } finally { setLoadingSent(false) }
   }
 
   const toggleRecipient = id => set('recipient_ids', form.recipient_ids.includes(id) ? form.recipient_ids.filter(r => r !== id) : [...form.recipient_ids, id])
@@ -526,7 +526,7 @@ function WorkerInboxTab() {
   const fetchInbox = useCallback(async () => {
     setLoading(true)
     try { const r = await api.get('/hub/messages/inbox'); setMessages(r.data.messages || []) }
-    catch (_) {} finally { setLoading(false) }
+    catch (e) { console.error('Failed to load inbox:', e) } finally { setLoading(false) }
   }, [])
   useEffect(() => { fetchInbox() }, [fetchInbox])
 
@@ -537,7 +537,7 @@ function WorkerInboxTab() {
       try {
         await api.patch(`/hub/messages/${msg.id}/read`)
         setMessages(prev => prev.map(m => m.id===msg.id ? {...m, status:'READ'} : m))
-      } catch (_) {}
+      } catch (e) { console.error('Failed to mark message as read:', e) }
     }
   }
 
@@ -546,7 +546,7 @@ function WorkerInboxTab() {
     try {
       await api.patch(`/hub/messages/${msgId}/ack`)
       setMessages(prev => prev.map(m => m.id===msgId ? {...m, status:'ACKNOWLEDGED', acknowledged_at: new Date().toISOString()} : m))
-    } catch (_) {} finally { setAcking(p => ({ ...p, [msgId]: false })) }
+    } catch (e) { console.error('Failed to acknowledge message:', e) } finally { setAcking(p => ({ ...p, [msgId]: false })) }
   }
 
   const unread = messages.filter(m => m.status==='SENT').length
@@ -669,7 +669,7 @@ function InboxTab() {
     const merged = Object.values(map); setMergedItems(merged)
     const sm = {}
     for (const item of merged) {
-      try { const r = await api.get(`/materials/surplus?item_name=${encodeURIComponent(item.item_name)}`); if (r.data.surplus?.length) sm[item.item_name.toLowerCase()] = r.data.surplus } catch (_) {}
+      try { const r = await api.get(`/materials/surplus?item_name=${encodeURIComponent(item.item_name)}`); if (r.data.surplus?.length) sm[item.item_name.toLowerCase()] = r.data.surplus } catch (e) { console.error('Failed to check surplus:', e) }
     }
     setSurplus(sm)
   }
@@ -905,13 +905,13 @@ export default function MyHubPage() {
 
   useEffect(() => {
     if (!canMaterials) return
-    const f = async () => { try { const r = await api.get('/materials/inbox/count'); setMaterialsCount(r.data.count||0) } catch(_){} }
+    const f = async () => { try { const r = await api.get('/materials/inbox/count'); setMaterialsCount(r.data.count||0) } catch(e){ console.error('Failed to load materials count:', e) } }
     f(); const i = setInterval(f, 30000); return () => clearInterval(i)
   }, [canMaterials])
 
   useEffect(() => {
     if (!canReceiveTasks) return
-    const f = async () => { try { const r = await api.get('/hub/messages/unread-count'); setTasksUnread(r.data.count||0) } catch(_){} }
+    const f = async () => { try { const r = await api.get('/hub/messages/unread-count'); setTasksUnread(r.data.count||0) } catch(e){ console.error('Failed to load unread count:', e) } }
     f(); const i = setInterval(f, 30000); return () => clearInterval(i)
   }, [canReceiveTasks])
 

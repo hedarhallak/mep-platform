@@ -580,11 +580,15 @@ function AssignmentsReport() {
 // ─────────────────────────────────────────────────────────────
 function DistanceReport() {
   const mr = monthRange()
-  const [from, setFrom] = useState(mr.from)
-  const [to,   setTo]   = useState(mr.to)
+  const [from, setFrom]       = useState(mr.from)
+  const [to,   setTo]         = useState(mr.to)
   const [data,    setData]    = useState(null)
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState('')
+  const [sortCol, setSortCol] = useState('distance_km')
+  const [sortDir, setSortDir] = useState('desc')
+  const [filterEmp,  setFilterEmp]  = useState('')
+  const [filterProj, setFilterProj] = useState('')
 
   const run = useCallback(async () => {
     setLoading(true); setError('')
@@ -595,14 +599,22 @@ function DistanceReport() {
     finally { setLoading(false) }
   }, [from, to])
 
+  const handleSort = (col) => {
+    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortCol(col); setSortDir('desc') }
+  }
+
+  const SortIcon = ({ col }) => {
+    if (sortCol !== col) return <span className="text-slate-300 ml-1">↕</span>
+    return <span className="text-indigo-500 ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>
+  }
+
   const handleExport = () => {
     if (!data?.records?.length) return
-    exportCSV(data.records, [
+    exportCSV(sortedRecords, [
       { label: 'Employee',     value: r => r.full_name },
       { label: 'Trade',        value: r => r.trade_code },
-      { label: 'Home Address', value: r => r.home_address },
       { label: 'Project',      value: r => r.project_code },
-      { label: 'Site Address', value: r => r.site_address },
       { label: 'Distance km',  value: r => r.distance_km },
       { label: 'Zone',         value: r => r.zone_label },
       { label: 'Needs T2200',  value: r => r.needs_t2200 ? 'YES' : '' },
@@ -612,8 +624,29 @@ function DistanceReport() {
     ], `distance_report_${from}_${to}.csv`)
   }
 
-  const t2200Count    = data?.records?.filter(r => r.needs_t2200).length || 0
-  const allowanceRecs = data?.records?.filter(r => r.needs_allowance) || []
+  // Get unique employees and projects for filter dropdowns
+  const employees = [...new Set((data?.records || []).map(r => r.full_name))].sort()
+  const projects  = [...new Set((data?.records || []).map(r => r.project_code))].sort()
+
+  // Apply filters
+  const filtered = (data?.records || []).filter(r => {
+    if (filterEmp  && r.full_name    !== filterEmp)  return false
+    if (filterProj && r.project_code !== filterProj) return false
+    return true
+  })
+
+  // Apply sort
+  const sortedRecords = [...filtered].sort((a, b) => {
+    let va = a[sortCol], vb = b[sortCol]
+    if (typeof va === 'string') va = va.toLowerCase()
+    if (typeof vb === 'string') vb = vb.toLowerCase()
+    if (va < vb) return sortDir === 'asc' ? -1 : 1
+    if (va > vb) return sortDir === 'asc' ? 1 : -1
+    return 0
+  })
+
+  const t2200Count     = filtered.filter(r => r.needs_t2200).length
+  const allowanceRecs  = filtered.filter(r => r.needs_allowance)
   const totalAllowance = allowanceRecs.reduce((s, r) => s + r.total_allowance, 0)
 
   return (
@@ -646,8 +679,25 @@ function DistanceReport() {
             </div>
           </div>
 
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-400">{data.records.length} employees 41km+</span>
+          {/* Filters + Export */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <select value={filterEmp} onChange={e => setFilterEmp(e.target.value)}
+              className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
+              <option value="">All Employees</option>
+              {employees.map(e => <option key={e} value={e}>{e}</option>)}
+            </select>
+            <select value={filterProj} onChange={e => setFilterProj(e.target.value)}
+              className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
+              <option value="">All Projects</option>
+              {projects.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+            {(filterEmp || filterProj) && (
+              <button onClick={() => { setFilterEmp(''); setFilterProj('') }}
+                className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-700 border border-slate-200 rounded-lg bg-white">
+                Clear filters
+              </button>
+            )}
+            <span className="text-xs text-slate-400 ml-auto">{sortedRecords.length} employees 41km+</span>
             <button onClick={handleExport}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 border border-slate-200 bg-white hover:bg-slate-50 rounded-lg transition-colors">
               <Download className="w-3.5 h-3.5" />Export CSV
@@ -658,19 +708,31 @@ function DistanceReport() {
             <table className="w-full">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200">
-                  {['Employee','Trade','Project','Distance','Zone','Action Required','Rate/Day','Days','Total'].map(h => (
-                    <th key={h} className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">{h}</th>
+                  {[
+                    { label: 'Employee',        col: 'full_name' },
+                    { label: 'Trade',           col: 'trade_code' },
+                    { label: 'Project',         col: 'project_code' },
+                    { label: 'Distance',        col: 'distance_km' },
+                    { label: 'Action Required', col: null },
+                    { label: 'Rate/Day',        col: 'rate_per_day' },
+                    { label: 'Days',            col: 'days_worked' },
+                    { label: 'Total',           col: 'total_allowance' },
+                  ].map(h => (
+                    <th key={h.label}
+                      onClick={() => h.col && handleSort(h.col)}
+                      className={`text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5 ${h.col ? 'cursor-pointer hover:text-slate-600 select-none' : ''}`}>
+                      {h.label}{h.col && <SortIcon col={h.col} />}
+                    </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {data.records.map((r, i) => (
+                {sortedRecords.map((r, i) => (
                   <tr key={i} className={`border-b border-slate-50 last:border-0 hover:bg-slate-50/60 ${r.needs_t2200 ? 'bg-blue-50/30' : r.needs_allowance ? 'bg-amber-50/30' : ''}`}>
                     <td className="px-4 py-2.5 text-sm font-semibold text-slate-700">{r.full_name}</td>
                     <td className="px-4 py-2.5"><span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{r.trade_code}</span></td>
                     <td className="px-4 py-2.5 text-xs text-slate-600">{r.project_code}</td>
                     <td className="px-4 py-2.5 text-xs font-bold text-slate-700">{fmtKm(r.distance_km)}</td>
-                    <td className="px-4 py-2.5 text-xs text-slate-500">{r.zone_label}</td>
                     <td className="px-4 py-2.5">
                       {r.needs_t2200
                         ? <span className="flex items-center gap-1 text-[10px] font-bold text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full w-fit"><AlertTriangle className="w-3 h-3" />T2200 Form</span>
@@ -889,7 +951,6 @@ function MyReport() {
 const ADMIN_TABS = [
   { id: 'hours',       icon: Clock,         label: 'Work Hours'     },
   { id: 'attendance',  icon: CalendarCheck, label: 'Attendance'     },
-  { id: 'travel',      icon: MapPin,        label: 'CCQ Travel'     },
   { id: 'assignments', icon: Users,         label: 'Assignments'    },
   { id: 'distance',    icon: TrendingUp,    label: 'Distance 41km+' },
 ]
@@ -933,7 +994,6 @@ export default function ReportsPage() {
         {tab === 'my'          && <MyReport />}
         {tab === 'hours'       && <HoursReport />}
         {tab === 'attendance'  && <AttendanceReport />}
-        {tab === 'travel'      && <TravelReport />}
         {tab === 'assignments' && <AssignmentsReport />}
         {tab === 'distance'    && <DistanceReport />}
       </div>

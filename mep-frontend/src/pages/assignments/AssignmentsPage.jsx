@@ -38,7 +38,7 @@ function MapTab({ selectedProj, form, onAssign, onModify, assigning, modifying, 
   const [token, setToken] = useState(null)
   const [hoveredEmp, setHoveredEmp] = useState(null)
 
-  useEffect(() => { api.get('/config').then(r => setToken(r.data.mapbox_token)).catch(() => {}) }, [])
+  useEffect(() => { api.get('/config').then(r => setToken(r.data.mapbox_token)).catch(e => console.error('Failed to load config:', e)) }, [])
 
   const loadMap = useCallback(async () => {
     if (!selectedProj) return
@@ -49,7 +49,7 @@ function MapTab({ selectedProj, form, onAssign, onModify, assigning, modifying, 
       if (form.end_date) params.set('end', form.end_date)
       const r = await api.get(`/assignments/employees-map?${params}`)
       setEmpMap(r.data.employees || [])
-    } catch { setEmpMap([]) } finally { setLoading(false) }
+    } catch (e) { console.error('Failed to load employee map:', e); setEmpMap([]) } finally { setLoading(false) }
   }, [selectedProj, form.start_date, form.end_date])
 
   useEffect(() => { loadMap() }, [loadMap])
@@ -398,7 +398,7 @@ function NewAssignmentModal({ projects, onClose, onSaved }) {
   useEffect(() => {
     api.get('/assignments/employees')
       .then(r => setEmployees(r.data.employees || []))
-      .catch(() => setEmployees([]))
+      .catch(e => { console.error('Failed to load employees:', e); setEmployees([]) })
       .finally(() => setLoadingEmp(false))
   }, [])
 
@@ -743,7 +743,7 @@ export default function AssignmentsPage() {
   useEffect(() => {
     api.get('/projects?status=ACTIVE')
       .then(r => setProjects(r.data.projects || r.data.rows || []))
-      .catch(() => setProjects([]))
+      .catch(e => { console.error('Failed to load projects:', e); setProjects([]) })
       .finally(() => setLoadingProj(false))
   }, [])
 
@@ -751,7 +751,7 @@ export default function AssignmentsPage() {
     setLoadingAsgn(true)
     api.get('/assignments')
       .then(r => setAssignments(r.data.assignments || []))
-      .catch(() => setAssignments([]))
+      .catch(e => { console.error('Failed to load assignments:', e); setAssignments([]) })
       .finally(() => setLoadingAsgn(false))
   }, [])
 

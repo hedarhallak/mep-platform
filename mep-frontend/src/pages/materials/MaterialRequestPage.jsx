@@ -36,7 +36,7 @@ function MyRequestsTab() {
       const projMap = {}
       list.forEach(r => { if (r.project_id) projMap[r.project_id] = { id: r.project_id, code: r.project_code, name: r.project_name } })
       setProjects(Object.values(projMap))
-    } catch (_) {}
+    } catch (e) { console.error('Failed to load material requests:', e) }
     finally { setLoading(false) }
   }
 
@@ -188,7 +188,7 @@ function ItemRow({ item, index, onChange, onRemove }) {
           const r = await api.get(`/materials/catalog?q=${encodeURIComponent(val)}`)
           setSuggestions(r.data.items || [])
           setShowSuggestions(true)
-        } catch (_) {}
+        } catch (e) { console.error('Failed to search catalog:', e) }
       }, 300)
     } else {
       setSuggestions([])
@@ -302,10 +302,10 @@ export default function MaterialRequestPage() {
               setProjects(list)
               if (list.length) setSelectedProj(String(list[0].id))
             })
-            .catch(() => {})
+            .catch(e => console.error('Failed to load projects:', e))
         }
       })
-      .catch(() => {})
+      .catch(e => console.error('Failed to load today assignment:', e))
   }, [permsLoading])
 
   const addItem = () =>
