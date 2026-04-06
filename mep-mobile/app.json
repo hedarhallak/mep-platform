@@ -27,6 +27,9 @@
       },
       "package": "com.constrai.mepplatform",
       "usesCleartextTraffic": true
-    }
+    },
+    "plugins": [
+      "@react-native-community/datetimepicker"
+    ]
   }
 }

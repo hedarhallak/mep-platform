@@ -1,7 +1,7 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export const DEV_URL = 'http://10.0.0.172:3000';
+export const DEV_URL = 'https://app.constrai.ca';
 
 export const apiClient = axios.create({
   baseURL: DEV_URL,
