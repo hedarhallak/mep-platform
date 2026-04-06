@@ -103,6 +103,7 @@ app.use("/api/assignments",     auth, loadRouter("./routes/assignments"));
 app.use("/api/assignments",     auth, require("./routes/auto_assign"));
 app.use("/api/attendance",      auth, loadRouter("./routes/attendance"));
 app.use("/api/profile",         auth, loadRouter("./routes/profile"));
+app.use("/api/profile",         auth, require("./routes/push_tokens_route"));
 
 // ── Project structure ─────────────────────────────────────────
 app.use("/api/project-trades",  auth, require("./routes/project_trades"));

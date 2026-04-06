@@ -1,4 +1,5 @@
 "use strict";
+const { sendPushNotification } = require("../lib/pushNotification");
 
 // routes/hub.js
 // Task & Blueprint messaging system with smart delivery
@@ -258,6 +259,10 @@ router.post("/messages", can("hub.send_tasks"), upload.single("file"), async (re
     });
 
     await client.query("COMMIT");
+
+    for (const recipientId of recipients) {
+      sendPushNotification(recipientId, title, body || '', { type, message_id: messageId }).catch(() => {});
+    }
 
     res.status(201).json({
       ok:           true,
