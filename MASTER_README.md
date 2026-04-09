@@ -178,16 +178,13 @@ RootNavigator
 ## Next Steps — Priority Order
 | Priority | Task | Notes |
 |---|---|---|
-| 🔴 1 | Remove constrai-mobile folder | Created by mistake today, not needed |
-| 🔴 2 | Fix mep-mobile .gitignore | Add node_modules, .expo to .gitignore |
-| 🔴 3 | Commit mep-mobile to git | Proper tracking of mobile code |
-| 🟡 4 | Apple Developer Account | $99/year — needed for App Store |
-| 🟡 5 | Google Play Developer Account | $25 one-time |
-| 🟡 6 | expo prebuild | Generate ios/ and android/ folders |
-| 🟡 7 | EAS Build setup | Expo Application Services for cloud builds |
-| 🟢 8 | TestFlight (iOS beta) | Internal testing before App Store |
-| 🟢 9 | App Store submission | Production release |
-| 🟢 10 | Google Play submission | Production release |
+| 🟡 1 | Apple Developer Account | $99/year — needed for App Store |
+| 🟡 2 | Google Play Developer Account | $25 one-time |
+| 🟡 3 | expo prebuild | Generate ios/ and android/ folders |
+| 🟡 4 | EAS Build setup | Expo Application Services for cloud builds |
+| 🟢 5 | TestFlight (iOS beta) | Internal testing before App Store |
+| 🟢 6 | App Store submission | Production release |
+| 🟢 7 | Google Play submission | Production release |
 
 ---
 
@@ -202,12 +199,34 @@ git commit -m "feat: description"
 git push origin main
 ```
 
-## Coding Rules (Always Enforce)
-1. Always deliver complete files with full paths — no snippets
+---
+
+## Working Rules (Always Enforce)
+
+### Code Rules
+1. Always deliver complete files with full paths — no snippets ever
 2. No Arabic text or comments inside any code file
 3. Do not modify unrelated components
-4. Every file labeled with path, ready to copy-paste
-5. Never ask Hedar to manually edit — make the full change
+4. Every file labeled with its full path, ready to copy-paste directly
+5. Never ask Hedar to manually edit — Claude makes the full change
+
+### File Inspection Rules
+6. When needing to read a file's contents — immediately output a PowerShell command that saves it to a .txt file on the Desktop, so Hedar can upload it here. Never ask Hedar to copy-paste terminal output manually.
+   Example: `Get-Content path\to\file.js | Out-File -FilePath C:\Users\Lenovo\Desktop\filename.txt`
+7. When needing to inspect a folder structure — use the same pattern with Out-File.
+   Example: `Get-ChildItem -Recurse -Name -Exclude node_modules | Out-File -FilePath C:\Users\Lenovo\Desktop\structure.txt`
+
+### Efficiency Rules
+8. Always prefer automated/scripted solutions over manual steps to minimize Hedar's manual work
+9. Batch multiple file operations into one command whenever possible
+10. Before starting any task — check if it already exists in the project (read MASTER_README first)
+11. Never start from scratch if something already exists
+
+### Conversation Rules
+12. At the start of every new conversation — read MASTER_README.md from GitHub before doing anything
+13. Never take unilateral decisions without Hedar's approval
+14. Never delete any file without explicit confirmation
+15. After every completed feature — update MASTER_README.md Next Steps and commit
 
 ---
 
