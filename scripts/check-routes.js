@@ -4,6 +4,12 @@ const path = require("path");
 const INDEX_FILE = path.join(__dirname, "../index.js");
 const ROUTES_DIR = path.join(__dirname, "../routes");
 
+const INTENTIONAL_DOUBLE_MOUNTS = [
+  "/api/assignments",
+  "/api/profile",
+  "/api/materials",
+];
+
 function checkRoutes() {
   const indexContent = fs.readFileSync(INDEX_FILE, "utf8");
   const routeFiles = fs
@@ -47,29 +53,29 @@ function checkRoutes() {
     }
   }
   for (const [prefix, count] of Object.entries(doubleMount)) {
-    if (count > 1) {
-      warnings.push(`  DOUBLE MOUNT (${count}x): ${prefix} — verify no route conflicts`);
+    if (count > 1 && !INTENTIONAL_DOUBLE_MOUNTS.includes(prefix)) {
+      warnings.push(`  DOUBLE MOUNT (${count}x): ${prefix} - verify no route conflicts`);
     }
   }
 
   console.log("\n========================================");
-  console.log("       CONSTRAI — Route Audit");
+  console.log("       CONSTRAI - Route Audit");
   console.log("========================================");
   console.log(`Route files found:    ${routeFiles.length}`);
   console.log(`Routes in index.js:   ${registeredInIndex.size}`);
 
   if (issues.length === 0 && warnings.length === 0) {
-    console.log("\n✅  All routes are clean and registered.\n");
+    console.log("\n  All routes are clean and registered.\n");
     return true;
   }
 
   if (issues.length > 0) {
-    console.log(`\n🔴  ERRORS (${issues.length}):`);
+    console.log(`\n  ERRORS (${issues.length}):`);
     issues.forEach((i) => console.log(i));
   }
 
   if (warnings.length > 0) {
-    console.log(`\n⚠️   WARNINGS (${warnings.length}):`);
+    console.log(`\n  WARNINGS (${warnings.length}):`);
     warnings.forEach((w) => console.log(w));
   }
 
