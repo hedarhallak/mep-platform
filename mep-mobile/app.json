@@ -1,35 +1,29 @@
 {
   "expo": {
-    "name": "MEP Platform",
-    "slug": "mep-platform",
+    "name": "Constrai",
+    "slug": "constrai",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#1e3a5f"
+      "backgroundColor": "#1E3A5F"
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.constrai.mepplatform",
-      "infoPlist": {
-        "NSAppTransportSecurity": {
-          "NSAllowsArbitraryLoads": true
-        }
-      }
+      "bundleIdentifier": "ca.constrai.app"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#1e3a5f"
+        "backgroundColor": "#1E3A5F"
       },
-      "package": "com.constrai.mepplatform",
-      "usesCleartextTraffic": true
+      "package": "ca.constrai.app"
     },
-    "plugins": [
-      "@react-native-community/datetimepicker"
-    ]
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
   }
 }
