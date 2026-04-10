@@ -62,10 +62,10 @@ router.get("/my-projects", can("hub.send_tasks"), async (req, res) => {
 
         AND (
           EXISTS (
-            SELECT 1 FROM public.assignments a
+            SELECT 1 FROM public.assignment_requests a
             WHERE a.project_id = p.id
-              AND a.employee_id = $2
-              AND (a.end_date IS NULL OR a.end_date >= CURRENT_DATE)
+              AND a.requested_for_employee_id = $2
+              AND (a.end_date IS NULL OR a.end_date >= CURRENT_DATE) AND a.status = 'APPROVED'
           )
           OR EXISTS (
             SELECT 1 FROM public.project_foremen pf
@@ -113,10 +113,10 @@ router.get("/workers", can("hub.send_tasks"), async (req, res) => {
         tt.name       AS trade_name,
         -- Is this worker currently assigned to the given project?
         CASE WHEN $2::BIGINT IS NOT NULL AND EXISTS (
-          SELECT 1 FROM public.assignments a
-          WHERE a.employee_id = e.id
+          SELECT 1 FROM public.assignment_requests a
+          WHERE a.requested_for_employee_id = e.id
             AND a.project_id  = $2::BIGINT
-            AND (a.end_date IS NULL OR a.end_date >= CURRENT_DATE)
+            AND (a.end_date IS NULL OR a.end_date >= CURRENT_DATE) AND a.status = 'APPROVED'
         ) THEN true ELSE false END AS is_assigned
       FROM public.app_users au
       JOIN public.employees       e  ON e.id  = au.employee_id
@@ -124,7 +124,7 @@ router.get("/workers", can("hub.send_tasks"), async (req, res) => {
       LEFT JOIN public.trade_types       tt ON tt.code = ep.trade_code
       WHERE au.company_id = $1
         AND au.is_active  = true
-        AND au.role       = 'WORKER'
+        AND au.role IN ('WORKER', 'JOURNEYMAN', 'APPRENTICE_1', 'APPRENTICE_2', 'APPRENTICE_3', 'APPRENTICE_4', 'DRIVER', 'FOREMAN')
       ORDER BY e.first_name, e.last_name
     `, [companyId, projectId]);
 
@@ -175,12 +175,12 @@ router.post("/messages", can("hub.send_tasks"), upload.single("file"), async (re
     let assignedEmployees = new Set();
     if (projectIdNum) {
       const assigned = await pool.query(`
-        SELECT a.employee_id
-        FROM public.assignments a
-        JOIN public.app_users au ON au.employee_id = a.employee_id
+        SELECT a.requested_for_employee_id
+        FROM public.assignment_requests a
+        JOIN public.app_users au ON au.employee_id = a.requested_for_employee_id
         WHERE a.project_id = $1
           AND au.id = ANY($2::BIGINT[])
-          AND (a.end_date IS NULL OR a.end_date >= CURRENT_DATE)
+          AND (a.end_date IS NULL OR a.end_date >= CURRENT_DATE) AND a.status = 'APPROVED'
       `, [projectIdNum, recipients]);
       assignedEmployees = new Set(assigned.rows.map(r => r.employee_id));
     }
