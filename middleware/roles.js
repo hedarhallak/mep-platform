@@ -8,15 +8,21 @@
  * SUPER_ADMIN            → sees all companies, system management
  * IT_ADMIN               → system + user management, no business data
  * COMPANY_ADMIN          → full access within company
- * TRADE_PROJECT_MANAGER  → read-only analytics for own trade
- * TRADE_ADMIN            → manages assignments + attendance for own trade
- * WORKER                 → sees own data only
+ * TRADE_PROJECT_MANAGER  → manages projects, sends tasks to TRADE_ADMIN
+ * TRADE_ADMIN            → manages trades, sends tasks to FOREMAN
+ * FOREMAN                → manages team on project, sends tasks to workers
+ * JOURNEYMAN             → experienced worker, same access as WORKER
+ * APPRENTICE_1           → apprentice level 1
+ * APPRENTICE_2           → apprentice level 2
+ * APPRENTICE_3           → apprentice level 3
+ * APPRENTICE_4           → apprentice level 4
+ * WORKER                 → field worker, sees own data only
+ * DRIVER                 → driver, sees own data only
  *
- * Legacy aliases (kept for backward compatibility during migration):
+ * Legacy aliases (kept for backward compatibility):
  * ADMIN       → COMPANY_ADMIN
  * PM          → TRADE_PROJECT_MANAGER
  * PROJECT_MANAGER → TRADE_PROJECT_MANAGER
- * FOREMAN     → TRADE_ADMIN
  * PURCHASING  → TRADE_ADMIN
  */
 
@@ -24,7 +30,6 @@ const ROLE_ALIASES = {
   ADMIN:           "COMPANY_ADMIN",
   PM:              "TRADE_PROJECT_MANAGER",
   PROJECT_MANAGER: "TRADE_PROJECT_MANAGER",
-  FOREMAN:         "TRADE_ADMIN",
   PURCHASING:      "TRADE_ADMIN",
 };
 
@@ -44,9 +49,16 @@ const ROLE_LEVEL = {
   SUPER_ADMIN:           100,
   IT_ADMIN:               90,
   COMPANY_ADMIN:          80,
-  TRADE_PROJECT_MANAGER:  50,
-  TRADE_ADMIN:            60,
+  TRADE_PROJECT_MANAGER:  60,
+  TRADE_ADMIN:            50,
+  FOREMAN:                40,
+  JOURNEYMAN:             20,
+  APPRENTICE_4:           16,
+  APPRENTICE_3:           15,
+  APPRENTICE_2:           14,
+  APPRENTICE_1:           13,
   WORKER:                 10,
+  DRIVER:                 10,
 };
 
 /**
@@ -107,11 +119,12 @@ function requireMinLevel(level) {
 
 // ── Prebuilt guards ───────────────────────────────────────────
 const SUPER_ADMIN_ONLY  = requireRoles(["SUPER_ADMIN"]);
-const IT_ADMIN_UP       = requireMinLevel(90);  // IT_ADMIN + SUPER_ADMIN
-const COMPANY_ADMIN_UP  = requireMinLevel(80);  // COMPANY_ADMIN + above
-const TRADE_ADMIN_UP    = requireMinLevel(60);  // TRADE_ADMIN + above
-const PM_UP             = requireMinLevel(50);  // TRADE_PROJECT_MANAGER + above
-const ANY_AUTHENTICATED = requireMinLevel(10);  // any logged in user
+const IT_ADMIN_UP       = requireMinLevel(90);   // IT_ADMIN + SUPER_ADMIN
+const COMPANY_ADMIN_UP  = requireMinLevel(80);   // COMPANY_ADMIN + above
+const TRADE_ADMIN_UP    = requireMinLevel(50);   // TRADE_ADMIN + above
+const PM_UP             = requireMinLevel(60);   // TRADE_PROJECT_MANAGER + above
+const FOREMAN_UP        = requireMinLevel(40);   // FOREMAN + above
+const ANY_AUTHENTICATED = requireMinLevel(10);   // any logged in user
 
 module.exports = {
   normalizeRole,
@@ -122,5 +135,6 @@ module.exports = {
   COMPANY_ADMIN_UP,
   TRADE_ADMIN_UP,
   PM_UP,
+  FOREMAN_UP,
   ANY_AUTHENTICATED,
 };
