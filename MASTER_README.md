@@ -1,7 +1,8 @@
 # MEP Platform — Master Project README
-> Last updated: April 2026 | Maintainer: Hedar Hallak
+> Last updated: April 10, 2026 | Maintainer: Hedar Hallak
 > Production: https://app.constrai.ca
 > Server: root@143.110.218.84
+> Backend path on server: /var/www/mep
 > DB: mepdb / mepuser / MepSecure2026X
 > Repo: hedarhallak/mep-platform
 
@@ -9,14 +10,14 @@
 
 ## How to Use This File
 At the start of every new conversation, reference this file so Claude knows exactly where we are.
-Command: `git pull && cat MASTER_README.md`
+Fetch it directly: `https://raw.githubusercontent.com/hedarhallak/mep-platform/main/MASTER_README.md`
 
 ---
 
 ## Project Overview
 MEP Platform (Constrai) is a Quebec construction workforce ERP for MEP companies.
 - Company ID in use: 5
-- Test accounts: worker89 (TRADE_ADMIN/FOREMAN, employee_id 18), worker15 (WORKER, employee_id 8)
+- Test accounts: seed.worker1@meptest.com → seed.worker50@meptest.com (PIN: 1234, role: WORKER)
 - Quebec CCQ labor rules enforced throughout (paid breaks, unpaid lunch, overtime, travel allowances)
 
 ---
@@ -27,7 +28,7 @@ MEP Platform (Constrai) is a Quebec construction workforce ERP for MEP companies
 | Backend | Node.js / Express / PostgreSQL |
 | Frontend Web | React / Vite / Tailwind CSS |
 | Mobile | React Native + Expo (TypeScript) |
-| Auth | JWT |
+| Auth | JWT + PIN |
 | Email | SendGrid |
 | Maps | Mapbox |
 | PDF | Puppeteer |
@@ -59,7 +60,7 @@ mep-fixed/
 ## Backend — API Routes Status
 | Route File | Feature | Status |
 |---|---|---|
-| auth.js | Login / JWT | ✅ Complete |
+| auth.js | Login / JWT + PIN | ✅ Complete |
 | employees.js | Employee management | ✅ Complete |
 | invite_employee.js | Invite + onboarding flow | ✅ Complete |
 | onboarding.js | Two-step onboarding (credentials + profile) | ✅ Complete |
@@ -92,7 +93,7 @@ mep-fixed/
 ## Database — Migrations
 - Total migrations: 028 (post-April 2026 audit)
 - Tables after audit: 55 (cleaned from 69)
-- Key tables: employees, companies, projects, assignment_requests, attendance_records, material_requests, ccq_travel_rates, permissions, role_permissions, push_tokens
+- Key tables: employees, companies, projects, assignment_requests, attendance_records, material_requests, ccq_travel_rates, permissions, role_permissions, push_tokens, app_users
 
 ---
 
@@ -104,7 +105,7 @@ mep-fixed/
 | COMPANY_ADMIN | company_role | Company-wide access |
 | TRADE_PROJECT_MANAGER | company_role | Project management |
 | TRADE_ADMIN | company_role | Also used as FOREMAN assignment_role |
-| WORKER | company_role | Field workers |
+| WORKER | company_role | Field workers — default for seed users |
 
 ---
 
@@ -136,13 +137,18 @@ mep-fixed/
 
 ## Mobile App (mep-mobile) — React Native + Expo (TypeScript)
 > Location: mep-fixed/mep-mobile/
-> Tested via: Expo Go
-> Next step: Build for App Store ($99/year Apple) + Google Play ($25 one-time)
+> EAS Project: @hedarhallak75/constrai
+> Bundle ID: ca.constrai.app
+> Apple Team: Hedar Al-Hallak (DX6L994VNU)
+> Apple Developer: ✅ Active (hedar.hallak@gmail.com) — paid April 10, 2026
+> Google Play: ✅ Active (hedar.hallak@gmail.com) — paid April 10, 2026
+> EAS CLI: eas-cli/18.5.0
+> Expo Account: hedarhallak75
 
 ### Screens Status
 | Screen | File | Status |
 |---|---|---|
-| Login | src/screens/auth/LoginScreen.js + LoginScreen.tsx | ✅ Complete |
+| Login | src/screens/LoginScreen.tsx | ✅ Complete |
 | My Hub | src/screens/hub/MyHubScreen.tsx | ✅ Complete |
 | Attendance | src/screens/attendance/AttendanceScreen.tsx | ✅ Complete |
 | Material Request | src/screens/materials/MaterialRequestScreen.tsx | ✅ Complete |
@@ -154,43 +160,57 @@ mep-fixed/
 ### Navigation Structure
 ```
 RootNavigator
-├── AuthNavigator (if not logged in)
-│   └── LoginScreen
 └── AppNavigator (if logged in)
-    ├── Tab: My Hub → MyHubScreen
     ├── Tab: Attendance → AttendanceScreen
     ├── Tab: Materials → MaterialRequestScreen / MyRequestsScreen
-    ├── Tab: Reports → MyReportScreen
+    ├── Tab: Report → MyReportScreen
+    ├── Tab: Hub → MyHubScreen
     └── Tab: Profile → ProfileScreen / ChangePinScreen
 ```
 
 ### Key Mobile Files
 | File | Purpose |
 |---|---|
-| src/api/client.ts | Axios instance + JWT interceptor |
-| src/store/useAuthStore.ts | Zustand auth state |
+| src/api/client.ts | Axios instance + JWT interceptor — baseURL: https://app.constrai.ca |
+| src/store/useAuthStore.ts | Zustand auth state — AsyncStorage keys: mep_token / mep_user |
 | src/hooks/usePushNotifications.ts | Push notification registration |
 | src/constants/colors.js | Design tokens |
-| src/utils/storage.js | SecureStore JWT storage |
+| app.json | Bundle ID + EAS project config |
+| eas.json | Build profiles (development / preview / production) |
+
+### Mobile Build Status (April 10, 2026)
+| Platform | Build Type | Status |
+|---|---|---|
+| Android | Preview APK | ✅ Built — EAS build ID: 4172a1ec |
+| iOS | Preview (ad hoc) | ✅ Built + installed on iPhone |
+| Android | Production (Google Play) | 🟡 Next |
+| iOS | Production (App Store) | 🟡 Next |
+
+### Test Credentials (Mobile)
+- Username: seed.worker1@meptest.com → seed.worker50@meptest.com
+- PIN: 1234
+- All 50 users have APPROVED assignments until 2026-05-06
+- All 50 users have role: WORKER
 
 ---
 
 ## Next Steps — Priority Order
 | Priority | Task | Notes |
 |---|---|---|
-| 🟡 1 | Apple Developer Account | $99/year — needed for App Store |
-| 🟡 2 | Google Play Developer Account | $25 one-time |
-| 🟡 3 | expo prebuild | Generate ios/ and android/ folders |
-| 🟡 4 | EAS Build setup | Expo Application Services for cloud builds |
-| 🟢 5 | TestFlight (iOS beta) | Internal testing before App Store |
-| 🟢 6 | App Store submission | Production release |
-| 🟢 7 | Google Play submission | Production release |
+| 🟡 1 | Test all screens thoroughly on iPhone | Attendance, Hub, Materials, Reports, Profile |
+| 🟡 2 | Fix any bugs found during testing | |
+| 🟡 3 | Build production iOS | eas build --platform ios --profile production |
+| 🟡 4 | Build production Android | eas build --platform android --profile production |
+| 🟡 5 | App Store submission | appstoreconnect.apple.com |
+| 🟡 6 | Google Play submission | play.google.com/console |
+| 🟢 7 | TestFlight for beta testers | Before full App Store release |
 
 ---
 
 ## Git Workflow
 ```bash
-# Start of every session
+# Start of every session — fetch MASTER_README from GitHub
+# Then:
 git pull origin main
 
 # After making changes
@@ -211,19 +231,19 @@ git push origin main
 5. Never ask Hedar to manually edit — Claude makes the full change
 
 ### File Inspection Rules
-6. When needing to read a file's contents — immediately output a PowerShell command that saves it to a .txt file on the Desktop, so Hedar can upload it here. Never ask Hedar to copy-paste terminal output manually.
-   Example: `Get-Content path\to\file.js | Out-File -FilePath C:\Users\Lenovo\Desktop\filename.txt`
-7. When needing to inspect a folder structure — use the same pattern with Out-File.
+6. Always read files from GitHub using raw URLs — never ask Hedar to copy-paste
+   Example: `https://raw.githubusercontent.com/hedarhallak/mep-platform/main/path/to/file`
+7. When needing to inspect a folder structure — use PowerShell Out-File pattern
    Example: `Get-ChildItem -Recurse -Name -Exclude node_modules | Out-File -FilePath C:\Users\Lenovo\Desktop\structure.txt`
 
 ### Efficiency Rules
-8. Always prefer automated/scripted solutions over manual steps to minimize Hedar's manual work
+8. Always prefer automated/scripted solutions over manual steps
 9. Batch multiple file operations into one command whenever possible
-10. Before starting any task — check if it already exists in the project (read MASTER_README first)
+10. Before starting any task — read MASTER_README from GitHub first
 11. Never start from scratch if something already exists
 
 ### Conversation Rules
-12. At the start of every new conversation — read MASTER_README.md from GitHub before doing anything
+12. At the start of every new conversation — fetch MASTER_README.md from GitHub before doing anything
 13. Never take unilateral decisions without Hedar's approval
 14. Never delete any file without explicit confirmation
 15. After every completed feature — update MASTER_README.md Next Steps and commit
@@ -238,3 +258,96 @@ See .env.example for required keys:
 - MAPBOX_TOKEN
 - PORT
 
+---
+
+## الأفكار المستقبلية — Future Vision
+
+> هذا القسم يوثّق الأفكار الاستراتيجية المتفق عليها — لا تُنفَّذ الآن بل تُبنى عليها لاحقاً.
+> لاسترجاعها في أي محادثة: "أعطيني الأفكار المستقبلية"
+
+---
+
+### 1. نظام التعيينات الذكي — Smart Workforce Exchange
+
+**المشكلة:** شركات MEP تعاني من سوء توزيع العمالة — عمال فاضيين عند فورمان وناقصين عند فورمان ثاني.
+
+**الحل داخل الشركة الواحدة (المرحلة الأولى — الأولوية الحالية):**
+- الفورمان يرفع طلب عمال إضافيين مع درجة أولوية + تاريخ + سبب
+- الفورمان الثاني يعرض تخفيف عمال من فريقه
+- TRADE_ADMIN يشوف dashboard كامل ويوافق على إعادة التوزيع
+- التعيين يصير تلقائياً بعد الموافقة
+
+**التوسع لاحقاً (المرحلة الثانية):**
+- نفس النظام بين شركات MEP مختلفة في Quebec
+- Constrai يصير وسيط بين الشركات
+- B2B marketplace للعمالة المؤقتة في Quebec
+
+---
+
+### 2. Constrai كـ Provincial Platform — رؤية Quebec
+
+**الهدف:** Constrai مش مجرد ERP — هو infrastructure لقطاع البناء في Quebec بأكمله.
+
+**المراحل:**
+```
+المرحلة 1 — داخل الشركة الواحدة        ← نحنا هنا الآن
+المرحلة 2 — بين شركات MEP في Quebec    ← بعد إتقان المرحلة 1
+المرحلة 3 — منصة رسمية مدعومة من CCQ  ← الهدف الكبير
+```
+
+**لماذا CCQ ستدعمه:**
+- يضمن تطبيق قواعد CCQ تلقائياً
+- يحمي حقوق العمال
+- يحل مشكلة البطالة الموسمية
+- يعطي إحصائيات دقيقة للقطاع بأكمله
+
+---
+
+### 3. أكواد البناء — Quebec Building Code AI
+
+**الفكرة:** منصة ذكاء اصطناعي للكود السباكة في Quebec — يجيب على أسئلة المقاولين عن الكود مباشرة بدل البحث اليدوي.
+
+**التقنية المقترحة:** RAG (Retrieval Augmented Generation) على وثائق كود البناء القبيكي.
+
+---
+
+### 4. حساب الكميات الذكي — AI Quantity Takeoff
+
+**الفكرة:** نظام يقرأ مخططات البناء (PDF/DWG) ويحسب الكميات تلقائياً.
+
+**التقنية المقترحة:** Computer Vision + LLM على مخططات MEP.
+
+---
+
+### 5. ربط الموردين — Supplier Integration
+
+**الفكرة:** ربط طلبات المواد مباشرة مع كتالوج الموردين — المقاول يطلب مواد والنظام يقارن الأسعار ويرسل الطلب تلقائياً.
+
+**يبني على:** نظام المواد الموجود حالياً في Constrai.
+
+---
+
+### 6. إعادة تصميم الأدوار — Role Redesign (أولوية قريبة)
+
+**الأدوار المطلوب إضافتها:**
+| Role | الوظيفة |
+|---|---|
+| FOREMAN | يرسل tasks للعمال — يدير مشروعه |
+| JOURNEYMAN | عامل متمرس |
+| APPRENTICE_1 | متدرب مستوى 1 |
+| APPRENTICE_2 | متدرب مستوى 2 |
+| APPRENTICE_3 | متدرب مستوى 3 |
+| APPRENTICE_4 | متدرب مستوى 4 |
+
+**الميزة الذكية — Dynamic Permissions:**
+عند الـ login، النظام يفحص assignment اليوم ويعطي الصلاحيات تلقائياً:
+- مُعيَّن اليوم كـ JOURNEYMAN → صلاحيات JOURNEYMAN
+- كان/لازال FOREMAN على مشروع → صلاحيات FOREMAN كاملة على ذلك المشروع (حتى لو متوقف مؤقتاً)
+
+**مصفوفة التعيينات (من يعيّن من):**
+| من | يعيّن |
+|---|---|
+| COMPANY_ADMIN | الجميع |
+| TRADE_PROJECT_MANAGER | TRADE_ADMIN وما دونه |
+| TRADE_ADMIN | FOREMAN وما دونه (الأساسي) |
+| FOREMAN | يقترح تعيين → TRADE_ADMIN يوافق |
