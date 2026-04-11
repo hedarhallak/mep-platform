@@ -324,6 +324,9 @@ router.get("/messages/sent", can("hub.send_tasks"), async (req, res) => {
           tr.status,
           tr.read_at,
           tr.acknowledged_at,
+          tr.completed_at,
+          tr.completion_note,
+          tr.completion_image_url,
           tr.expected_project_id,
           au.username,
           e.first_name,
@@ -439,7 +442,7 @@ router.patch("/messages/:id/ack", can("hub.receive_tasks"), async (req, res) => 
 router.patch("/messages/:id/complete", can("hub.receive_tasks"), upload.single("completion_image"), async (req, res) => {
   try {
     const fileUrl = req.file ? `/hub/${req.file.filename}` : null;
-    await pool.query(`UPDATE public.task_recipients SET status = 'ACKNOWLEDGED', acknowledged_at = NOW(), completed_at = NOW(), completion_image_url = COALESCE($3, completion_image_url), read_at = COALESCE(read_at, NOW()) WHERE message_id = $1 AND recipient_id = $2`, [Number(req.params.id), req.user.user_id, fileUrl]);
+    await pool.query(`UPDATE public.task_recipients SET status = 'ACKNOWLEDGED', acknowledged_at = NOW(), completed_at = NOW(), completion_image_url = COALESCE($3, completion_image_url), completion_note = COALESCE($4, completion_note), read_at = COALESCE(read_at, NOW()) WHERE message_id = $1 AND recipient_id = $2`, [Number(req.params.id), req.user.user_id, fileUrl, req.body.completion_note||null]);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ ok: false, error: "SERVER_ERROR" });
