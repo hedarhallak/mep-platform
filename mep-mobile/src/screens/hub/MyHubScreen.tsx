@@ -32,6 +32,7 @@ const DAYS = ['Su','Mo','Tu','We','Th','Fr','Sa'];
 
 function fmtDateShort(d: Date) { return d.toISOString().split('T')[0]; }
 function fmtDateDisplay(d: Date) { return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`; }
+function fmtDueDate(iso: string) { const d = new Date(iso); return d.toLocaleDateString('en-CA',{month:'short',day:'numeric',year:'numeric'}); }
 function fmtDT(iso: string) {
   const d = new Date(iso);
   return d.toLocaleDateString('en-CA',{month:'short',day:'numeric'})+' '+d.toLocaleTimeString('en-CA',{hour:'2-digit',minute:'2-digit',hour12:false});
@@ -278,7 +279,7 @@ export default function MyHubScreen() {
                 {isOpen&&(
                   <View style={s.msgExpanded}>
                     {msg.body?<Text style={s.msgBodyFull}>{msg.body}</Text>:null}
-                    {msg.due_date&&<View style={s.dueRow}><Ionicons name="calendar-outline" size={14} color="#dc2626"/><Text style={s.dueText}>Due: {msg.due_date}</Text></View>}
+                    {msg.due_date&&<View style={s.dueRow}><Ionicons name="calendar-outline" size={14} color="#dc2626"/><Text style={s.dueText}>Due: {fmtDueDate(msg.due_date!)}</Text></View>}
                     {!isDone&&(
                       <TouchableOpacity style={s.ackBtn} onPress={()=>ack(msg.id)}>
                         <Ionicons name="checkmark-done-outline" size={16} color="#fff"/>
@@ -666,3 +667,5 @@ const s = StyleSheet.create({
   workerRole:{fontSize:11,color:'#9ca3af',marginTop:1},
   emptyCheck:{width:22,height:22,borderRadius:11,borderWidth:2,borderColor:'#e5e7eb'},
 });
+
+
