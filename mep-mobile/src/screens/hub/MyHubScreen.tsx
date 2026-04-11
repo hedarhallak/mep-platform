@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ActivityIndicator, ScrollView,
   RefreshControl, TouchableOpacity, Modal, TextInput,
@@ -52,7 +52,7 @@ function ImageViewer({ uri, onClose }: { uri: string; onClose: () => void }) {
         <TouchableOpacity style={{ position:'absolute', top:50, right:20, zIndex:10, padding:10, backgroundColor:'rgba(255,255,255,0.15)', borderRadius:20 }} onPress={onClose}>
           <Ionicons name="close" size={24} color="#fff" />
         </TouchableOpacity>
-        <Text style={{ position:'absolute', top:56, left:0, right:0, textAlign:'center', color:'rgba(255,255,255,0.4)', fontSize:12, zIndex:5 }}>Pinch to zoom Â· Double tap to reset</Text>
+        <Text style={{ position:'absolute', top:56, left:0, right:0, textAlign:'center', color:'rgba(255,255,255,0.4)', fontSize:12, zIndex:5 }}>Pinch to zoom · Double tap to reset</Text>
         <ScrollView
           style={{ flex:1 }}
           contentContainerStyle={{ flex:1, justifyContent:'center', alignItems:'center' }}
@@ -334,7 +334,7 @@ export default function MyHubScreen() {
             const isDone = !!msg.acknowledged_at;
             return (
               <View key={msg.id} style={[s.msgCard, isNew&&s.unreadCard]}>
-                {/* Header Ã¢â‚¬â€ tap to expand */}
+                {/* Header - tap to expand */}
                 <TouchableOpacity onPress={()=>handleExpand(msg)} activeOpacity={0.8}>
                   <View style={s.msgHeader}>
                     <View style={s.row}>
@@ -354,7 +354,7 @@ export default function MyHubScreen() {
                   <Text style={[s.msgTitle, isDone&&{color:'#6b7280'}]}>{msg.title}</Text>
                   {!isOpen&&msg.body?<Text style={s.msgBody} numberOfLines={2}>{msg.body}</Text>:null}
                   <View style={s.meta}>
-                    <View style={s.row}><Ionicons name="person-outline" size={13} color="#9ca3af"/><Text style={s.metaText}>{msg.sender_first} {msg.sender_last} Ã‚Â· {fmtDT(msg.created_at)}</Text></View>
+                    <View style={s.row}><Ionicons name="person-outline" size={13} color="#9ca3af"/><Text style={s.metaText}>{msg.sender_first} {msg.sender_last} · {fmtDT(msg.created_at)}</Text></View>
                     {msg.project_name&&<View style={s.row}><Ionicons name="business-outline" size={13} color="#9ca3af"/><Text style={s.metaText}>{msg.project_name}</Text></View>}
                   </View>
                 </TouchableOpacity>
@@ -426,7 +426,7 @@ export default function MyHubScreen() {
                     </View>
                   </ScrollView>
 
-                  {/* Recipients ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â modal picker */}
+                  {/* Recipients - modal picker */}
                   <View style={s.workerHeader}>
                     <Text style={s.label}>Recipients {form.recipient_ids.length>0?`(${form.recipient_ids.length})`:''}</Text>
                     {form.recipient_ids.length>0&&(
@@ -532,8 +532,8 @@ export default function MyHubScreen() {
                           </View>
                         </View>
                         <Text style={s.sentMeta}>
-                          {fmtDT(task.created_at)}{task.project_code?` Ãƒâ€šÃ‚Â· ${task.project_code}`:''} Ãƒâ€šÃ‚Â· {total} recipient{total!==1?'s':''}
-                          {task.due_date?` Ãƒâ€šÃ‚Â· Due ${task.due_date}`:''}
+                          {fmtDT(task.created_at)}{task.project_code?` · ${task.project_code}`:''} · {total} recipient{total!==1?'s':''}
+                          {task.due_date?` · Due ${fmtDueDate(task.due_date)}`:''}
                         </Text>
                       </View>
                       <View style={s.sentProgress}>
@@ -555,6 +555,7 @@ export default function MyHubScreen() {
                               <Text style={[s.recipientStatus, isDone&&{color:'#16a34a'}, isPending&&{color:'#d97706'}, isRead&&{color:'#2563eb'}]}>
   {isDone?'Done':isPending?'Awaiting assignment':isRead?'Seen':'Sent'}
                               {r.completion_note&&<Text style={{fontSize:11,color:'#374151',marginTop:2}}>{r.completion_note}</Text>}
+                              {r.completion_image_url&&<TouchableOpacity onPress={()=>setFullScreenImg('https://app.constrai.ca/uploads'+r.completion_image_url)}><Image source={{uri:'https://app.constrai.ca/uploads'+r.completion_image_url}} style={{width:80,height:60,borderRadius:6,marginTop:4}} resizeMode='cover'/></TouchableOpacity>}
                               </Text>
                             </View>
                           );
@@ -639,7 +640,7 @@ export default function MyHubScreen() {
                   </View>
                   <View style={{flex:1}}>
                     <Text style={[s.workerName, selected&&{color:'#1e3a5f',fontWeight:'700'}]}>{w.first_name} {w.last_name}</Text>
-                    <Text style={s.workerRole}>{w.role} Ãƒâ€šÃ‚Â· {w.trade_name||'General'}{w.is_assigned?' Ãƒâ€šÃ‚Â· Assigned':''}</Text>
+                    <Text style={s.workerRole}>{w.role} · {w.trade_name||'General'}{w.is_assigned?' · Assigned':''}</Text>
                   </View>
                   {selected
                     ?<Ionicons name="checkmark-circle" size={22} color="#1e3a5f"/>
