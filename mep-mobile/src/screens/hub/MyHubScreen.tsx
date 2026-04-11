@@ -1,10 +1,12 @@
-﻿import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ActivityIndicator, ScrollView,
   RefreshControl, TouchableOpacity, Modal, TextInput,
   Alert, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+import { Image } from 'react-native';
 import { apiClient } from '../../api/client';
 import { useAuthStore } from '../../store/useAuthStore';
 
@@ -13,6 +15,7 @@ interface HubMessage {
   due_date: string | null; created_at: string; project_name: string;
   project_code: string; status: string; read_at: string | null;
   acknowledged_at: string | null; sender_first: string; sender_last: string;
+  file_url: string | null; file_name: string | null;
 }
 interface SentMessage {
   id: number; type: string; title: string; priority: string;
@@ -96,6 +99,7 @@ export default function MyHubScreen() {
   const [sending, setSending] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [showWorkerModal, setShowWorkerModal] = useState(false);
+  const [attachedFile, setAttachedFile] = useState<{uri:string;name:string;type:string}|null>(null);
   const [workerSearch, setWorkerSearch] = useState('');
   const [expandedSent, setExpandedSent] = useState<Record<number,boolean>>({});
   const [expandedMsgs, setExpandedMsgs] = useState<Record<number,boolean>>({}); 
@@ -184,7 +188,22 @@ export default function MyHubScreen() {
 
   const resetForm = () => {
     setForm({ title:'', body:'', type:'TASK', priority:'NORMAL', project_id: projects.length>0?String(projects[0].id):'', recipient_ids:[] });
-    setDueDate(new Date()); setWorkerSearch(''); setShowForm(false);
+    setDueDate(new Date()); setWorkerSearch(''); setShowForm(false); setAttachedFile(null);
+  };
+
+  const pickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') { Alert.alert('Permission needed', 'Please allow photo access.'); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: false, quality: 0.7,
+    });
+    if (!result.canceled && result.assets[0]) {
+      const asset = result.assets[0];
+      const name = asset.uri.split('/').pop() || 'image.jpg';
+      const type = asset.type === 'image' ? 'image/jpeg' : 'image/jpeg';
+      setAttachedFile({ uri: asset.uri, name, type });
+    }
   };
 
   const handleSend = async () => {
@@ -192,14 +211,19 @@ export default function MyHubScreen() {
     if (!form.recipient_ids.length) { Alert.alert('Error','Select at least one recipient'); return; }
     setSending(true);
     try {
-      await apiClient.post('/api/hub/messages', {
-        title: form.title.trim(),
-        body: form.body.trim()||undefined,
-        type: form.type,
-        priority: form.priority,
-        due_date: fmtDateShort(dueDate),
-        project_id: form.project_id||undefined,
-        recipient_ids: JSON.stringify(form.recipient_ids),
+      const fd = new FormData();
+      fd.append('title', form.title.trim());
+      if (form.body.trim()) fd.append('body', form.body.trim());
+      fd.append('type', form.type);
+      fd.append('priority', form.priority);
+      fd.append('due_date', fmtDateShort(dueDate));
+      if (form.project_id) fd.append('project_id', form.project_id);
+      fd.append('recipient_ids', JSON.stringify(form.recipient_ids));
+      if (attachedFile) {
+        fd.append('file', { uri: attachedFile.uri, name: attachedFile.name, type: attachedFile.type } as any);
+      }
+      await apiClient.post('/api/hub/messages', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
       resetForm();
       fetchSendData();
@@ -280,6 +304,9 @@ export default function MyHubScreen() {
                   <View style={s.msgExpanded}>
                     {msg.body?<Text style={s.msgBodyFull}>{msg.body}</Text>:null}
                     {msg.due_date&&<View style={s.dueRow}><Ionicons name="calendar-outline" size={14} color="#dc2626"/><Text style={s.dueText}>Due: {fmtDueDate(msg.due_date!)}</Text></View>}
+                    {msg.file_url&&(
+                      <Image source={{uri:`https://app.constrai.ca/uploads${msg.file_url}`}} style={s.inboxImg} resizeMode="cover"/>
+                    )}
                     {!isDone&&(
                       <TouchableOpacity style={s.ackBtn} onPress={()=>ack(msg.id)}>
                         <Ionicons name="checkmark-done-outline" size={16} color="#fff"/>
@@ -381,6 +408,17 @@ export default function MyHubScreen() {
                     <Ionicons name="calendar-outline" size={16} color="#1e3a5f"/>
                     <Text style={s.dateButtonText}>{fmtDateDisplay(dueDate)}</Text>
                   </TouchableOpacity>
+
+                  {/* Attachment */}
+                  <Text style={s.label}>Attachment (optional)</Text>
+                  <TouchableOpacity style={s.attachBtn} onPress={pickImage}>
+                    <Ionicons name="image-outline" size={18} color="#1e3a5f"/>
+                    <Text style={[s.attachBtnText, !attachedFile&&{color:'#9ca3af'}]}>
+                      {attachedFile ? attachedFile.name : 'Add photo or image...'}
+                    </Text>
+                    {attachedFile&&<TouchableOpacity onPress={()=>setAttachedFile(null)}><Ionicons name="close-circle" size={18} color="#dc2626"/></TouchableOpacity>}
+                  </TouchableOpacity>
+                  {attachedFile&&<Image source={{uri:attachedFile.uri}} style={s.previewImg} resizeMode="cover"/>}
 
                   {/* Actions */}
                   <View style={s.formActions}>
@@ -666,6 +704,10 @@ const s = StyleSheet.create({
   workerName:{fontSize:14,fontWeight:'600',color:'#111827'},
   workerRole:{fontSize:11,color:'#9ca3af',marginTop:1},
   emptyCheck:{width:22,height:22,borderRadius:11,borderWidth:2,borderColor:'#e5e7eb'},
+  attachBtn:{flexDirection:'row',alignItems:'center',gap:10,backgroundColor:'#f9fafb',borderRadius:10,borderWidth:1,borderColor:'#e5e7eb',paddingHorizontal:14,paddingVertical:12},
+  attachBtnText:{flex:1,fontSize:14,color:'#111827'},
+  previewImg:{width:'100%',height:180,borderRadius:12,marginTop:8},
+  inboxImg:{width:'100%',height:200,borderRadius:12,marginTop:8},
 });
 
 
