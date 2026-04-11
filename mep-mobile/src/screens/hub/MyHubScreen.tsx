@@ -8,7 +8,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { apiClient } from '../../api/client';
 import { useAuthStore } from '../../store/useAuthStore';
 
-// ── Types ─────────────────────────────────────────────────────
 interface HubMessage {
   id: number; type: string; title: string; body: string; priority: string;
   due_date: string | null; created_at: string; project_name: string;
@@ -24,7 +23,6 @@ interface SentMessage {
 interface Worker { id: number; employee_id: number; first_name: string; last_name: string; role: string; trade_name: string; is_assigned: boolean; }
 interface Project { id: number; project_code: string; project_name: string; }
 
-// ── Constants ─────────────────────────────────────────────────
 const CAN_SEND = ['FOREMAN','TRADE_ADMIN','TRADE_PROJECT_MANAGER','COMPANY_ADMIN','IT_ADMIN','SUPER_ADMIN'];
 const PRIORITIES = ['NORMAL','HIGH','URGENT'];
 const INBOX_TABS = [{key:'ALL',label:'All'},{key:'TASK',label:'Tasks'},{key:'MATERIAL',label:'Materials'},{key:'GENERAL',label:'General'}];
@@ -32,7 +30,6 @@ const HUB_TABS = [{key:'inbox',label:'Inbox'},{key:'send',label:'Send Task'}];
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const DAYS = ['Su','Mo','Tu','We','Th','Fr','Sa'];
 
-// ── Helpers ───────────────────────────────────────────────────
 function fmtDateShort(d: Date) { return d.toISOString().split('T')[0]; }
 function fmtDateDisplay(d: Date) { return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`; }
 function fmtDT(iso: string) {
@@ -44,7 +41,6 @@ function typeIcon(t: string): any { return t==='TASK'?'checkmark-circle-outline'
 function getDaysInMonth(y: number, m: number) { return new Date(y, m+1, 0).getDate(); }
 function getFirstDay(y: number, m: number) { return new Date(y, m, 1).getDay(); }
 
-// ── CalendarPicker (same as MyReport) ─────────────────────────
 function CalendarPicker({ value, onChange, minDate }: { value: Date; onChange: (d: Date) => void; minDate?: Date; }) {
   const [viewYear, setViewYear] = useState(value.getFullYear());
   const [viewMonth, setViewMonth] = useState(value.getMonth());
@@ -80,22 +76,17 @@ function CalendarPicker({ value, onChange, minDate }: { value: Date; onChange: (
   );
 }
 
-// ── Main Component ────────────────────────────────────────────
 export default function MyHubScreen() {
   const { user } = useAuthStore();
   const canSend = user?.role && CAN_SEND.includes(user.role);
-
-  // Hub tab (inbox vs send)
   const [hubTab, setHubTab] = useState('inbox');
 
-  // ── Inbox State ──────────────────────────────────────────────
   const [messages, setMessages] = useState<HubMessage[]>([]);
   const [unread, setUnread] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [inboxTab, setInboxTab] = useState('ALL');
 
-  // ── Send Task State ──────────────────────────────────────────
   const [projects, setProjects] = useState<Project[]>([]);
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [sent, setSent] = useState<SentMessage[]>([]);
@@ -103,6 +94,7 @@ export default function MyHubScreen() {
   const [loadingSent, setLoadingSent] = useState(true);
   const [sending, setSending] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [showWorkerModal, setShowWorkerModal] = useState(false);
   const [workerSearch, setWorkerSearch] = useState('');
   const [expandedSent, setExpandedSent] = useState<Record<number,boolean>>({});
   const [dueDate, setDueDate] = useState(new Date());
@@ -114,7 +106,6 @@ export default function MyHubScreen() {
 
   const setField = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
 
-  // ── Fetch Inbox ──────────────────────────────────────────────
   const fetchInbox = useCallback(async () => {
     try {
       const [r1,r2] = await Promise.all([
@@ -129,7 +120,6 @@ export default function MyHubScreen() {
 
   useEffect(()=>{ fetchInbox(); },[fetchInbox]);
 
-  // ── Fetch Send Tab Data ──────────────────────────────────────
   const fetchSendData = useCallback(async () => {
     setLoadingSend(true);
     try {
@@ -142,7 +132,6 @@ export default function MyHubScreen() {
       setProjects(p);
       setWorkers(r2.data?.workers||[]);
       setSent(r3.data?.messages||[]);
-      // Auto-select first project
       if (p.length>0) setField('project_id', String(p[0].id));
     } catch {}
     finally { setLoadingSend(false); setLoadingSent(false); }
@@ -152,7 +141,6 @@ export default function MyHubScreen() {
     if (hubTab==='send' && canSend) fetchSendData();
   },[hubTab]);
 
-  // ── When project changes → re-fetch workers filtered by project ──
   useEffect(()=>{
     if (!form.project_id) return;
     apiClient.get(`/api/hub/workers?project_id=${form.project_id}`)
@@ -161,7 +149,6 @@ export default function MyHubScreen() {
     setField('recipient_ids', []);
   },[form.project_id]);
 
-  // ── Inbox Actions ─────────────────────────────────────────────
   const markRead = async (id:number) => {
     try {
       await apiClient.patch(`/api/hub/messages/${id}/read`);
@@ -176,7 +163,6 @@ export default function MyHubScreen() {
     } catch {}
   };
 
-  // ── Send Task ────────────────────────────────────────────────
   const filteredWorkers = workerSearch.trim()
     ? workers.filter(w=>`${w.first_name} ${w.last_name} ${w.role} ${w.trade_name}`.toLowerCase().includes(workerSearch.toLowerCase()))
     : workers;
@@ -216,8 +202,8 @@ export default function MyHubScreen() {
     } finally { setSending(false); }
   };
 
-  // ── Filtered inbox ───────────────────────────────────────────
   const filtered = inboxTab==='ALL'?messages:messages.filter(m=>m.type===inboxTab);
+  const selectedWorkers = workers.filter(w=>form.recipient_ids.includes(w.id));
 
   if (loading && hubTab==='inbox') return <View style={s.center}><ActivityIndicator size="large" color="#1e3a5f"/></View>;
 
@@ -233,11 +219,10 @@ export default function MyHubScreen() {
         ))}
       </View>
 
-      {/* ── INBOX TAB ── */}
+      {/* INBOX TAB */}
       {hubTab==='inbox'&&(
         <ScrollView style={s.container} contentContainerStyle={s.content}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={()=>{setRefreshing(true);fetchInbox();}} tintColor="#1e3a5f"/>}>
-
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.tabsScroll}>
             <View style={s.tabsRow}>
               {INBOX_TABS.map(t=>{
@@ -251,7 +236,6 @@ export default function MyHubScreen() {
               })}
             </View>
           </ScrollView>
-
           {filtered.length===0?(
             <View style={s.emptyCard}><Ionicons name="mail-outline" size={40} color="#d1d5db"/><Text style={s.emptyText}>No messages here</Text></View>
           ):filtered.map(msg=>(
@@ -286,14 +270,13 @@ export default function MyHubScreen() {
         </ScrollView>
       )}
 
-      {/* ── SEND TASK TAB ── */}
+      {/* SEND TASK TAB */}
       {hubTab==='send'&&canSend&&(
         <ScrollView style={s.container} contentContainerStyle={s.content}>
           {loadingSend?(
             <View style={s.center}><ActivityIndicator size="large" color="#1e3a5f"/></View>
           ):(
             <>
-              {/* New Task Button */}
               {!showForm&&(
                 <TouchableOpacity style={s.newTaskBtn} onPress={()=>setShowForm(true)}>
                   <Ionicons name="add-circle-outline" size={20} color="#fff"/>
@@ -301,12 +284,11 @@ export default function MyHubScreen() {
                 </TouchableOpacity>
               )}
 
-              {/* Task Form */}
               {showForm&&(
                 <View style={s.formCard}>
                   <Text style={s.formTitle}>New Task</Text>
 
-                  {/* Project Selector */}
+                  {/* Project */}
                   <Text style={s.label}>Project</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom:8}}>
                     <View style={{flexDirection:'row',gap:8}}>
@@ -320,39 +302,35 @@ export default function MyHubScreen() {
                     </View>
                   </ScrollView>
 
-                  {/* Worker Search + Select */}
+                  {/* Recipients — modal picker */}
                   <View style={s.workerHeader}>
-                    <Text style={s.label}>Recipients ({form.recipient_ids.length} selected)</Text>
-                    <View style={s.row}>
-                      <TouchableOpacity onPress={selectAll} style={s.selectBtn}>
-                        <Text style={s.selectBtnText}>All</Text>
-                      </TouchableOpacity>
+                    <Text style={s.label}>Recipients {form.recipient_ids.length>0?`(${form.recipient_ids.length})`:''}</Text>
+                    {form.recipient_ids.length>0&&(
                       <TouchableOpacity onPress={clearAll} style={s.selectBtn}>
-                        <Text style={s.selectBtnText}>Clear</Text>
+                        <Text style={s.selectBtnText}>Clear all</Text>
                       </TouchableOpacity>
-                    </View>
+                    )}
                   </View>
-                  <View style={s.searchBox}>
-                    <Ionicons name="search-outline" size={16} color="#9ca3af"/>
-                    <TextInput style={s.searchInput} placeholder="Search..." placeholderTextColor="#9ca3af" value={workerSearch} onChangeText={setWorkerSearch}/>
-                  </View>
-                  <View style={s.workerList}>
-                    {filteredWorkers.map(w=>{
-                      const selected = form.recipient_ids.includes(w.id);
-                      return (
-                        <TouchableOpacity key={w.id} style={[s.workerRow, selected&&s.workerRowSel]} onPress={()=>toggleRecipient(w.id)}>
-                          <View style={[s.workerAvatar, selected&&{backgroundColor:'#1e3a5f'}]}>
-                            <Text style={[s.workerAvatarText, selected&&{color:'#fff'}]}>{w.first_name[0]}{w.last_name[0]}</Text>
-                          </View>
-                          <View style={{flex:1}}>
-                            <Text style={[s.workerName, selected&&{color:'#1e3a5f',fontWeight:'700'}]}>{w.first_name} {w.last_name}</Text>
-                            <Text style={s.workerRole}>{w.role} · {w.trade_name||'General'} {w.is_assigned?'· ✓ Assigned':''}</Text>
-                          </View>
-                          {selected&&<Ionicons name="checkmark-circle" size={20} color="#1e3a5f"/>}
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
+                  {/* Selected chips */}
+                  {selectedWorkers.length>0&&(
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom:8}}>
+                      <View style={{flexDirection:'row',gap:6}}>
+                        {selectedWorkers.map(w=>(
+                          <TouchableOpacity key={w.id} style={s.selectedChip} onPress={()=>toggleRecipient(w.id)}>
+                            <Text style={s.selectedChipText}>{w.first_name} {w.last_name}</Text>
+                            <Ionicons name="close-circle" size={14} color="#fff"/>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </ScrollView>
+                  )}
+                  <TouchableOpacity style={s.workerPickerBtn} onPress={()=>{ setWorkerSearch(''); setShowWorkerModal(true); }}>
+                    <Ionicons name="people-outline" size={18} color="#1e3a5f"/>
+                    <Text style={[s.workerPickerText, form.recipient_ids.length===0&&{color:'#9ca3af'}]}>
+                      {form.recipient_ids.length===0 ? 'Select recipients...' : `${form.recipient_ids.length} selected — tap to edit`}
+                    </Text>
+                    <Ionicons name="chevron-forward" size={16} color="#9ca3af"/>
+                  </TouchableOpacity>
 
                   {/* Title */}
                   <Text style={s.label}>Title *</Text>
@@ -440,7 +418,7 @@ export default function MyHubScreen() {
                             <View key={i} style={[s.recipientRow, isDone&&{backgroundColor:'#f0fdf4'}, isPending&&{backgroundColor:'#fffbeb'}, isRead&&{backgroundColor:'#eff6ff'}]}>
                               <Text style={s.recipientName}>{name}</Text>
                               <Text style={[s.recipientStatus, isDone&&{color:'#16a34a'}, isPending&&{color:'#d97706'}, isRead&&{color:'#2563eb'}]}>
-                                {isDone?'✓ Done':isPending?'⏳ Awaiting assignment':isRead?'👁 Seen':'📬 Sent'}
+                                {isDone?'Done':isPending?'Awaiting assignment':isRead?'Seen':'Sent'}
                               </Text>
                             </View>
                           );
@@ -473,11 +451,71 @@ export default function MyHubScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Worker Picker Modal */}
+      <Modal visible={showWorkerModal} animationType="slide" presentationStyle="pageSheet">
+        <View style={s.wrapper}>
+          <View style={s.pickerHeader}>
+            <View>
+              <Text style={s.pickerTitle}>Select Recipients</Text>
+              <Text style={s.pickerSub}>{form.recipient_ids.length} selected</Text>
+            </View>
+            <View style={s.row}>
+              <TouchableOpacity onPress={selectAll} style={s.selectBtn}>
+                <Text style={s.selectBtnText}>All</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={clearAll} style={s.selectBtn}>
+                <Text style={s.selectBtnText}>Clear</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.pickerDoneBtn} onPress={()=>setShowWorkerModal(false)}>
+                <Text style={s.pickerDoneText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+          <View style={s.pickerSearch}>
+            <Ionicons name="search-outline" size={18} color="#9ca3af"/>
+            <TextInput
+              style={s.searchInput}
+              placeholder="Search by name, role, trade..."
+              placeholderTextColor="#9ca3af"
+              value={workerSearch}
+              onChangeText={setWorkerSearch}
+              autoFocus
+            />
+            {workerSearch.length>0&&(
+              <TouchableOpacity onPress={()=>setWorkerSearch('')}>
+                <Ionicons name="close-circle" size={18} color="#9ca3af"/>
+              </TouchableOpacity>
+            )}
+          </View>
+          <ScrollView style={{flex:1,paddingHorizontal:16}}>
+            {filteredWorkers.length===0?(
+              <View style={s.emptyCard}><Text style={s.emptyText}>No workers found</Text></View>
+            ):filteredWorkers.map(w=>{
+              const selected = form.recipient_ids.includes(w.id);
+              return (
+                <TouchableOpacity key={w.id} style={[s.workerRow, selected&&s.workerRowSel]} onPress={()=>toggleRecipient(w.id)}>
+                  <View style={[s.workerAvatar, selected&&{backgroundColor:'#1e3a5f'}]}>
+                    <Text style={[s.workerAvatarText, selected&&{color:'#fff'}]}>{w.first_name[0]}{w.last_name[0]}</Text>
+                  </View>
+                  <View style={{flex:1}}>
+                    <Text style={[s.workerName, selected&&{color:'#1e3a5f',fontWeight:'700'}]}>{w.first_name} {w.last_name}</Text>
+                    <Text style={s.workerRole}>{w.role} · {w.trade_name||'General'}{w.is_assigned?' · Assigned':''}</Text>
+                  </View>
+                  {selected
+                    ?<Ionicons name="checkmark-circle" size={22} color="#1e3a5f"/>
+                    :<View style={s.emptyCheck}/>
+                  }
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      </Modal>
     </View>
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────
 const cal = StyleSheet.create({
   container:{paddingVertical:8},
   header:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginBottom:12},
@@ -500,8 +538,6 @@ const s = StyleSheet.create({
   content:{padding:16,gap:12,paddingBottom:40},
   center:{flex:1,justifyContent:'center',alignItems:'center',paddingVertical:40},
   row:{flexDirection:'row',alignItems:'center',gap:6},
-
-  // Hub Tab Bar
   hubTabBar:{flexDirection:'row',backgroundColor:'#fff',borderBottomWidth:1,borderBottomColor:'#e5e7eb',paddingHorizontal:16},
   hubTab:{flexDirection:'row',alignItems:'center',gap:6,paddingVertical:14,paddingHorizontal:16,borderBottomWidth:2,borderBottomColor:'transparent'},
   hubTabActive:{borderBottomColor:'#1e3a5f'},
@@ -509,8 +545,6 @@ const s = StyleSheet.create({
   hubTabTextActive:{color:'#1e3a5f'},
   tabBadge:{backgroundColor:'#dc2626',borderRadius:10,minWidth:18,height:18,justifyContent:'center',alignItems:'center',paddingHorizontal:4},
   tabBadgeText:{fontSize:11,color:'#fff',fontWeight:'700'},
-
-  // Inbox Tabs
   tabsScroll:{marginHorizontal:-16,paddingHorizontal:16,marginBottom:4},
   tabsRow:{flexDirection:'row',gap:8,paddingRight:16},
   tab:{flexDirection:'row',alignItems:'center',gap:6,paddingHorizontal:16,paddingVertical:8,borderRadius:20,backgroundColor:'#fff',borderWidth:1,borderColor:'#e5e7eb'},
@@ -519,11 +553,8 @@ const s = StyleSheet.create({
   tabTextActive:{color:'#fff',fontWeight:'700'},
   smallBadge:{backgroundColor:'#dc2626',borderRadius:10,minWidth:16,height:16,justifyContent:'center',alignItems:'center',paddingHorizontal:3},
   smallBadgeText:{fontSize:10,color:'#fff',fontWeight:'700'},
-
   emptyCard:{backgroundColor:'#fff',borderRadius:16,padding:40,alignItems:'center',gap:12,marginTop:8},
   emptyText:{fontSize:15,color:'#9ca3af'},
-
-  // Messages
   msgCard:{backgroundColor:'#fff',borderRadius:16,padding:16,shadowColor:'#000',shadowOffset:{width:0,height:2},shadowOpacity:0.06,shadowRadius:8,elevation:3},
   unreadCard:{borderLeftWidth:4,borderLeftColor:'#1e3a5f'},
   msgHeader:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',marginBottom:10},
@@ -541,8 +572,6 @@ const s = StyleSheet.create({
   ackText:{fontSize:14,color:'#fff',fontWeight:'600'},
   ackDone:{flexDirection:'row',alignItems:'center',gap:4,marginTop:4},
   ackDoneText:{fontSize:13,color:'#16a34a',fontWeight:'500'},
-
-  // Send Form
   newTaskBtn:{flexDirection:'row',alignItems:'center',justifyContent:'center',gap:8,backgroundColor:'#1e3a5f',borderRadius:14,padding:14},
   newTaskText:{fontSize:15,fontWeight:'bold',color:'#fff'},
   formCard:{backgroundColor:'#fff',borderRadius:16,padding:16,gap:4,shadowColor:'#000',shadowOffset:{width:0,height:2},shadowOpacity:0.06,shadowRadius:8,elevation:3},
@@ -559,27 +588,19 @@ const s = StyleSheet.create({
   pChipText:{fontSize:13,fontWeight:'600',color:'#374151'},
   dateButton:{flexDirection:'row',alignItems:'center',gap:8,height:44,borderWidth:1,borderColor:'#e5e7eb',borderRadius:10,paddingHorizontal:12,backgroundColor:'#f9fafb'},
   dateButtonText:{fontSize:13,color:'#111827',fontWeight:'500',flex:1},
-
-  // Worker List
   workerHeader:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',marginTop:12},
   selectBtn:{paddingHorizontal:10,paddingVertical:4,backgroundColor:'#f3f4f6',borderRadius:8,borderWidth:1,borderColor:'#e5e7eb'},
   selectBtnText:{fontSize:12,color:'#374151',fontWeight:'600'},
-  searchBox:{flexDirection:'row',alignItems:'center',gap:8,backgroundColor:'#f9fafb',borderRadius:10,borderWidth:1,borderColor:'#e5e7eb',paddingHorizontal:12,paddingVertical:8,marginBottom:8},
-  searchInput:{flex:1,fontSize:14,color:'#111827'},
-  workerList:{gap:6,marginBottom:8},
-  workerRow:{flexDirection:'row',alignItems:'center',gap:10,backgroundColor:'#f9fafb',borderRadius:12,padding:10,borderWidth:1,borderColor:'#e5e7eb'},
-  workerRowSel:{borderColor:'#1e3a5f',backgroundColor:'#eff6ff'},
-  workerAvatar:{width:36,height:36,borderRadius:18,backgroundColor:'#e8f0fe',justifyContent:'center',alignItems:'center'},
-  workerAvatarText:{fontSize:13,fontWeight:'700',color:'#1e3a5f'},
-  workerName:{fontSize:14,fontWeight:'600',color:'#111827'},
-  workerRole:{fontSize:11,color:'#9ca3af',marginTop:1},
+  // Worker picker button
+  workerPickerBtn:{flexDirection:'row',alignItems:'center',gap:10,backgroundColor:'#f9fafb',borderRadius:10,borderWidth:1,borderColor:'#e5e7eb',paddingHorizontal:14,paddingVertical:12,marginTop:4},
+  workerPickerText:{flex:1,fontSize:14,color:'#111827'},
+  selectedChip:{flexDirection:'row',alignItems:'center',gap:4,backgroundColor:'#1e3a5f',borderRadius:20,paddingHorizontal:10,paddingVertical:5},
+  selectedChipText:{fontSize:12,color:'#fff',fontWeight:'600'},
   formActions:{flexDirection:'row',gap:10,marginTop:16},
   cancelBtn:{flex:1,padding:14,borderRadius:12,backgroundColor:'#f3f4f6',alignItems:'center'},
   cancelText:{fontSize:14,fontWeight:'600',color:'#374151'},
   sendBtn:{flex:2,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:8,backgroundColor:'#1e3a5f',borderRadius:12,padding:14},
   sendBtnText:{fontSize:14,fontWeight:'bold',color:'#fff'},
-
-  // Sent Messages
   sentCard:{backgroundColor:'#fff',borderRadius:14,borderWidth:1,borderColor:'#e5e7eb',overflow:'hidden'},
   sentHeader:{flexDirection:'row',alignItems:'center',gap:10,padding:14},
   sentIcon:{width:36,height:36,borderRadius:10,backgroundColor:'#eff6ff',justifyContent:'center',alignItems:'center'},
@@ -594,11 +615,24 @@ const s = StyleSheet.create({
   recipientStatus:{fontSize:12,fontWeight:'600',color:'#6b7280'},
   pendingNote:{flexDirection:'row',alignItems:'center',gap:6,padding:8,backgroundColor:'#fffbeb',borderRadius:8},
   pendingNoteText:{fontSize:12,color:'#d97706',flex:1},
-
-  // Calendar
   calOverlay:{flex:1,backgroundColor:'rgba(0,0,0,0.5)',justifyContent:'center',alignItems:'center',padding:24},
   calCard:{backgroundColor:'#fff',borderRadius:20,padding:20,width:'100%'},
   calTitle:{fontSize:16,fontWeight:'700',color:'#1e3a5f',marginBottom:12,textAlign:'center'},
   calDone:{backgroundColor:'#1e3a5f',borderRadius:10,padding:12,alignItems:'center',marginTop:12},
   calDoneText:{color:'#fff',fontWeight:'700',fontSize:14},
+  // Worker picker modal
+  pickerHeader:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',padding:16,backgroundColor:'#fff',borderBottomWidth:1,borderBottomColor:'#e5e7eb'},
+  pickerTitle:{fontSize:17,fontWeight:'bold',color:'#1e3a5f'},
+  pickerSub:{fontSize:12,color:'#9ca3af',marginTop:2},
+  pickerDoneBtn:{backgroundColor:'#1e3a5f',borderRadius:10,paddingHorizontal:14,paddingVertical:7},
+  pickerDoneText:{fontSize:14,fontWeight:'700',color:'#fff'},
+  pickerSearch:{flexDirection:'row',alignItems:'center',gap:10,backgroundColor:'#fff',margin:12,borderRadius:12,borderWidth:1,borderColor:'#e5e7eb',paddingHorizontal:14,paddingVertical:10},
+  searchInput:{flex:1,fontSize:15,color:'#111827'},
+  workerRow:{flexDirection:'row',alignItems:'center',gap:12,backgroundColor:'#fff',borderRadius:14,padding:12,marginBottom:8,borderWidth:1,borderColor:'#e5e7eb'},
+  workerRowSel:{borderColor:'#1e3a5f',backgroundColor:'#eff6ff'},
+  workerAvatar:{width:38,height:38,borderRadius:19,backgroundColor:'#e8f0fe',justifyContent:'center',alignItems:'center'},
+  workerAvatarText:{fontSize:13,fontWeight:'700',color:'#1e3a5f'},
+  workerName:{fontSize:14,fontWeight:'600',color:'#111827'},
+  workerRole:{fontSize:11,color:'#9ca3af',marginTop:1},
+  emptyCheck:{width:22,height:22,borderRadius:11,borderWidth:2,borderColor:'#e5e7eb'},
 });

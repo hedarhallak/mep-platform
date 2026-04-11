@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import AttendanceScreen from '../screens/attendance/AttendanceScreen';
@@ -6,10 +6,25 @@ import MaterialRequestScreen from '../screens/materials/MaterialRequestScreen';
 import MyReportScreen from '../screens/reports/MyReportScreen';
 import MyHubScreen from '../screens/hub/MyHubScreen';
 import ProfileScreen from '../screens/profile/ProfileScreen';
+import { apiClient } from '../api/client';
 
 const Tab = createBottomTabNavigator();
 
 export default function AppNavigator() {
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    const fetchUnread = async () => {
+      try {
+        const res = await apiClient.get('/api/hub/messages/unread-count');
+        setUnreadCount(Number(res.data?.count || 0));
+      } catch {}
+    };
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -34,7 +49,15 @@ export default function AppNavigator() {
       <Tab.Screen name="Attendance" component={AttendanceScreen} options={{ title: 'Check In/Out' }} />
       <Tab.Screen name="Materials" component={MaterialRequestScreen} options={{ title: 'Materials' }} />
       <Tab.Screen name="Report" component={MyReportScreen} options={{ title: 'My Report' }} />
-      <Tab.Screen name="Hub" component={MyHubScreen} options={{ title: 'My Hub' }} />
+      <Tab.Screen
+        name="Hub"
+        component={MyHubScreen}
+        options={{
+          title: 'My Hub',
+          tabBarBadge: unreadCount > 0 ? (unreadCount > 99 ? '99+' : unreadCount) : undefined,
+          tabBarBadgeStyle: { backgroundColor: '#dc2626', color: '#ffffff', fontSize: 10 },
+        }}
+      />
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'Profile' }} />
     </Tab.Navigator>
   );
