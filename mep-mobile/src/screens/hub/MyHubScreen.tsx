@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ActivityIndicator, ScrollView,
   RefreshControl, TouchableOpacity, Modal, TextInput,
@@ -99,6 +99,7 @@ export default function MyHubScreen() {
   const [sending, setSending] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [showWorkerModal, setShowWorkerModal] = useState(false);
+  const [fullScreenImg, setFullScreenImg] = useState<string|null>(null);
   const [attachedFile, setAttachedFile] = useState<{uri:string;name:string;type:string}|null>(null);
   const [workerSearch, setWorkerSearch] = useState('');
   const [expandedSent, setExpandedSent] = useState<Record<number,boolean>>({});
@@ -275,7 +276,7 @@ export default function MyHubScreen() {
             const isDone = !!msg.acknowledged_at;
             return (
               <View key={msg.id} style={[s.msgCard, isNew&&s.unreadCard]}>
-                {/* Header — tap to expand */}
+                {/* Header â€” tap to expand */}
                 <TouchableOpacity onPress={()=>handleExpand(msg)} activeOpacity={0.8}>
                   <View style={s.msgHeader}>
                     <View style={s.row}>
@@ -295,7 +296,7 @@ export default function MyHubScreen() {
                   <Text style={[s.msgTitle, isDone&&{color:'#6b7280'}]}>{msg.title}</Text>
                   {!isOpen&&msg.body?<Text style={s.msgBody} numberOfLines={2}>{msg.body}</Text>:null}
                   <View style={s.meta}>
-                    <View style={s.row}><Ionicons name="person-outline" size={13} color="#9ca3af"/><Text style={s.metaText}>{msg.sender_first} {msg.sender_last} · {fmtDT(msg.created_at)}</Text></View>
+                    <View style={s.row}><Ionicons name="person-outline" size={13} color="#9ca3af"/><Text style={s.metaText}>{msg.sender_first} {msg.sender_last} Â· {fmtDT(msg.created_at)}</Text></View>
                     {msg.project_name&&<View style={s.row}><Ionicons name="business-outline" size={13} color="#9ca3af"/><Text style={s.metaText}>{msg.project_name}</Text></View>}
                   </View>
                 </TouchableOpacity>
@@ -305,7 +306,7 @@ export default function MyHubScreen() {
                     {msg.body?<Text style={s.msgBodyFull}>{msg.body}</Text>:null}
                     {msg.due_date&&<View style={s.dueRow}><Ionicons name="calendar-outline" size={14} color="#dc2626"/><Text style={s.dueText}>Due: {fmtDueDate(msg.due_date!)}</Text></View>}
                     {msg.file_url&&(
-                      <Image source={{uri:`https://app.constrai.ca/uploads${msg.file_url}`}} style={s.inboxImg} resizeMode="cover"/>
+                      <TouchableOpacity onPress={()=>setFullScreenImg(`https://app.constrai.ca/uploads${msg.file_url}`)}><Image source={{uri:`https://app.constrai.ca/uploads${msg.file_url}`}} style={s.inboxImg} resizeMode="cover"/></TouchableOpacity>
                     )}
                     {!isDone&&(
                       <TouchableOpacity style={s.ackBtn} onPress={()=>ack(msg.id)}>
@@ -354,7 +355,7 @@ export default function MyHubScreen() {
                     </View>
                   </ScrollView>
 
-                  {/* Recipients â€” modal picker */}
+                  {/* Recipients Ã¢â‚¬â€ modal picker */}
                   <View style={s.workerHeader}>
                     <Text style={s.label}>Recipients {form.recipient_ids.length>0?`(${form.recipient_ids.length})`:''}</Text>
                     {form.recipient_ids.length>0&&(
@@ -379,7 +380,7 @@ export default function MyHubScreen() {
                   <TouchableOpacity style={s.workerPickerBtn} onPress={()=>{ setWorkerSearch(''); setShowWorkerModal(true); }}>
                     <Ionicons name="people-outline" size={18} color="#1e3a5f"/>
                     <Text style={[s.workerPickerText, form.recipient_ids.length===0&&{color:'#9ca3af'}]}>
-                      {form.recipient_ids.length===0 ? 'Select recipients...' : `${form.recipient_ids.length} selected â€” tap to edit`}
+                      {form.recipient_ids.length===0 ? 'Select recipients...' : `${form.recipient_ids.length} selected Ã¢â‚¬â€ tap to edit`}
                     </Text>
                     <Ionicons name="chevron-forward" size={16} color="#9ca3af"/>
                   </TouchableOpacity>
@@ -460,8 +461,8 @@ export default function MyHubScreen() {
                           </View>
                         </View>
                         <Text style={s.sentMeta}>
-                          {fmtDT(task.created_at)}{task.project_code?` Â· ${task.project_code}`:''} Â· {total} recipient{total!==1?'s':''}
-                          {task.due_date?` Â· Due ${task.due_date}`:''}
+                          {fmtDT(task.created_at)}{task.project_code?` Ã‚Â· ${task.project_code}`:''} Ã‚Â· {total} recipient{total!==1?'s':''}
+                          {task.due_date?` Ã‚Â· Due ${task.due_date}`:''}
                         </Text>
                       </View>
                       <View style={s.sentProgress}>
@@ -501,6 +502,14 @@ export default function MyHubScreen() {
           )}
         </ScrollView>
       )}
+
+      {/* Full Screen Image Modal */}
+      <Modal visible={!!fullScreenImg} transparent animationType="fade">
+        <TouchableOpacity style={{flex:1,backgroundColor:'rgba(0,0,0,0.95)',justifyContent:'center',alignItems:'center'}} onPress={()=>setFullScreenImg(null)}>
+          {fullScreenImg&&<Image source={{uri:fullScreenImg}} style={{width:'100%',height:'80%'}} resizeMode="contain"/>}
+          <Text style={{color:'#fff',marginTop:16,fontSize:13}}>Tap to close</Text>
+        </TouchableOpacity>
+      </Modal>
 
       {/* Calendar Modal */}
       <Modal visible={showCalendar} transparent animationType="fade">
@@ -563,7 +572,7 @@ export default function MyHubScreen() {
                   </View>
                   <View style={{flex:1}}>
                     <Text style={[s.workerName, selected&&{color:'#1e3a5f',fontWeight:'700'}]}>{w.first_name} {w.last_name}</Text>
-                    <Text style={s.workerRole}>{w.role} Â· {w.trade_name||'General'}{w.is_assigned?' Â· Assigned':''}</Text>
+                    <Text style={s.workerRole}>{w.role} Ã‚Â· {w.trade_name||'General'}{w.is_assigned?' Ã‚Â· Assigned':''}</Text>
                   </View>
                   {selected
                     ?<Ionicons name="checkmark-circle" size={22} color="#1e3a5f"/>
@@ -709,5 +718,6 @@ const s = StyleSheet.create({
   previewImg:{width:'100%',height:180,borderRadius:12,marginTop:8},
   inboxImg:{width:'100%',height:200,borderRadius:12,marginTop:8},
 });
+
 
 
