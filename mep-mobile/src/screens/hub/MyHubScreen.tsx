@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ActivityIndicator, ScrollView,
   RefreshControl, TouchableOpacity, Modal, TextInput,
@@ -97,6 +97,7 @@ export default function MyHubScreen() {
   const [showWorkerModal, setShowWorkerModal] = useState(false);
   const [workerSearch, setWorkerSearch] = useState('');
   const [expandedSent, setExpandedSent] = useState<Record<number,boolean>>({});
+  const [expandedMsgs, setExpandedMsgs] = useState<Record<number,boolean>>({}); 
   const [dueDate, setDueDate] = useState(new Date());
   const [showCalendar, setShowCalendar] = useState(false);
   const [form, setForm] = useState({
@@ -149,12 +150,17 @@ export default function MyHubScreen() {
     setField('recipient_ids', []);
   },[form.project_id]);
 
-  const markRead = async (id:number) => {
-    try {
-      await apiClient.patch(`/api/hub/messages/${id}/read`);
-      setMessages(p=>p.map(m=>m.id===id?{...m,read_at:new Date().toISOString()}:m));
-      setUnread(p=>Math.max(0,p-1));
-    } catch {}
+  const handleExpand = async (msg: HubMessage) => {
+    const isOpen = expandedMsgs[msg.id];
+    setExpandedMsgs(p=>({...p,[msg.id]:!isOpen}));
+    // Mark as read on first expand
+    if (!isOpen && !msg.read_at) {
+      try {
+        await apiClient.patch(`/api/hub/messages/${msg.id}/read`);
+        setMessages(p=>p.map(m=>m.id===msg.id?{...m,read_at:new Date().toISOString()}:m));
+        setUnread(p=>Math.max(0,p-1));
+      } catch {}
+    }
   };
   const ack = async (id:number) => {
     try {
@@ -238,35 +244,53 @@ export default function MyHubScreen() {
           </ScrollView>
           {filtered.length===0?(
             <View style={s.emptyCard}><Ionicons name="mail-outline" size={40} color="#d1d5db"/><Text style={s.emptyText}>No messages here</Text></View>
-          ):filtered.map(msg=>(
-            <TouchableOpacity key={msg.id} style={[s.msgCard,!msg.read_at&&s.unreadCard]} onPress={()=>!msg.read_at&&markRead(msg.id)} activeOpacity={0.8}>
-              <View style={s.msgHeader}>
-                <View style={s.row}>
-                  <Ionicons name={typeIcon(msg.type)} size={18} color="#1e3a5f"/>
-                  <Text style={s.msgType}>{msg.type}</Text>
-                  <View style={[s.pBadge,{backgroundColor:priorityColor(msg.priority)+'20'}]}>
-                    <Text style={[s.pText,{color:priorityColor(msg.priority)}]}>{msg.priority}</Text>
+          ):filtered.map(msg=>{
+            const isOpen = expandedMsgs[msg.id];
+            const isNew = !msg.read_at;
+            const isDone = !!msg.acknowledged_at;
+            return (
+              <View key={msg.id} style={[s.msgCard, isNew&&s.unreadCard]}>
+                {/* Header — tap to expand */}
+                <TouchableOpacity onPress={()=>handleExpand(msg)} activeOpacity={0.8}>
+                  <View style={s.msgHeader}>
+                    <View style={s.row}>
+                      <Ionicons name={typeIcon(msg.type)} size={18} color={isDone?'#16a34a':isNew?'#f59e0b':'#1e3a5f'}/>
+                      <Text style={s.msgType}>{msg.type}</Text>
+                      <View style={[s.pBadge,{backgroundColor:priorityColor(msg.priority)+'20'}]}>
+                        <Text style={[s.pText,{color:priorityColor(msg.priority)}]}>{msg.priority}</Text>
+                      </View>
+                      {isNew&&<View style={s.newBadge}><Text style={s.newBadgeText}>NEW</Text></View>}
+                      {isDone&&<View style={s.doneBadge}><Text style={s.doneBadgeText}>Done</Text></View>}
+                    </View>
+                    <View style={s.row}>
+                      {isNew&&<View style={s.dot}/>}
+                      <Ionicons name={isOpen?'chevron-up':'chevron-down'} size={16} color="#9ca3af"/>
+                    </View>
                   </View>
-                </View>
-                {!msg.read_at&&<View style={s.dot}/>}
-              </View>
-              <Text style={s.msgTitle}>{msg.title}</Text>
-              {msg.body?<Text style={s.msgBody} numberOfLines={3}>{msg.body}</Text>:null}
-              <View style={s.meta}>
-                <View style={s.row}><Ionicons name="business-outline" size={13} color="#9ca3af"/><Text style={s.metaText}>{msg.project_name||'General'}</Text></View>
-                <View style={s.row}><Ionicons name="person-outline" size={13} color="#9ca3af"/><Text style={s.metaText}>{msg.sender_first} {msg.sender_last}</Text></View>
-                <View style={s.row}><Ionicons name="time-outline" size={13} color="#9ca3af"/><Text style={s.metaText}>{fmtDT(msg.created_at)}</Text></View>
-              </View>
-              {msg.due_date&&<View style={s.dueRow}><Ionicons name="calendar-outline" size={14} color="#dc2626"/><Text style={s.dueText}>Due: {msg.due_date}</Text></View>}
-              {msg.read_at&&!msg.acknowledged_at&&(
-                <TouchableOpacity style={s.ackBtn} onPress={()=>ack(msg.id)}>
-                  <Ionicons name="checkmark-done-outline" size={16} color="#fff"/>
-                  <Text style={s.ackText}>Acknowledge</Text>
+                  <Text style={[s.msgTitle, isDone&&{color:'#6b7280'}]}>{msg.title}</Text>
+                  {!isOpen&&msg.body?<Text style={s.msgBody} numberOfLines={2}>{msg.body}</Text>:null}
+                  <View style={s.meta}>
+                    <View style={s.row}><Ionicons name="person-outline" size={13} color="#9ca3af"/><Text style={s.metaText}>{msg.sender_first} {msg.sender_last} · {fmtDT(msg.created_at)}</Text></View>
+                    {msg.project_name&&<View style={s.row}><Ionicons name="business-outline" size={13} color="#9ca3af"/><Text style={s.metaText}>{msg.project_name}</Text></View>}
+                  </View>
                 </TouchableOpacity>
-              )}
-              {msg.acknowledged_at&&<View style={s.ackDone}><Ionicons name="checkmark-done" size={15} color="#16a34a"/><Text style={s.ackDoneText}>Acknowledged</Text></View>}
-            </TouchableOpacity>
-          ))}
+                {/* Expanded details */}
+                {isOpen&&(
+                  <View style={s.msgExpanded}>
+                    {msg.body?<Text style={s.msgBodyFull}>{msg.body}</Text>:null}
+                    {msg.due_date&&<View style={s.dueRow}><Ionicons name="calendar-outline" size={14} color="#dc2626"/><Text style={s.dueText}>Due: {msg.due_date}</Text></View>}
+                    {!isDone&&(
+                      <TouchableOpacity style={s.ackBtn} onPress={()=>ack(msg.id)}>
+                        <Ionicons name="checkmark-done-outline" size={16} color="#fff"/>
+                        <Text style={s.ackText}>Acknowledge Task</Text>
+                      </TouchableOpacity>
+                    )}
+                    {isDone&&<View style={s.ackDone}><Ionicons name="checkmark-done" size={15} color="#16a34a"/><Text style={s.ackDoneText}>Acknowledged</Text></View>}
+                  </View>
+                )}
+              </View>
+            );
+          })}
         </ScrollView>
       )}
 
@@ -302,7 +326,7 @@ export default function MyHubScreen() {
                     </View>
                   </ScrollView>
 
-                  {/* Recipients — modal picker */}
+                  {/* Recipients â€” modal picker */}
                   <View style={s.workerHeader}>
                     <Text style={s.label}>Recipients {form.recipient_ids.length>0?`(${form.recipient_ids.length})`:''}</Text>
                     {form.recipient_ids.length>0&&(
@@ -327,7 +351,7 @@ export default function MyHubScreen() {
                   <TouchableOpacity style={s.workerPickerBtn} onPress={()=>{ setWorkerSearch(''); setShowWorkerModal(true); }}>
                     <Ionicons name="people-outline" size={18} color="#1e3a5f"/>
                     <Text style={[s.workerPickerText, form.recipient_ids.length===0&&{color:'#9ca3af'}]}>
-                      {form.recipient_ids.length===0 ? 'Select recipients...' : `${form.recipient_ids.length} selected — tap to edit`}
+                      {form.recipient_ids.length===0 ? 'Select recipients...' : `${form.recipient_ids.length} selected â€” tap to edit`}
                     </Text>
                     <Ionicons name="chevron-forward" size={16} color="#9ca3af"/>
                   </TouchableOpacity>
@@ -397,8 +421,8 @@ export default function MyHubScreen() {
                           </View>
                         </View>
                         <Text style={s.sentMeta}>
-                          {fmtDT(task.created_at)}{task.project_code?` · ${task.project_code}`:''} · {total} recipient{total!==1?'s':''}
-                          {task.due_date?` · Due ${task.due_date}`:''}
+                          {fmtDT(task.created_at)}{task.project_code?` Â· ${task.project_code}`:''} Â· {total} recipient{total!==1?'s':''}
+                          {task.due_date?` Â· Due ${task.due_date}`:''}
                         </Text>
                       </View>
                       <View style={s.sentProgress}>
@@ -500,7 +524,7 @@ export default function MyHubScreen() {
                   </View>
                   <View style={{flex:1}}>
                     <Text style={[s.workerName, selected&&{color:'#1e3a5f',fontWeight:'700'}]}>{w.first_name} {w.last_name}</Text>
-                    <Text style={s.workerRole}>{w.role} · {w.trade_name||'General'}{w.is_assigned?' · Assigned':''}</Text>
+                    <Text style={s.workerRole}>{w.role} Â· {w.trade_name||'General'}{w.is_assigned?' Â· Assigned':''}</Text>
                   </View>
                   {selected
                     ?<Ionicons name="checkmark-circle" size={22} color="#1e3a5f"/>
@@ -572,6 +596,12 @@ const s = StyleSheet.create({
   ackText:{fontSize:14,color:'#fff',fontWeight:'600'},
   ackDone:{flexDirection:'row',alignItems:'center',gap:4,marginTop:4},
   ackDoneText:{fontSize:13,color:'#16a34a',fontWeight:'500'},
+  msgExpanded:{borderTopWidth:1,borderTopColor:'#f3f4f6',paddingTop:12,marginTop:8,gap:10},
+  msgBodyFull:{fontSize:14,color:'#374151',lineHeight:22},
+  newBadge:{backgroundColor:'#fef3c7',borderRadius:10,paddingHorizontal:8,paddingVertical:2},
+  newBadgeText:{fontSize:10,fontWeight:'700',color:'#d97706'},
+  doneBadge:{backgroundColor:'#f0fdf4',borderRadius:10,paddingHorizontal:8,paddingVertical:2},
+  doneBadgeText:{fontSize:10,fontWeight:'700',color:'#16a34a'},
   newTaskBtn:{flexDirection:'row',alignItems:'center',justifyContent:'center',gap:8,backgroundColor:'#1e3a5f',borderRadius:14,padding:14},
   newTaskText:{fontSize:15,fontWeight:'bold',color:'#fff'},
   formCard:{backgroundColor:'#fff',borderRadius:16,padding:16,gap:4,shadowColor:'#000',shadowOffset:{width:0,height:2},shadowOpacity:0.06,shadowRadius:8,elevation:3},
