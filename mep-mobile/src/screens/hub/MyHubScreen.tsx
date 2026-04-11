@@ -7,8 +7,6 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'react-native';
-import { GestureHandlerRootView, GestureDetector, Gesture } from 'react-native-gesture-handler';
-import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import { apiClient } from '../../api/client';
 import { useAuthStore } from '../../store/useAuthStore';
 
@@ -48,32 +46,28 @@ function getDaysInMonth(y: number, m: number) { return new Date(y, m+1, 0).getDa
 function getFirstDay(y: number, m: number) { return new Date(y, m, 1).getDay(); }
 
 function ImageViewer({ uri, onClose }: { uri: string; onClose: () => void }) {
-  const scale = useSharedValue(1);
-  const savedScale = useSharedValue(1);
-  const translateX = useSharedValue(0);
-  const translateY = useSharedValue(0);
-  const savedX = useSharedValue(0);
-  const savedY = useSharedValue(0);
-  const pinch = Gesture.Pinch().onUpdate(e => { scale.value = savedScale.value * e.scale; }).onEnd(() => { savedScale.value = scale.value; if (scale.value < 1) { scale.value = withSpring(1); savedScale.value = 1; translateX.value = withSpring(0); translateY.value = withSpring(0); } });
-  const pan = Gesture.Pan().onUpdate(e => { translateX.value = savedX.value + e.translationX; translateY.value = savedY.value + e.translationY; }).onEnd(() => { savedX.value = translateX.value; savedY.value = translateY.value; });
-  const doubleTap = Gesture.Tap().numberOfTaps(2).onEnd(() => { if (scale.value > 1) { scale.value = withSpring(1); savedScale.value = 1; translateX.value = withSpring(0); translateY.value = withSpring(0); savedX.value = 0; savedY.value = 0; } else { scale.value = withSpring(2.5); savedScale.value = 2.5; } });
-  const composed = Gesture.Simultaneous(pinch, pan);
-  const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }, { translateX: translateX.value }, { translateY: translateY.value }] }));
   return (
     <Modal visible transparent animationType="fade">
-      <GestureHandlerRootView style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.97)', justifyContent: 'center', alignItems: 'center' }}>
-        <TouchableOpacity style={{ position: 'absolute', top: 50, right: 20, zIndex: 10, padding: 10, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 20 }} onPress={onClose}>
+      <View style={{ flex:1, backgroundColor:'rgba(0,0,0,0.97)' }}>
+        <TouchableOpacity style={{ position:'absolute', top:50, right:20, zIndex:10, padding:10, backgroundColor:'rgba(255,255,255,0.15)', borderRadius:20 }} onPress={onClose}>
           <Ionicons name="close" size={24} color="#fff" />
         </TouchableOpacity>
-        <Text style={{ position: 'absolute', top: 55, left: 0, right: 0, textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>Pinch to zoom · Double tap · Drag</Text>
-        <GestureDetector gesture={Gesture.Simultaneous(composed, doubleTap)}>
-          <Animated.Image source={{ uri }} style={[{ width: '100%', height: '80%' }, animStyle]} resizeMode="contain" />
-        </GestureDetector>
-      </GestureHandlerRootView>
+        <Text style={{ position:'absolute', top:56, left:0, right:0, textAlign:'center', color:'rgba(255,255,255,0.4)', fontSize:12, zIndex:5 }}>Pinch to zoom · Double tap to reset</Text>
+        <ScrollView
+          style={{ flex:1 }}
+          contentContainerStyle={{ flex:1, justifyContent:'center', alignItems:'center' }}
+          maximumZoomScale={5}
+          minimumZoomScale={1}
+          showsHorizontalScrollIndicator={false}
+          showsVerticalScrollIndicator={false}
+          centerContent
+        >
+          <Image source={{ uri }} style={{ width:'100%', height:400 }} resizeMode="contain" />
+        </ScrollView>
+      </View>
     </Modal>
   );
 }
-
 function CalendarPicker({ value, onChange, minDate }: { value: Date; onChange: (d: Date) => void; minDate?: Date; }) {
   const [viewYear, setViewYear] = useState(value.getFullYear());
   const [viewMonth, setViewMonth] = useState(value.getMonth());
@@ -742,6 +736,8 @@ const s = StyleSheet.create({
   previewImg:{width:'100%',height:180,borderRadius:12,marginTop:8},
   inboxImg:{width:'100%',height:200,borderRadius:12,marginTop:8},
 });
+
+
 
 
 
