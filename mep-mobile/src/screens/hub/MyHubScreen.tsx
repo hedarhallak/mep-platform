@@ -21,7 +21,7 @@ interface SentMessage {
   id: number; type: string; title: string; priority: string;
   due_date: string | null; created_at: string; project_code: string;
   total_recipients: number; acknowledged_count: number; pending_count: number;
-  recipients: { first_name: string; last_name: string; username: string; status: string; acknowledged_at: string | null }[];
+  recipients: { first_name: string; last_name: string; username: string; status: string; acknowledged_at: string | null; completion_note: string | null; completion_image_url: string | null }[];
 }
 interface Worker { id: number; employee_id: number; first_name: string; last_name: string; role: string; trade_name: string; is_assigned: boolean; }
 interface Project { id: number; project_code: string; project_name: string; }
@@ -553,7 +553,8 @@ export default function MyHubScreen() {
                             <View key={i} style={[s.recipientRow, isDone&&{backgroundColor:'#f0fdf4'}, isPending&&{backgroundColor:'#fffbeb'}, isRead&&{backgroundColor:'#eff6ff'}]}>
                               <Text style={s.recipientName}>{name}</Text>
                               <Text style={[s.recipientStatus, isDone&&{color:'#16a34a'}, isPending&&{color:'#d97706'}, isRead&&{color:'#2563eb'}]}>
-                                {isDone?'Done':isPending?'Awaiting assignment':isRead?'Seen':'Sent'}
+  {isDone?'Done':isPending?'Awaiting assignment':isRead?'Seen':'Sent'}
+                              {r.completion_note&&<Text style={{fontSize:11,color:'#374151',marginTop:2}}>{r.completion_note}</Text>}
                               </Text>
                             </View>
                           );
@@ -786,6 +787,7 @@ const s = StyleSheet.create({
   previewImg:{width:'100%',height:180,borderRadius:12,marginTop:8},
   inboxImg:{width:'100%',height:200,borderRadius:12,marginTop:8},
 });
+
 
 
 
