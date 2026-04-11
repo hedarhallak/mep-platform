@@ -451,7 +451,7 @@ export default function MyHubScreen() {
                   <TouchableOpacity style={s.workerPickerBtn} onPress={()=>{ setWorkerSearch(''); setShowWorkerModal(true); }}>
                     <Ionicons name="people-outline" size={18} color="#1e3a5f"/>
                     <Text style={[s.workerPickerText, form.recipient_ids.length===0&&{color:'#9ca3af'}]}>
-                      {form.recipient_ids.length===0 ? 'Select recipients...' : `${form.recipient_ids.length} selected ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â tap to edit`}
+                      {form.recipient_ids.length===0 ? 'Select recipients...' : `${form.recipient_ids.length} selected - tap to edit`}
                     </Text>
                     <Ionicons name="chevron-forward" size={16} color="#9ca3af"/>
                   </TouchableOpacity>
@@ -786,6 +786,7 @@ const s = StyleSheet.create({
   previewImg:{width:'100%',height:180,borderRadius:12,marginTop:8},
   inboxImg:{width:'100%',height:200,borderRadius:12,marginTop:8},
 });
+
 
 
 
