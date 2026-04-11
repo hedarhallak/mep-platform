@@ -550,13 +550,32 @@ export default function MyHubScreen() {
                           const isDone = r.status==='ACKNOWLEDGED';
                           const isRead = r.status==='READ';
                           return (
-                            <View key={i} style={[s.recipientRow, isDone&&{backgroundColor:'#f0fdf4'}, isPending&&{backgroundColor:'#fffbeb'}, isRead&&{backgroundColor:'#eff6ff'}]}>
-                              <Text style={s.recipientName}>{name}</Text>
-                              <Text style={[s.recipientStatus, isDone&&{color:'#16a34a'}, isPending&&{color:'#d97706'}, isRead&&{color:'#2563eb'}]}>
-  {isDone?'Done':isPending?'Awaiting assignment':isRead?'Seen':'Sent'}
-                              {r.completion_note&&<Text style={{fontSize:11,color:'#374151',marginTop:2}}>{r.completion_note}</Text>}
-                              {r.completion_image_url&&<TouchableOpacity onPress={()=>setFullScreenImg('https://app.constrai.ca/uploads'+r.completion_image_url)}><Image source={{uri:'https://app.constrai.ca/uploads'+r.completion_image_url}} style={{width:80,height:60,borderRadius:6,marginTop:4}} resizeMode='cover'/></TouchableOpacity>}
-                              </Text>
+                            <View key={i} style={[s.recipientCard, isDone&&{borderLeftColor:'#16a34a'}, isPending&&{borderLeftColor:'#d97706'}, isRead&&{borderLeftColor:'#2563eb'}]}>
+                              <View style={{flexDirection:'row',justifyContent:'space-between',alignItems:'center'}}>
+                                <View style={{flexDirection:'row',alignItems:'center',gap:8}}>
+                                  <View style={[s.recipientAvatar, isDone&&{backgroundColor:'#16a34a'}, isPending&&{backgroundColor:'#d97706'}, isRead&&{backgroundColor:'#2563eb'}]}>
+                                    <Text style={{fontSize:11,fontWeight:'700',color:'#fff'}}>{name[0]?.toUpperCase()}</Text>
+                                  </View>
+                                  <Text style={s.recipientName}>{name}</Text>
+                                </View>
+                                <View style={[s.recipientBadge, isDone&&{backgroundColor:'#f0fdf4'}, isPending&&{backgroundColor:'#fffbeb'}, isRead&&{backgroundColor:'#eff6ff'}]}>
+                                  <Text style={[s.recipientStatus, isDone&&{color:'#16a34a'}, isPending&&{color:'#d97706'}, isRead&&{color:'#2563eb'}]}>
+                                    {isDone?'✓ Done':isPending?'⏳ Pending':isRead?'👁 Seen':'📬 Sent'}
+                                  </Text>
+                                </View>
+                              </View>
+                              {r.completion_note&&(
+                                <View style={s.completionNoteBox}>
+                                  <Ionicons name="chatbubble-outline" size={12} color="#6b7280"/>
+                                  <Text style={s.completionNoteText}>{r.completion_note}</Text>
+                                </View>
+                              )}
+                              {r.completion_image_url&&(
+                                <TouchableOpacity onPress={()=>setFullScreenImg('https://app.constrai.ca/uploads'+r.completion_image_url)} style={{marginTop:8}}>
+                                  <Image source={{uri:'https://app.constrai.ca/uploads'+r.completion_image_url}} style={s.completionThumb} resizeMode="cover"/>
+                                  <Text style={{fontSize:11,color:'#6b7280',marginTop:4}}>Tap to view completion photo</Text>
+                                </TouchableOpacity>
+                              )}
                             </View>
                           );
                         })}
@@ -756,9 +775,14 @@ const s = StyleSheet.create({
   sentPct:{fontSize:13,fontWeight:'bold',color:'#1e3a5f'},
   sentPctSub:{fontSize:10,color:'#9ca3af'},
   sentDetails:{borderTopWidth:1,borderTopColor:'#f3f4f6',padding:12,gap:6},
-  recipientRow:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',paddingHorizontal:10,paddingVertical:8,borderRadius:8,backgroundColor:'#f9fafb'},
-  recipientName:{fontSize:13,fontWeight:'500',color:'#374151'},
-  recipientStatus:{fontSize:12,fontWeight:'600',color:'#6b7280'},
+  recipientCard:{backgroundColor:'#fff',borderRadius:12,padding:12,borderLeftWidth:3,borderLeftColor:'#e5e7eb',borderWidth:1,borderColor:'#f3f4f6',marginBottom:6},
+  recipientAvatar:{width:26,height:26,borderRadius:13,backgroundColor:'#9ca3af',justifyContent:'center',alignItems:'center'},
+  recipientName:{fontSize:13,fontWeight:'600',color:'#111827'},
+  recipientBadge:{paddingHorizontal:8,paddingVertical:3,borderRadius:20},
+  recipientStatus:{fontSize:11,fontWeight:'700'},
+  completionNoteBox:{flexDirection:'row',alignItems:'flex-start',gap:6,marginTop:8,backgroundColor:'#f9fafb',borderRadius:8,padding:8},
+  completionNoteText:{fontSize:12,color:'#374151',flex:1,lineHeight:18},
+  completionThumb:{width:'100%',height:140,borderRadius:10},
   pendingNote:{flexDirection:'row',alignItems:'center',gap:6,padding:8,backgroundColor:'#fffbeb',borderRadius:8},
   pendingNoteText:{fontSize:12,color:'#d97706',flex:1},
   calOverlay:{flex:1,backgroundColor:'rgba(0,0,0,0.5)',justifyContent:'center',alignItems:'center',padding:24},
