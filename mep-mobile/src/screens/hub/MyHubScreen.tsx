@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ActivityIndicator, ScrollView,
   RefreshControl, TouchableOpacity, Modal, TextInput,
@@ -126,7 +126,9 @@ export default function MyHubScreen() {
   const [attachedFile, setAttachedFile] = useState<{uri:string;name:string;type:string}|null>(null);
   const [workerSearch, setWorkerSearch] = useState('');
   const [expandedSent, setExpandedSent] = useState<Record<number,boolean>>({});
-  const [expandedMsgs, setExpandedMsgs] = useState<Record<number,boolean>>({}); 
+  const [expandedMsgs, setExpandedMsgs] = useState<Record<number,boolean>>({});
+  const [completingId, setCompletingId] = useState<number|null>(null);
+  const [completionFile, setCompletionFile] = useState<{uri:string;name:string;type:string}|null>(null); 
   const [dueDate, setDueDate] = useState(new Date());
   const [showCalendar, setShowCalendar] = useState(false);
   const [form, setForm] = useState({
@@ -196,6 +198,37 @@ export default function MyHubScreen() {
       await apiClient.patch(`/api/hub/messages/${id}/ack`);
       setMessages(p=>p.map(m=>m.id===id?{...m,acknowledged_at:new Date().toISOString()}:m));
     } catch {}
+  };
+
+  const pickCompletionImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') { Alert.alert('Permission needed', 'Please allow photo access.'); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: false, quality: 0.7,
+    });
+    if (!result.canceled && result.assets[0]) {
+      const asset = result.assets[0];
+      const name = asset.uri.split('/').pop() || 'completion.jpg';
+      setCompletionFile({ uri: asset.uri, name, type: 'image/jpeg' });
+    }
+  };
+
+  const completeTask = async (id:number) => {
+    setCompletingId(id);
+    try {
+      const fd = new FormData();
+      if (completionFile) {
+        fd.append('completion_image', { uri: completionFile.uri, name: completionFile.name, type: completionFile.type } as any);
+      }
+      await apiClient.patch(`/api/hub/messages/${id}/complete`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setMessages(p=>p.map(m=>m.id===id?{...m,acknowledged_at:new Date().toISOString()}:m));
+      setCompletionFile(null);
+    } catch (e:any) {
+      Alert.alert('Error', e.response?.data?.error||'Failed to complete task.');
+    } finally { setCompletingId(null); }
   };
 
   const filteredWorkers = workerSearch.trim()
@@ -332,12 +365,24 @@ export default function MyHubScreen() {
                       <TouchableOpacity onPress={()=>setFullScreenImg(`https://app.constrai.ca/uploads${msg.file_url}`)}><Image source={{uri:`https://app.constrai.ca/uploads${msg.file_url}`}} style={s.inboxImg} resizeMode="cover"/></TouchableOpacity>
                     )}
                     {!isDone&&(
-                      <TouchableOpacity style={s.ackBtn} onPress={()=>ack(msg.id)}>
-                        <Ionicons name="checkmark-done-outline" size={16} color="#fff"/>
-                        <Text style={s.ackText}>Acknowledge Task</Text>
-                      </TouchableOpacity>
+                      <View style={{gap:8}}>
+                        <TouchableOpacity style={s.completionPhotoBtn} onPress={pickCompletionImage}>
+                          <Ionicons name="camera-outline" size={18} color="#1e3a5f"/>
+                          <Text style={[s.completionPhotoBtnText, !completionFile&&{color:'#9ca3af'}]}>
+                            {completionFile ? completionFile.name : 'Add completion photo (optional)'}
+                          </Text>
+                          {completionFile&&<TouchableOpacity onPress={()=>setCompletionFile(null)}><Ionicons name="close-circle" size={16} color="#dc2626"/></TouchableOpacity>}
+                        </TouchableOpacity>
+                        {completionFile&&<Image source={{uri:completionFile.uri}} style={{width:'100%',height:120,borderRadius:10}} resizeMode="cover"/>}
+                        <TouchableOpacity style={[s.ackBtn,{opacity:completingId===msg.id?0.6:1}]} onPress={()=>completeTask(msg.id)} disabled={completingId===msg.id}>
+                          {completingId===msg.id?<ActivityIndicator color="#fff" size="small"/>:<>
+                            <Ionicons name="checkmark-done-outline" size={16} color="#fff"/>
+                            <Text style={s.ackText}>Mark Complete</Text>
+                          </>}
+                        </TouchableOpacity>
+                      </View>
                     )}
-                    {isDone&&<View style={s.ackDone}><Ionicons name="checkmark-done" size={15} color="#16a34a"/><Text style={s.ackDoneText}>Acknowledged</Text></View>}
+                    {isDone&&<View style={s.ackDone}><Ionicons name="checkmark-done" size={15} color="#16a34a"/><Text style={s.ackDoneText}>Task Completed</Text></View>}
                   </View>
                 )}
               </View>
@@ -731,6 +776,8 @@ const s = StyleSheet.create({
   workerName:{fontSize:14,fontWeight:'600',color:'#111827'},
   workerRole:{fontSize:11,color:'#9ca3af',marginTop:1},
   emptyCheck:{width:22,height:22,borderRadius:11,borderWidth:2,borderColor:'#e5e7eb'},
+  completionPhotoBtn:{flexDirection:'row',alignItems:'center',gap:10,backgroundColor:'#f9fafb',borderRadius:10,borderWidth:1,borderColor:'#e5e7eb',paddingHorizontal:14,paddingVertical:12},
+  completionPhotoBtnText:{flex:1,fontSize:13,color:'#111827'},
   attachBtn:{flexDirection:'row',alignItems:'center',gap:10,backgroundColor:'#f9fafb',borderRadius:10,borderWidth:1,borderColor:'#e5e7eb',paddingHorizontal:14,paddingVertical:12},
   attachBtnText:{flex:1,fontSize:14,color:'#111827'},
   previewImg:{width:'100%',height:180,borderRadius:12,marginTop:8},
