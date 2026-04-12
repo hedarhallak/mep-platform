@@ -1,10 +1,10 @@
-"use strict";
+﻿"use strict";
 
 // routes/user_management.js
-// GET    /api/users           — list all app_users for company
-// PATCH  /api/users/:id/role  — change user role
-// PATCH  /api/users/:id/status — activate / deactivate
-// POST   /api/users/:id/resend — resend activation email
+// GET    /api/users           â€” list all app_users for company
+// PATCH  /api/users/:id/role  â€” change user role
+// PATCH  /api/users/:id/status â€” activate / deactivate
+// POST   /api/users/:id/resend â€” resend activation email
 
 const express  = require("express");
 const router   = express.Router();
@@ -23,8 +23,19 @@ const ALLOWED_ROLES = [
 ];
 
 const ROLE_RANK = {
-  SUPER_ADMIN: 0, IT_ADMIN: 1, COMPANY_ADMIN: 2,
-  TRADE_PROJECT_MANAGER: 3, TRADE_ADMIN: 4, WORKER: 5,
+  SUPER_ADMIN: 0,
+  IT_ADMIN: 1,
+  COMPANY_ADMIN: 2,
+  TRADE_PROJECT_MANAGER: 3,
+  TRADE_ADMIN: 4,
+  FOREMAN: 5,
+  JOURNEYMAN: 6,
+  APPRENTICE_4: 7,
+  APPRENTICE_3: 7,
+  APPRENTICE_2: 7,
+  APPRENTICE_1: 7,
+  WORKER: 8,
+  DRIVER: 8,
 };
 
 function mustEnv(name) {
@@ -32,7 +43,7 @@ function mustEnv(name) {
   return v && String(v).trim() ? String(v).trim() : null;
 }
 
-// ── GET /api/users ────────────────────────────────────────────
+// â”€â”€ GET /api/users â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // List all app_users for current company with employee info
 router.get("/", can("settings.user_management"), async (req, res) => {
   try {
@@ -69,8 +80,8 @@ router.get("/", can("settings.user_management"), async (req, res) => {
   }
 });
 
-// ── PATCH /api/users/:id/role ─────────────────────────────────
-// Change user role — caller must outrank target
+// â”€â”€ PATCH /api/users/:id/role â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Change user role â€” caller must outrank target
 router.patch("/:id/role", can("settings.user_management"), async (req, res) => {
   try {
     const targetId  = Number(req.params.id);
@@ -93,7 +104,7 @@ router.patch("/:id/role", can("settings.user_management"), async (req, res) => {
       return res.status(403).json({ ok: false, error: "CROSS_COMPANY" });
     }
 
-    // Rank check — cannot change role of someone equal or higher
+    // Rank check â€” cannot change role of someone equal or higher
     const callerRank = ROLE_RANK[normalizeRole(req.user.role)] ?? 99;
     const targetRank = ROLE_RANK[normalizeRole(target.role)]  ?? 99;
     const newRank    = ROLE_RANK[newRole] ?? 99;
@@ -119,7 +130,7 @@ router.patch("/:id/role", can("settings.user_management"), async (req, res) => {
   }
 });
 
-// ── PATCH /api/users/:id/status ───────────────────────────────
+// â”€â”€ PATCH /api/users/:id/status â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Activate or deactivate a user account
 router.patch("/:id/status", can("settings.user_management"), async (req, res) => {
   try {
@@ -164,7 +175,7 @@ router.patch("/:id/status", can("settings.user_management"), async (req, res) =>
   }
 });
 
-// ── POST /api/users/:id/resend ────────────────────────────────
+// â”€â”€ POST /api/users/:id/resend â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Resend activation email to a user who hasn't activated yet
 router.post("/:id/resend", can("settings.user_management"), async (req, res) => {
   try {

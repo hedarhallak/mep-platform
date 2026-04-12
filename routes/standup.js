@@ -1,17 +1,17 @@
-"use strict";
+﻿"use strict";
 
 // routes/standup.js
-// Daily standup — foreman reviews tomorrow's plan
+// Daily standup â€” foreman reviews tomorrow's plan
 //
-// GET  /api/standup/tomorrow          — get tomorrow's data (team + materials)
-// POST /api/standup/session           — create or get standup session
-// POST /api/standup/session/:id/complete — mark as done
+// GET  /api/standup/tomorrow          â€” get tomorrow's data (team + materials)
+// POST /api/standup/session           â€” create or get standup session
+// POST /api/standup/session/:id/complete â€” mark as done
 //
 // Material request integration:
-// GET  /api/standup/materials/:project_id  — get/create tomorrow's material request
-// POST /api/standup/materials/:request_id/items — add item
-// PATCH /api/standup/materials/:request_id/items/:item_id — edit item qty
-// DELETE /api/standup/materials/:request_id/items/:item_id — remove item
+// GET  /api/standup/materials/:project_id  â€” get/create tomorrow's material request
+// POST /api/standup/materials/:request_id/items â€” add item
+// PATCH /api/standup/materials/:request_id/items/:item_id â€” edit item qty
+// DELETE /api/standup/materials/:request_id/items/:item_id â€” remove item
 
 const express  = require('express')
 const router   = express.Router()
@@ -24,7 +24,7 @@ const tomorrow = () => {
   return d.toISOString().split('T')[0]
 }
 
-// ── GET /api/standup/tomorrow ─────────────────────────────────
+// â”€â”€ GET /api/standup/tomorrow â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Returns all projects where foreman has assignments tomorrow
 // with team members and existing material requests
 router.get('/tomorrow', can('standup.manage'), async (req, res) => {
@@ -34,7 +34,7 @@ router.get('/tomorrow', can('standup.manage'), async (req, res) => {
     const employeeId = req.user.employee_id
     const tmrw       = tomorrow()
 
-    const isAdmin = req.user.role === 'COMPANY_ADMIN' || req.user.role === 'SUPER_ADMIN'
+    const isAdmin = ['SUPER_ADMIN','COMPANY_ADMIN','TRADE_ADMIN','TRADE_PROJECT_MANAGER'].includes((req.user.role || '').toUpperCase())
 
     // Get projects where there are workers assigned tomorrow
     // COMPANY_ADMIN sees all, TRADE_ADMIN sees only their projects
@@ -152,7 +152,7 @@ router.get('/tomorrow', can('standup.manage'), async (req, res) => {
   }
 })
 
-// ── POST /api/standup/session ─────────────────────────────────
+// â”€â”€ POST /api/standup/session â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Create standup session for a project
 router.post('/session', can('standup.manage'), async (req, res) => {
   try {
@@ -177,7 +177,7 @@ router.post('/session', can('standup.manage'), async (req, res) => {
   }
 })
 
-// ── POST /api/standup/session/:id/complete ────────────────────
+// â”€â”€ POST /api/standup/session/:id/complete â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 router.post('/session/:id/complete', can('standup.manage'), async (req, res) => {
   try {
     const { note } = req.body
@@ -200,7 +200,7 @@ router.post('/session/:id/complete', can('standup.manage'), async (req, res) => 
   }
 })
 
-// ── GET/POST /api/standup/materials/:project_id ───────────────
+// â”€â”€ GET/POST /api/standup/materials/:project_id â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Get existing or create new material request for tomorrow
 router.get('/materials/:project_id', can('standup.manage'), async (req, res) => {
   try {
@@ -257,7 +257,7 @@ router.get('/materials/:project_id', can('standup.manage'), async (req, res) => 
         (company_id, project_id, requested_by, foreman_employee_id, status, note)
       VALUES ($1, $2, $3, $4, 'PENDING', $5)
       RETURNING id, status, note
-    `, [companyId, projectId, req.user.user_id, foremanId, 'Daily standup — ' + tmrw])
+    `, [companyId, projectId, req.user.user_id, foremanId, 'Daily standup â€” ' + tmrw])
 
     res.json({ ok: true, request: { ...newReq.rows[0], items: [] }, created: true })
   } catch (err) {
@@ -266,7 +266,7 @@ router.get('/materials/:project_id', can('standup.manage'), async (req, res) => 
   }
 })
 
-// ── POST /api/standup/materials/:request_id/items ─────────────
+// â”€â”€ POST /api/standup/materials/:request_id/items â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Add item to material request
 router.post('/materials/:request_id/items', can('standup.manage'), async (req, res) => {
   try {
@@ -300,7 +300,7 @@ router.post('/materials/:request_id/items', can('standup.manage'), async (req, r
   }
 })
 
-// ── PATCH /api/standup/materials/:request_id/items/:item_id ───
+// â”€â”€ PATCH /api/standup/materials/:request_id/items/:item_id â”€â”€â”€
 // Edit item quantity/note
 router.patch('/materials/:request_id/items/:item_id', can('standup.manage'), async (req, res) => {
   try {
@@ -336,7 +336,7 @@ router.patch('/materials/:request_id/items/:item_id', can('standup.manage'), asy
   }
 })
 
-// ── DELETE /api/standup/materials/:request_id/items/:item_id ──
+// â”€â”€ DELETE /api/standup/materials/:request_id/items/:item_id â”€â”€
 router.delete('/materials/:request_id/items/:item_id', can('standup.manage'), async (req, res) => {
   try {
     const companyId = req.user.company_id

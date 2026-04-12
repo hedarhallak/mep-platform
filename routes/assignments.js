@@ -1,14 +1,14 @@
-"use strict";
+﻿"use strict";
 
 /**
  * routes/assignments.js
  * Assignment request workflow:
- *   PM  → POST /api/assignments/requests        (create request)
- *   ADMIN → PATCH /api/assignments/requests/:id/approve
- *   ADMIN → PATCH /api/assignments/requests/:id/reject
- *   ALL  → GET  /api/assignments/requests        (list requests)
- *   ALL  → GET  /api/assignments                 (list active assignments)
- *   ADMIN → DELETE /api/assignments/:id          (cancel assignment)
+ *   PM  â†’ POST /api/assignments/requests        (create request)
+ *   ADMIN â†’ PATCH /api/assignments/requests/:id/approve
+ *   ADMIN â†’ PATCH /api/assignments/requests/:id/reject
+ *   ALL  â†’ GET  /api/assignments/requests        (list requests)
+ *   ALL  â†’ GET  /api/assignments                 (list active assignments)
+ *   ADMIN â†’ DELETE /api/assignments/:id          (cancel assignment)
  */
 
 const express = require("express");
@@ -18,9 +18,9 @@ const { audit, ACTIONS } = require("../lib/audit");
 const { can } = require("../middleware/permissions");
 const { sendAssignmentEmployee, sendAssignmentForeman } = require("../lib/email");
 
-// ── notifyAssignment ──────────────────────────────────────────
+// â”€â”€ notifyAssignment â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Sends email to the assigned employee + foreman (same project, same trade)
-// Never throws — errors are logged only.
+// Never throws â€” errors are logged only.
 async function notifyAssignment(pool, assignmentRequestId, companyId) {
   try {
     // Load this assignment's details
@@ -69,7 +69,7 @@ async function notifyAssignment(pool, assignmentRequestId, companyId) {
     const foreman = team.find(t => t.assignment_role === 'FOREMAN');
 
     if (a.assignment_role === 'FOREMAN') {
-      // ── Foreman assigned ──
+      // â”€â”€ Foreman assigned â”€â”€
       // 1) Send foreman their own assignment details + list of workers
       const workers = team.filter(t => t.assignment_role !== 'FOREMAN');
       if (a.employee_email) {
@@ -89,7 +89,7 @@ async function notifyAssignment(pool, assignmentRequestId, companyId) {
           isSelfNotice: true,
         });
       }
-      // 2) Notify existing workers — update them with foreman contact
+      // 2) Notify existing workers â€” update them with foreman contact
       for (const worker of workers) {
         if (worker.contact_email) {
           await sendAssignmentEmployee({
@@ -109,7 +109,7 @@ async function notifyAssignment(pool, assignmentRequestId, companyId) {
         }
       }
     } else {
-      // ── Worker / Journeyman assigned ──
+      // â”€â”€ Worker / Journeyman assigned â”€â”€
       // 1) Send worker their assignment + foreman info if available
       if (a.employee_email) {
         await sendAssignmentEmployee({
@@ -127,7 +127,7 @@ async function notifyAssignment(pool, assignmentRequestId, companyId) {
           foremanPhone: foreman?.phone || null,
         });
       }
-      // 2) Notify foreman — new team member added
+      // 2) Notify foreman â€” new team member added
       if (foreman?.contact_email) {
         await sendAssignmentForeman({
           to:           foreman.contact_email,
@@ -151,7 +151,7 @@ async function notifyAssignment(pool, assignmentRequestId, companyId) {
   }
 }
 
-// ── Role helpers ─────────────────────────────────────────
+// â”€â”€ Role helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const { normalizeRole } = require("../middleware/roles");
 
 function requireRoles(allowed) {
@@ -165,10 +165,10 @@ function requireRoles(allowed) {
     return next();
   };
 }
-const ADMIN_ONLY = requireRoles(["COMPANY_ADMIN", "ADMIN"]);
-const ADMIN_PM   = requireRoles(["COMPANY_ADMIN", "ADMIN", "TRADE_ADMIN", "PROJECT_MANAGER", "PM"]);
+const ADMIN_ONLY = requireRoles(["COMPANY_ADMIN"]);
+const ADMIN_PM   = requireRoles(["COMPANY_ADMIN", "TRADE_ADMIN", "TRADE_PROJECT_MANAGER"]);
 
-// ── Time slots helper (every 30 min) ─────────────────────
+// â”€â”€ Time slots helper (every 30 min) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function generateTimeSlots() {
   const slots = [];
   for (let h = 0; h < 24; h++) {
@@ -186,12 +186,12 @@ function generateTimeSlots() {
   return slots;
 }
 
-// ── GET /api/assignments/timeslots ────────────────────────
+// â”€â”€ GET /api/assignments/timeslots â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 router.get("/timeslots", can("assignments.view"), (req, res) => {
   return res.json({ ok: true, slots: generateTimeSlots() });
 });
 
-// ── GET /api/assignments/employees-map ───────────────────
+// â”€â”€ GET /api/assignments/employees-map â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Employees with home coords + availability for given period
 router.get("/employees-map", can("assignments.view"), async (req, res) => {
   try {
@@ -255,7 +255,7 @@ router.get("/employees", can("assignments.view"), async (req, res) => {
   }
 });
 
-// ── GET /api/assignments/defaults ────────────────────────
+// â”€â”€ GET /api/assignments/defaults â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Returns company default shift times
 router.get("/defaults", can("assignments.view"), async (req, res) => {
   try {
@@ -276,7 +276,7 @@ router.get("/defaults", can("assignments.view"), async (req, res) => {
   }
 });
 
-// ── GET /api/assignments/my-today ────────────────────────
+// â”€â”€ GET /api/assignments/my-today â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Returns the current user's active assignment for today
 // Used by MaterialRequest, TaskRequest, Standup to auto-select project
 router.get("/my-today", async (req, res) => {
@@ -318,7 +318,7 @@ router.get("/my-today", async (req, res) => {
   }
 });
 
-// ── GET /api/assignments/requests ────────────────────────
+// â”€â”€ GET /api/assignments/requests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 router.get("/requests", can("assignments.view"), async (req, res) => {
   try {
     const { status } = req.query;
@@ -358,7 +358,7 @@ router.get("/requests", can("assignments.view"), async (req, res) => {
     }
 
     // PM sees only their own requests
-    if (req.user.role === "PM") {
+    if (normalizeRole(req.user.role) === "TRADE_PROJECT_MANAGER") {
       params.push(req.user.user_id);
       query += ` AND ar.requested_by_user_id = $${params.length}`;
     }
@@ -373,7 +373,7 @@ router.get("/requests", can("assignments.view"), async (req, res) => {
   }
 });
 
-// ── POST /api/assignments/requests ───────────────────────
+// â”€â”€ POST /api/assignments/requests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 router.post("/requests", can("assignments.create"), async (req, res) => {
   try {
     const companyId = req.user.company_id;
@@ -462,7 +462,7 @@ router.post("/requests", can("assignments.create"), async (req, res) => {
 
     // Create request
     // COMPANY_ADMIN and TRADE_ADMIN requests are auto-approved
-    const autoApproveRoles = ["ADMIN", "COMPANY_ADMIN", "TRADE_ADMIN"];
+    const autoApproveRoles = ["COMPANY_ADMIN", "TRADE_ADMIN", "TRADE_PROJECT_MANAGER"];
     const isAdmin  = autoApproveRoles.includes(normalizeRole(req.user.role));
     const status   = isAdmin ? "APPROVED" : "PENDING";
 
@@ -496,7 +496,7 @@ router.post("/requests", can("assignments.create"), async (req, res) => {
       action:      ACTIONS.ASSIGNMENT_CREATED,
       entity_type: "assignment_request",
       entity_id:   rows[0].id,
-      entity_name: `${employee.rows[0].full_name} → ${project.rows[0].project_name}`,
+      entity_name: `${employee.rows[0].full_name} â†’ ${project.rows[0].project_name}`,
       new_values:  { status, start_date, end_date, shift_start, shift_end },
     });
 
@@ -521,7 +521,7 @@ router.post("/requests", can("assignments.create"), async (req, res) => {
   }
 });
 
-// ── Mapbox Distance Helper ────────────────────────────────
+// â”€â”€ Mapbox Distance Helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const MAPBOX_TOKEN = process.env.MAPBOX_ACCESS_TOKEN || ""
 
 async function calcDistanceKm(employeeId, projectId, companyId) {
@@ -575,7 +575,7 @@ async function calcDistanceKm(employeeId, projectId, companyId) {
   }
 }
 
-// ── PATCH /api/assignments/requests/:id/approve ──────────
+// â”€â”€ PATCH /api/assignments/requests/:id/approve â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 router.patch("/requests/:id/approve", can("assignments.edit"), async (req, res) => {
   try {
     const reqId     = Number(req.params.id);
@@ -642,7 +642,7 @@ router.patch("/requests/:id/approve", can("assignments.edit"), async (req, res) 
   }
 });
 
-// ── PATCH /api/assignments/requests/:id/reject ───────────
+// â”€â”€ PATCH /api/assignments/requests/:id/reject â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 router.patch("/requests/:id/reject", can("assignments.edit"), async (req, res) => {
   try {
     const reqId     = Number(req.params.id);
@@ -681,7 +681,7 @@ router.patch("/requests/:id/reject", can("assignments.edit"), async (req, res) =
   }
 });
 
-// ── PATCH /api/assignments/requests/:id/cancel ───────────
+// â”€â”€ PATCH /api/assignments/requests/:id/cancel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // PM can cancel their own PENDING request
 router.patch("/requests/:id/cancel", can("assignments.edit"), async (req, res) => {
   try {
@@ -698,7 +698,7 @@ router.patch("/requests/:id/cancel", can("assignments.edit"), async (req, res) =
     const r = existing.rows[0];
 
     // PM can only cancel own requests
-    if (req.user.role === "PM" && r.requested_by_user_id !== req.user.user_id)
+    if (normalizeRole(req.user.role) === "TRADE_PROJECT_MANAGER" && r.requested_by_user_id !== req.user.user_id)
       return res.status(403).json({ ok: false, error: "FORBIDDEN" });
 
     if (!["PENDING", "APPROVED"].includes(r.status))
@@ -726,8 +726,8 @@ router.patch("/requests/:id/cancel", can("assignments.edit"), async (req, res) =
   }
 });
 
-// ── GET /api/assignments ──────────────────────────────────
-// Active (APPROVED) assignments — what's on site today/upcoming
+// â”€â”€ GET /api/assignments â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Active (APPROVED) assignments â€” what's on site today/upcoming
 router.get("/", can("assignments.view"), async (req, res) => {
   try {
     const { project_id, employee_id, date } = req.query;
@@ -787,7 +787,7 @@ router.get("/", can("assignments.view"), async (req, res) => {
   }
 });
 
-// ── PATCH /api/assignments/requests/:id/reassign ─────────
+// â”€â”€ PATCH /api/assignments/requests/:id/reassign â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Atomically cancel old assignment + create new one in one transaction
 // Avoids race condition of cancel-then-create with overlap check
 router.patch("/requests/:id/reassign", can("assignments.edit"), async (req, res) => {
@@ -886,7 +886,7 @@ router.patch("/requests/:id/reassign", can("assignments.edit"), async (req, res)
   }
 });
 
-// ── PATCH /api/assignments/requests/:id/move ─────────────
+// â”€â”€ PATCH /api/assignments/requests/:id/move â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Move an employee to a different project (same dates + shift)
 router.patch("/requests/:id/move", can("assignments.edit"), async (req, res) => {
   const client = await pool.connect();
@@ -996,7 +996,7 @@ router.patch("/requests/:id/move", can("assignments.edit"), async (req, res) => 
   }
 });
 
-// ── POST /api/assignments/repeat-preview ─────────────────────
+// â”€â”€ POST /api/assignments/repeat-preview â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Shows what would be repeated from today to target_date
 router.post("/repeat-preview", can("assignments.create"), async (req, res) => {
   try {
@@ -1050,7 +1050,7 @@ router.post("/repeat-preview", can("assignments.create"), async (req, res) => {
   }
 });
 
-// ── POST /api/assignments/repeat-confirm ─────────────────────
+// â”€â”€ POST /api/assignments/repeat-confirm â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Creates assignments for target_date based on today's assignments (skips already assigned)
 router.post("/repeat-confirm", can("assignments.create"), async (req, res) => {
   const client = await pool.connect();
@@ -1134,7 +1134,7 @@ router.post("/repeat-confirm", can("assignments.create"), async (req, res) => {
 
 module.exports = router;
 
-// ── GET /api/assignments/suggest/:project_id ──────────────
+// â”€â”€ GET /api/assignments/suggest/:project_id â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Smart suggestions: available employees ranked by distance + compatibility
 router.get("/suggest/:project_id", can("assignments.view"), async (req, res) => {
   try {
@@ -1207,7 +1207,7 @@ router.get("/suggest/:project_id", can("assignments.view"), async (req, res) => 
     );
     const busyIds = new Set(busyRes.rows.map(r => r.requested_for_employee_id));
 
-    // Get team frequency — who worked together on same projects before
+    // Get team frequency â€” who worked together on same projects before
     const freqRes = await pool.query(
       `SELECT ar.requested_for_employee_id AS employee_id,
               COUNT(*) AS times_together
