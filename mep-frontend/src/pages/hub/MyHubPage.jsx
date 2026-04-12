@@ -601,7 +601,7 @@ function WorkerInboxTab() {
                   {isDone ? <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700"><CheckCircle2 className="w-3 h-3" />Done</span>
                     : isNew ? <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700"><Clock className="w-3 h-3" />New</span>
                     : <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-600"><Eye className="w-3 h-3" />Read</span>}
-                  <PriorityBadge priority={msg.priority} />
+                  {msg.priority && msg.priority !== 'NORMAL' && <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${PRIORITY_STYLE[msg.priority]||PRIORITY_STYLE.NORMAL}`}>{msg.priority}</span>}
                 </div>
                 <div className="text-[10px] text-slate-400 mt-0.5 flex gap-2">
                   <span>From {sender}</span>
