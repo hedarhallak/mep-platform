@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import {
   Shield,
   ShieldAlert,
@@ -15,9 +15,16 @@ const ROLES = [
   { key: 'SUPER_ADMIN',           label: 'Super Admin',           color: 'text-red-400',    bg: 'bg-red-500/10    border-red-500/30'    },
   { key: 'IT_ADMIN',              label: 'IT Admin',              color: 'text-orange-400', bg: 'bg-orange-500/10 border-orange-500/30' },
   { key: 'COMPANY_ADMIN',         label: 'Company Admin',         color: 'text-yellow-400', bg: 'bg-yellow-500/10 border-yellow-500/30' },
-  { key: 'TRADE_PROJECT_MANAGER', label: 'Trade Project Manager', color: 'text-blue-400',   bg: 'bg-blue-500/10   border-blue-500/30'   },
+  { key: 'TRADE_PROJECT_MANAGER', label: 'Project Manager',       color: 'text-blue-400',   bg: 'bg-blue-500/10   border-blue-500/30'   },
   { key: 'TRADE_ADMIN',           label: 'Trade Admin',           color: 'text-cyan-400',   bg: 'bg-cyan-500/10   border-cyan-500/30'   },
+  { key: 'FOREMAN',               label: 'Foreman',               color: 'text-teal-400',   bg: 'bg-teal-500/10   border-teal-500/30'   },
+  { key: 'JOURNEYMAN',            label: 'Journeyman',            color: 'text-green-400',  bg: 'bg-green-500/10  border-green-500/30'  },
+  { key: 'APPRENTICE_4',          label: 'Apprentice 4',          color: 'text-lime-400',   bg: 'bg-lime-500/10   border-lime-500/30'   },
+  { key: 'APPRENTICE_3',          label: 'Apprentice 3',          color: 'text-lime-400',   bg: 'bg-lime-500/10   border-lime-500/30'   },
+  { key: 'APPRENTICE_2',          label: 'Apprentice 2',          color: 'text-lime-400',   bg: 'bg-lime-500/10   border-lime-500/30'   },
+  { key: 'APPRENTICE_1',          label: 'Apprentice 1',          color: 'text-lime-400',   bg: 'bg-lime-500/10   border-lime-500/30'   },
   { key: 'WORKER',                label: 'Worker',                color: 'text-slate-400',  bg: 'bg-slate-500/10  border-slate-500/30'  },
+  { key: 'DRIVER',                label: 'Driver',                color: 'text-violet-400', bg: 'bg-violet-500/10 border-violet-500/30' },
 ];
 
 const MODULES = [
@@ -80,7 +87,7 @@ function Toast({ message, type, onClose }) {
 }
 
 function AuditLog({ logs, loading }) {
-  if (loading) return <div className="text-center py-8 text-slate-500 text-sm">Loading audit log…</div>;
+  if (loading) return <div className="text-center py-8 text-slate-500 text-sm">Loading audit logâ€¦</div>;
   if (!logs.length) return <div className="text-center py-8 text-slate-500 text-sm">No permission changes recorded yet.</div>;
   return (
     <div className="divide-y divide-slate-800">
@@ -92,11 +99,11 @@ function AuditLog({ logs, loading }) {
               <span className="text-slate-100 font-medium">{entry.changed_by}</span>
               {' '}updated permissions for{' '}
               <span className="font-mono text-xs bg-slate-800 px-1.5 py-0.5 rounded text-amber-300">
-                {entry.details?.role || '—'}
+                {entry.details?.role || 'â€”'}
               </span>
             </p>
             <p className="text-xs text-slate-500 mt-0.5">
-              {new Date(entry.created_at).toLocaleString()} · {entry.changer_role}
+              {new Date(entry.created_at).toLocaleString()} Â· {entry.changer_role}
             </p>
           </div>
         </div>
@@ -141,7 +148,7 @@ export default function PermissionsPage() {
   const [showAudit, setShowAudit]           = useState(false);
 
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
-  const callerRank  = { SUPER_ADMIN: 0, IT_ADMIN: 1, COMPANY_ADMIN: 2, TRADE_PROJECT_MANAGER: 3, TRADE_ADMIN: 4, WORKER: 5 };
+  const callerRank  = { SUPER_ADMIN: 0, IT_ADMIN: 1, COMPANY_ADMIN: 2, TRADE_PROJECT_MANAGER: 3, TRADE_ADMIN: 4, FOREMAN: 5, JOURNEYMAN: 6, APPRENTICE_4: 7, APPRENTICE_3: 7, APPRENTICE_2: 7, APPRENTICE_1: 7, WORKER: 8, DRIVER: 8 };
   const roleInfo    = ROLES.find(r => r.key === selectedRole);
   const isEditable  = callerRank[currentUser.role] < callerRank[selectedRole];
 
@@ -261,7 +268,7 @@ export default function PermissionsPage() {
             </div>
             <div>
               <h1 className="text-xl font-semibold text-slate-100">Permissions Matrix</h1>
-              <p className="text-xs text-slate-500 mt-0.5">Role-based access control · Changes apply company-wide</p>
+              <p className="text-xs text-slate-500 mt-0.5">Role-based access control Â· Changes apply company-wide</p>
             </div>
           </div>
 
@@ -301,7 +308,7 @@ export default function PermissionsPage() {
                   className="flex items-center gap-1.5 px-4 py-1.5 text-xs rounded-lg font-medium bg-amber-500 hover:bg-amber-400 text-slate-950 disabled:opacity-50 transition-colors shadow-lg shadow-amber-500/20"
                 >
                   {saving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                  {saving ? 'Saving…' : 'Save Changes'}
+                  {saving ? 'Savingâ€¦' : 'Save Changes'}
                 </button>
               </>
             )}
@@ -323,7 +330,7 @@ export default function PermissionsPage() {
         {hasChanges && isEditable && (
           <div className="flex items-center gap-2 px-4 py-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg text-xs text-amber-300">
             <ShieldAlert className="w-4 h-4" />
-            Unsaved changes for <strong>{roleInfo?.label}</strong> — click "Save Changes" to apply.
+            Unsaved changes for <strong>{roleInfo?.label}</strong> â€” click "Save Changes" to apply.
           </div>
         )}
 
@@ -385,7 +392,7 @@ export default function PermissionsPage() {
             {loading ? (
               <div className="flex items-center justify-center py-20 text-slate-500 text-sm">
                 <RefreshCw className="w-5 h-5 animate-spin mr-2" />
-                Loading matrix…
+                Loading matrixâ€¦
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -437,7 +444,7 @@ export default function PermissionsPage() {
                                     : 'bg-slate-800 border-slate-700 text-slate-500 hover:border-slate-500'
                                   }`}
                               >
-                                {allChecked ? '✓' : '○'}
+                                {allChecked ? 'âœ“' : 'â—‹'}
                               </button>
                             </div>
                           </td>

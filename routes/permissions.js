@@ -1,21 +1,21 @@
-"use strict";
+﻿"use strict";
 
 const express  = require('express');
 const router   = express.Router();
 const { pool } = require('../db');
 const { can, logAudit } = require('../middleware/permissions');
 
-// Splits 'employees.view' → { module: 'employees', action: 'view' }
+// Splits 'employees.view' â†’ { module: 'employees', action: 'view' }
 function parseCode(code) {
   const dot = code.indexOf('.');
   if (dot === -1) return { module: code, action: 'view' };
   return { module: code.slice(0, dot), action: code.slice(dot + 1) };
 }
 
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // GET /api/permissions/matrix
 // Returns { roles[], modules[], matrix: { role: { module: { action: bool } } } }
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 router.get('/matrix', can('settings.permissions'), async (req, res) => {
   try {
     // All permission codes with their groups
@@ -54,10 +54,10 @@ router.get('/matrix', can('settings.permissions'), async (req, res) => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // GET /api/permissions/my-permissions
 // Returns current user's permissions as { module: { action: true } }
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 router.get('/my-permissions', async (req, res) => {
   try {
     if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
@@ -96,14 +96,14 @@ router.get('/my-permissions', async (req, res) => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // GET /api/permissions/role/:role
 // Returns all permission_codes for a role
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 router.get('/role/:role', can('settings.permissions'), async (req, res) => {
   try {
     const { role } = req.params;
-    const validRoles = ['SUPER_ADMIN','IT_ADMIN','COMPANY_ADMIN','TRADE_PROJECT_MANAGER','TRADE_ADMIN','WORKER'];
+    const validRoles = ['SUPER_ADMIN','IT_ADMIN','COMPANY_ADMIN','TRADE_PROJECT_MANAGER','TRADE_ADMIN','FOREMAN','JOURNEYMAN','APPRENTICE_4','APPRENTICE_3','APPRENTICE_2','APPRENTICE_1','WORKER','DRIVER'];
     if (!validRoles.includes(role)) return res.status(400).json({ error: 'Invalid role' });
 
     const result = await pool.query(`
@@ -121,25 +121,25 @@ router.get('/role/:role', can('settings.permissions'), async (req, res) => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // PUT /api/permissions/role/:role
 // Body: { permissions: [{ module, action, allowed }] }
 // Converts module+action back to permission_code for DB ops
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 router.put('/role/:role', can('settings.permissions'), async (req, res) => {
   const client = await pool.connect();
   try {
     const { role } = req.params;
     const { permissions } = req.body;
 
-    const validRoles = ['SUPER_ADMIN','IT_ADMIN','COMPANY_ADMIN','TRADE_PROJECT_MANAGER','TRADE_ADMIN','WORKER'];
+    const validRoles = ['SUPER_ADMIN','IT_ADMIN','COMPANY_ADMIN','TRADE_PROJECT_MANAGER','TRADE_ADMIN','FOREMAN','JOURNEYMAN','APPRENTICE_4','APPRENTICE_3','APPRENTICE_2','APPRENTICE_1','WORKER','DRIVER'];
     if (!validRoles.includes(role)) return res.status(400).json({ error: 'Invalid role' });
 
     if (!Array.isArray(permissions) || permissions.length === 0) {
       return res.status(400).json({ error: 'permissions array is required' });
     }
 
-    const callerRank = { SUPER_ADMIN: 0, IT_ADMIN: 1, COMPANY_ADMIN: 2, TRADE_PROJECT_MANAGER: 3, TRADE_ADMIN: 4, WORKER: 5 };
+    const callerRank = { SUPER_ADMIN: 0, IT_ADMIN: 1, COMPANY_ADMIN: 2, TRADE_PROJECT_MANAGER: 3, TRADE_ADMIN: 4, FOREMAN: 5, JOURNEYMAN: 6, APPRENTICE_4: 7, APPRENTICE_3: 7, APPRENTICE_2: 7, APPRENTICE_1: 7, WORKER: 8, DRIVER: 8 };
     if (callerRank[req.user.role] >= callerRank[role]) {
       return res.status(403).json({ error: 'Cannot edit permissions for a role equal or higher than yours' });
     }
@@ -177,11 +177,11 @@ router.put('/role/:role', can('settings.permissions'), async (req, res) => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // POST /api/permissions/reset/:role
 // Resets role to seeded defaults by re-running seed logic
 // Only SUPER_ADMIN / IT_ADMIN
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 router.post('/reset/:role', can('settings.permissions'), async (req, res) => {
   const client = await pool.connect();
   try {
@@ -190,7 +190,7 @@ router.post('/reset/:role', can('settings.permissions'), async (req, res) => {
     }
 
     const { role } = req.params;
-    const validRoles = ['SUPER_ADMIN','IT_ADMIN','COMPANY_ADMIN','TRADE_PROJECT_MANAGER','TRADE_ADMIN','WORKER'];
+    const validRoles = ['SUPER_ADMIN','IT_ADMIN','COMPANY_ADMIN','TRADE_PROJECT_MANAGER','TRADE_ADMIN','FOREMAN','JOURNEYMAN','APPRENTICE_4','APPRENTICE_3','APPRENTICE_2','APPRENTICE_1','WORKER','DRIVER'];
     if (!validRoles.includes(role)) return res.status(400).json({ error: 'Invalid role' });
 
     const defaults = {
@@ -229,11 +229,68 @@ router.post('/reset/:role', can('settings.permissions'), async (req, res) => {
         'materials.catalog_view','materials.surplus_view','materials.surplus_declare',
         'purchase_orders.view_own_trade','purchase_orders.print'
       ],
+      FOREMAN: [
+        'dashboard.view',
+        'assignments.view','assignments.view_own_trade',
+        'attendance.checkin','attendance.view','attendance.view_own_trade','attendance.view_self',
+        'hub.access','hub.materials_inbox','hub.materials_merge_send','hub.receive_tasks','hub.send_tasks',
+        'materials.catalog_view','materials.request_submit','materials.request_view_own','materials.request_view_own_trade',
+        'materials.surplus_declare','materials.surplus_view',
+        'projects.view_own_trade',
+        'purchase_orders.print','purchase_orders.view','purchase_orders.view_own',
+        'reports.view','reports.view_self',
+        'suppliers.view','tasks.send','tasks.view'
+      ],
+      JOURNEYMAN: [
+        'dashboard.view',
+        'attendance.checkin','attendance.view_self',
+        'hub.receive_tasks',
+        'materials.catalog_view','materials.request_submit','materials.request_view_own',
+        'purchase_orders.view_own',
+        'reports.view','reports.view_self','tasks.view'
+      ],
+      APPRENTICE_4: [
+        'dashboard.view',
+        'attendance.checkin','attendance.view_self',
+        'hub.receive_tasks',
+        'materials.catalog_view','materials.request_submit','materials.request_view_own',
+        'purchase_orders.view_own',
+        'reports.view','reports.view_self','tasks.view'
+      ],
+      APPRENTICE_3: [
+        'dashboard.view',
+        'attendance.checkin','attendance.view_self',
+        'hub.receive_tasks',
+        'materials.catalog_view','materials.request_submit','materials.request_view_own',
+        'reports.view','reports.view_self','tasks.view'
+      ],
+      APPRENTICE_2: [
+        'dashboard.view',
+        'attendance.checkin','attendance.view_self',
+        'hub.receive_tasks',
+        'materials.catalog_view',
+        'reports.view_self','tasks.view'
+      ],
+      APPRENTICE_1: [
+        'dashboard.view',
+        'attendance.checkin','attendance.view_self',
+        'hub.receive_tasks',
+        'materials.catalog_view',
+        'reports.view_self','tasks.view'
+      ],
       WORKER: [
         'dashboard.view',
-        'attendance.view_self','attendance.checkin',
-        'materials.request_submit','materials.request_view_own','materials.catalog_view',
-        'purchase_orders.view_own'
+        'attendance.checkin','attendance.view_self',
+        'hub.receive_tasks',
+        'materials.catalog_view','materials.request_submit','materials.request_view_own',
+        'purchase_orders.view_own',
+        'reports.view','reports.view_self','tasks.view'
+      ],
+      DRIVER: [
+        'dashboard.view',
+        'attendance.checkin','attendance.view_self',
+        'hub.receive_tasks',
+        'reports.view_self','tasks.view'
       ],
     };
 
@@ -264,9 +321,9 @@ router.post('/reset/:role', can('settings.permissions'), async (req, res) => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // GET /api/permissions/audit
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 router.get('/audit', can('settings.permissions'), async (req, res) => {
   try {
     const result = await pool.query(`
