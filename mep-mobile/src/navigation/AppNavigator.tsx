@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import AttendanceScreen from '../screens/attendance/AttendanceScreen';
-import MaterialRequestScreen from '../screens/materials/MaterialRequestScreen';
+import MaterialsNavigator from './MaterialsNavigator';
 import MyReportScreen from '../screens/reports/MyReportScreen';
 import MyHubScreen from '../screens/hub/MyHubScreen';
 import ProfileScreen from '../screens/profile/ProfileScreen';
@@ -47,7 +47,11 @@ export default function AppNavigator() {
       })}
     >
       <Tab.Screen name="Attendance" component={AttendanceScreen} options={{ title: 'Check In/Out' }} />
-      <Tab.Screen name="Materials" component={MaterialRequestScreen} options={{ title: 'Materials' }} />
+      <Tab.Screen
+        name="Materials"
+        component={MaterialsNavigator}
+        options={{ headerShown: false, title: 'Materials' }}
+      />
       <Tab.Screen name="Report" component={MyReportScreen} options={{ title: 'My Report' }} />
       <Tab.Screen
         name="Hub"

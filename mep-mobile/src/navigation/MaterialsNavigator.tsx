@@ -1,23 +1,54 @@
 import React from 'react';
-import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
+import { createStackNavigator } from '@react-navigation/stack';
 import MaterialRequestScreen from '../screens/materials/MaterialRequestScreen';
 import MyRequestsScreen from '../screens/materials/MyRequestsScreen';
+import ForemanWorkspaceScreen from '../screens/materials/ForemanWorkspaceScreen';
+import { useAuthStore } from '../store/useAuthStore';
 
-const Tab = createMaterialTopTabNavigator();
+const Stack = createStackNavigator();
+
+const FOREMAN_ROLES = ['TRADE_ADMIN', 'COMPANY_ADMIN', 'TRADE_PROJECT_MANAGER', 'SUPER_ADMIN', 'IT_ADMIN'];
 
 export default function MaterialsNavigator() {
+  const user = useAuthStore(s => s.user);
+  const role = (user?.role || '').toUpperCase();
+  const isForeman = FOREMAN_ROLES.includes(role);
+
+  const headerOptions = {
+    headerStyle: { backgroundColor: '#1e3a5f' },
+    headerTintColor: '#ffffff',
+    headerTitleStyle: { fontWeight: 'bold' as const },
+  };
+
   return (
-    <Tab.Navigator
-      screenOptions={{
-        tabBarActiveTintColor: '#1e3a5f',
-        tabBarInactiveTintColor: '#9ca3af',
-        tabBarIndicatorStyle: { backgroundColor: '#1e3a5f', height: 3 },
-        tabBarLabelStyle: { fontWeight: '700', fontSize: 13 },
-        tabBarStyle: { backgroundColor: '#ffffff' },
-      }}
-    >
-      <Tab.Screen name="New Request" component={MaterialRequestScreen} />
-      <Tab.Screen name="My Requests" component={MyRequestsScreen} />
-    </Tab.Navigator>
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      {isForeman ? (
+        <>
+          <Stack.Screen
+            name="ForemanWorkspace"
+            component={ForemanWorkspaceScreen}
+            options={{ ...headerOptions, headerShown: true, title: 'Materials' }}
+          />
+          <Stack.Screen
+            name="MaterialRequest"
+            component={MaterialRequestScreen}
+            options={{ ...headerOptions, headerShown: true, title: 'Submit Request' }}
+          />
+        </>
+      ) : (
+        <>
+          <Stack.Screen
+            name="MaterialRequest"
+            component={MaterialRequestScreen}
+            options={{ ...headerOptions, headerShown: true, title: 'Materials' }}
+          />
+        </>
+      )}
+      <Stack.Screen
+        name="MyRequests"
+        component={MyRequestsScreen}
+        options={{ ...headerOptions, headerShown: true, title: 'My Requests' }}
+      />
+    </Stack.Navigator>
   );
 }
