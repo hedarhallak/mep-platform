@@ -26,7 +26,7 @@ async function notifyAssignment(pool, assignmentRequestId, companyId) {
     // Load this assignment's details
     const { rows } = await pool.query(
       `SELECT
-         ar.start_date, ar.end_date, ar.shift_start, ar.shift_end, ar.notes,
+         ar.start_date, ar.end_date, ar.shift_start, ar.shift_end, ar.decision_note AS notes,
          ar.assignment_role,
          ar.requested_for_employee_id AS employee_id,
          ar.project_id,
@@ -332,7 +332,7 @@ router.get("/requests", can("assignments.view"), async (req, res) => {
         ar.end_date,
         ar.shift_start,
         ar.shift_end,
-        ar.notes,
+        ar.decision_note AS notes,
         ar.created_at,
         ar.decision_note,
         ar.decision_at,
@@ -740,7 +740,7 @@ router.get("/", can("assignments.view"), async (req, res) => {
         ar.end_date,
         ar.shift_start,
         ar.shift_end,
-        ar.notes,
+        ar.decision_note AS notes,
         ar.assignment_role,
         ar.created_at,
         p.id           AS project_id,
@@ -1011,7 +1011,7 @@ router.post("/repeat-preview", can("assignments.create"), async (req, res) => {
     const { rows: todayRows } = await pool.query(
       `SELECT
          ar.id, ar.requested_for_employee_id AS employee_id,
-         ar.project_id, ar.shift_start, ar.shift_end, ar.notes, ar.assignment_role,
+         ar.project_id, ar.shift_start, ar.shift_end, ar.decision_note AS notes, ar.assignment_role,
          ep.full_name  AS employee_name,
          ep.trade_code,
          p.project_code
@@ -1066,7 +1066,7 @@ router.post("/repeat-confirm", can("assignments.create"), async (req, res) => {
     const { rows: todayRows } = await pool.query(
       `SELECT
          ar.requested_for_employee_id AS employee_id,
-         ar.project_id, ar.shift_start, ar.shift_end, ar.notes, ar.assignment_role
+         ar.project_id, ar.shift_start, ar.shift_end, ar.decision_note AS notes, ar.assignment_role
        FROM public.assignment_requests ar
        WHERE ar.company_id = $1
          AND ar.status     = 'APPROVED'
