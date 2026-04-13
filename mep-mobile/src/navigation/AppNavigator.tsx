@@ -6,6 +6,7 @@ import MyHubScreen from '../screens/hub/MyHubScreen';
 import ProfileScreen from '../screens/profile/ProfileScreen';
 import ChangePinScreen from '../screens/profile/ChangePinScreen';
 import { createStackNavigator } from '@react-navigation/stack';
+import MergeEditScreen from '../screens/materials/MergeEditScreen';
 import { apiClient } from '../api/client';
 
 const Tab = createBottomTabNavigator();
@@ -16,6 +17,31 @@ const headerOptions = {
   headerTintColor: '#ffffff',
   headerTitleStyle: { fontWeight: 'bold' as const },
 };
+
+const HubStack = createStackNavigator();
+
+const headerOptions2 = {
+  headerStyle: { backgroundColor: '#1e3a5f' },
+  headerTintColor: '#ffffff',
+  headerTitleStyle: { fontWeight: 'bold' as const },
+};
+
+function HubNavigator() {
+  return (
+    <HubStack.Navigator>
+      <HubStack.Screen
+        name="MyHubMain"
+        component={MyHubScreen}
+        options={{ ...headerOptions2, title: 'My Hub' }}
+      />
+      <HubStack.Screen
+        name="MergeEdit"
+        component={MergeEditScreen}
+        options={{ ...headerOptions2, title: 'Edit & Send Order' }}
+      />
+    </HubStack.Navigator>
+  );
+}
 
 function ProfileNavigator() {
   return (
@@ -80,13 +106,10 @@ export default function AppNavigator() {
       />
       <Tab.Screen
         name="Hub"
-        component={MyHubScreen}
+        component={HubNavigator}
         options={{
           title: 'My Hub',
-          headerShown: true,
-          headerStyle: { backgroundColor: '#1e3a5f' },
-          headerTintColor: '#ffffff',
-          headerTitleStyle: { fontWeight: 'bold' as const },
+          headerShown: false,
           tabBarBadge: unreadCount > 0 ? (unreadCount > 99 ? '99+' : unreadCount) : undefined,
           tabBarBadgeStyle: { backgroundColor: '#dc2626', color: '#ffffff', fontSize: 10 },
         }}

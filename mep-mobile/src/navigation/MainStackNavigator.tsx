@@ -6,6 +6,7 @@ import MaterialsNavigator from './MaterialsNavigator';
 import MyReportScreen from '../screens/reports/MyReportScreen';
 import ProfileScreen from '../screens/profile/ProfileScreen';
 import ChangePinScreen from '../screens/profile/ChangePinScreen';
+import MergeEditScreen from '../screens/materials/MergeEditScreen';
 
 const Stack = createStackNavigator();
 
@@ -43,6 +44,11 @@ export default function MainStackNavigator() {
         name="ChangePin"
         component={ChangePinScreen}
         options={{ ...headerOptions, headerShown: true, title: 'Change PIN' }}
+      />
+      <Stack.Screen
+        name="MergeEdit"
+        component={MergeEditScreen}
+        options={{ ...headerOptions, headerShown: true, title: 'Edit & Send Order' }}
       />
     </Stack.Navigator>
   );
