@@ -203,7 +203,7 @@ router.get("/employees-map", can("assignments.view"), async (req, res) => {
          ep.employee_id AS id,
          ep.full_name,
          ep.trade_code,
-         ep.rank_code,
+ 
          ST_X(ep.home_location::geometry) AS home_lng,
          ST_Y(ep.home_location::geometry) AS home_lat,
          CASE
@@ -750,7 +750,7 @@ router.get("/", can("assignments.view"), async (req, res) => {
         ep.employee_id,
         ep.full_name   AS employee_name,
         ep.trade_code,
-        ep.rank_code,
+
         ep.phone,
         requester.username AS assigned_by
       FROM public.assignment_requests ar
@@ -1168,7 +1168,7 @@ router.get("/suggest/:project_id", can("assignments.view"), async (req, res) => 
          ep.full_name,
          ep.trade_code,
          ep.role_code,
-         ep.rank_code,
+ 
          ep.home_address,
          ST_X(ep.home_location::geometry) AS home_lng,
          ST_Y(ep.home_location::geometry) AS home_lat,
