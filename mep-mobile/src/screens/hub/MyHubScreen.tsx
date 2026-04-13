@@ -9,6 +9,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'react-native';
 import { apiClient } from '../../api/client';
 import { useAuthStore } from '../../store/useAuthStore';
+import ForemanMaterialsTab from '../materials/ForemanMaterialsTab';
 
 interface HubMessage {
   id: number; type: string; title: string; body: string; priority: string;
@@ -27,6 +28,7 @@ interface Worker { id: number; employee_id: number; first_name: string; last_nam
 interface Project { id: number; project_code: string; project_name: string; }
 
 const CAN_SEND = ['FOREMAN','TRADE_ADMIN','TRADE_PROJECT_MANAGER','COMPANY_ADMIN','IT_ADMIN','SUPER_ADMIN'];
+const CAN_MATERIALS_HUB = ['FOREMAN','TRADE_ADMIN','COMPANY_ADMIN','SUPER_ADMIN'];
 const PRIORITIES = ['NORMAL','HIGH','URGENT'];
 const INBOX_TABS = [{key:'ALL',label:'All'},{key:'TASK',label:'Tasks'},{key:'MATERIAL',label:'Materials'},{key:'GENERAL',label:'General'}];
 // Hub shows Inbox only - Send Task moved to Dashboard
@@ -106,6 +108,8 @@ function CalendarPicker({ value, onChange, minDate }: { value: Date; onChange: (
 export default function MyHubScreen() {
   const { user } = useAuthStore();
   const canSend = user?.role && CAN_SEND.includes(user.role);
+  const canMaterialsHub = !!(user?.role && CAN_MATERIALS_HUB.includes((user.role||'').toUpperCase()));
+  const [hubTab, setHubTab] = React.useState<'inbox'|'materials'|'send'>('inbox');
 
 
   const [messages, setMessages] = useState<HubMessage[]>([]);
@@ -299,8 +303,39 @@ export default function MyHubScreen() {
   return (
     <View style={s.wrapper}>
 
+      {/* Tab Bar */}
+      <View style={s.hubTabBar}>
+        <TouchableOpacity style={[s.hubTab, hubTab==='inbox'&&s.hubTabActive]} onPress={()=>setHubTab('inbox')}>
+          <Text style={[s.hubTabText, hubTab==='inbox'&&s.hubTabTextActive]}>Inbox</Text>
+          {unread>0&&<View style={s.tabBadge}><Text style={s.tabBadgeText}>{unread}</Text></View>}
+        </TouchableOpacity>
+        {canMaterialsHub&&(
+          <TouchableOpacity style={[s.hubTab, hubTab==='materials'&&s.hubTabActive]} onPress={()=>setHubTab('materials')}>
+            <Text style={[s.hubTabText, hubTab==='materials'&&s.hubTabTextActive]}>Materials</Text>
+          </TouchableOpacity>
+        )}
+        {canSend&&(
+          <TouchableOpacity style={[s.hubTab, hubTab==='send'&&s.hubTabActive]} onPress={()=>setHubTab('send')}>
+            <Text style={[s.hubTabText, hubTab==='send'&&s.hubTabTextActive]}>Send Task</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* MATERIALS TAB */}
+      {hubTab==='materials'&&(<ForemanMaterialsTab />)}
+
+      {/* SEND TASK TAB - placeholder for now */}
+      {hubTab==='send'&&canSend&&(
+        <ScrollView style={s.container} contentContainerStyle={s.content}>
+          <View style={s.emptyCard}>
+            <Ionicons name="send-outline" size={40} color="#d1d5db"/>
+            <Text style={s.emptyText}>Send Task - Coming Soon</Text>
+          </View>
+        </ScrollView>
+      )}
+
       {/* INBOX TAB */}
-      <ScrollView style={s.container} contentContainerStyle={s.content}
+      {hubTab==='inbox'&&<ScrollView style={s.container} contentContainerStyle={s.content}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={()=>{setRefreshing(true);fetchInbox();}} tintColor="#1e3a5f"/>}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.tabsScroll}>
             <View style={s.tabsRow}>
@@ -380,7 +415,7 @@ export default function MyHubScreen() {
               </View>
             );
           })}
-        </ScrollView>
+        </ScrollView>}
 
       {/* Full Screen Image Modal */}
       {fullScreenImg&&<ImageViewer uri={fullScreenImg} onClose={()=>setFullScreenImg(null)}/>}

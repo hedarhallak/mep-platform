@@ -6,6 +6,7 @@ import {
   StyleSheet,
   ScrollView,
   StatusBar,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -19,7 +20,7 @@ interface Module {
   icon: any;
   color: string;
   bg: string;
-  screen: string;
+  screen: string | null;
   roles: string[];
 }
 
@@ -59,7 +60,7 @@ const ALL_MODULES: Module[] = [
     icon: 'clipboard-outline',
     color: '#d97706',
     bg: '#fffbeb',
-    screen: 'Assignments',
+    screen: null,
     roles: ['FOREMAN', 'TRADE_ADMIN', 'TRADE_PROJECT_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN', 'IT_ADMIN'],
   },
   {
@@ -68,26 +69,21 @@ const ALL_MODULES: Module[] = [
     icon: 'people-outline',
     color: '#059669',
     bg: '#ecfdf5',
-    screen: 'Standup',
+    screen: null,
     roles: ['FOREMAN', 'TRADE_ADMIN', 'TRADE_PROJECT_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN'],
   },
   {
-    id: 'tasks',
-    label: 'Send Task',
-    icon: 'send-outline',
-    color: '#dc2626',
-    bg: '#fef2f2',
-    screen: 'Tasks',
-    roles: ['FOREMAN', 'TRADE_ADMIN', 'TRADE_PROJECT_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN'],
+    id: 'purchase_orders',
+    label: 'Purchase Orders',
+    icon: 'document-text-outline',
+    color: '#6d28d9',
+    bg: '#f5f3ff',
+    screen: null,
+    roles: ['FOREMAN', 'TRADE_ADMIN', 'TRADE_PROJECT_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN', 'IT_ADMIN'],
   },
 ];
 
 // --------------------------------------------------------- role helpers --
-
-const FOREMAN_AND_ABOVE = [
-  'FOREMAN', 'TRADE_ADMIN', 'TRADE_PROJECT_MANAGER',
-  'COMPANY_ADMIN', 'SUPER_ADMIN', 'IT_ADMIN',
-];
 
 function getVisibleModules(role: string): Module[] {
   const r = (role || '').toUpperCase();
@@ -123,6 +119,15 @@ function getGreeting(): string {
   return 'Good evening';
 }
 
+function getDisplayName(user: any): string {
+  if (user?.name && user.name.trim()) return user.name.split(' ')[0];
+  if (user?.username && user.username.trim()) {
+    const u = user.username.split('@')[0];
+    return u.charAt(0).toUpperCase() + u.slice(1);
+  }
+  return 'there';
+}
+
 // ================================================================ screen --
 
 export default function DashboardScreen() {
@@ -130,7 +135,15 @@ export default function DashboardScreen() {
   const user = useAuthStore(s => s.user);
   const role = user?.role || 'WORKER';
   const modules = getVisibleModules(role);
-  const firstName = user?.name?.split(' ')[0] || 'there';
+  const displayName = getDisplayName(user);
+
+  const handleModulePress = (mod: Module) => {
+    if (mod.screen) {
+      navigation.navigate(mod.screen);
+    } else {
+      Alert.alert('Coming Soon', `${mod.label} module will be available in the next update.`);
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -140,7 +153,7 @@ export default function DashboardScreen() {
       <View style={styles.header}>
         <View>
           <Text style={styles.greeting}>{getGreeting()},</Text>
-          <Text style={styles.name}>{firstName}</Text>
+          <Text style={styles.name}>{displayName}</Text>
         </View>
         <View style={styles.roleBadge}>
           <Text style={styles.roleText}>{getRoleLabel(role)}</Text>
@@ -159,14 +172,19 @@ export default function DashboardScreen() {
           {modules.map(mod => (
             <TouchableOpacity
               key={mod.id}
-              style={styles.moduleCard}
-              onPress={() => navigation.navigate(mod.screen)}
+              style={[styles.moduleCard, !mod.screen && styles.moduleCardSoon]}
+              onPress={() => handleModulePress(mod)}
               activeOpacity={0.75}
             >
               <View style={[styles.moduleIcon, { backgroundColor: mod.bg }]}>
                 <Ionicons name={mod.icon} size={28} color={mod.color} />
               </View>
               <Text style={styles.moduleLabel}>{mod.label}</Text>
+              {!mod.screen && (
+                <View style={styles.soonBadge}>
+                  <Text style={styles.soonText}>Soon</Text>
+                </View>
+              )}
             </TouchableOpacity>
           ))}
         </View>
@@ -224,12 +242,15 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 20,
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
     shadowRadius: 8,
     elevation: 3,
+  },
+  moduleCardSoon: {
+    opacity: 0.7,
   },
   moduleIcon: {
     width: 56,
@@ -243,5 +264,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#374151',
     textAlign: 'center',
+  },
+  soonBadge: {
+    backgroundColor: '#f3f4f6',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  soonText: {
+    fontSize: 10,
+    color: '#9ca3af',
+    fontWeight: '600',
   },
 });
