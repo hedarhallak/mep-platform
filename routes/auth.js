@@ -34,9 +34,10 @@ router.post("/login", async (req, res) => {
 
     const { rows } = await pool.query(
       `
-      SELECT id, username, employee_id, company_id, role, is_active, pin_hash, must_change_pin
-      FROM public.app_users
-      WHERE username = $1
+      SELECT au.id, au.username, au.employee_id, au.company_id, au.role, au.is_active, au.pin_hash, au.must_change_pin, ep.full_name
+      FROM public.app_users au
+      LEFT JOIN public.employee_profiles ep ON ep.employee_id = au.employee_id
+      WHERE au.username = $1
       LIMIT 1
       `,
       [username]
@@ -106,6 +107,7 @@ router.post("/login", async (req, res) => {
       user: {
         user_id: user.id,
         username: user.username,
+        name: user.full_name || user.username,
         employee_id: user.employee_id,
         company_id: user.company_id,
         role,
