@@ -66,10 +66,10 @@ router.get("/workforce-suggestions", can("bi.access_full"), async (req, res) => 
          p.site_address,
          p.site_lat,
          p.site_lng,
-         ST_X(ep.home_location::geometry) AS home_lng,
-         ST_Y(ep.home_location::geometry) AS home_lat,
+         ep.home_lng,
+         ep.home_lat,
          ROUND((ST_Distance(
-           ep.home_location::geography,
+           ST_SetSRID(ST_MakePoint(ep.home_lng, ep.home_lat), 4326)::geography,
            ST_SetSRID(ST_MakePoint(p.site_lng, p.site_lat), 4326)::geography
          ) / 1000)::numeric, 1) AS current_distance_km
        FROM public.assignment_requests ar
@@ -79,7 +79,7 @@ router.get("/workforce-suggestions", can("bi.access_full"), async (req, res) => 
          AND ar.status     = 'APPROVED'
          AND ar.start_date <= $2
          AND ar.end_date   >= $2
-         AND ep.home_location IS NOT NULL
+         AND ep.home_lat IS NOT NULL AND ep.home_lng IS NOT NULL
          AND p.site_lat IS NOT NULL`,
       [companyId, today]
     );
