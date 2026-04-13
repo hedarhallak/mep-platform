@@ -694,3 +694,101 @@ router.get("/purchase-orders/:id", can("purchase_orders.view"), async (req, res)
 });
 
 module.exports = router;
+
+// ── POST /send-order ─────────────────────────────────────────
+// Foreman sends edited/merged items as a purchase order
+// Body: { request_ids, items: [{item_name, qty, unit}], supplier_id, note }
+router.post("/send-order", can("hub.materials_merge_send"), async (req, res) => {
+  try {
+    const companyId  = req.user.company_id;
+    const employeeId = await resolveEmployeeId(req);
+    const { request_ids, items, supplier_id, note } = req.body || {};
+
+    if (!request_ids || !request_ids.length)
+      return res.status(400).json({ ok: false, error: "REQUEST_IDS_REQUIRED" });
+    if (!Array.isArray(items) || !items.length)
+      return res.status(400).json({ ok: false, error: "ITEMS_REQUIRED" });
+
+    const ids = request_ids.map(Number).filter(Boolean);
+
+    // 1. Company info
+    const { rows: [company] } = await pool.query(
+      `SELECT name, phone, admin_email, procurement_email, address, logo_url
+       FROM public.companies WHERE company_id = $1`, [companyId]
+    );
+
+    // 2. Foreman info
+    const { rows: [foreman] } = await pool.query(
+      `SELECT ep.full_name, ep.contact_email
+       FROM public.employee_profiles ep
+       WHERE ep.employee_id = $1 LIMIT 1`, [employeeId]
+    );
+
+    // 3. Project info
+    const { rows: [project] } = await pool.query(
+      `SELECT p.id, p.project_code, p.project_name, p.site_address
+       FROM public.material_requests mr
+       JOIN public.projects p ON p.id = mr.project_id
+       WHERE mr.id = $1 AND mr.company_id = $2 LIMIT 1`,
+      [ids[0], companyId]
+    );
+
+    // 4. Supplier info
+    let supplier = null;
+    if (supplier_id && supplier_id !== 'procurement') {
+      const { rows: [s] } = await pool.query(
+        `SELECT name, email, phone, address FROM public.suppliers
+         WHERE id = $1 AND company_id = $2 LIMIT 1`,
+        [Number(supplier_id), companyId]
+      );
+      supplier = s || null;
+    }
+
+    // 5. Reference + save PO
+    const ref = `PO-${companyId}-${Date.now().toString().slice(-6)}`;
+    await pool.query(
+      `INSERT INTO public.purchase_orders
+         (company_id, ref, project_id, foreman_id, supplier_id, is_procurement, items, note)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [
+        companyId, ref, project?.id || null, employeeId,
+        supplier_id && supplier_id !== 'procurement' ? Number(supplier_id) : null,
+        !supplier_id || supplier_id === 'procurement',
+        JSON.stringify(items), note || null,
+      ]
+    );
+
+    // 6. Mark requests as SENT
+    await pool.query(
+      `UPDATE public.material_requests SET status = 'SENT' WHERE id = ANY($1::bigint[]) AND company_id = $2`,
+      [ids, companyId]
+    );
+
+    // 7. Send email
+    const { sendPurchaseOrder } = require('../lib/email');
+    const emailTo = supplier
+      ? supplier.email
+      : (company.procurement_email || company.admin_email);
+
+    if (emailTo) {
+      sendPurchaseOrder({
+        to: emailTo, ref,
+        date: new Date().toLocaleDateString('en-CA'),
+        companyName: company.name, companyPhone: company.phone,
+        companyAddress: company.address,
+        projectCode: project?.project_code, projectName: project?.project_name,
+        siteAddress: project?.site_address,
+        foremanName: foreman?.full_name,
+        items, note: note || null,
+        isProcurement: !supplier_id || supplier_id === 'procurement',
+        supplierName: supplier?.name,
+      }).catch(e => console.error('[PO email error]', e.message));
+    }
+
+    return res.json({ ok: true, ref });
+  } catch (err) {
+    console.error("POST /send-order error:", err);
+    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+  }
+});
+
