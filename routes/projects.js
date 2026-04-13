@@ -149,7 +149,7 @@ router.get("/", can("projects.view"), async (req, res) => {
       LEFT JOIN public.trade_types      tt ON tt.id = p.trade_type_id
       LEFT JOIN public.project_statuses ps ON ps.id = p.status_id
       LEFT JOIN public.clients           c ON c.id  = p.client_id
-      LEFT JOIN public.assignments       a ON a.project_id = p.id
+      LEFT JOIN public.assignment_requests       a ON a.project_id = p.id
       WHERE p.company_id = $1
     `;
 
@@ -413,7 +413,7 @@ router.delete("/:id", can("projects.delete"), async (req, res) => {
 
     // Block delete if project has assignments
     const assigned = await pool.query(
-      "SELECT COUNT(*) FROM public.assignments WHERE project_id = $1",
+      "SELECT COUNT(*) FROM public.assignment_requests WHERE project_id = $1",
       [projectId]
     );
     if (parseInt(assigned.rows[0].count) > 0)
