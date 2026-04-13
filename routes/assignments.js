@@ -49,7 +49,7 @@ async function notifyAssignment(pool, assignmentRequestId, companyId) {
     const teamRes = await pool.query(
       `SELECT
          ep.full_name    AS name,
-         ep.phone,
+ 
          ep.contact_email,
          ar.assignment_role,
          ar.id
@@ -751,7 +751,7 @@ router.get("/", can("assignments.view"), async (req, res) => {
         ep.full_name   AS employee_name,
         ep.trade_code,
 
-        ep.phone,
+
         requester.username AS assigned_by
       FROM public.assignment_requests ar
       JOIN public.projects          p         ON p.id           = ar.project_id
