@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ActivityIndicator, ScrollView,
   RefreshControl, TouchableOpacity, Modal, TextInput,
@@ -29,7 +29,7 @@ interface Project { id: number; project_code: string; project_name: string; }
 const CAN_SEND = ['FOREMAN','TRADE_ADMIN','TRADE_PROJECT_MANAGER','COMPANY_ADMIN','IT_ADMIN','SUPER_ADMIN'];
 const PRIORITIES = ['NORMAL','HIGH','URGENT'];
 const INBOX_TABS = [{key:'ALL',label:'All'},{key:'TASK',label:'Tasks'},{key:'MATERIAL',label:'Materials'},{key:'GENERAL',label:'General'}];
-const HUB_TABS = [{key:'inbox',label:'Inbox'},{key:'send',label:'Send Task'}];
+// Hub shows Inbox only - Send Task moved to Dashboard
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const DAYS = ['Su','Mo','Tu','We','Th','Fr','Sa'];
 
@@ -52,7 +52,7 @@ function ImageViewer({ uri, onClose }: { uri: string; onClose: () => void }) {
         <TouchableOpacity style={{ position:'absolute', top:50, right:20, zIndex:10, padding:10, backgroundColor:'rgba(255,255,255,0.15)', borderRadius:20 }} onPress={onClose}>
           <Ionicons name="close" size={24} color="#fff" />
         </TouchableOpacity>
-        <Text style={{ position:'absolute', top:56, left:0, right:0, textAlign:'center', color:'rgba(255,255,255,0.4)', fontSize:12, zIndex:5 }}>Pinch to zoom · Double tap to reset</Text>
+        <Text style={{ position:'absolute', top:56, left:0, right:0, textAlign:'center', color:'rgba(255,255,255,0.4)', fontSize:12, zIndex:5 }}>Pinch to zoom Â· Double tap to reset</Text>
         <ScrollView
           style={{ flex:1 }}
           contentContainerStyle={{ flex:1, justifyContent:'center', alignItems:'center' }}
@@ -106,7 +106,7 @@ function CalendarPicker({ value, onChange, minDate }: { value: Date; onChange: (
 export default function MyHubScreen() {
   const { user } = useAuthStore();
   const canSend = user?.role && CAN_SEND.includes(user.role);
-  const [hubTab, setHubTab] = useState('inbox');
+
 
   const [messages, setMessages] = useState<HubMessage[]>([]);
   const [unread, setUnread] = useState(0);
@@ -171,8 +171,7 @@ export default function MyHubScreen() {
   },[]);
 
   useEffect(()=>{
-    if (hubTab==='send' && canSend) fetchSendData();
-  },[hubTab]);
+  },[]);
 
   useEffect(()=>{
     if (!form.project_id) return;
@@ -295,23 +294,13 @@ export default function MyHubScreen() {
   const filtered = inboxTab==='ALL'?messages:messages.filter(m=>m.type===inboxTab);
   const selectedWorkers = workers.filter(w=>form.recipient_ids.includes(w.id));
 
-  if (loading && hubTab==='inbox') return <View style={s.center}><ActivityIndicator size="large" color="#1e3a5f"/></View>;
+  if (loading) return <View style={s.center}><ActivityIndicator size="large" color="#1e3a5f"/></View>;
 
   return (
     <View style={s.wrapper}>
-      {/* Hub Tab Bar */}
-      <View style={s.hubTabBar}>
-        {(canSend ? HUB_TABS : [HUB_TABS[0]]).map(t=>(
-          <TouchableOpacity key={t.key} style={[s.hubTab, hubTab===t.key&&s.hubTabActive]} onPress={()=>setHubTab(t.key)}>
-            <Text style={[s.hubTabText, hubTab===t.key&&s.hubTabTextActive]}>{t.label}</Text>
-            {t.key==='inbox'&&unread>0&&<View style={s.tabBadge}><Text style={s.tabBadgeText}>{unread}</Text></View>}
-          </TouchableOpacity>
-        ))}
-      </View>
 
       {/* INBOX TAB */}
-      {hubTab==='inbox'&&(
-        <ScrollView style={s.container} contentContainerStyle={s.content}
+      <ScrollView style={s.container} contentContainerStyle={s.content}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={()=>{setRefreshing(true);fetchInbox();}} tintColor="#1e3a5f"/>}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.tabsScroll}>
             <View style={s.tabsRow}>
@@ -354,7 +343,7 @@ export default function MyHubScreen() {
                   <Text style={[s.msgTitle, isDone&&{color:'#6b7280'}]}>{msg.title}</Text>
                   {!isOpen&&msg.body?<Text style={s.msgBody} numberOfLines={2}>{msg.body}</Text>:null}
                   <View style={s.meta}>
-                    <View style={s.row}><Ionicons name="person-outline" size={13} color="#9ca3af"/><Text style={s.metaText}>{msg.sender_first} {msg.sender_last} · {fmtDT(msg.created_at)}</Text></View>
+                    <View style={s.row}><Ionicons name="person-outline" size={13} color="#9ca3af"/><Text style={s.metaText}>{msg.sender_first} {msg.sender_last} Â· {fmtDT(msg.created_at)}</Text></View>
                     {msg.project_name&&<View style={s.row}><Ionicons name="business-outline" size={13} color="#9ca3af"/><Text style={s.metaText}>{msg.project_name}</Text></View>}
                   </View>
                 </TouchableOpacity>
@@ -392,208 +381,6 @@ export default function MyHubScreen() {
             );
           })}
         </ScrollView>
-      )}
-
-      {/* SEND TASK TAB */}
-      {hubTab==='send'&&canSend&&(
-        <ScrollView style={s.container} contentContainerStyle={s.content}>
-          {loadingSend?(
-            <View style={s.center}><ActivityIndicator size="large" color="#1e3a5f"/></View>
-          ):(
-            <>
-              {!showForm&&(
-                <TouchableOpacity style={s.newTaskBtn} onPress={()=>setShowForm(true)}>
-                  <Ionicons name="add-circle-outline" size={20} color="#fff"/>
-                  <Text style={s.newTaskText}>New Task</Text>
-                </TouchableOpacity>
-              )}
-
-              {showForm&&(
-                <View style={s.formCard}>
-                  <Text style={s.formTitle}>New Task</Text>
-
-                  {/* Project */}
-                  <Text style={s.label}>Project</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom:8}}>
-                    <View style={{flexDirection:'row',gap:8}}>
-                      {projects.map(p=>(
-                        <TouchableOpacity key={p.id} style={[s.chip, form.project_id===String(p.id)&&s.chipSel]}
-                          onPress={()=>setField('project_id', String(p.id))}>
-                          <Text style={[s.chipText, form.project_id===String(p.id)&&s.chipTextSel]}>{p.project_name}</Text>
-                          <Text style={[s.chipSub, form.project_id===String(p.id)&&{color:'#93c5fd'}]}>{p.project_code}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </ScrollView>
-
-                  {/* Recipients - modal picker */}
-                  <View style={s.workerHeader}>
-                    <Text style={s.label}>Recipients {form.recipient_ids.length>0?`(${form.recipient_ids.length})`:''}</Text>
-                    {form.recipient_ids.length>0&&(
-                      <TouchableOpacity onPress={clearAll} style={s.selectBtn}>
-                        <Text style={s.selectBtnText}>Clear all</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                  {/* Selected chips */}
-                  {selectedWorkers.length>0&&(
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom:8}}>
-                      <View style={{flexDirection:'row',gap:6}}>
-                        {selectedWorkers.map(w=>(
-                          <TouchableOpacity key={w.id} style={s.selectedChip} onPress={()=>toggleRecipient(w.id)}>
-                            <Text style={s.selectedChipText}>{w.first_name} {w.last_name}</Text>
-                            <Ionicons name="close-circle" size={14} color="#fff"/>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    </ScrollView>
-                  )}
-                  <TouchableOpacity style={s.workerPickerBtn} onPress={()=>{ setWorkerSearch(''); setShowWorkerModal(true); }}>
-                    <Ionicons name="people-outline" size={18} color="#1e3a5f"/>
-                    <Text style={[s.workerPickerText, form.recipient_ids.length===0&&{color:'#9ca3af'}]}>
-                      {form.recipient_ids.length===0 ? 'Select recipients...' : `${form.recipient_ids.length} selected - tap to edit`}
-                    </Text>
-                    <Ionicons name="chevron-forward" size={16} color="#9ca3af"/>
-                  </TouchableOpacity>
-
-                  {/* Title */}
-                  <Text style={s.label}>Title *</Text>
-                  <TextInput style={s.input} placeholder="Task title..." placeholderTextColor="#9ca3af" value={form.title} onChangeText={v=>setField('title',v)}/>
-
-                  {/* Body */}
-                  <Text style={s.label}>Description</Text>
-                  <TextInput style={[s.input,s.textArea]} placeholder="Details..." placeholderTextColor="#9ca3af" value={form.body} onChangeText={v=>setField('body',v)} multiline numberOfLines={3}/>
-
-                  {/* Priority */}
-                  <Text style={s.label}>Priority</Text>
-                  <View style={{flexDirection:'row',gap:8,marginBottom:8}}>
-                    {PRIORITIES.map(p=>(
-                      <TouchableOpacity key={p} style={[s.pChip, form.priority===p&&{backgroundColor:priorityColor(p),borderColor:priorityColor(p)}]} onPress={()=>setField('priority',p)}>
-                        <Text style={[s.pChipText, form.priority===p&&{color:'#fff'}]}>{p}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-
-                  {/* Due Date */}
-                  <Text style={s.label}>Due Date</Text>
-                  <TouchableOpacity style={s.dateButton} onPress={()=>setShowCalendar(true)}>
-                    <Ionicons name="calendar-outline" size={16} color="#1e3a5f"/>
-                    <Text style={s.dateButtonText}>{fmtDateDisplay(dueDate)}</Text>
-                  </TouchableOpacity>
-
-                  {/* Attachment */}
-                  <Text style={s.label}>Attachment (optional)</Text>
-                  <TouchableOpacity style={s.attachBtn} onPress={pickImage}>
-                    <Ionicons name="image-outline" size={18} color="#1e3a5f"/>
-                    <Text style={[s.attachBtnText, !attachedFile&&{color:'#9ca3af'}]}>
-                      {attachedFile ? attachedFile.name : 'Add photo or image...'}
-                    </Text>
-                    {attachedFile&&<TouchableOpacity onPress={()=>setAttachedFile(null)}><Ionicons name="close-circle" size={18} color="#dc2626"/></TouchableOpacity>}
-                  </TouchableOpacity>
-                  {attachedFile&&<Image source={{uri:attachedFile.uri}} style={s.previewImg} resizeMode="cover"/>}
-
-                  {/* Actions */}
-                  <View style={s.formActions}>
-                    <TouchableOpacity style={s.cancelBtn} onPress={resetForm}>
-                      <Text style={s.cancelText}>Cancel</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[s.sendBtn, sending&&{opacity:0.6}]} onPress={handleSend} disabled={sending}>
-                      {sending?<ActivityIndicator color="#fff" size="small"/>:<>
-                        <Ionicons name="send" size={16} color="#fff"/>
-                        <Text style={s.sendBtnText}>Send Task</Text>
-                      </>}
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
-
-              {/* Sent Messages */}
-              {loadingSent?(
-                <View style={s.center}><ActivityIndicator color="#1e3a5f"/></View>
-              ):sent.length===0&&!showForm?(
-                <View style={s.emptyCard}><Ionicons name="send-outline" size={40} color="#d1d5db"/><Text style={s.emptyText}>No tasks sent yet</Text></View>
-              ):sent.map(task=>{
-                const total = Number(task.total_recipients)||0;
-                const acked = Number(task.acknowledged_count)||0;
-                const pending = Number(task.pending_count)||0;
-                const pct = total>0?Math.round((acked/total)*100):0;
-                const isOpen = expandedSent[task.id];
-                return (
-                  <View key={task.id} style={s.sentCard}>
-                    <TouchableOpacity style={s.sentHeader} onPress={()=>setExpandedSent(p=>({...p,[task.id]:!p[task.id]}))}>
-                      <View style={s.sentIcon}>
-                        <Ionicons name="checkmark-circle-outline" size={20} color="#1e3a5f"/>
-                      </View>
-                      <View style={{flex:1}}>
-                        <View style={s.row}>
-                          <Text style={s.sentTitle} numberOfLines={1}>{task.title}</Text>
-                          <View style={[s.pBadge,{backgroundColor:priorityColor(task.priority)+'20'}]}>
-                            <Text style={[s.pText,{color:priorityColor(task.priority)}]}>{task.priority}</Text>
-                          </View>
-                        </View>
-                        <Text style={s.sentMeta}>
-                          {fmtDT(task.created_at)}{task.project_code?` · ${task.project_code}`:''} · {total} recipient{total!==1?'s':''}
-                          {task.due_date?` · Due ${fmtDueDate(task.due_date)}`:''}
-                        </Text>
-                      </View>
-                      <View style={s.sentProgress}>
-                        <Text style={s.sentPct}>{pct}%</Text>
-                        <Text style={s.sentPctSub}>{acked}/{total}</Text>
-                      </View>
-                      <Ionicons name={isOpen?'chevron-up':'chevron-down'} size={16} color="#9ca3af"/>
-                    </TouchableOpacity>
-                    {isOpen&&(
-                      <View style={s.sentDetails}>
-                        {task.recipients?.map((r,i)=>{
-                          const name = r.first_name?`${r.first_name} ${r.last_name}`:r.username;
-                          const isPending = r.status==='PENDING';
-                          const isDone = r.status==='ACKNOWLEDGED';
-                          const isRead = r.status==='READ';
-                          return (
-                            <View key={i} style={[s.recipientCard, isDone&&{borderLeftColor:'#16a34a'}, isPending&&{borderLeftColor:'#d97706'}, isRead&&{borderLeftColor:'#2563eb'}]}>
-                              <View style={{flexDirection:'row',justifyContent:'space-between',alignItems:'center'}}>
-                                <View style={{flexDirection:'row',alignItems:'center',gap:8}}>
-                                  <View style={[s.recipientAvatar, isDone&&{backgroundColor:'#16a34a'}, isPending&&{backgroundColor:'#d97706'}, isRead&&{backgroundColor:'#2563eb'}]}>
-                                    <Text style={{fontSize:11,fontWeight:'700',color:'#fff'}}>{name[0]?.toUpperCase()}</Text>
-                                  </View>
-                                  <Text style={s.recipientName}>{name}</Text>
-                                </View>
-                                <View style={[s.recipientBadge, isDone&&{backgroundColor:'#f0fdf4'}, isPending&&{backgroundColor:'#fffbeb'}, isRead&&{backgroundColor:'#eff6ff'}]}>
-                                  <Text style={[s.recipientStatus, isDone&&{color:'#16a34a'}, isPending&&{color:'#d97706'}, isRead&&{color:'#2563eb'}]}>
-                                    {isDone?'✓ Done':isPending?'⏳ Pending':isRead?'👁 Seen':'📬 Sent'}
-                                  </Text>
-                                </View>
-                              </View>
-                              {r.completion_note&&(
-                                <View style={s.completionNoteBox}>
-                                  <Ionicons name="chatbubble-outline" size={12} color="#6b7280"/>
-                                  <Text style={s.completionNoteText}>{r.completion_note}</Text>
-                                </View>
-                              )}
-                              {r.completion_image_url&&(
-                                <TouchableOpacity onPress={()=>setFullScreenImg('https://app.constrai.ca/uploads'+r.completion_image_url)} style={{marginTop:8}}>
-                                  <Image source={{uri:'https://app.constrai.ca/uploads'+r.completion_image_url}} style={s.completionThumb} resizeMode="cover"/>
-                                  <Text style={{fontSize:11,color:'#6b7280',marginTop:4}}>Tap to view completion photo</Text>
-                                </TouchableOpacity>
-                              )}
-                            </View>
-                          );
-                        })}
-                        {pending>0&&(
-                          <View style={s.pendingNote}>
-                            <Ionicons name="time-outline" size={14} color="#d97706"/>
-                            <Text style={s.pendingNoteText}>{pending} recipient{pending!==1?'s':''} will receive this once assigned to the project</Text>
-                          </View>
-                        )}
-                      </View>
-                    )}
-                  </View>
-                );
-              })}
-            </>
-          )}
-        </ScrollView>
-      )}
 
       {/* Full Screen Image Modal */}
       {fullScreenImg&&<ImageViewer uri={fullScreenImg} onClose={()=>setFullScreenImg(null)}/>}
@@ -659,7 +446,7 @@ export default function MyHubScreen() {
                   </View>
                   <View style={{flex:1}}>
                     <Text style={[s.workerName, selected&&{color:'#1e3a5f',fontWeight:'700'}]}>{w.first_name} {w.last_name}</Text>
-                    <Text style={s.workerRole}>{w.role} · {w.trade_name||'General'}{w.is_assigned?' · Assigned':''}</Text>
+                    <Text style={s.workerRole}>{w.role} Â· {w.trade_name||'General'}{w.is_assigned?' Â· Assigned':''}</Text>
                   </View>
                   {selected
                     ?<Ionicons name="checkmark-circle" size={22} color="#1e3a5f"/>

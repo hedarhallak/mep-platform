@@ -1,5 +1,5 @@
 # MEP Platform — Master Project README
-> Last updated: April 12, 2026 | Maintainer: Hedar Hallak
+> Last updated: April 13, 2026 | Maintainer: Hedar Hallak
 > Production: https://app.constrai.ca
 > Server: root@143.110.218.84
 > Backend path on server: /var/www/mep
@@ -21,17 +21,31 @@ https://raw.githubusercontent.com/hedarhallak/mep-platform/main/DECISIONS.md
 MEP Platform (Constrai) is a Quebec construction workforce ERP for MEP companies.
 - Company ID: 5
 - Projects: PROJ-11(Alpha), PROJ-12(Beta), PROJ-21(Gamma), PROJ-22(Delta), PROJ-23(Epsilon)
-- All assignments extended to 2026-06-30
 
-### Test Roles:
-| Users | Role | PIN |
+### Test Accounts:
+| Username | Role | PIN |
 |---|---|---|
-| seed.worker1-5 | TRADE_ADMIN | 1234 |
-| seed.worker6-10 | FOREMAN | 1234 |
-| seed.worker11-20 | JOURNEYMAN | 1234 |
-| seed.worker21-28 | APPRENTICE_1-4 | 1234 |
-| seed.worker29-30 | DRIVER | 1234 |
-| seed.worker31-50 | WORKER | 1234 |
+| admin | COMPANY_ADMIN | 1234 |
+| seed.worker2@meptest.com | TRADE_ADMIN | 1234 |
+| seed.worker6@meptest.com | FOREMAN | 1234 |
+| seed.worker11@meptest.com | JOURNEYMAN | 1234 |
+| seed.worker31@meptest.com | WORKER | 1234 |
+
+### Seed Accounts Pattern (PIN: 1234):
+| Range | Role |
+|---|---|
+| seed.worker1-5 | TRADE_ADMIN |
+| seed.worker6-10 | FOREMAN |
+| seed.worker11-20 | JOURNEYMAN |
+| seed.worker21-28 | APPRENTICE_1-4 |
+| seed.worker29-30 | DRIVER |
+| seed.worker31-50 | WORKER |
+
+### Test Assignment (Project Alpha — PROJ-11):
+| Employee | Role | Period |
+|---|---|---|
+| David Tremblay 6 (emp 211) | FOREMAN | Apr 12 – May 12, 2026 |
+| Lucas–Carlos Tremblay 11-16 (emp 216-221) | WORKER | Apr 12 – May 12, 2026 |
 
 ---
 
@@ -46,6 +60,7 @@ MEP Platform (Constrai) is a Quebec construction workforce ERP for MEP companies
 | Maps | Mapbox |
 | PDF | Puppeteer |
 | Hosting | DigitalOcean VPS |
+| GIS | PostGIS (installed April 2026) |
 
 ---
 
@@ -53,97 +68,98 @@ MEP Platform (Constrai) is a Quebec construction workforce ERP for MEP companies
 | Route | Feature | Status |
 |---|---|---|
 | auth.js | Login / JWT + PIN | ✅ |
-| hub.js | My Hub — tasks + complete endpoint + file upload | ✅ |
-| assignments.js | Assignments + PENDING hub task delivery trigger | ✅ |
+| hub.js | My Hub — tasks + complete + file upload | ✅ |
+| assignments.js | Assignments | ✅ |
 | attendance.js | Attendance + CCQ hours | ✅ |
 | materials.js + material_requests.js | Materials + PO + PDF | ✅ |
 | reports.js | My Report + Distance 41km+ | ✅ |
-| permissions.js | RBAC 51 permissions | ✅ |
+| permissions.js | RBAC — 58 permissions / 13 roles / 284 mappings | ✅ |
+| bi.js | Business Intelligence + Workforce Planner | ✅ |
+| projects.js | Projects CRUD | ✅ |
 
 ---
 
 ## Database
 - Migrations: 030
 - Tables: 55
+- PostGIS extension: installed
 - Hub tables: task_messages, task_recipients
-- task_recipients columns: status, read_at, acknowledged_at, completed_at, completion_note, completion_image_url, expected_project_id
 - Status flow: PENDING → SENT → READ → ACKNOWLEDGED
-- File uploads: /var/www/mep/uploads/hub/
+
+---
+
+## RBAC — 13 Roles (April 2026)
+| Role | Level |
+|---|---|
+| SUPER_ADMIN | 100 |
+| IT_ADMIN | 90 |
+| COMPANY_ADMIN | 80 |
+| TRADE_PROJECT_MANAGER | 60 |
+| TRADE_ADMIN | 50 |
+| FOREMAN | 40 |
+| JOURNEYMAN | 20 |
+| APPRENTICE_4/3/2/1 | 15 |
+| WORKER | 10 |
+| DRIVER | 10 |
+
+Permission matrix: 284 mappings — see DECISIONS.md for full matrix.
 
 ---
 
 ## Frontend Web
-- Built with: `cd /var/www/mep/mep-frontend && npm run build --legacy-peer-deps`
-- Nginx serves: /var/www/mep/mep-frontend/dist
-- API proxied via nginx to localhost:3000
-- Uploads served at: /uploads/
+- Build: `cd /var/www/mep/mep-frontend && npm run build`
+- After build: `cp -r dist/* /var/www/mep/public/`
+- Nginx serves: /var/www/mep/public/
 
-## Nginx Config (important)
-```nginx
-root /var/www/mep/mep-frontend/dist;
-location /api/ { proxy_pass http://localhost:3000; }
-location /uploads/ { alias /var/www/mep/uploads/; }
-location / { try_files $uri $uri/ /index.html; }
-```
+### Web Pages Status
+| Page | Status |
+|---|---|
+| Dashboard | ✅ |
+| Assignments | ✅ |
+| Attendance | ✅ |
+| Materials + Purchase Orders | ✅ |
+| Reports | ✅ |
+| My Hub | ✅ |
+| Permissions Matrix (13 roles) | ✅ |
+| User Management | ✅ |
+| Business Intelligence / Workforce Planner | ✅ |
 
 ---
 
 ## Mobile App — React Native + Expo
 > Location: mep-fixed/mep-mobile/
 > Bundle ID: ca.constrai.app
-> Apple Developer: ✅ Active
-> Google Play: ✅ Active
 > Expo Account: hedarhallak75
 
-### Screens Status
+### Navigation Structure (Dashboard First — April 2026)
+```
+Bottom Bar: Home · My Hub · Profile
+Home → DashboardScreen (module grid, role-aware)
+       → Attendance
+       → Materials (Stack: Worker view / Foreman Workspace)
+       → Report
+       → Assignments (Coming Soon)
+       → Standup (Coming Soon)
+```
+
+### Mobile Screens Status
 | Screen | Status |
 |---|---|
 | Login | ✅ |
-| My Hub (full) | ✅ |
+| Dashboard (Home) | ✅ Role-aware module grid |
+| My Hub — Inbox only | ✅ Send Task moved to Dashboard |
 | Attendance | ✅ |
-| Material Request | ✅ |
-| My Report | ✅ |
-| Profile | ✅ |
-
-### My Hub — Full Feature Status
-| Feature | Status |
-|---|---|
-| Inbox + expand/read | ✅ |
-| Acknowledge / Mark Complete | ✅ |
-| Completion note + photo | ✅ |
-| Send Task + file attachment | ✅ |
-| Worker picker modal + search | ✅ |
-| Filter workers by project | ✅ |
-| Smart delivery PENDING→SENT | ✅ (API only, not direct DB) |
-| Unread badge on tab | ✅ |
-| Sent list with completion details | ✅ |
-| Full screen image zoom | ✅ |
+| Material Request (Worker) | ✅ |
+| Foreman Workspace | ✅ Built, pending test |
+| My Report | 🔄 Not tested yet |
+| Profile + Change PIN | 🔄 Not tested yet |
 
 ### Daily Testing
 ```powershell
 cd C:\Users\Lenovo\Desktop\mep-site-backend-fixed\mep-fixed\mep-mobile
-npx expo start
+npx expo start --clear
 ```
-Scan QR with iPhone Camera app → opens in Expo Go
-
-### Production Build (when ready)
-```powershell
-eas build --platform ios --profile production
-eas build --platform android --profile production
-```
-
----
-
-## Next Steps
-| Priority | Task |
-|---|---|
-| 🔴 1 | Test Attendance screen on mobile |
-| 🔴 2 | Test Materials screen on mobile |
-| 🔴 3 | Test My Report on mobile |
-| 🔴 4 | Test Profile + Change PIN on mobile |
-| 🔴 5 | Fix any bugs found |
-| 🟡 6 | Production iOS build → App Store |
-| 🟡 7 | Production Android build → Google Play |
+Scan QR with iPhone Camera → opens in Expo Go
 
 ---
 
@@ -156,21 +172,31 @@ eas build --platform android --profile production
 4. Every file labeled with full path, ready to copy-paste
 5. Never ask Hedar to manually edit — Claude makes the full change
 
-### Communication Rules
-6. When giving multi-step instructions: write each step in BOTH Arabic and English separately
-7. Always specify WHERE to run a command: "on the server" or "on PowerShell on your machine"
-8. Never write "شغّل:" without specifying the location
+### Location Rules
+6. Always specify WHERE to run a command:
+   - **On the server:** `ssh root@143.110.218.84` then run
+   - **On PowerShell:** explicitly say "on PowerShell"
+   - Never write a command without specifying location
 
-### Testing Rules
-9. Use `npx expo start` + Expo Go for daily testing — NOT EAS builds
-10. EAS builds only for production/TestFlight
+### Error Checking Rules
+7. For mobile errors — ALWAYS ask for terminal log, NOT a screenshot:
+   ```powershell
+   npx expo start --clear 2>&1 | Tee-Object -FilePath C:\Users\Lenovo\Desktop\expo_log.txt
+   ```
+   Then upload expo_log.txt — faster and more complete than screenshots
+8. For server errors — use `pm2 logs mep-backend --err --lines 30 --nostream`
+9. For frontend errors — check browser console Network tab
 
-### File Rules
-11. Always read files from GitHub using raw URLs
-12. For folder structure: use PowerShell Out-File pattern
-13. Never commit broken files — always verify syntax before commit
+### File Inspection Rules
+10. To read a file: `Get-Content "path\to\file" | Out-File -FilePath C:\Users\Lenovo\Desktop\filename.txt`
+11. To read folder structure: `Get-ChildItem "path" -Recurse -Name | Out-File -FilePath C:\Users\Lenovo\Desktop\structure.txt`
+
+### Git Rules
+12. After any server-side fix: commit from server and push to GitHub immediately
+13. Before any session: `git pull origin main` on server
+14. After every feature: update MASTER_README.md and commit
 
 ### Conversation Rules
-14. At start of every conversation — fetch MASTER_README.md and DECISIONS.md from GitHub
-15. Never take unilateral decisions without Hedar's approval
-16. After every completed feature — update MASTER_README.md and commit
+15. At start of every conversation — fetch MASTER_README.md and DECISIONS.md from GitHub
+16. Never take unilateral decisions without Hedar's approval
+17. Every architectural decision made in conversation → document in DECISIONS.md immediately

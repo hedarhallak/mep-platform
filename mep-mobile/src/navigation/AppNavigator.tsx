@@ -1,14 +1,38 @@
 import React, { useEffect, useState } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
-import AttendanceScreen from '../screens/attendance/AttendanceScreen';
-import MaterialsNavigator from './MaterialsNavigator';
-import MyReportScreen from '../screens/reports/MyReportScreen';
+import MainStackNavigator from './MainStackNavigator';
 import MyHubScreen from '../screens/hub/MyHubScreen';
 import ProfileScreen from '../screens/profile/ProfileScreen';
+import ChangePinScreen from '../screens/profile/ChangePinScreen';
+import { createStackNavigator } from '@react-navigation/stack';
 import { apiClient } from '../api/client';
 
 const Tab = createBottomTabNavigator();
+const ProfileStack = createStackNavigator();
+
+const headerOptions = {
+  headerStyle: { backgroundColor: '#1e3a5f' },
+  headerTintColor: '#ffffff',
+  headerTitleStyle: { fontWeight: 'bold' as const },
+};
+
+function ProfileNavigator() {
+  return (
+    <ProfileStack.Navigator>
+      <ProfileStack.Screen
+        name="ProfileMain"
+        component={ProfileScreen}
+        options={{ ...headerOptions, title: 'Profile' }}
+      />
+      <ProfileStack.Screen
+        name="ChangePin"
+        component={ChangePinScreen}
+        options={{ ...headerOptions, title: 'Change PIN' }}
+      />
+    </ProfileStack.Navigator>
+  );
+}
 
 export default function AppNavigator() {
   const [unreadCount, setUnreadCount] = useState(0);
@@ -28,41 +52,50 @@ export default function AppNavigator() {
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
-        tabBarIcon: ({ color, size }) => {
-          const icons: Record<string, any> = {
-            Attendance: 'location-outline',
-            Materials: 'cube-outline',
-            Report: 'bar-chart-outline',
-            Hub: 'notifications-outline',
-            Profile: 'person-outline',
+        tabBarIcon: ({ color, size, focused }) => {
+          const icons: Record<string, [string, string]> = {
+            Home:    ['home',          'home-outline'],
+            Hub:     ['notifications', 'notifications-outline'],
+            Profile: ['person-circle', 'person-circle-outline'],
           };
-          return <Ionicons name={icons[route.name]} size={size} color={color} />;
+          const [filled, outline] = icons[route.name] || ['ellipse', 'ellipse-outline'];
+          return <Ionicons name={focused ? filled : outline} size={size} color={color} />;
         },
         tabBarActiveTintColor: '#1e3a5f',
         tabBarInactiveTintColor: '#9ca3af',
-        tabBarStyle: { backgroundColor: '#ffffff', borderTopColor: '#e5e7eb' },
-        headerStyle: { backgroundColor: '#1e3a5f' },
-        headerTintColor: '#ffffff',
-        headerTitleStyle: { fontWeight: 'bold' },
+        tabBarStyle: {
+          backgroundColor: '#ffffff',
+          borderTopColor: '#e5e7eb',
+          paddingBottom: 4,
+          height: 60,
+        },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+        headerShown: false,
       })}
     >
-      <Tab.Screen name="Attendance" component={AttendanceScreen} options={{ title: 'Check In/Out' }} />
       <Tab.Screen
-        name="Materials"
-        component={MaterialsNavigator}
-        options={{ headerShown: false, title: 'Materials' }}
+        name="Home"
+        component={MainStackNavigator}
+        options={{ title: 'Home' }}
       />
-      <Tab.Screen name="Report" component={MyReportScreen} options={{ title: 'My Report' }} />
       <Tab.Screen
         name="Hub"
         component={MyHubScreen}
         options={{
           title: 'My Hub',
+          headerShown: true,
+          headerStyle: { backgroundColor: '#1e3a5f' },
+          headerTintColor: '#ffffff',
+          headerTitleStyle: { fontWeight: 'bold' as const },
           tabBarBadge: unreadCount > 0 ? (unreadCount > 99 ? '99+' : unreadCount) : undefined,
           tabBarBadgeStyle: { backgroundColor: '#dc2626', color: '#ffffff', fontSize: 10 },
         }}
       />
-      <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'Profile' }} />
+      <Tab.Screen
+        name="Profile"
+        component={ProfileNavigator}
+        options={{ title: 'Profile' }}
+      />
     </Tab.Navigator>
   );
 }
