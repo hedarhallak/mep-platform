@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import SubMenuScreen, { SubMenuItem } from '../shared/SubMenuScreen';
+import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../../store/useAuthStore';
 import { apiClient } from '../../api/client';
 import { useFocusEffect } from '@react-navigation/native';
@@ -8,6 +9,7 @@ import { useCallback } from 'react';
 const FOREMAN_ROLES = ['FOREMAN', 'TRADE_ADMIN', 'COMPANY_ADMIN', 'TRADE_PROJECT_MANAGER', 'SUPER_ADMIN', 'IT_ADMIN'];
 
 export default function HubMenuScreen() {
+  const { t } = useTranslation();
   const user = useAuthStore(s => s.user);
   const isForeman = FOREMAN_ROLES.includes((user?.role || '').toUpperCase());
   const [unread, setUnread] = useState(0);
@@ -29,8 +31,8 @@ export default function HubMenuScreen() {
   const items: SubMenuItem[] = [
     {
       id: 'inbox',
-      label: 'Inbox',
-      description: 'Tasks, requests and notifications',
+      label: t('hub.inbox'),
+      description: t('hub.inboxDesc'),
       icon: 'mail-outline',
       color: '#1e3a5f',
       bg: '#eff6ff',
@@ -39,8 +41,8 @@ export default function HubMenuScreen() {
     },
     ...(isForeman ? [{
       id: 'material_requests',
-      label: 'Material Requests',
-      description: 'Review and merge worker requests',
+      label: t('hub.materialRequests'),
+      description: t('hub.materialRequestsDesc'),
       icon: 'cube-outline',
       color: '#0891b2',
       bg: '#ecfeff',

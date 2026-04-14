@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import SubMenuScreen, { SubMenuItem } from '../shared/SubMenuScreen';
+import { useTranslation } from 'react-i18next';
 import { apiClient } from '../../api/client';
 
 export default function TasksMenuScreen() {
+  const { t } = useTranslation();
   const [sentCount, setSentCount] = useState(0);
 
   useEffect(() => {
@@ -14,8 +16,8 @@ export default function TasksMenuScreen() {
   const items: SubMenuItem[] = [
     {
       id: 'new_task',
-      label: 'New Task',
-      description: 'Create and send a task to workers',
+      label: t('tasks.newTask'),
+      description: t('tasks.newTaskDesc'),
       icon: 'send-outline',
       color: '#dc2626',
       bg: '#fef2f2',
@@ -23,8 +25,8 @@ export default function TasksMenuScreen() {
     },
     {
       id: 'sent_tasks',
-      label: 'Sent Tasks',
-      description: 'Track completion status of sent tasks',
+      label: t('tasks.sentTasks'),
+      description: t('tasks.sentTasksDesc'),
       icon: 'checkmark-circle-outline',
       color: '#059669',
       bg: '#ecfdf5',

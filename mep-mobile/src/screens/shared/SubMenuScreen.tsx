@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 
 // ------------------------------------------------------------------ types --
 
@@ -26,11 +27,12 @@ interface SubMenuScreenProps {
 // ================================================================ screen --
 
 export default function SubMenuScreen({ items }: SubMenuScreenProps) {
+  const { t } = useTranslation();
   const navigation = useNavigation<any>();
 
   const handlePress = (item: SubMenuItem) => {
     if (!item.screen || item.soon) {
-      Alert.alert('Coming Soon', `${item.label} will be available in the next update.`);
+      Alert.alert(t('common.comingSoon'), item.label);
       return;
     }
     navigation.navigate(item.screen, item.params);
@@ -64,7 +66,7 @@ export default function SubMenuScreen({ items }: SubMenuScreenProps) {
               )}
               {item.soon && (
                 <View style={styles.soonBadge}>
-                  <Text style={styles.soonText}>Soon</Text>
+                  <Text style={styles.soonText}>{t('common.comingSoon')}</Text>
                 </View>
               )}
             </TouchableOpacity>

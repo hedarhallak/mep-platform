@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useAuthStore } from '../store/useAuthStore';
+import { useTranslation } from 'react-i18next';
 
 // ------------------------------------------------------------------ types --
 
@@ -24,110 +25,6 @@ interface Module {
   roles: string[];
 }
 
-// --------------------------------------------------------------- modules --
-
-const ALL_MODULES: Module[] = [
-  {
-    id: 'attendance',
-    label: 'Attendance',
-    icon: 'location-outline',
-    color: '#1e3a5f',
-    bg: '#eff6ff',
-    screen: 'Attendance',
-    roles: ['ALL'],
-  },
-  {
-    id: 'materials',
-    label: 'Materials',
-    icon: 'cube-outline',
-    color: '#0891b2',
-    bg: '#ecfeff',
-    screen: 'Materials',
-    roles: ['ALL'],
-  },
-  {
-    id: 'report',
-    label: 'My Report',
-    icon: 'bar-chart-outline',
-    color: '#7c3aed',
-    bg: '#f5f3ff',
-    screen: 'Report',
-    roles: ['ALL'],
-  },
-  {
-    id: 'tasks',
-    label: 'Tasks',
-    icon: 'checkmark-circle-outline',
-    color: '#dc2626',
-    bg: '#fef2f2',
-    screen: 'Tasks',
-    roles: ['FOREMAN', 'TRADE_ADMIN', 'TRADE_PROJECT_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN', 'IT_ADMIN'],
-  },
-  {
-    id: 'assignments',
-    label: 'Assignments',
-    icon: 'clipboard-outline',
-    color: '#d97706',
-    bg: '#fffbeb',
-    screen: null,
-    roles: ['FOREMAN', 'TRADE_ADMIN', 'TRADE_PROJECT_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN', 'IT_ADMIN'],
-  },
-  {
-    id: 'standup',
-    label: 'Standup',
-    icon: 'people-outline',
-    color: '#059669',
-    bg: '#ecfdf5',
-    screen: null,
-    roles: ['FOREMAN', 'TRADE_ADMIN', 'TRADE_PROJECT_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN'],
-  },
-  {
-    id: 'purchase_orders',
-    label: 'Purchase Orders',
-    icon: 'document-text-outline',
-    color: '#6d28d9',
-    bg: '#f5f3ff',
-    screen: null,
-    roles: ['FOREMAN', 'TRADE_ADMIN', 'TRADE_PROJECT_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN', 'IT_ADMIN'],
-  },
-];
-
-// --------------------------------------------------------- role helpers --
-
-function getVisibleModules(role: string): Module[] {
-  const r = (role || '').toUpperCase();
-  return ALL_MODULES.filter(m => {
-    if (m.roles.includes('ALL')) return true;
-    return m.roles.map(x => x.toUpperCase()).includes(r);
-  });
-}
-
-function getRoleLabel(role: string): string {
-  const map: Record<string, string> = {
-    SUPER_ADMIN: 'Super Admin',
-    IT_ADMIN: 'IT Admin',
-    COMPANY_ADMIN: 'Company Admin',
-    TRADE_PROJECT_MANAGER: 'Project Manager',
-    TRADE_ADMIN: 'Trade Admin',
-    FOREMAN: 'Foreman',
-    JOURNEYMAN: 'Journeyman',
-    APPRENTICE_4: 'Apprentice 4',
-    APPRENTICE_3: 'Apprentice 3',
-    APPRENTICE_2: 'Apprentice 2',
-    APPRENTICE_1: 'Apprentice 1',
-    WORKER: 'Worker',
-    DRIVER: 'Driver',
-  };
-  return map[role?.toUpperCase()] || role || 'Worker';
-}
-
-function getGreeting(): string {
-  const h = new Date().getHours();
-  if (h < 12) return 'Good morning';
-  if (h < 18) return 'Good afternoon';
-  return 'Good evening';
-}
-
 function getDisplayName(user: any): string {
   if (user?.name && user.name.trim()) return user.name.split(' ')[0];
   if (user?.username && user.username.trim()) {
@@ -137,20 +34,44 @@ function getDisplayName(user: any): string {
   return 'there';
 }
 
-// ================================================================ screen --
+function getRoleLabel(role: string): string {
+  const map: Record<string, string> = {
+    SUPER_ADMIN: 'Super Admin', IT_ADMIN: 'IT Admin', COMPANY_ADMIN: 'Company Admin',
+    TRADE_PROJECT_MANAGER: 'Project Manager', TRADE_ADMIN: 'Trade Admin',
+    FOREMAN: 'Foreman', JOURNEYMAN: 'Journeyman', APPRENTICE_4: 'Apprentice 4',
+    APPRENTICE_3: 'Apprentice 3', APPRENTICE_2: 'Apprentice 2', APPRENTICE_1: 'Apprentice 1',
+    WORKER: 'Worker', DRIVER: 'Driver',
+  };
+  return map[role?.toUpperCase()] || role || 'Worker';
+}
 
 export default function DashboardScreen() {
   const navigation = useNavigation<any>();
+  const { t } = useTranslation();
   const user = useAuthStore(s => s.user);
+
+  const ALL_MODULES: Module[] = [
+    { id: 'attendance', label: t('modules.attendance'), icon: 'location-outline', color: '#1e3a5f', bg: '#eff6ff', screen: 'Attendance', roles: ['ALL'] },
+    { id: 'materials', label: t('modules.materials'), icon: 'cube-outline', color: '#0891b2', bg: '#ecfeff', screen: 'Materials', roles: ['ALL'] },
+    { id: 'report', label: t('modules.report'), icon: 'bar-chart-outline', color: '#7c3aed', bg: '#f5f3ff', screen: 'Report', roles: ['ALL'] },
+    { id: 'tasks', label: t('modules.tasks'), icon: 'checkmark-circle-outline', color: '#dc2626', bg: '#fef2f2', screen: 'Tasks', roles: ['FOREMAN', 'TRADE_ADMIN', 'TRADE_PROJECT_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN', 'IT_ADMIN'] },
+    { id: 'assignments', label: t('modules.assignments'), icon: 'clipboard-outline', color: '#d97706', bg: '#fffbeb', screen: null, roles: ['FOREMAN', 'TRADE_ADMIN', 'TRADE_PROJECT_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN', 'IT_ADMIN'] },
+    { id: 'standup', label: t('modules.standup'), icon: 'people-outline', color: '#059669', bg: '#ecfdf5', screen: null, roles: ['FOREMAN', 'TRADE_ADMIN', 'TRADE_PROJECT_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN'] },
+    { id: 'purchase_orders', label: t('modules.purchaseOrders'), icon: 'document-text-outline', color: '#6d28d9', bg: '#f5f3ff', screen: null, roles: ['FOREMAN', 'TRADE_ADMIN', 'TRADE_PROJECT_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN', 'IT_ADMIN'] },
+  ];
   const role = user?.role || 'WORKER';
-  const modules = getVisibleModules(role);
+  const modules = ALL_MODULES.filter(m => {
+    const r = role.toUpperCase();
+    if (m.roles.includes('ALL')) return true;
+    return m.roles.map((x: string) => x.toUpperCase()).includes(r);
+  });
   const displayName = getDisplayName(user);
 
   const handleModulePress = (mod: Module) => {
     if (mod.screen) {
       navigation.navigate(mod.screen);
     } else {
-      Alert.alert('Coming Soon', `${mod.label} module will be available in the next update.`);
+      Alert.alert(t('common.comingSoon'), `${mod.label}`);
     }
   };
 
@@ -161,7 +82,7 @@ export default function DashboardScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.greeting}>{getGreeting()},</Text>
+          <Text style={styles.greeting}>{new Date().getHours() < 12 ? t('dashboard.greeting.morning') : new Date().getHours() < 18 ? t('dashboard.greeting.afternoon') : t('dashboard.greeting.evening')},</Text>
           <Text style={styles.name}>{displayName}</Text>
         </View>
         <View style={styles.roleBadge}>
@@ -175,7 +96,7 @@ export default function DashboardScreen() {
         contentContainerStyle={styles.grid}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.sectionTitle}>Quick Access</Text>
+        <Text style={styles.sectionTitle}>{t('dashboard.quickAccess')}</Text>
 
         <View style={styles.modulesGrid}>
           {modules.map(mod => (
@@ -191,7 +112,7 @@ export default function DashboardScreen() {
               <Text style={styles.moduleLabel}>{mod.label}</Text>
               {!mod.screen && (
                 <View style={styles.soonBadge}>
-                  <Text style={styles.soonText}>Soon</Text>
+                  <Text style={styles.soonText}>{t('common.comingSoon')}</Text>
                 </View>
               )}
             </TouchableOpacity>
