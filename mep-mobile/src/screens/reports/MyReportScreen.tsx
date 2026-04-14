@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -170,9 +170,9 @@ function generatePdfHtml(records: ReportRecord[], from: string, to: string, empl
       <td>${fmtDate(r.attendance_date)}</td><td>${r.project_name}</td>
       <td>${fmtTime(r.check_in_time)}</td><td>${fmtTime(r.check_out_time)}</td>
       <td>${fmtHours(r.regular_hours)}</td>
-      <td>${Number(r.overtime_hours) > 0 ? fmtHours(r.overtime_hours) : '—'}</td>
-      <td>${Number(r.distance_km) >= 41 ? `${r.distance_km} km` : '—'}</td>
-      <td>${Number(r.daily_allowance) > 0 ? `$${Number(r.daily_allowance).toFixed(2)}` : r.needs_t2200 ? 'T2200' : '—'}</td>
+      <td>${Number(r.overtime_hours) > 0 ? fmtHours(r.overtime_hours) : 'â€”'}</td>
+      <td>${Number(r.distance_km) >= 41 ? `${r.distance_km} km` : 'â€”'}</td>
+      <td>${Number(r.daily_allowance) > 0 ? `$${Number(r.daily_allowance).toFixed(2)}` : r.needs_t2200 ? 'T2200' : 'â€”'}</td>
       <td style="color:${getStatusColor(r.status)};font-weight:600">${r.status}</td>
     </tr>`).join('');
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
@@ -189,7 +189,7 @@ function generatePdfHtml(records: ReportRecord[], from: string, to: string, empl
     tr:nth-child(even){background:#f9fafb}
     .footer{margin-top:24px;text-align:center;font-size:11px;color:#9ca3af}
   </style></head><body>
-  <div class="header"><div><div class="brand">CONSTRAI</div><div style="font-size:14px;color:#6b7280">MEP Platform — Attendance Report</div></div>
+  <div class="header"><div><div class="brand">CONSTRAI</div><div style="font-size:14px;color:#6b7280">MEP Platform â€” Attendance Report</div></div>
   <div style="text-align:right;font-size:13px"><div><strong>${employeeName}</strong></div><div>Period: ${from} to ${to}</div><div>Generated: ${new Date().toLocaleDateString('en-CA')}</div></div></div>
   <div class="summary">
     <div class="summary-item"><div class="summary-label">Days Worked</div><div class="summary-value">${totalDays}</div></div>
@@ -199,17 +199,20 @@ function generatePdfHtml(records: ReportRecord[], from: string, to: string, empl
   </div>
   <table><thead><tr><th>Date</th><th>Project</th><th>In</th><th>Out</th><th>Regular</th><th>OT</th><th>Distance</th><th>Allowance</th><th>Status</th></tr></thead>
   <tbody>${rows}</tbody></table>
-  <div class="footer">CONSTRAI MEP Platform — Confidential</div>
+  <div class="footer">CONSTRAI MEP Platform â€” Confidential</div>
   </body></html>`;
 }
 
 export default function MyReportScreen() {
   const { user } = useAuthStore();
+  const route = useRoute<any>();
+  const period = route.params?.period || 'this_week';
   const [records, setRecords] = useState<ReportRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
-  const [rangeIndex, setRangeIndex] = useState(0);
+  const initialIndex = period === 'last_week' ? 1 : period === 'custom' ? 2 : 0;
+  const [rangeIndex, setRangeIndex] = useState(initialIndex);
   const [customFrom, setCustomFrom] = useState<Date>(new Date());
   const [customTo, setCustomTo] = useState<Date>(new Date());
   const [showFromCal, setShowFromCal] = useState(false);
@@ -369,7 +372,7 @@ export default function MyReportScreen() {
             {Number(r.distance_km) >= 41 && (
               <View style={styles.travelRow}>
                 <Ionicons name="car-outline" size={14} color="#1e3a5f" />
-                <Text style={styles.travelText}>{r.distance_km} km{r.needs_t2200 ? ' — T2200 / TP-64.3' : ''}{r.needs_allowance && r.daily_allowance > 0 ? ` — $${Number(r.daily_allowance).toFixed(2)}` : ''}</Text>
+                <Text style={styles.travelText}>{r.distance_km} km{r.needs_t2200 ? ' â€” T2200 / TP-64.3' : ''}{r.needs_allowance && r.daily_allowance > 0 ? ` â€” $${Number(r.daily_allowance).toFixed(2)}` : ''}</Text>
               </View>
             )}
           </View>

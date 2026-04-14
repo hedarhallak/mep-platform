@@ -55,6 +55,15 @@ const ALL_MODULES: Module[] = [
     roles: ['ALL'],
   },
   {
+    id: 'tasks',
+    label: 'Tasks',
+    icon: 'checkmark-circle-outline',
+    color: '#dc2626',
+    bg: '#fef2f2',
+    screen: 'Tasks',
+    roles: ['FOREMAN', 'TRADE_ADMIN', 'TRADE_PROJECT_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN', 'IT_ADMIN'],
+  },
+  {
     id: 'assignments',
     label: 'Assignments',
     icon: 'clipboard-outline',

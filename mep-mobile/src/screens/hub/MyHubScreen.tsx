@@ -1,4 +1,5 @@
 ﻿import React, { useState, useEffect, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, ActivityIndicator, ScrollView,
   RefreshControl, TouchableOpacity, Modal, TextInput,
@@ -9,7 +10,6 @@ import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'react-native';
 import { apiClient } from '../../api/client';
 import { useAuthStore } from '../../store/useAuthStore';
-import ForemanMaterialsTab from '../materials/ForemanMaterialsTab';
 
 interface HubMessage {
   id: number; type: string; title: string; body: string; priority: string;
@@ -27,10 +27,8 @@ interface SentMessage {
 interface Worker { id: number; employee_id: number; first_name: string; last_name: string; role: string; trade_name: string; is_assigned: boolean; }
 interface Project { id: number; project_code: string; project_name: string; }
 
-const CAN_SEND = ['FOREMAN','TRADE_ADMIN','TRADE_PROJECT_MANAGER','COMPANY_ADMIN','IT_ADMIN','SUPER_ADMIN'];
-const CAN_MATERIALS_HUB = ['FOREMAN','TRADE_ADMIN','COMPANY_ADMIN','SUPER_ADMIN'];
 const PRIORITIES = ['NORMAL','HIGH','URGENT'];
-const INBOX_TABS = [{key:'ALL',label:'All'},{key:'TASK',label:'Tasks'},{key:'MATERIAL',label:'Materials'},{key:'GENERAL',label:'General'}];
+const INBOX_TABS = [{key:'ALL',label:'All'},{key:'TASK',label:'Tasks'},{key:'GENERAL',label:'General'}];
 // Hub shows Inbox only - Send Task moved to Dashboard
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const DAYS = ['Su','Mo','Tu','We','Th','Fr','Sa'];
@@ -70,46 +68,8 @@ function ImageViewer({ uri, onClose }: { uri: string; onClose: () => void }) {
     </Modal>
   );
 }
-function CalendarPicker({ value, onChange, minDate }: { value: Date; onChange: (d: Date) => void; minDate?: Date; }) {
-  const [viewYear, setViewYear] = useState(value.getFullYear());
-  const [viewMonth, setViewMonth] = useState(value.getMonth());
-  const daysInMonth = getDaysInMonth(viewYear, viewMonth);
-  const firstDay = getFirstDay(viewYear, viewMonth);
-  const prevMonth = () => { if (viewMonth===0){setViewMonth(11);setViewYear(y=>y-1);}else setViewMonth(m=>m-1); };
-  const nextMonth = () => { if (viewMonth===11){setViewMonth(0);setViewYear(y=>y+1);}else setViewMonth(m=>m+1); };
-  const cells: (number|null)[] = [];
-  for (let i=0;i<firstDay;i++) cells.push(null);
-  for (let d=1;d<=daysInMonth;d++) cells.push(d);
-  return (
-    <View style={cal.container}>
-      <View style={cal.header}>
-        <TouchableOpacity onPress={prevMonth} style={cal.navBtn}><Ionicons name="chevron-back" size={20} color="#1e3a5f"/></TouchableOpacity>
-        <Text style={cal.title}>{MONTHS[viewMonth]} {viewYear}</Text>
-        <TouchableOpacity onPress={nextMonth} style={cal.navBtn}><Ionicons name="chevron-forward" size={20} color="#1e3a5f"/></TouchableOpacity>
-      </View>
-      <View style={cal.daysRow}>{DAYS.map(d=><Text key={d} style={cal.dayLabel}>{d}</Text>)}</View>
-      <View style={cal.grid}>
-        {cells.map((day, i) => {
-          if (!day) return <View key={`e-${i}`} style={cal.cell}/>;
-          const thisDate = new Date(viewYear, viewMonth, day);
-          const isSelected = fmtDateShort(thisDate)===fmtDateShort(value);
-          const isDisabled = minDate ? thisDate < minDate : false;
-          return (
-            <TouchableOpacity key={day} style={[cal.cell, isSelected&&cal.selectedCell, isDisabled&&cal.disabledCell]} onPress={()=>!isDisabled&&onChange(thisDate)} disabled={isDisabled}>
-              <Text style={[cal.dayNum, isSelected&&cal.selectedNum, isDisabled&&cal.disabledNum]}>{day}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-    </View>
-  );
-}
-
 export default function MyHubScreen() {
   const { user } = useAuthStore();
-  const canSend = user?.role && CAN_SEND.includes(user.role);
-  const canMaterialsHub = !!(user?.role && CAN_MATERIALS_HUB.includes((user.role||'').toUpperCase()));
-  const [hubTab, setHubTab] = React.useState<'inbox'|'materials'|'send'>('inbox');
 
 
   const [messages, setMessages] = useState<HubMessage[]>([]);
@@ -118,30 +78,19 @@ export default function MyHubScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [inboxTab, setInboxTab] = useState('ALL');
 
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [workers, setWorkers] = useState<Worker[]>([]);
-  const [sent, setSent] = useState<SentMessage[]>([]);
-  const [loadingSend, setLoadingSend] = useState(false);
-  const [loadingSent, setLoadingSent] = useState(true);
-  const [sending, setSending] = useState(false);
-  const [showForm, setShowForm] = useState(false);
-  const [showWorkerModal, setShowWorkerModal] = useState(false);
   const [fullScreenImg, setFullScreenImg] = useState<string|null>(null);
-  const [attachedFile, setAttachedFile] = useState<{uri:string;name:string;type:string}|null>(null);
-  const [workerSearch, setWorkerSearch] = useState('');
-  const [expandedSent, setExpandedSent] = useState<Record<number,boolean>>({});
   const [expandedMsgs, setExpandedMsgs] = useState<Record<number,boolean>>({});
   const [completingId, setCompletingId] = useState<number|null>(null);
   const [completionNote, setCompletionNote] = useState('');
   const [completionFile, setCompletionFile] = useState<{uri:string;name:string;type:string}|null>(null); 
-  const [dueDate, setDueDate] = useState(new Date());
-  const [showCalendar, setShowCalendar] = useState(false);
-  const [form, setForm] = useState({
-    title: '', body: '', type: 'TASK', priority: 'NORMAL',
-    project_id: '', recipient_ids: [] as number[],
-  });
 
-  const setField = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
+
+  // Refresh unread count when screen gains focus (updates bottom tab badge)
+  useFocusEffect(
+    useCallback(() => {
+      fetchInbox();
+    }, [])
+  );
 
   const fetchInbox = useCallback(async () => {
     try {
@@ -156,34 +105,6 @@ export default function MyHubScreen() {
   },[]);
 
   useEffect(()=>{ fetchInbox(); },[fetchInbox]);
-
-  const fetchSendData = useCallback(async () => {
-    setLoadingSend(true);
-    try {
-      const [r1,r2,r3] = await Promise.all([
-        apiClient.get('/api/hub/my-projects'),
-        apiClient.get('/api/hub/workers'),
-        apiClient.get('/api/hub/messages/sent'),
-      ]);
-      const p = r1.data?.projects||[];
-      setProjects(p);
-      setWorkers(r2.data?.workers||[]);
-      setSent(r3.data?.messages||[]);
-      if (p.length>0) setField('project_id', String(p[0].id));
-    } catch {}
-    finally { setLoadingSend(false); setLoadingSent(false); }
-  },[]);
-
-  useEffect(()=>{
-  },[]);
-
-  useEffect(()=>{
-    if (!form.project_id) return;
-    apiClient.get(`/api/hub/workers?project_id=${form.project_id}`)
-      .then(r => setWorkers(r.data?.workers||[]))
-      .catch(()=>{});
-    setField('recipient_ids', []);
-  },[form.project_id]);
 
   const handleExpand = async (msg: HubMessage) => {
     const isOpen = expandedMsgs[msg.id];
@@ -204,20 +125,6 @@ export default function MyHubScreen() {
     } catch {}
   };
 
-  const pickCompletionImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') { Alert.alert('Permission needed', 'Please allow photo access.'); return; }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: false, quality: 0.7,
-    });
-    if (!result.canceled && result.assets[0]) {
-      const asset = result.assets[0];
-      const name = asset.uri.split('/').pop() || 'completion.jpg';
-      setCompletionFile({ uri: asset.uri, name, type: 'image/jpeg' });
-    }
-  };
-
   const completeTask = async (id:number) => {
     setCompletingId(id);
     try {
@@ -236,106 +143,15 @@ export default function MyHubScreen() {
     } finally { setCompletingId(null); }
   };
 
-  const filteredWorkers = workerSearch.trim()
-    ? workers.filter(w=>`${w.first_name} ${w.last_name} ${w.role} ${w.trade_name}`.toLowerCase().includes(workerSearch.toLowerCase()))
-    : workers;
-
-  const toggleRecipient = (id:number) => {
-    setField('recipient_ids', form.recipient_ids.includes(id)
-      ? form.recipient_ids.filter(r=>r!==id)
-      : [...form.recipient_ids, id]);
-  };
-  const selectAll = () => setField('recipient_ids', filteredWorkers.map(w=>w.id));
-  const clearAll  = () => setField('recipient_ids', []);
-
-  const resetForm = () => {
-    setForm({ title:'', body:'', type:'TASK', priority:'NORMAL', project_id: projects.length>0?String(projects[0].id):'', recipient_ids:[] });
-    setDueDate(new Date()); setWorkerSearch(''); setShowForm(false); setAttachedFile(null);
-  };
-
-  const pickImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') { Alert.alert('Permission needed', 'Please allow photo access.'); return; }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: false, quality: 0.7,
-    });
-    if (!result.canceled && result.assets[0]) {
-      const asset = result.assets[0];
-      const name = asset.uri.split('/').pop() || 'image.jpg';
-      const type = asset.type === 'image' ? 'image/jpeg' : 'image/jpeg';
-      setAttachedFile({ uri: asset.uri, name, type });
-    }
-  };
-
-  const handleSend = async () => {
-    if (!form.title.trim()) { Alert.alert('Error','Title is required'); return; }
-    if (!form.recipient_ids.length) { Alert.alert('Error','Select at least one recipient'); return; }
-    setSending(true);
-    try {
-      const fd = new FormData();
-      fd.append('title', form.title.trim());
-      if (form.body.trim()) fd.append('body', form.body.trim());
-      fd.append('type', form.type);
-      fd.append('priority', form.priority);
-      fd.append('due_date', fmtDateShort(dueDate));
-      if (form.project_id) fd.append('project_id', form.project_id);
-      fd.append('recipient_ids', JSON.stringify(form.recipient_ids));
-      if (attachedFile) {
-        fd.append('file', { uri: attachedFile.uri, name: attachedFile.name, type: attachedFile.type } as any);
-      }
-      await apiClient.post('/api/hub/messages', fd, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-      resetForm();
-      fetchSendData();
-      Alert.alert('Sent', `Task sent to ${form.recipient_ids.length} recipient(s).`);
-    } catch (e:any) {
-      Alert.alert('Error', e.response?.data?.error||'Failed to send task.');
-    } finally { setSending(false); }
-  };
-
   const filtered = inboxTab==='ALL'?messages:messages.filter(m=>m.type===inboxTab);
-  const selectedWorkers = workers.filter(w=>form.recipient_ids.includes(w.id));
 
   if (loading) return <View style={s.center}><ActivityIndicator size="large" color="#1e3a5f"/></View>;
 
   return (
     <View style={s.wrapper}>
 
-      {/* Tab Bar */}
-      <View style={s.hubTabBar}>
-        <TouchableOpacity style={[s.hubTab, hubTab==='inbox'&&s.hubTabActive]} onPress={()=>setHubTab('inbox')}>
-          <Text style={[s.hubTabText, hubTab==='inbox'&&s.hubTabTextActive]}>Inbox</Text>
-          {unread>0&&<View style={s.tabBadge}><Text style={s.tabBadgeText}>{unread}</Text></View>}
-        </TouchableOpacity>
-        {canMaterialsHub&&(
-          <TouchableOpacity style={[s.hubTab, hubTab==='materials'&&s.hubTabActive]} onPress={()=>setHubTab('materials')}>
-            <Text style={[s.hubTabText, hubTab==='materials'&&s.hubTabTextActive]}>Materials</Text>
-          </TouchableOpacity>
-        )}
-        {canSend&&(
-          <TouchableOpacity style={[s.hubTab, hubTab==='send'&&s.hubTabActive]} onPress={()=>setHubTab('send')}>
-            <Text style={[s.hubTabText, hubTab==='send'&&s.hubTabTextActive]}>Send Task</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* MATERIALS TAB */}
-      {hubTab==='materials'&&(<ForemanMaterialsTab />)}
-
-      {/* SEND TASK TAB - placeholder for now */}
-      {hubTab==='send'&&canSend&&(
-        <ScrollView style={s.container} contentContainerStyle={s.content}>
-          <View style={s.emptyCard}>
-            <Ionicons name="send-outline" size={40} color="#d1d5db"/>
-            <Text style={s.emptyText}>Send Task - Coming Soon</Text>
-          </View>
-        </ScrollView>
-      )}
-
-      {/* INBOX TAB */}
-      {hubTab==='inbox'&&<ScrollView style={s.container} contentContainerStyle={s.content}
+      {/* INBOX */}
+      <ScrollView style={s.container} contentContainerStyle={s.content}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={()=>{setRefreshing(true);fetchInbox();}} tintColor="#1e3a5f"/>}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.tabsScroll}>
             <View style={s.tabsRow}>
@@ -415,84 +231,13 @@ export default function MyHubScreen() {
               </View>
             );
           })}
-        </ScrollView>}
+        </ScrollView>
 
       {/* Full Screen Image Modal */}
       {fullScreenImg&&<ImageViewer uri={fullScreenImg} onClose={()=>setFullScreenImg(null)}/>}
 
-      {/* Calendar Modal */}
-      <Modal visible={showCalendar} transparent animationType="fade">
-        <View style={s.calOverlay}>
-          <View style={s.calCard}>
-            <Text style={s.calTitle}>Select Due Date</Text>
-            <CalendarPicker value={dueDate} onChange={d=>setDueDate(d)} minDate={new Date()}/>
-            <TouchableOpacity style={s.calDone} onPress={()=>setShowCalendar(false)}>
-              <Text style={s.calDoneText}>Done</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
 
-      {/* Worker Picker Modal */}
-      <Modal visible={showWorkerModal} animationType="slide" presentationStyle="pageSheet">
-        <View style={s.wrapper}>
-          <View style={s.pickerHeader}>
-            <View>
-              <Text style={s.pickerTitle}>Select Recipients</Text>
-              <Text style={s.pickerSub}>{form.recipient_ids.length} selected</Text>
-            </View>
-            <View style={s.row}>
-              <TouchableOpacity onPress={selectAll} style={s.selectBtn}>
-                <Text style={s.selectBtnText}>All</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={clearAll} style={s.selectBtn}>
-                <Text style={s.selectBtnText}>Clear</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={s.pickerDoneBtn} onPress={()=>setShowWorkerModal(false)}>
-                <Text style={s.pickerDoneText}>Done</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-          <View style={s.pickerSearch}>
-            <Ionicons name="search-outline" size={18} color="#9ca3af"/>
-            <TextInput
-              style={s.searchInput}
-              placeholder="Search by name, role, trade..."
-              placeholderTextColor="#9ca3af"
-              value={workerSearch}
-              onChangeText={setWorkerSearch}
-              autoFocus
-            />
-            {workerSearch.length>0&&(
-              <TouchableOpacity onPress={()=>setWorkerSearch('')}>
-                <Ionicons name="close-circle" size={18} color="#9ca3af"/>
-              </TouchableOpacity>
-            )}
-          </View>
-          <ScrollView style={{flex:1,paddingHorizontal:16}}>
-            {filteredWorkers.length===0?(
-              <View style={s.emptyCard}><Text style={s.emptyText}>No workers found</Text></View>
-            ):filteredWorkers.map(w=>{
-              const selected = form.recipient_ids.includes(w.id);
-              return (
-                <TouchableOpacity key={w.id} style={[s.workerRow, selected&&s.workerRowSel]} onPress={()=>toggleRecipient(w.id)}>
-                  <View style={[s.workerAvatar, selected&&{backgroundColor:'#1e3a5f'}]}>
-                    <Text style={[s.workerAvatarText, selected&&{color:'#fff'}]}>{w.first_name[0]}{w.last_name[0]}</Text>
-                  </View>
-                  <View style={{flex:1}}>
-                    <Text style={[s.workerName, selected&&{color:'#1e3a5f',fontWeight:'700'}]}>{w.first_name} {w.last_name}</Text>
-                    <Text style={s.workerRole}>{w.role} Â· {w.trade_name||'General'}{w.is_assigned?' Â· Assigned':''}</Text>
-                  </View>
-                  {selected
-                    ?<Ionicons name="checkmark-circle" size={22} color="#1e3a5f"/>
-                    :<View style={s.emptyCheck}/>
-                  }
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
-      </Modal>
+
     </View>
   );
 }

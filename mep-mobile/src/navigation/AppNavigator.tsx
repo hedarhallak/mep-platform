@@ -2,7 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import MainStackNavigator from './MainStackNavigator';
+import HubMenuScreen from '../screens/hub/HubMenuScreen';
 import MyHubScreen from '../screens/hub/MyHubScreen';
+import ForemanMaterialsTab from '../screens/materials/ForemanMaterialsTab';
 import ProfileScreen from '../screens/profile/ProfileScreen';
 import ChangePinScreen from '../screens/profile/ChangePinScreen';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -30,9 +32,19 @@ function HubNavigator() {
   return (
     <HubStack.Navigator>
       <HubStack.Screen
-        name="MyHubMain"
-        component={MyHubScreen}
+        name="HubMenu"
+        component={HubMenuScreen}
         options={{ ...headerOptions2, title: 'My Hub' }}
+      />
+      <HubStack.Screen
+        name="HubInbox"
+        component={MyHubScreen}
+        options={{ ...headerOptions2, title: 'Inbox' }}
+      />
+      <HubStack.Screen
+        name="HubMaterials"
+        component={ForemanMaterialsTab}
+        options={{ ...headerOptions2, title: 'Material Requests' }}
       />
       <HubStack.Screen
         name="MergeEdit"
@@ -71,7 +83,8 @@ export default function AppNavigator() {
       } catch {}
     };
     fetchUnread();
-    const interval = setInterval(fetchUnread, 30000);
+    const interval = setInterval(fetchUnread, 10000);
+
     return () => clearInterval(interval);
   }, []);
 
