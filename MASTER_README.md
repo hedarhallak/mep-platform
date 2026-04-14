@@ -1,5 +1,5 @@
 # MEP Platform — Master Project README
-> Last updated: April 13, 2026 | Maintainer: Hedar Hallak
+> Last updated: April 14, 2026 | Maintainer: Hedar Hallak
 > Production: https://app.constrai.ca
 > Server: root@143.110.218.84
 > Backend path on server: /var/www/mep
@@ -41,6 +41,13 @@ MEP Platform (Constrai) is a Quebec construction workforce ERP for MEP companies
 | seed.worker29-30 | DRIVER |
 | seed.worker31-50 | WORKER |
 
+### Test Suppliers (company_id=5):
+| Name | Email | Trade |
+|---|---|---|
+| Plumbing Supply Co | orders@plumbingsupply.ca | PLUMBING |
+| Electrical Parts Ltd | orders@electricalparts.ca | ELECTRICAL |
+| General Materials Inc | orders@generalmaterials.ca | ALL |
+
 ### Test Assignment (Project Alpha — PROJ-11):
 | Employee | Role | Period |
 |---|---|---|
@@ -67,14 +74,14 @@ MEP Platform (Constrai) is a Quebec construction workforce ERP for MEP companies
 ## Backend — API Routes
 | Route | Feature | Status |
 |---|---|---|
-| auth.js | Login / JWT + PIN | ✅ |
+| auth.js | Login / JWT + PIN + full_name | ✅ |
 | hub.js | My Hub — tasks + complete + file upload | ✅ |
 | assignments.js | Assignments | ✅ |
 | attendance.js | Attendance + CCQ hours | ✅ |
-| materials.js + material_requests.js | Materials + PO + PDF | ✅ |
+| materials.js + material_requests.js | Materials + PO + PDF + POST /send-order | ✅ |
 | reports.js | My Report + Distance 41km+ | ✅ |
 | permissions.js | RBAC — 58 permissions / 13 roles / 284 mappings | ✅ |
-| bi.js | Business Intelligence + Workforce Planner | ✅ |
+| bi.js | Business Intelligence + Workforce Planner (PostGIS) | ✅ |
 | projects.js | Projects CRUD | ✅ |
 
 ---
@@ -85,6 +92,7 @@ MEP Platform (Constrai) is a Quebec construction workforce ERP for MEP companies
 - PostGIS extension: installed
 - Hub tables: task_messages, task_recipients
 - Status flow: PENDING → SENT → READ → ACKNOWLEDGED
+- material_requests: status flow PENDING → SENT (after Foreman sends PO)
 
 ---
 
@@ -108,7 +116,6 @@ Permission matrix: 284 mappings — see DECISIONS.md for full matrix.
 
 ## Frontend Web
 - Build: `cd /var/www/mep/mep-frontend && npm run build`
-- After build: `cp -r dist/* /var/www/mep/public/`
 - Nginx serves: /var/www/mep/public/
 
 ### Web Pages Status
@@ -130,36 +137,71 @@ Permission matrix: 284 mappings — see DECISIONS.md for full matrix.
 > Location: mep-fixed/mep-mobile/
 > Bundle ID: ca.constrai.app
 > Expo Account: hedarhallak75
+> TestFlight: https://appstoreconnect.apple.com/apps/6762187466/testflight/ios
+> Last Build: April 14, 2026 — EAS Build ID: 8ebef820-1d6e-4083-b319-26b8d7fb0661
 
-### Navigation Structure (Dashboard First — April 2026)
+### Navigation Structure (Unified Icon Grid — April 2026)
 ```
-Bottom Bar: Home · My Hub · Profile
-Home → DashboardScreen (module grid, role-aware)
-       → Attendance
-       → Materials (Stack: Worker view / Foreman Workspace)
-       → Report
-       → Assignments (Coming Soon)
-       → Standup (Coming Soon)
+Bottom Bar: Home · Hub · Profile
+
+Home → DashboardScreen (icon grid, role-aware)
+  → Attendance (direct screen)
+  → Materials → MaterialsMenuScreen
+      → New Request → MaterialRequestScreen
+      → My Requests → MyRequestsScreen
+  → Tasks (FOREMAN+) → TasksMenuScreen
+      → New Task → NewTaskScreen
+      → Sent Tasks → SentTasksScreen
+  → Report → ReportMenuScreen
+      → This Week → MyReportScreen (period=this_week)
+      → Last Week → MyReportScreen (period=last_week)
+      → Custom Date → MyReportScreen (period=custom)
+  → Assignments (Soon)
+  → Standup (Soon)
+  → Purchase Orders (Soon)
+
+Hub → HubMenuScreen (icon grid)
+  → Inbox → MyHubScreen
+  → Material Requests (FOREMAN+) → ForemanMaterialsTab
+      → Merge & Edit → MergeEditScreen
+
+Profile → ProfileNavigator
+  → ProfileScreen
+  → ChangePinScreen
 ```
 
 ### Mobile Screens Status
 | Screen | Status |
 |---|---|
 | Login | ✅ |
-| Dashboard (Home) | ✅ Role-aware module grid |
-| My Hub — Inbox only | ✅ Send Task moved to Dashboard |
+| Dashboard (icon grid, role-aware) | ✅ |
 | Attendance | ✅ |
-| Material Request (Worker) | ✅ |
-| Foreman Workspace | ✅ Built, pending test |
-| My Report | 🔄 Not tested yet |
-| Profile + Change PIN | 🔄 Not tested yet |
+| MaterialsMenuScreen | ✅ |
+| MaterialRequestScreen (Worker) | ✅ |
+| MyRequestsScreen | ✅ |
+| TasksMenuScreen | ✅ |
+| NewTaskScreen (full: project, recipients, photo, priority) | ✅ |
+| SentTasksScreen (completion tracking) | ✅ |
+| ReportMenuScreen | ✅ |
+| MyReportScreen (period param) | ✅ |
+| HubMenuScreen (icon grid) | ✅ |
+| MyHubScreen (Inbox only) | ✅ |
+| ForemanMaterialsTab + MergeEditScreen | ✅ |
+| Profile + Change PIN | ✅ |
 
-### Daily Testing
+### Shared Components
+- `src/screens/shared/SubMenuScreen.tsx` — unified icon grid (same design as Dashboard) used by all sub-menus
+
+### Testing
 ```powershell
+# Daily dev testing
 cd C:\Users\Lenovo\Desktop\mep-site-backend-fixed\mep-fixed\mep-mobile
 npx expo start --clear
+
+# Production build
+eas build --platform ios --profile production
+eas submit --platform ios
 ```
-Scan QR with iPhone Camera → opens in Expo Go
 
 ---
 
@@ -171,32 +213,33 @@ Scan QR with iPhone Camera → opens in Expo Go
 3. Do not modify unrelated components
 4. Every file labeled with full path, ready to copy-paste
 5. Never ask Hedar to manually edit — Claude makes the full change
+6. **UI Law: Every sub-screen uses icon grid (SubMenuScreen) — no tabs, no separate buttons**
+7. **No duplicate screens: identical UI must use shared component with props**
+8. **Never delete ideas from DECISIONS.md — only add and evolve**
 
 ### Location Rules
-6. Always specify WHERE to run a command:
+9. Always specify WHERE to run a command:
    - **On the server:** `ssh root@143.110.218.84` then run
    - **On PowerShell:** explicitly say "on PowerShell"
-   - Never write a command without specifying location
 
 ### Error Checking Rules
-7. For mobile errors — ALWAYS ask for terminal log, NOT a screenshot:
-   ```powershell
-   npx expo start --clear 2>&1 | Tee-Object -FilePath C:\Users\Lenovo\Desktop\expo_log.txt
-   ```
-   Then upload expo_log.txt — faster and more complete than screenshots
-8. For server errors — use `pm2 logs mep-backend --err --lines 30 --nostream`
-9. For frontend errors — check browser console Network tab
+10. For mobile errors — ALWAYS ask for terminal log, NOT a screenshot:
+    ```powershell
+    npx expo start --clear 2>&1 | Tee-Object -FilePath C:\Users\Lenovo\Desktop\expo_log.txt
+    ```
+11. For server errors — `pm2 logs mep-backend --err --lines 30 --nostream`
+12. For frontend errors — check browser console Network tab
 
 ### File Inspection Rules
-10. To read a file: `Get-Content "path\to\file" | Out-File -FilePath C:\Users\Lenovo\Desktop\filename.txt`
-11. To read folder structure: `Get-ChildItem "path" -Recurse -Name | Out-File -FilePath C:\Users\Lenovo\Desktop\structure.txt`
+13. To read a file: `Get-Content "path" | Out-File -FilePath C:\Users\Lenovo\Desktop\filename.txt`
+14. To read folder structure: `Get-ChildItem "path" -Recurse -Name | Out-File -FilePath C:\Users\Lenovo\Desktop\structure.txt`
 
 ### Git Rules
-12. After any server-side fix: commit from server and push to GitHub immediately
-13. Before any session: `git pull origin main` on server
-14. After every feature: update MASTER_README.md and commit
+15. After any server-side fix: commit from server and push to GitHub immediately
+16. Before any session: `git pull origin main` on server
+17. After every feature: update MASTER_README.md and DECISIONS.md and commit
 
 ### Conversation Rules
-15. At start of every conversation — fetch MASTER_README.md and DECISIONS.md from GitHub
-16. Never take unilateral decisions without Hedar's approval
-17. Every architectural decision made in conversation → document in DECISIONS.md immediately
+18. At start of every conversation — fetch MASTER_README.md and DECISIONS.md from GitHub
+19. Never take unilateral decisions without Hedar's approval
+20. Every architectural decision → document in DECISIONS.md immediately
