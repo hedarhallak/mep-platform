@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ActivityIndicator, ScrollView,
   RefreshControl, TouchableOpacity, Modal, TextInput,
   Alert, Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import * as ImagePicker from 'expo-image-picker';
 import { apiClient } from '../../api/client';
 
@@ -67,6 +68,7 @@ function CalendarPicker({ value, onChange, minDate }: { value: Date; onChange: (
 // ================================================================ screen --
 
 export default function NewTaskScreen() {
+  const { t } = useTranslation();
   const [projects, setProjects]           = useState<Project[]>([]);
   const [workers, setWorkers]             = useState<Worker[]>([]);
   const [loading, setLoading]             = useState(true);
@@ -152,7 +154,7 @@ export default function NewTaskScreen() {
       await apiClient.post('/api/hub/messages', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       resetForm();
       fetchData(true);
-      Alert.alert('Sent', `Task sent to ${form.recipient_ids.length} recipient(s).`);
+      Alert.alert(t('common.success'), `Task sent to ${form.recipient_ids.length} recipient(s).`);
     } catch (e: any) {
       Alert.alert('Error', e.response?.data?.error || 'Failed to send task.');
     } finally { setSending(false); }
@@ -171,13 +173,13 @@ export default function NewTaskScreen() {
           {!showForm&&(
             <TouchableOpacity style={s.newTaskBtn} onPress={()=>setShowForm(true)}>
               <Ionicons name="add-circle-outline" size={20} color="#fff"/>
-              <Text style={s.newTaskText}>New Task</Text>
+              <Text style={s.newTaskText}>{t('tasks.newTaskBtn')}</Text>
             </TouchableOpacity>
           )}
 
           {showForm&&(
             <View style={s.formCard}>
-              <Text style={s.formTitle}>New Task</Text>
+              <Text style={s.formTitle}>{t('tasks.newTaskBtn')}</Text>
 
               <Text style={s.label}>Project</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom:8}}>
@@ -215,16 +217,16 @@ export default function NewTaskScreen() {
               <TouchableOpacity style={s.workerPickerBtn} onPress={()=>{setWorkerSearch('');setShowWorkerModal(true);}}>
                 <Ionicons name="people-outline" size={18} color="#1e3a5f"/>
                 <Text style={[s.workerPickerText, form.recipient_ids.length===0&&{color:'#9ca3af'}]}>
-                  {form.recipient_ids.length===0?'Select recipients...':`${form.recipient_ids.length} selected - tap to edit`}
+                  {form.recipient_ids.length===0?t('tasks.selectRecipients'):`${form.recipient_ids.length} selected - tap to edit`}
                 </Text>
                 <Ionicons name="chevron-forward" size={16} color="#9ca3af"/>
               </TouchableOpacity>
 
               <Text style={s.label}>Title *</Text>
-              <TextInput style={s.input} placeholder="Task title..." placeholderTextColor="#9ca3af" value={form.title} onChangeText={v=>setField('title',v)}/>
+              <TextInput style={s.input} placeholder={t('tasks.taskTitle')} placeholderTextColor="#9ca3af" value={form.title} onChangeText={v=>setField('title',v)}/>
 
               <Text style={s.label}>Description</Text>
-              <TextInput style={[s.input,s.textArea]} placeholder="Details..." placeholderTextColor="#9ca3af" value={form.body} onChangeText={v=>setField('body',v)} multiline numberOfLines={3}/>
+              <TextInput style={[s.input,s.textArea]} placeholder={t('tasks.description')} placeholderTextColor="#9ca3af" value={form.body} onChangeText={v=>setField('body',v)} multiline numberOfLines={3}/>
 
               <Text style={s.label}>Priority</Text>
               <View style={{flexDirection:'row',gap:8,marginBottom:8}}>
@@ -258,7 +260,7 @@ export default function NewTaskScreen() {
                 <TouchableOpacity style={[s.sendBtn, sending&&{opacity:0.6}]} onPress={handleSend} disabled={sending}>
                   {sending?<ActivityIndicator color="#fff" size="small"/>:<>
                     <Ionicons name="send" size={16} color="#fff"/>
-                    <Text style={s.sendBtnText}>Send Task</Text>
+                    <Text style={s.sendBtnText}>{t('tasks.sendTask')}</Text>
                   </>}
                 </TouchableOpacity>
               </View>
@@ -324,7 +326,7 @@ export default function NewTaskScreen() {
                   </View>
                   <View style={{flex:1}}>
                     <Text style={[s.workerName, selected&&{color:'#1e3a5f',fontWeight:'700'}]}>{w.first_name} {w.last_name}</Text>
-                    <Text style={s.workerRole}>{w.role} · {w.trade_name||'General'}{w.is_assigned?' · Assigned':''}</Text>
+                    <Text style={s.workerRole}>{w.role} Â· {w.trade_name||'General'}{w.is_assigned?' Â· Assigned':''}</Text>
                   </View>
                   {selected?<Ionicons name="checkmark-circle" size={22} color="#1e3a5f"/>:<View style={s.emptyCheck}/>}
                 </TouchableOpacity>

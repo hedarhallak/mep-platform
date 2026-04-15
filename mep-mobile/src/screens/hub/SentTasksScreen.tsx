@@ -1,9 +1,10 @@
-import React, { useState, useCallback } from 'react';
+﻿import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ActivityIndicator, ScrollView,
   RefreshControl, TouchableOpacity, Modal, Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { apiClient } from '../../api/client';
 import { useFocusEffect } from '@react-navigation/native';
 
@@ -25,6 +26,7 @@ function fmtDT(iso: string) {
 function priorityColor(p: string) { return p==='URGENT'?'#dc2626':p==='HIGH'?'#f59e0b':'#2563eb'; }
 
 export default function SentTasksScreen() {
+  const { t } = useTranslation();
   const [sent, setSent]                   = useState<SentMessage[]>([]);
   const [loading, setLoading]             = useState(true);
   const [refreshing, setRefreshing]       = useState(false);
@@ -49,7 +51,7 @@ export default function SentTasksScreen() {
       <ScrollView style={s.container} contentContainerStyle={s.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={()=>{setRefreshing(true);fetchSent(true);}} tintColor="#1e3a5f"/>}>
         {sent.length===0?(
-          <View style={s.emptyCard}><Ionicons name="send-outline" size={40} color="#d1d5db"/><Text style={s.emptyText}>No tasks sent yet</Text></View>
+          <View style={s.emptyCard}><Ionicons name="send-outline" size={40} color="#d1d5db"/><Text style={s.emptyText}>{t('tasks.noTasksSent')}</Text></View>
         ):sent.map(task=>{
           const total = Number(task.total_recipients)||0;
           const acked = Number(task.acknowledged_count)||0;
@@ -68,8 +70,8 @@ export default function SentTasksScreen() {
                     </View>
                   </View>
                   <Text style={s.sentMeta}>
-                    {fmtDT(task.created_at)}{task.project_code?` · ${task.project_code}`:''} · {total} recipient{total!==1?'s':''}
-                    {task.due_date?` · Due ${fmtDueDate(task.due_date)}`:''}
+                    {fmtDT(task.created_at)}{task.project_code?` Â· ${task.project_code}`:''} Â· {total} recipient{total!==1?'s':''}
+                    {task.due_date?` Â· Due ${fmtDueDate(task.due_date)}`:''}
                   </Text>
                 </View>
                 <View style={s.sentProgress}>
@@ -96,7 +98,7 @@ export default function SentTasksScreen() {
                           </View>
                           <View style={[s.recipientBadge, isDone&&{backgroundColor:'#f0fdf4'}, isPending&&{backgroundColor:'#fffbeb'}, isRead&&{backgroundColor:'#eff6ff'}]}>
                             <Text style={[s.recipientStatus, isDone&&{color:'#16a34a'}, isPending&&{color:'#d97706'}, isRead&&{color:'#2563eb'}]}>
-                              {isDone?'✓ Done':isPending?'⏳ Pending':isRead?'👁 Seen':'📬 Sent'}
+                              {isDone?'âœ“ Done':isPending?'â³ Pending':isRead?'ðŸ‘ Seen':'ðŸ“¬ Sent'}
                             </Text>
                           </View>
                         </View>

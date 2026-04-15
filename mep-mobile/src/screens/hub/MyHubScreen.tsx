@@ -6,6 +6,7 @@ import {
   Alert, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'react-native';
 import { apiClient } from '../../api/client';
@@ -28,7 +29,7 @@ interface Worker { id: number; employee_id: number; first_name: string; last_nam
 interface Project { id: number; project_code: string; project_name: string; }
 
 const PRIORITIES = ['NORMAL','HIGH','URGENT'];
-const INBOX_TABS = [{key:'ALL',label:'All'},{key:'TASK',label:'Tasks'},{key:'GENERAL',label:'General'}];
+// INBOX_TABS moved inside component
 // Hub shows Inbox only - Send Task moved to Dashboard
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const DAYS = ['Su','Mo','Tu','We','Th','Fr','Sa'];
@@ -69,6 +70,8 @@ function ImageViewer({ uri, onClose }: { uri: string; onClose: () => void }) {
   );
 }
 export default function MyHubScreen() {
+  const { t } = useTranslation();
+  const INBOX_TABS = [{key:'ALL',label:t('hub.filters.all')},{key:'TASK',label:t('hub.filters.tasks')},{key:'GENERAL',label:t('hub.filters.general')}];
   const { user } = useAuthStore();
 
 
@@ -167,7 +170,7 @@ export default function MyHubScreen() {
             </View>
           </ScrollView>
           {filtered.length===0?(
-            <View style={s.emptyCard}><Ionicons name="mail-outline" size={40} color="#d1d5db"/><Text style={s.emptyText}>No messages here</Text></View>
+            <View style={s.emptyCard}><Ionicons name="mail-outline" size={40} color="#d1d5db"/><Text style={s.emptyText}>{t('hub.noMessages')}</Text></View>
           ):filtered.map(msg=>{
             const isOpen = expandedMsgs[msg.id];
             const isNew = !msg.read_at;
@@ -220,12 +223,12 @@ export default function MyHubScreen() {
                         <TouchableOpacity style={[s.ackBtn,{opacity:completingId===msg.id?0.6:1}]} onPress={()=>completeTask(msg.id)} disabled={completingId===msg.id}>
                           {completingId===msg.id?<ActivityIndicator color="#fff" size="small"/>:<>
                             <Ionicons name="checkmark-done-outline" size={16} color="#fff"/>
-                            <Text style={s.ackText}>Mark Complete</Text>
+                            <Text style={s.ackText}>{t('hub.markComplete')}</Text>
                           </>}
                         </TouchableOpacity>
                       </View>
                     )}
-                    {isDone&&<View style={s.ackDone}><Ionicons name="checkmark-done" size={15} color="#16a34a"/><Text style={s.ackDoneText}>Task Completed</Text></View>}
+                    {isDone&&<View style={s.ackDone}><Ionicons name="checkmark-done" size={15} color="#16a34a"/><Text style={s.ackDoneText}>{t('hub.taskCompleted')}</Text></View>}
                   </View>
                 )}
               </View>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import {
   FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { apiClient } from '../../api/client';
 import { useNavigation } from '@react-navigation/native';
 
@@ -45,6 +46,7 @@ function newItem(): Item {
 }
 
 export default function MaterialRequestScreen() {
+  const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const [assignment, setAssignment] = useState<TodayAssignment | null>(null);
   const [items, setItems] = useState<Item[]>([newItem()]);
@@ -126,7 +128,7 @@ export default function MaterialRequestScreen() {
     }
     const validItems = items.filter(i => i.item_name.trim() && Number(i.quantity) > 0);
     if (!validItems.length) {
-      Alert.alert('Error', 'Add at least one item with a name and quantity.');
+      Alert.alert(t('common.error'), 'Add at least one item with a name and quantity.');
       return;
     }
     setSubmitting(true);
@@ -146,7 +148,7 @@ export default function MaterialRequestScreen() {
       ]);
     } catch (err: any) {
       const msg = err.response?.data?.message || err.response?.data?.error || 'Submission failed.';
-      Alert.alert('Error', msg);
+      Alert.alert(t('common.error'), msg);
     } finally {
       setSubmitting(false);
     }
@@ -197,7 +199,7 @@ export default function MaterialRequestScreen() {
 
             <TextInput
               style={styles.input}
-              placeholder="Item name *"
+              placeholder={t('materials.itemName')}
               placeholderTextColor="#9ca3af"
               value={item.item_name}
               onChangeText={v => {
@@ -226,7 +228,7 @@ export default function MaterialRequestScreen() {
             <View style={styles.row}>
               <TextInput
                 style={[styles.input, { flex: 1, marginRight: 8, marginBottom: 0 }]}
-                placeholder="Qty *"
+                placeholder={t('materials.quantity')}
                 placeholderTextColor="#9ca3af"
                 keyboardType="decimal-pad"
                 value={item.quantity}
@@ -249,7 +251,7 @@ export default function MaterialRequestScreen() {
         ))}
 
         <View style={styles.noteCard}>
-          <Text style={styles.noteLabel}>Request Note (optional)</Text>
+          <Text style={styles.noteLabel}>{t('materials.requestNote')}</Text>
           <TextInput
             style={styles.noteInput}
             placeholder="General note..."
@@ -271,7 +273,7 @@ export default function MaterialRequestScreen() {
           ) : (
             <>
               <Ionicons name="send-outline" size={20} color="#ffffff" />
-              <Text style={styles.submitText}>Submit Request</Text>
+              <Text style={styles.submitText}>{t('materials.submitRequest')}</Text>
             </>
           )}
         </TouchableOpacity>
@@ -281,7 +283,7 @@ export default function MaterialRequestScreen() {
           onPress={() => navigation.navigate('MyRequests')}
         >
           <Ionicons name="list-outline" size={20} color="#1e3a5f" />
-          <Text style={styles.myRequestsText}>View My Requests</Text>
+          <Text style={styles.myRequestsText}>{t('materials.viewMyRequests')}</Text>
         </TouchableOpacity>
 
       </ScrollView>
