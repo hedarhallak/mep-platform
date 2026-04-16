@@ -9,6 +9,7 @@ import { apiClient } from '../../api/client';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useNavigation } from '@react-navigation/native';
 import { changeLanguage } from '../../i18n';
+import Colors from '../../theme/colors';
 
 interface Profile {
   employee_id: number;
@@ -28,7 +29,7 @@ function InfoRow({ icon, label, value }: { icon: any; label: string; value: stri
   return (
     <View style={styles.infoRow}>
       <View style={styles.infoIcon}>
-        <Ionicons name={icon} size={18} color="#1e3a5f" />
+        <Ionicons name={icon} size={18} color={Colors.primary} />
       </View>
       <View style={styles.infoContent}>
         <Text style={styles.infoLabel}>{label}</Text>
@@ -82,7 +83,7 @@ export default function ProfileScreen() {
     setLangModal(false);
   };
 
-  if (loading) return <View style={styles.center}><ActivityIndicator size="large" color="#1e3a5f" /></View>;
+  if (loading) return <View style={styles.center}><ActivityIndicator size="large" color={Colors.primary} /></View>;
 
   const initials = profile?.full_name
     ? profile.full_name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()
@@ -94,7 +95,7 @@ export default function ProfileScreen() {
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchProfile(); }} tintColor="#1e3a5f" />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchProfile(); }} tintColor={Colors.primary} />}
     >
       {/* Avatar Card */}
       <View style={styles.avatarCard}>
@@ -127,12 +128,12 @@ export default function ProfileScreen() {
         {/* Language Selector */}
         <TouchableOpacity style={styles.actionRow} onPress={() => setLangModal(true)}>
           <View style={styles.actionLeft}>
-            <Ionicons name="language-outline" size={20} color="#1e3a5f" />
+            <Ionicons name="language-outline" size={20} color={Colors.primary} />
             <Text style={styles.actionText}>{t('profile.language')}</Text>
           </View>
           <View style={styles.actionRight}>
             <Text style={styles.langValue}>{currentLang.flag} {currentLang.label}</Text>
-            <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+            <Ionicons name="chevron-forward" size={18} color={Colors.textLight} />
           </View>
         </TouchableOpacity>
 
@@ -141,16 +142,16 @@ export default function ProfileScreen() {
         {/* Change PIN */}
         <TouchableOpacity style={styles.actionRow} onPress={() => navigation.navigate('ChangePin')}>
           <View style={styles.actionLeft}>
-            <Ionicons name="key-outline" size={20} color="#1e3a5f" />
+            <Ionicons name="key-outline" size={20} color={Colors.primary} />
             <Text style={styles.actionText}>{t('auth.changePin')}</Text>
           </View>
-          <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+          <Ionicons name="chevron-forward" size={18} color={Colors.textLight} />
         </TouchableOpacity>
       </View>
 
       {/* Logout */}
       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-        <Ionicons name="log-out-outline" size={20} color="#dc2626" />
+        <Ionicons name="log-out-outline" size={20} color={Colors.danger} />
         <Text style={styles.logoutText}>{t('auth.logout')}</Text>
       </TouchableOpacity>
 
@@ -172,7 +173,7 @@ export default function ProfileScreen() {
                 <Text style={[styles.langLabel, i18n.language === lang.code && styles.langLabelActive]}>
                   {lang.label}
                 </Text>
-                {i18n.language === lang.code && <Ionicons name="checkmark" size={20} color="#1e3a5f" />}
+                {i18n.language === lang.code && <Ionicons name="checkmark" size={20} color={Colors.primary} />}
               </TouchableOpacity>
             ))}
           </View>
@@ -183,45 +184,45 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f3f4f6' },
+  container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: 16, gap: 16, paddingBottom: 40 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
-  avatarCard: { backgroundColor: '#1e3a5f', borderRadius: 20, padding: 32, alignItems: 'center' },
+  avatarCard: { backgroundColor: Colors.primary, borderRadius: 20, padding: 32, alignItems: 'center' },
   avatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
-  avatarText: { fontSize: 28, fontWeight: 'bold', color: '#ffffff' },
-  fullName: { fontSize: 22, fontWeight: 'bold', color: '#ffffff', marginBottom: 8 },
+  avatarText: { fontSize: 28, fontWeight: 'bold', color: Colors.white },
+  fullName: { fontSize: 22, fontWeight: 'bold', color: Colors.white, marginBottom: 8 },
   roleBadge: { backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 4, marginBottom: 6 },
-  roleText: { fontSize: 13, color: '#93c5fd', fontWeight: '600' },
+  roleText: { fontSize: 13, color: Colors.primaryBright, fontWeight: '600' },
   empCode: { fontSize: 13, color: 'rgba(255,255,255,0.5)' },
 
-  infoCard: { backgroundColor: '#ffffff', borderRadius: 16, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 },
-  sectionTitle: { fontSize: 13, fontWeight: '700', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 16 },
+  infoCard: { backgroundColor: Colors.cardBg, borderRadius: 16, padding: 20, shadowColor: Colors.shadowColor, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 },
+  sectionTitle: { fontSize: 13, fontWeight: '700', color: Colors.textLight, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 16 },
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
-  infoIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#eff6ff', justifyContent: 'center', alignItems: 'center' },
+  infoIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: Colors.primaryPale, justifyContent: 'center', alignItems: 'center' },
   infoContent: { flex: 1 },
-  infoLabel: { fontSize: 12, color: '#9ca3af', marginBottom: 2 },
-  infoValue: { fontSize: 15, color: '#111827', fontWeight: '500' },
+  infoLabel: { fontSize: 12, color: Colors.textLight, marginBottom: 2 },
+  infoValue: { fontSize: 15, color: Colors.textPrimary, fontWeight: '500' },
 
-  actionsCard: { backgroundColor: '#ffffff', borderRadius: 16, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 },
+  actionsCard: { backgroundColor: Colors.cardBg, borderRadius: 16, padding: 20, shadowColor: Colors.shadowColor, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 },
   actionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8 },
   actionLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   actionRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  actionText: { fontSize: 15, color: '#111827', fontWeight: '500' },
-  langValue: { fontSize: 14, color: '#6b7280' },
-  divider: { height: 1, backgroundColor: '#f3f4f6', marginVertical: 4 },
+  actionText: { fontSize: 15, color: Colors.textPrimary, fontWeight: '500' },
+  langValue: { fontSize: 14, color: Colors.textMuted },
+  divider: { height: 1, backgroundColor: Colors.background, marginVertical: 4 },
 
-  logoutButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#ffffff', borderRadius: 16, padding: 18, borderWidth: 1, borderColor: '#fecaca', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 },
-  logoutText: { fontSize: 16, fontWeight: '600', color: '#dc2626' },
-  version: { textAlign: 'center', fontSize: 12, color: '#9ca3af' },
+  logoutButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: Colors.cardBg, borderRadius: 16, padding: 18, borderWidth: 1, borderColor: '#fecaca', shadowColor: Colors.shadowColor, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 },
+  logoutText: { fontSize: 16, fontWeight: '600', color: Colors.danger },
+  version: { textAlign: 'center', fontSize: 12, color: Colors.textLight },
 
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24 },
-  handle: { width: 40, height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
-  sheetTitle: { fontSize: 18, fontWeight: 'bold', color: '#111827', marginBottom: 16 },
-  langRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  langRowActive: { backgroundColor: '#eff6ff', borderRadius: 12, paddingHorizontal: 12 },
+  sheet: { backgroundColor: Colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24 },
+  handle: { width: 40, height: 4, backgroundColor: Colors.divider, borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
+  sheetTitle: { fontSize: 18, fontWeight: 'bold', color: Colors.textPrimary, marginBottom: 16 },
+  langRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: Colors.background },
+  langRowActive: { backgroundColor: Colors.primaryPale, borderRadius: 12, paddingHorizontal: 12 },
   langFlag: { fontSize: 24 },
-  langLabel: { flex: 1, fontSize: 16, color: '#374151' },
-  langLabelActive: { color: '#1e3a5f', fontWeight: '700' },
+  langLabel: { flex: 1, fontSize: 16, color: Colors.textSecondary },
+  langLabelActive: { color: Colors.primary, fontWeight: '700' },
 });

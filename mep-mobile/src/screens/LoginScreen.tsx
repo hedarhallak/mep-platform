@@ -6,6 +6,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { apiClient } from '../api/client';
 import { useAuthStore } from '../store/useAuthStore';
+import Colors from '../theme/colors';
 
 export default function LoginScreen() {
   const { t } = useTranslation();
@@ -44,7 +45,7 @@ export default function LoginScreen() {
         <TextInput
           style={styles.input}
           placeholder={t('auth.usernamePlaceholder')}
-          placeholderTextColor="#9ca3af"
+          placeholderTextColor={Colors.textLight}
           autoCapitalize="none"
           autoCorrect={false}
           value={username}
@@ -53,7 +54,7 @@ export default function LoginScreen() {
         <TextInput
           style={styles.input}
           placeholder={t('auth.pinPlaceholder')}
-          placeholderTextColor="#9ca3af"
+          placeholderTextColor={Colors.textLight}
           secureTextEntry
           keyboardType="number-pad"
           value={pin}
@@ -62,7 +63,7 @@ export default function LoginScreen() {
 
         <TouchableOpacity style={styles.button} onPress={handleLogin} disabled={loading}>
           {loading ? (
-            <ActivityIndicator color="#ffffff" />
+            <ActivityIndicator color={Colors.white} />
           ) : (
             <Text style={styles.buttonText}>{t('auth.login')}</Text>
           )}
@@ -73,11 +74,11 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1e3a5f', justifyContent: 'center', alignItems: 'center', padding: 24 },
-  card: { width: '100%', backgroundColor: '#ffffff', borderRadius: 16, padding: 32, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 8 },
-  brand: { fontSize: 28, fontWeight: 'bold', color: '#1e3a5f', letterSpacing: 2 },
-  subtitle: { fontSize: 14, color: '#6b7280', marginBottom: 32, marginTop: 4 },
-  input: { width: '100%', height: 48, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 16, fontSize: 15, color: '#111827', backgroundColor: '#f9fafb', marginBottom: 12 },
-  button: { width: '100%', height: 48, backgroundColor: '#1e3a5f', borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginTop: 8 },
-  buttonText: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
+  container: { flex: 1, backgroundColor: Colors.primary, justifyContent: 'center', alignItems: 'center', padding: 24 },
+  card: { width: '100%', backgroundColor: Colors.cardBg, borderRadius: 16, padding: 32, alignItems: 'center', shadowColor: Colors.shadowColor, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 8 },
+  brand: { fontSize: 28, fontWeight: 'bold', color: Colors.primary, letterSpacing: 2 },
+  subtitle: { fontSize: 14, color: Colors.textMuted, marginBottom: 32, marginTop: 4 },
+  input: { width: '100%', height: 48, borderWidth: 1, borderColor: Colors.divider, borderRadius: 8, paddingHorizontal: 16, fontSize: 15, color: Colors.textPrimary, backgroundColor: Colors.inputBg, marginBottom: 12 },
+  button: { width: '100%', height: 48, backgroundColor: Colors.primary, borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginTop: 8 },
+  buttonText: { color: Colors.white, fontSize: 16, fontWeight: '600' },
 });

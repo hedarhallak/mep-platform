@@ -16,6 +16,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { apiClient } from '../../api/client';
+import Colors from '../../theme/colors';
 
 // ------------------------------------------------------------------ types --
 
@@ -147,7 +148,7 @@ export default function MergeEditScreen() {
 
         {/* Items Section */}
         <View style={styles.sectionRow}>
-          <Ionicons name="git-merge-outline" size={17} color="#1e3a5f" />
+          <Ionicons name="git-merge-outline" size={17} color={Colors.primary} />
           <Text style={styles.sectionTitle}>Merged Items</Text>
           <View style={styles.badge}>
             <Text style={styles.badgeText}>{items.length} items</Text>
@@ -167,20 +168,20 @@ export default function MergeEditScreen() {
                   value={item.qty > 0 ? String(item.qty) : ''}
                   onChangeText={v => updateQty(idx, v)}
                   placeholder="Qty"
-                  placeholderTextColor="#9ca3af"
+                  placeholderTextColor={Colors.textLight}
                 />
                 <TouchableOpacity
                   style={styles.unitBtn}
                   onPress={() => { setUnitTargetIdx(idx); setUnitModal(true); }}
                 >
                   <Text style={styles.unitText}>{item.unit}</Text>
-                  <Ionicons name="chevron-down" size={12} color="#6b7280" />
+                  <Ionicons name="chevron-down" size={12} color={Colors.textMuted} />
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.deleteBtn}
                   onPress={() => deleteItem(idx)}
                 >
-                  <Ionicons name="trash-outline" size={18} color="#dc2626" />
+                  <Ionicons name="trash-outline" size={18} color={Colors.danger} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -189,7 +190,7 @@ export default function MergeEditScreen() {
 
         {/* Destination Section */}
         <View style={[styles.sectionRow, { marginTop: 16 }]}>
-          <Ionicons name="send-outline" size={17} color="#1e3a5f" />
+          <Ionicons name="send-outline" size={17} color={Colors.primary} />
           <Text style={styles.sectionTitle}>Send To</Text>
         </View>
 
@@ -200,7 +201,7 @@ export default function MergeEditScreen() {
             onPress={() => setDestination('procurement')}
           >
             <View style={styles.destLeft}>
-              <Ionicons name="business-outline" size={22} color={destination === 'procurement' ? '#1e3a5f' : '#9ca3af'} />
+              <Ionicons name="business-outline" size={22} color={destination === 'procurement' ? Colors.primary : Colors.textLight} />
               <View>
                 <Text style={[styles.destTitle, destination === 'procurement' && styles.destTitleOn]}>
                   Procurement
@@ -221,7 +222,7 @@ export default function MergeEditScreen() {
             onPress={() => setSupplierModal(true)}
           >
             <View style={styles.destLeft}>
-              <Ionicons name="storefront-outline" size={22} color={typeof destination === 'number' ? '#1e3a5f' : '#9ca3af'} />
+              <Ionicons name="storefront-outline" size={22} color={typeof destination === 'number' ? Colors.primary : Colors.textLight} />
               <View>
                 <Text style={[styles.destTitle, typeof destination === 'number' && styles.destTitleOn]}>
                   {selectedSupplier ? selectedSupplier.name : 'Select Supplier'}
@@ -244,10 +245,10 @@ export default function MergeEditScreen() {
           disabled={sending || destination === null}
         >
           {sending ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color={Colors.white} />
           ) : (
             <>
-              <Ionicons name="paper-plane-outline" size={20} color="#fff" />
+              <Ionicons name="paper-plane-outline" size={20} color={Colors.white} />
               <Text style={styles.sendBtnText}>
                 Send Order ({items.filter(i => i.qty > 0).length} items)
               </Text>
@@ -280,7 +281,7 @@ export default function MergeEditScreen() {
                       <Text style={styles.supplierName}>{s.name}</Text>
                       <Text style={styles.supplierEmail}>{s.email}</Text>
                     </View>
-                    {destination === s.id && <Ionicons name="checkmark" size={20} color="#1e3a5f" />}
+                    {destination === s.id && <Ionicons name="checkmark" size={20} color={Colors.primary} />}
                   </TouchableOpacity>
                 )}
               />
@@ -309,7 +310,7 @@ export default function MergeEditScreen() {
                 >
                   <Text style={styles.unitOptionText}>{unit}</Text>
                   {unitTargetIdx !== null && items[unitTargetIdx]?.unit === unit && (
-                    <Ionicons name="checkmark" size={20} color="#1e3a5f" />
+                    <Ionicons name="checkmark" size={20} color={Colors.primary} />
                   )}
                 </TouchableOpacity>
               )}
@@ -325,50 +326,50 @@ export default function MergeEditScreen() {
 // ------------------------------------------------------------------ styles --
 
 const styles = StyleSheet.create({
-  container:   { flex: 1, backgroundColor: '#f3f4f6' },
+  container:   { flex: 1, backgroundColor: Colors.background },
   content:     { padding: 16, gap: 12, paddingBottom: 48 },
 
   sectionRow:  { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  sectionTitle:{ fontSize: 15, fontWeight: '700', color: '#111827' },
-  badge:       { backgroundColor: '#eff6ff', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 },
-  badgeText:   { fontSize: 12, fontWeight: '700', color: '#1e3a5f' },
+  sectionTitle:{ fontSize: 15, fontWeight: '700', color: Colors.textPrimary },
+  badge:       { backgroundColor: Colors.primaryPale, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 },
+  badgeText:   { fontSize: 12, fontWeight: '700', color: Colors.primary },
 
-  itemsCard:   { backgroundColor: '#fff', borderRadius: 14, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 },
+  itemsCard:   { backgroundColor: Colors.cardBg, borderRadius: 14, overflow: 'hidden', shadowColor: Colors.shadowColor, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 },
   itemRow:     { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 10 },
-  itemBorder:  { borderTopWidth: 1, borderTopColor: '#f3f4f6' },
+  itemBorder:  { borderTopWidth: 1, borderTopColor: Colors.background },
   itemInfo:    { flex: 1 },
-  itemName:    { fontSize: 14, fontWeight: '600', color: '#111827' },
+  itemName:    { fontSize: 14, fontWeight: '600', color: Colors.textPrimary },
   itemControls:{ flexDirection: 'row', alignItems: 'center', gap: 8 },
-  qtyInput:    { width: 64, height: 40, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, fontSize: 15, fontWeight: '700', color: '#1e3a5f', backgroundColor: '#f9fafb', textAlign: 'center' },
-  unitBtn:     { flexDirection: 'row', alignItems: 'center', gap: 2, height: 40, paddingHorizontal: 10, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, backgroundColor: '#f9fafb', minWidth: 56 },
-  unitText:    { fontSize: 13, fontWeight: '600', color: '#374151' },
-  deleteBtn:   { width: 36, height: 36, borderRadius: 8, backgroundColor: '#fef2f2', justifyContent: 'center', alignItems: 'center' },
+  qtyInput:    { width: 64, height: 40, borderWidth: 1, borderColor: Colors.divider, borderRadius: 8, paddingHorizontal: 10, fontSize: 15, fontWeight: '700', color: Colors.primary, backgroundColor: Colors.inputBg, textAlign: 'center' },
+  unitBtn:     { flexDirection: 'row', alignItems: 'center', gap: 2, height: 40, paddingHorizontal: 10, borderWidth: 1, borderColor: Colors.divider, borderRadius: 8, backgroundColor: Colors.inputBg, minWidth: 56 },
+  unitText:    { fontSize: 13, fontWeight: '600', color: Colors.textSecondary },
+  deleteBtn:   { width: 36, height: 36, borderRadius: 8, backgroundColor: Colors.dangerBg, justifyContent: 'center', alignItems: 'center' },
 
-  destCard:    { backgroundColor: '#fff', borderRadius: 14, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 },
+  destCard:    { backgroundColor: Colors.cardBg, borderRadius: 14, overflow: 'hidden', shadowColor: Colors.shadowColor, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 },
   destOption:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 18 },
-  destSelected:{ backgroundColor: '#eff6ff' },
+  destSelected:{ backgroundColor: Colors.primaryPale },
   destLeft:    { flexDirection: 'row', alignItems: 'center', gap: 14, flex: 1 },
-  destTitle:   { fontSize: 15, fontWeight: '600', color: '#374151' },
-  destTitleOn: { color: '#1e3a5f' },
-  destSub:     { fontSize: 12, color: '#9ca3af', marginTop: 2 },
-  divider:     { height: 1, backgroundColor: '#f3f4f6' },
+  destTitle:   { fontSize: 15, fontWeight: '600', color: Colors.textSecondary },
+  destTitleOn: { color: Colors.primary },
+  destSub:     { fontSize: 12, color: Colors.textLight, marginTop: 2 },
+  divider:     { height: 1, backgroundColor: Colors.background },
   radio:       { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: '#d1d5db', justifyContent: 'center', alignItems: 'center' },
-  radioOn:     { borderColor: '#1e3a5f' },
-  radioDot:    { width: 11, height: 11, borderRadius: 6, backgroundColor: '#1e3a5f' },
+  radioOn:     { borderColor: Colors.primary },
+  radioDot:    { width: 11, height: 11, borderRadius: 6, backgroundColor: Colors.primary },
 
-  sendBtn:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: '#16a34a', borderRadius: 16, padding: 18, shadowColor: '#16a34a', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5, marginTop: 8 },
+  sendBtn:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: Colors.success, borderRadius: 16, padding: 18, shadowColor: Colors.success, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5, marginTop: 8 },
   sendBtnDisabled: { opacity: 0.4 },
-  sendBtnText:     { fontSize: 16, fontWeight: 'bold', color: '#fff' },
+  sendBtnText:     { fontSize: 16, fontWeight: 'bold', color: Colors.white },
 
   overlay:      { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  sheet:        { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, maxHeight: '65%' },
-  handle:       { width: 40, height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
-  sheetTitle:   { fontSize: 18, fontWeight: 'bold', color: '#111827', marginBottom: 16 },
+  sheet:        { backgroundColor: Colors.cardBg, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, maxHeight: '65%' },
+  handle:       { width: 40, height: 4, backgroundColor: Colors.divider, borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
+  sheetTitle:   { fontSize: 18, fontWeight: 'bold', color: Colors.textPrimary, marginBottom: 16 },
   emptyCard:    { padding: 24, alignItems: 'center' },
-  emptyText:    { fontSize: 14, color: '#9ca3af' },
-  supplierRow:  { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f3f4f6', gap: 12 },
-  supplierName: { fontSize: 15, fontWeight: '600', color: '#111827' },
-  supplierEmail:{ fontSize: 13, color: '#6b7280', marginTop: 2 },
-  unitOptionRow:{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  unitOptionText:{ fontSize: 16, color: '#111827' },
+  emptyText:    { fontSize: 14, color: Colors.textLight },
+  supplierRow:  { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: Colors.background, gap: 12 },
+  supplierName: { fontSize: 15, fontWeight: '600', color: Colors.textPrimary },
+  supplierEmail:{ fontSize: 13, color: Colors.textMuted, marginTop: 2 },
+  unitOptionRow:{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: Colors.background },
+  unitOptionText:{ fontSize: 16, color: Colors.textPrimary },
 });

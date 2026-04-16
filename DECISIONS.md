@@ -214,6 +214,11 @@ requests status → SENT
 | PostGIS | Installed on mepdb for geo calculations | April 2026 |
 | PO send endpoint | POST /api/materials/send-order (accepts edited items) | April 2026 |
 | full_name in JWT | Added to login response for mobile display | April 2026 |
+| Mobile i18n library | react-i18next v4 (compatibility v3 removed) | April 15, 2026 |
+| Mobile default language | French (FR) — English secondary | April 15, 2026 |
+| Language detector | Custom AsyncStorage detector, key: mep_language | April 15, 2026 |
+| Date/time locale | Dynamic via i18n.language → fr-CA or en-CA | April 15, 2026 |
+| @expo/vector-icons path | Resolved via tsconfig paths (nested install) | April 15, 2026 |
 
 ---
 
@@ -229,17 +234,20 @@ requests status → SENT
 6. ✅ Materials Hub (Foreman: merge + edit + send)
 7. ✅ Report Menu (This Week / Last Week / Custom)
 8. ✅ Apple TestFlight Build
-9. 🟡 Android Google Play Build
-10. 🟡 Update DECISIONS.md + MASTER_README.md → commit
+9. ✅ Mobile Bilingual (EN/FR) — all screens + headers + localized dates
+10. 🟡 Web Frontend Bilingual (EN/FR) — not yet started
+11. 🟡 Android Google Play Build
+12. 🟡 PDF / Email templates in FR (follow Company language setting)
 ```
 
 ### 5.2 Planned Features — High Priority
 ```
-1. 🟡 Bilingual Support (EN/FR) — see Section 6
+1. 🟡 Web Frontend Bilingual (EN/FR) — mirror of mobile i18n
 2. 🟡 Purchase Orders screen on mobile
 3. 🟡 Assignments screen on mobile
 4. 🟡 Standup screen on mobile
 5. 🟡 Unread badge fix on My Hub bottom tab
+6. 🟡 Company Language setting UI (for official documents)
 ```
 
 ### 5.3 Planned Features — Medium Priority
@@ -257,7 +265,7 @@ requests status → SENT
 
 ---
 
-## 6. Bilingual Support (EN/FR) 🟡
+## 6. Bilingual Support (EN/FR) 🔄
 
 ### Decision:
 - **UI Language** → user chooses (EN or FR) per device
@@ -269,13 +277,26 @@ requests status → SENT
 - All PDFs, PO emails, official correspondence → generated in company language
 - Rationale: Quebec Law 101 requires French for official business documents
 
-### Implementation Plan (when ready):
-- Library: react-i18next
-- Setup: 1 day
-- Mobile UI translation: 2-3 days
-- Web UI translation: 2-3 days
-- PDF/email templates in FR: 1-2 days
-- **Total estimate: ~1 week**
+### Implementation Status:
+| Layer | Status | Date |
+|---|---|---|
+| Mobile — library setup (react-i18next) | ✅ | Apr 14, 2026 |
+| Mobile — all screens + headers | ✅ | Apr 15, 2026 |
+| Mobile — localized dates (fr-CA / en-CA) | ✅ | Apr 15, 2026 |
+| Mobile — Profile → Language switcher | ✅ | Apr 14, 2026 |
+| Web Frontend — library setup | 🟡 | — |
+| Web Frontend — all pages | 🟡 | — |
+| PDF templates (PO, reports) in FR | 🟡 | — |
+| Email templates (supplier orders) in FR | 🟡 | — |
+| Company language setting UI | 🟡 | — |
+
+### Mobile i18n Technical Notes:
+- Library: `react-i18next` v4 (compatibility v3 mode removed)
+- Language detector: Custom AsyncStorage detector, key `mep_language`
+- Default language: French (FR), fallback: EN
+- Files: `src/i18n/index.ts`, `src/i18n/locales/en.ts`, `src/i18n/locales/fr.ts`
+- Sections: common, auth, dashboard, modules, attendance, materials, tasks, hub, report, profile, roles, errors
+- Date/time locale: dynamic via `i18n.language === 'fr' ? 'fr-CA' : 'en-CA'`
 
 ### Note:
 > Many Quebec companies communicate internally in English even under Law 101.
@@ -390,7 +411,38 @@ Automatic assignment suggestions based on:
 
 ---
 
-## 11. Decisions About Ideas Management
+## 11. Session Log — April 15, 2026
+
+### Completed:
+- Fixed `Property 't' doesn't exist` TypeScript error (root cause: SubMenuScreen props mismatch)
+- Cleared all remaining TypeScript errors (0 errors on `tsc --noEmit`)
+- Replaced all hardcoded English strings across screens:
+  - `NewTaskScreen` (body + labels)
+  - `MainStackNavigator` (11 screen titles)
+  - `MaterialsNavigator` (all titles)
+  - `AttendanceScreen` (all strings + localized date/time)
+  - `MaterialRequestScreen` (all strings + interpolation)
+  - `ForemanMaterialsTab` (My Hub → Material Requests: all strings + localized dates)
+- Added missing translation keys in `en.ts` and `fr.ts`:
+  - `attendance.*` — regular, todaysAssignment, markedLate, shiftConfirmed, shiftCompleted, confirmCheckout, confirmCheckoutMsg, loadError, checkinFailed, checkoutFailed, noRecord
+  - `materials.*` — itemLabel, itemNote, selectUnit, submitSuccess, submitFailed, addItemHint, noAssignmentTitle, noAssignmentMsg, noPendingRequests, worker, itemsCount (plural), noRequestsSelected(Msg), noItems(Msg), mergeEditBtn
+- Fixed missing `pickCompletionImage` in MyHubScreen
+- Fixed Expo SDK 54 `NotificationBehavior` (added `shouldShowBanner`, `shouldShowList`)
+- Fixed `@expo/vector-icons` path (nested install) via tsconfig paths
+- Fixed Ionicons name typing via `React.ComponentProps<typeof Ionicons>['name']`
+- Removed `compatibilityJSON: 'v3'` from i18n init (v4 default)
+- Built + uploaded to TestFlight; installed on phone and verified
+
+### Pending Discussion (for next session):
+- Web Frontend i18n (mirror mobile setup)
+- Material Return / Surplus System — detailed design (Section 8)
+- Custom Job Titles per Company — design session (Section 7)
+- CCQ Labor Marketplace — architecture discussion (Section 9)
+- Company Language setting UI (backend + frontend)
+
+---
+
+## 12. Decisions About Ideas Management
 
 > **Rule: Never delete any idea from this file.**
 > When two similar ideas exist → keep both, note the similarity, merge during dedicated discussion.

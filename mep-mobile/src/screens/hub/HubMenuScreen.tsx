@@ -5,6 +5,7 @@ import { useAuthStore } from '../../store/useAuthStore';
 import { apiClient } from '../../api/client';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback } from 'react';
+import Colors from '../../theme/colors';
 
 const FOREMAN_ROLES = ['FOREMAN', 'TRADE_ADMIN', 'COMPANY_ADMIN', 'TRADE_PROJECT_MANAGER', 'SUPER_ADMIN', 'IT_ADMIN'];
 
@@ -34,8 +35,8 @@ export default function HubMenuScreen() {
       label: t('hub.inbox'),
       description: t('hub.inboxDesc'),
       icon: 'mail-outline',
-      color: '#1e3a5f',
-      bg: '#eff6ff',
+      color: Colors.primary,
+      bg: Colors.primaryPale,
       screen: 'HubInbox',
       badge: unread,
     },

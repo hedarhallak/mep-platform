@@ -14,6 +14,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { apiClient } from '../../api/client';
+import Colors from '../../theme/colors';
 
 export default function ChangePinScreen() {
   const navigation = useNavigation();
@@ -148,34 +149,34 @@ export default function ChangePinScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f3f4f6' },
+  container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: 16, gap: 16, paddingBottom: 40 },
 
   infoCard: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: '#eff6ff', borderRadius: 12, padding: 14,
+    backgroundColor: Colors.primaryPale, borderRadius: 12, padding: 14,
     borderWidth: 1, borderColor: '#bfdbfe',
   },
   infoText: { fontSize: 14, color: '#2563eb', flex: 1 },
 
   formCard: {
-    backgroundColor: '#ffffff', borderRadius: 16, padding: 20,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3,
+    backgroundColor: Colors.cardBg, borderRadius: 16, padding: 20,
+    shadowColor: Colors.shadowColor, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3,
   },
-  fieldLabel: { fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 8 },
+  fieldLabel: { fontSize: 13, fontWeight: '600', color: Colors.textSecondary, marginBottom: 8 },
   inputRow: { flexDirection: 'row', alignItems: 'center' },
   input: {
-    flex: 1, height: 48, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10,
-    paddingHorizontal: 14, fontSize: 16, color: '#111827', backgroundColor: '#f9fafb',
+    flex: 1, height: 48, borderWidth: 1, borderColor: Colors.divider, borderRadius: 10,
+    paddingHorizontal: 14, fontSize: 16, color: Colors.textPrimary, backgroundColor: Colors.inputBg,
     letterSpacing: 4,
   },
   eyeButton: { position: 'absolute', right: 14 },
 
   submitButton: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
-    backgroundColor: '#1e3a5f', borderRadius: 16, padding: 18,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 5,
+    backgroundColor: Colors.primary, borderRadius: 16, padding: 18,
+    shadowColor: Colors.shadowColor, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 5,
   },
   disabledButton: { opacity: 0.5 },
-  submitText: { fontSize: 17, fontWeight: 'bold', color: '#ffffff' },
+  submitText: { fontSize: 17, fontWeight: 'bold', color: Colors.white },
 });

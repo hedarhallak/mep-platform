@@ -11,23 +11,16 @@ import { createStackNavigator } from '@react-navigation/stack';
 import MergeEditScreen from '../screens/materials/MergeEditScreen';
 import { apiClient } from '../api/client';
 import { useTranslation } from 'react-i18next';
+import Colors, { headerColors } from '../theme/colors';
 
 const Tab = createBottomTabNavigator();
 const ProfileStack = createStackNavigator();
 
-const headerOptions = {
-  headerStyle: { backgroundColor: '#1e3a5f' },
-  headerTintColor: '#ffffff',
-  headerTitleStyle: { fontWeight: 'bold' as const },
-};
+const headerOptions = headerColors;
 
 const HubStack = createStackNavigator();
 
-const headerOptions2 = {
-  headerStyle: { backgroundColor: '#1e3a5f' },
-  headerTintColor: '#ffffff',
-  headerTitleStyle: { fontWeight: 'bold' as const },
-};
+const headerOptions2 = headerColors;
 
 function HubNavigator() {
   const { t } = useTranslation();
@@ -96,19 +89,20 @@ export default function AppNavigator() {
     <Tab.Navigator
       screenOptions={({ route }) => ({
         tabBarIcon: ({ color, size, focused }) => {
-          const icons: Record<string, [string, string]> = {
+          type IconName = React.ComponentProps<typeof Ionicons>['name'];
+          const icons: Record<string, [IconName, IconName]> = {
             Home:    ['home',          'home-outline'],
             Hub:     ['notifications', 'notifications-outline'],
             Profile: ['person-circle', 'person-circle-outline'],
           };
-          const [filled, outline] = icons[route.name] || ['ellipse', 'ellipse-outline'];
+          const [filled, outline] = icons[route.name] || ['ellipse' as IconName, 'ellipse-outline' as IconName];
           return <Ionicons name={focused ? filled : outline} size={size} color={color} />;
         },
-        tabBarActiveTintColor: '#1e3a5f',
-        tabBarInactiveTintColor: '#9ca3af',
+        tabBarActiveTintColor: Colors.primary,
+        tabBarInactiveTintColor: Colors.textLight,
         tabBarStyle: {
-          backgroundColor: '#ffffff',
-          borderTopColor: '#e5e7eb',
+          backgroundColor: Colors.white,
+          borderTopColor: Colors.divider,
           paddingBottom: 4,
           height: 60,
         },
@@ -128,7 +122,7 @@ export default function AppNavigator() {
           title: t('modules.myHub'),
           headerShown: false,
           tabBarBadge: unreadCount > 0 ? (unreadCount > 99 ? '99+' : unreadCount) : undefined,
-          tabBarBadgeStyle: { backgroundColor: '#dc2626', color: '#ffffff', fontSize: 10 },
+          tabBarBadgeStyle: { backgroundColor: Colors.danger, color: Colors.white, fontSize: 10 },
         }}
       />
       <Tab.Screen

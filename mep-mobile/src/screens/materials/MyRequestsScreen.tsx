@@ -11,6 +11,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { apiClient } from '../../api/client';
+import Colors from '../../theme/colors';
 
 interface RequestItem {
   id: number;
@@ -100,14 +101,14 @@ export default function MyRequestsScreen() {
   };
 
   if (loading) {
-    return <View style={styles.center}><ActivityIndicator size="large" color="#1e3a5f" /></View>;
+    return <View style={styles.center}><ActivityIndicator size="large" color={Colors.primary} /></View>;
   }
 
   return (
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1e3a5f" />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
     >
       <View style={styles.tabsRow}>
         {TABS.map(tab => (
@@ -156,14 +157,14 @@ export default function MyRequestsScreen() {
                   </View>
                   <Ionicons
                     name={expanded === req.id ? 'chevron-up' : 'chevron-down'}
-                    size={16} color="#9ca3af"
+                    size={16} color={Colors.textLight}
                     style={{ marginTop: 8 }}
                   />
                 </View>
               </View>
 
               <View style={styles.itemsSummary}>
-                <Ionicons name="cube-outline" size={14} color="#6b7280" />
+                <Ionicons name="cube-outline" size={14} color={Colors.textMuted} />
                 <Text style={styles.itemsCount}>
                   {req.items?.length || 0} item{(req.items?.length || 0) !== 1 ? 's' : ''}
                 </Text>
@@ -181,7 +182,7 @@ export default function MyRequestsScreen() {
                   ))}
                   {req.note && (
                     <View style={styles.noteRow}>
-                      <Ionicons name="document-text-outline" size={14} color="#6b7280" />
+                      <Ionicons name="document-text-outline" size={14} color={Colors.textMuted} />
                       <Text style={styles.noteText}>{req.note}</Text>
                     </View>
                   )}
@@ -196,7 +197,7 @@ export default function MyRequestsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f3f4f6' },
+  container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: 16, gap: 16, paddingBottom: 40 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
@@ -204,41 +205,41 @@ const styles = StyleSheet.create({
   tab: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
     paddingVertical: 10, borderRadius: 12,
-    backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e5e7eb',
+    backgroundColor: Colors.cardBg, borderWidth: 1, borderColor: Colors.divider,
   },
-  tabActive: { backgroundColor: '#1e3a5f', borderColor: '#1e3a5f' },
-  tabText: { fontSize: 13, color: '#6b7280', fontWeight: '600' },
-  tabTextActive: { color: '#ffffff' },
-  tabBadge: { backgroundColor: '#f3f4f6', borderRadius: 10, minWidth: 20, height: 20, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4 },
+  tabActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  tabText: { fontSize: 13, color: Colors.textMuted, fontWeight: '600' },
+  tabTextActive: { color: Colors.white },
+  tabBadge: { backgroundColor: Colors.background, borderRadius: 10, minWidth: 20, height: 20, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4 },
   tabBadgeActive: { backgroundColor: 'rgba(255,255,255,0.25)' },
-  tabBadgeText: { fontSize: 11, color: '#374151', fontWeight: '700' },
-  tabBadgeTextActive: { color: '#ffffff' },
+  tabBadgeText: { fontSize: 11, color: Colors.textSecondary, fontWeight: '700' },
+  tabBadgeTextActive: { color: Colors.white },
 
-  emptyCard: { backgroundColor: '#ffffff', borderRadius: 16, padding: 40, alignItems: 'center', gap: 12 },
-  emptyText: { fontSize: 15, color: '#9ca3af' },
+  emptyCard: { backgroundColor: Colors.cardBg, borderRadius: 16, padding: 40, alignItems: 'center', gap: 12 },
+  emptyText: { fontSize: 15, color: Colors.textLight },
 
   requestCard: {
-    backgroundColor: '#ffffff', borderRadius: 16, padding: 16,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3,
+    backgroundColor: Colors.cardBg, borderRadius: 16, padding: 16,
+    shadowColor: Colors.shadowColor, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3,
   },
   requestHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   requestLeft: { flex: 1 },
-  requestId: { fontSize: 15, fontWeight: 'bold', color: '#111827' },
-  requestProject: { fontSize: 13, color: '#6b7280', marginTop: 2 },
-  requestDate: { fontSize: 12, color: '#9ca3af', marginTop: 2 },
+  requestId: { fontSize: 15, fontWeight: 'bold', color: Colors.textPrimary },
+  requestProject: { fontSize: 13, color: Colors.textMuted, marginTop: 2 },
+  requestDate: { fontSize: 12, color: Colors.textLight, marginTop: 2 },
   requestRight: { alignItems: 'flex-end' },
   statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
   statusText: { fontSize: 12, fontWeight: '700' },
 
   itemsSummary: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 10 },
-  itemsCount: { fontSize: 13, color: '#6b7280' },
+  itemsCount: { fontSize: 13, color: Colors.textMuted },
 
-  itemsList: { marginTop: 12, borderTopWidth: 1, borderTopColor: '#f3f4f6', paddingTop: 12, gap: 8 },
-  itemsHeaderText: { fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 4 },
+  itemsList: { marginTop: 12, borderTopWidth: 1, borderTopColor: Colors.background, paddingTop: 12, gap: 8 },
+  itemsHeaderText: { fontSize: 13, fontWeight: '600', color: Colors.textSecondary, marginBottom: 4 },
   itemRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  itemDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#1e3a5f' },
-  itemName: { flex: 1, fontSize: 14, color: '#111827' },
-  itemQty: { fontSize: 13, color: '#6b7280', fontWeight: '500' },
-  noteRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, backgroundColor: '#f9fafb', borderRadius: 8, padding: 8, marginTop: 4 },
-  noteText: { fontSize: 13, color: '#374151', flex: 1 },
+  itemDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.primary },
+  itemName: { flex: 1, fontSize: 14, color: Colors.textPrimary },
+  itemQty: { fontSize: 13, color: Colors.textMuted, fontWeight: '500' },
+  noteRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, backgroundColor: Colors.inputBg, borderRadius: 8, padding: 8, marginTop: 4 },
+  noteText: { fontSize: 13, color: Colors.textSecondary, flex: 1 },
 });

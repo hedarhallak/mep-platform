@@ -13,8 +13,10 @@ import {
   FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { apiClient } from '../../api/client';
 import { useNavigation } from '@react-navigation/native';
+import Colors from '../../theme/colors';
 
 // ------------------------------------------------------------------ types --
 
@@ -49,18 +51,20 @@ interface Supplier {
 
 // --------------------------------------------------------------- helpers --
 
-function fmtDateTime(iso: string): string {
+function fmtDateTime(iso: string, locale: string): string {
   const d = new Date(iso);
   return (
-    d.toLocaleDateString('en-CA', { month: 'short', day: 'numeric' }) +
+    d.toLocaleDateString(locale, { month: 'short', day: 'numeric' }) +
     '  ' +
-    d.toLocaleTimeString('en-CA', { hour: '2-digit', minute: '2-digit', hour12: false })
+    d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', hour12: false })
   );
 }
 
 // ================================================================ screen --
 
 export default function ForemanMaterialsTab() {
+  const { t, i18n } = useTranslation();
+  const dateLocale = i18n.language === 'fr' ? 'fr-CA' : 'en-CA';
   const navigation = useNavigation<any>();
   const [requests, setRequests]           = useState<InboxRequest[]>([]);
   const [suppliers, setSuppliers]         = useState<Supplier[]>([]);
@@ -128,11 +132,11 @@ export default function ForemanMaterialsTab() {
 
   const handleMergeEdit = () => {
     if (selectedIds.size === 0) {
-      Alert.alert('No Requests Selected', 'Select at least one request.');
+      Alert.alert(t('materials.noRequestsSelected'), t('materials.noRequestsSelectedMsg'));
       return;
     }
     if (mergedItems.length === 0) {
-      Alert.alert('No Items', 'Selected requests have no items.');
+      Alert.alert(t('materials.noItems'), t('materials.noItemsMsg'));
       return;
     }
     navigation.navigate('MergeEdit', {
@@ -147,7 +151,7 @@ export default function ForemanMaterialsTab() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#1e3a5f" />
+        <ActivityIndicator size="large" color={Colors.primary} />
       </View>
     );
   }
@@ -157,13 +161,13 @@ export default function ForemanMaterialsTab() {
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1e3a5f" />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
       >
         {/* ---- SECTION 1: Worker Requests ---- */}
         <View style={styles.sectionRow}>
           <View style={styles.titleRow}>
-            <Ionicons name="people-outline" size={17} color="#1e3a5f" />
-            <Text style={styles.sectionTitle}>Worker Requests</Text>
+            <Ionicons name="people-outline" size={17} color={Colors.primary} />
+            <Text style={styles.sectionTitle}>{t('materials.workerRequests')}</Text>
             <View style={styles.badge}>
               <Text style={styles.badgeText}>{requests.length}</Text>
             </View>
@@ -172,13 +176,13 @@ export default function ForemanMaterialsTab() {
           {requests.length > 0 && (
             <View style={styles.selectRow}>
               <TouchableOpacity onPress={() => setSelectedIds(new Set(requests.map(r => r.id)))}>
-                <Text style={styles.selectAllText}>Select All</Text>
+                <Text style={styles.selectAllText}>{t('materials.selectAll')}</Text>
               </TouchableOpacity>
               {selectedIds.size > 0 && (
                 <>
                   <Text style={styles.dot}>Â·</Text>
                   <TouchableOpacity onPress={() => setSelectedIds(new Set())}>
-                    <Text style={styles.clearText}>Clear</Text>
+                    <Text style={styles.clearText}>{t('materials.clear')}</Text>
                   </TouchableOpacity>
                 </>
               )}
@@ -189,7 +193,7 @@ export default function ForemanMaterialsTab() {
         {requests.length === 0 ? (
           <View style={styles.emptyCard}>
             <Ionicons name="checkmark-circle-outline" size={36} color="#d1d5db" />
-            <Text style={styles.emptyText}>No pending requests</Text>
+            <Text style={styles.emptyText}>{t('materials.noPendingRequests')}</Text>
           </View>
         ) : (
           requests.map(req => {
@@ -204,17 +208,17 @@ export default function ForemanMaterialsTab() {
               >
                 <View style={styles.cardHeader}>
                   <View style={[styles.checkbox, checked && styles.checkboxOn]}>
-                    {checked && <Ionicons name="checkmark" size={14} color="#fff" />}
+                    {checked && <Ionicons name="checkmark" size={14} color={Colors.white} />}
                   </View>
 
                   <View style={styles.cardInfo}>
                     <Text style={styles.cardProject}>{req.project_name}</Text>
                     <Text style={styles.cardMeta}>
-                      {req.requester_name ?? 'Worker'}
-                      {req.created_at ? `  Â·  ${fmtDateTime(req.created_at)}` : ''}
+                      {req.requester_name ?? t('materials.worker')}
+                      {req.created_at ? `  ·  ${fmtDateTime(req.created_at, dateLocale)}` : ''}
                     </Text>
                     <Text style={styles.cardItemCount}>
-                      {(req.items || []).length} item{(req.items || []).length !== 1 ? 's' : ''}
+                      {t('materials.itemsCount', { count: (req.items || []).length })}
                     </Text>
                   </View>
 
@@ -223,7 +227,7 @@ export default function ForemanMaterialsTab() {
                     onPress={() => setExpandedId(expanded ? null : req.id)}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
-                    <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color="#9ca3af" />
+                    <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={Colors.textLight} />
                   </TouchableOpacity>
                 </View>
 
@@ -238,7 +242,7 @@ export default function ForemanMaterialsTab() {
                     ))}
                     {req.note ? (
                       <View style={styles.noteRow}>
-                        <Ionicons name="document-text-outline" size={13} color="#9ca3af" />
+                        <Ionicons name="document-text-outline" size={13} color={Colors.textLight} />
                         <Text style={styles.noteText}>{req.note}</Text>
                       </View>
                     ) : null}
@@ -253,10 +257,10 @@ export default function ForemanMaterialsTab() {
         {selectedIds.size > 0 && (
           <>
             <View style={[styles.titleRow, { marginTop: 8 }]}>
-              <Ionicons name="git-merge-outline" size={17} color="#1e3a5f" />
-              <Text style={styles.sectionTitle}>Merged Preview</Text>
+              <Ionicons name="git-merge-outline" size={17} color={Colors.primary} />
+              <Text style={styles.sectionTitle}>{t('materials.mergedPreview')}</Text>
               <View style={styles.badge}>
-                <Text style={styles.badgeText}>{mergedItems.length} items</Text>
+                <Text style={styles.badgeText}>{t('materials.itemsCount', { count: mergedItems.length })}</Text>
               </View>
             </View>
 
@@ -276,9 +280,9 @@ export default function ForemanMaterialsTab() {
               onPress={handleMergeEdit}
               disabled={mergedItems.length === 0}
             >
-              <Ionicons name="create-outline" size={20} color="#fff" />
+              <Ionicons name="create-outline" size={20} color={Colors.white} />
               <Text style={styles.mergeEditText}>
-                Merge & Edit ({mergedItems.length} items)
+                {t('materials.mergeEditBtn', { count: mergedItems.length })}
               </Text>
             </TouchableOpacity>
           </>
@@ -295,81 +299,81 @@ export default function ForemanMaterialsTab() {
 const S = StyleSheet;
 
 const styles = S.create({
-  container:   { flex: 1, backgroundColor: '#f3f4f6' },
+  container:   { flex: 1, backgroundColor: Colors.background },
   content:     { padding: 16, gap: 12, paddingBottom: 48 },
   center:      { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
   sectionRow:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   titleRow:    { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  sectionTitle:{ fontSize: 15, fontWeight: '700', color: '#111827' },
-  badge:       { backgroundColor: '#eff6ff', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 },
-  badgeText:   { fontSize: 12, fontWeight: '700', color: '#1e3a5f' },
+  sectionTitle:{ fontSize: 15, fontWeight: '700', color: Colors.textPrimary },
+  badge:       { backgroundColor: Colors.primaryPale, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 },
+  badgeText:   { fontSize: 12, fontWeight: '700', color: Colors.primary },
 
   selectRow:   { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  selectAllText:{ fontSize: 13, fontWeight: '600', color: '#1e3a5f' },
-  dot:         { fontSize: 13, color: '#9ca3af' },
-  clearText:   { fontSize: 13, fontWeight: '600', color: '#dc2626' },
+  selectAllText:{ fontSize: 13, fontWeight: '600', color: Colors.primary },
+  dot:         { fontSize: 13, color: Colors.textLight },
+  clearText:   { fontSize: 13, fontWeight: '600', color: Colors.danger },
 
-  emptyCard:   { backgroundColor: '#fff', borderRadius: 14, padding: 32, alignItems: 'center', gap: 8 },
-  emptyText:   { fontSize: 14, color: '#9ca3af' },
+  emptyCard:   { backgroundColor: Colors.cardBg, borderRadius: 14, padding: 32, alignItems: 'center', gap: 8 },
+  emptyText:   { fontSize: 14, color: Colors.textLight },
 
   card: {
-    backgroundColor: '#fff', borderRadius: 14, overflow: 'hidden',
+    backgroundColor: Colors.cardBg, borderRadius: 14, overflow: 'hidden',
     borderWidth: 2, borderColor: 'transparent',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowColor: Colors.shadowColor, shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
   },
-  cardSelected:  { borderColor: '#1e3a5f' },
+  cardSelected:  { borderColor: Colors.primary },
   cardHeader:    { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 12 },
-  checkbox:      { width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: '#d1d5db', justifyContent: 'center', alignItems: 'center', backgroundColor: '#f9fafb' },
-  checkboxOn:    { backgroundColor: '#1e3a5f', borderColor: '#1e3a5f' },
+  checkbox:      { width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: '#d1d5db', justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.inputBg },
+  checkboxOn:    { backgroundColor: Colors.primary, borderColor: Colors.primary },
   cardInfo:      { flex: 1 },
-  cardProject:   { fontSize: 14, fontWeight: '700', color: '#111827' },
-  cardMeta:      { fontSize: 12, color: '#9ca3af', marginTop: 2 },
-  cardItemCount: { fontSize: 12, color: '#6b7280', marginTop: 3 },
+  cardProject:   { fontSize: 14, fontWeight: '700', color: Colors.textPrimary },
+  cardMeta:      { fontSize: 12, color: Colors.textLight, marginTop: 2 },
+  cardItemCount: { fontSize: 12, color: Colors.textMuted, marginTop: 3 },
   expandBtn:     { padding: 4 },
 
-  itemsList:  { borderTopWidth: 1, borderTopColor: '#f3f4f6', paddingHorizontal: 14, paddingBottom: 12, gap: 8 },
+  itemsList:  { borderTopWidth: 1, borderTopColor: Colors.background, paddingHorizontal: 14, paddingBottom: 12, gap: 8 },
   itemRow:    { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 2 },
-  itemDot:    { width: 6, height: 6, borderRadius: 3, backgroundColor: '#1e3a5f' },
-  itemName:   { flex: 1, fontSize: 13, color: '#374151' },
-  itemQty:    { fontSize: 13, color: '#6b7280', fontWeight: '500' },
-  noteRow:    { flexDirection: 'row', gap: 6, backgroundColor: '#f9fafb', borderRadius: 8, padding: 8, marginTop: 4 },
-  noteText:   { fontSize: 12, color: '#6b7280', flex: 1 },
+  itemDot:    { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.primary },
+  itemName:   { flex: 1, fontSize: 13, color: Colors.textSecondary },
+  itemQty:    { fontSize: 13, color: Colors.textMuted, fontWeight: '500' },
+  noteRow:    { flexDirection: 'row', gap: 6, backgroundColor: Colors.inputBg, borderRadius: 8, padding: 8, marginTop: 4 },
+  noteText:   { fontSize: 12, color: Colors.textMuted, flex: 1 },
 
-  mergedCard:   { backgroundColor: '#fff', borderRadius: 14, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 },
+  mergedCard:   { backgroundColor: Colors.cardBg, borderRadius: 14, overflow: 'hidden', shadowColor: Colors.shadowColor, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 },
   mergedRow:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 },
-  mergedBorder: { borderTopWidth: 1, borderTopColor: '#f3f4f6' },
-  mergedName:   { fontSize: 14, color: '#111827', fontWeight: '500', flex: 1 },
-  mergedQty:    { fontSize: 14, color: '#1e3a5f', fontWeight: '700' },
+  mergedBorder: { borderTopWidth: 1, borderTopColor: Colors.background },
+  mergedName:   { fontSize: 14, color: Colors.textPrimary, fontWeight: '500', flex: 1 },
+  mergedQty:    { fontSize: 14, color: Colors.primary, fontWeight: '700' },
 
-  destCard:    { backgroundColor: '#fff', borderRadius: 14, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 },
+  destCard:    { backgroundColor: Colors.cardBg, borderRadius: 14, overflow: 'hidden', shadowColor: Colors.shadowColor, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 },
   destOption:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
-  destSelected:{ backgroundColor: '#eff6ff' },
+  destSelected:{ backgroundColor: Colors.primaryPale },
   destLeft:    { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  destTitle:   { fontSize: 15, fontWeight: '600', color: '#374151' },
-  destTitleOn: { color: '#1e3a5f' },
-  destSub:     { fontSize: 12, color: '#9ca3af', marginTop: 2 },
-  divider:     { height: 1, backgroundColor: '#f3f4f6' },
+  destTitle:   { fontSize: 15, fontWeight: '600', color: Colors.textSecondary },
+  destTitleOn: { color: Colors.primary },
+  destSub:     { fontSize: 12, color: Colors.textLight, marginTop: 2 },
+  divider:     { height: 1, backgroundColor: Colors.background },
   radio:       { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: '#d1d5db', justifyContent: 'center', alignItems: 'center' },
-  radioOn:     { borderColor: '#1e3a5f' },
-  radioDot:    { width: 10, height: 10, borderRadius: 5, backgroundColor: '#1e3a5f' },
+  radioOn:     { borderColor: Colors.primary },
+  radioDot:    { width: 10, height: 10, borderRadius: 5, backgroundColor: Colors.primary },
 
-  sendBtn:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: '#16a34a', borderRadius: 16, padding: 18, shadowColor: '#16a34a', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5, marginTop: 4 },
+  sendBtn:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: Colors.success, borderRadius: 16, padding: 18, shadowColor: Colors.success, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5, marginTop: 4 },
   sendBtnDisabled: { opacity: 0.4 },
-  sendBtnText:     { fontSize: 16, fontWeight: 'bold', color: '#fff' },
+  sendBtnText:     { fontSize: 16, fontWeight: 'bold', color: Colors.white },
 
   overlay:     { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  sheet:       { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, maxHeight: '65%' },
-  handle:      { width: 40, height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
-  sheetTitle:  { fontSize: 18, fontWeight: 'bold', color: '#111827', marginBottom: 16 },
-  supplierRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f3f4f6', gap: 12 },
-  supplierName:{ fontSize: 15, fontWeight: '600', color: '#111827' },
-  supplierEmail:{ fontSize: 13, color: '#6b7280', marginTop: 2 },
-  supplierAddress:{ fontSize: 12, color: '#9ca3af', marginTop: 1 },
-  mergeEditBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: '#1e3a5f', borderRadius: 14, padding: 16, shadowColor: '#1e3a5f', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 },
-  mergeEditText: { fontSize: 15, fontWeight: 'bold', color: '#fff' },
-  editQtyInput: { width: 60, height: 32, borderWidth: 1, borderColor: '#1e3a5f', borderRadius: 6, paddingHorizontal: 8, fontSize: 13, color: '#111827', backgroundColor: '#f0f4ff' },
-  mergedUnit: { fontSize: 13, color: '#6b7280', marginHorizontal: 4 },
-  editSaveBtn: { width: 28, height: 28, borderRadius: 6, backgroundColor: '#dcfce7', justifyContent: 'center', alignItems: 'center', marginHorizontal: 2 },
+  sheet:       { backgroundColor: Colors.cardBg, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, maxHeight: '65%' },
+  handle:      { width: 40, height: 4, backgroundColor: Colors.divider, borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
+  sheetTitle:  { fontSize: 18, fontWeight: 'bold', color: Colors.textPrimary, marginBottom: 16 },
+  supplierRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: Colors.background, gap: 12 },
+  supplierName:{ fontSize: 15, fontWeight: '600', color: Colors.textPrimary },
+  supplierEmail:{ fontSize: 13, color: Colors.textMuted, marginTop: 2 },
+  supplierAddress:{ fontSize: 12, color: Colors.textLight, marginTop: 1 },
+  mergeEditBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: Colors.primary, borderRadius: 14, padding: 16, shadowColor: Colors.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 },
+  mergeEditText: { fontSize: 15, fontWeight: 'bold', color: Colors.white },
+  editQtyInput: { width: 60, height: 32, borderWidth: 1, borderColor: Colors.primary, borderRadius: 6, paddingHorizontal: 8, fontSize: 13, color: Colors.textPrimary, backgroundColor: Colors.primaryPale },
+  mergedUnit: { fontSize: 13, color: Colors.textMuted, marginHorizontal: 4 },
+  editSaveBtn: { width: 28, height: 28, borderRadius: 6, backgroundColor: Colors.successBg, justifyContent: 'center', alignItems: 'center', marginHorizontal: 2 },
 });

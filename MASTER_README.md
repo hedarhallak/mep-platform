@@ -1,5 +1,5 @@
 # MEP Platform — Master Project README
-> Last updated: April 14, 2026 | Maintainer: Hedar Hallak
+> Last updated: April 15, 2026 | Maintainer: Hedar Hallak
 > Production: https://app.constrai.ca
 > Server: root@143.110.218.84
 > Backend path on server: /var/www/mep
@@ -137,8 +137,11 @@ Permission matrix: 284 mappings — see DECISIONS.md for full matrix.
 > Location: mep-fixed/mep-mobile/
 > Bundle ID: ca.constrai.app
 > Expo Account: hedarhallak75
-> TestFlight: https://appstoreconnect.apple.com/apps/6762187466/testflight/ios
-> Last Build: April 14, 2026 — EAS Build ID: 8ebef820-1d6e-4083-b319-26b8d7fb0661
+> Apple Team ID: DX6L994VNU (Hedar Al-Hallak — Individual)
+> TestFlight App ID: 6762187466
+> TestFlight URL: https://appstoreconnect.apple.com/apps/6762187466/testflight/ios
+> i18n: react-i18next — default FR, EN secondary (user picks from Profile)
+> Last Build: April 15, 2026 — includes full i18n for all screens + localized dates
 
 ### Navigation Structure (Unified Icon Grid — April 2026)
 ```
@@ -171,26 +174,34 @@ Profile → ProfileNavigator
 ```
 
 ### Mobile Screens Status
-| Screen | Status |
-|---|---|
-| Login | ✅ |
-| Dashboard (icon grid, role-aware) | ✅ |
-| Attendance | ✅ |
-| MaterialsMenuScreen | ✅ |
-| MaterialRequestScreen (Worker) | ✅ |
-| MyRequestsScreen | ✅ |
-| TasksMenuScreen | ✅ |
-| NewTaskScreen (full: project, recipients, photo, priority) | ✅ |
-| SentTasksScreen (completion tracking) | ✅ |
-| ReportMenuScreen | ✅ |
-| MyReportScreen (period param) | ✅ |
-| HubMenuScreen (icon grid) | ✅ |
-| MyHubScreen (Inbox only) | ✅ |
-| ForemanMaterialsTab + MergeEditScreen | ✅ |
-| Profile + Change PIN | ✅ |
+| Screen | Built | i18n (EN/FR) |
+|---|:---:|:---:|
+| Login | ✅ | ✅ |
+| Dashboard (icon grid, role-aware) | ✅ | ✅ |
+| Attendance (with localized date/time) | ✅ | ✅ |
+| MaterialsMenuScreen | ✅ | ✅ |
+| MaterialRequestScreen (Worker) | ✅ | ✅ |
+| MyRequestsScreen | ✅ | ✅ |
+| TasksMenuScreen | ✅ | ✅ |
+| NewTaskScreen (full: project, recipients, photo, priority) | ✅ | ✅ |
+| SentTasksScreen (completion tracking) | ✅ | ✅ |
+| ReportMenuScreen | ✅ | ✅ |
+| MyReportScreen (period param) | ✅ | ✅ |
+| HubMenuScreen (icon grid) | ✅ | ✅ |
+| MyHubScreen (Inbox only) | ✅ | ✅ |
+| ForemanMaterialsTab + MergeEditScreen | ✅ | ✅ |
+| Profile + Change PIN | ✅ | ✅ |
+| Navigation Headers (all stacks) | ✅ | ✅ |
 
 ### Shared Components
 - `src/screens/shared/SubMenuScreen.tsx` — unified icon grid (same design as Dashboard) used by all sub-menus
+
+### i18n Structure
+- `src/i18n/index.ts` — i18next init with AsyncStorage language detector (key: `mep_language`)
+- `src/i18n/locales/en.ts` + `src/i18n/locales/fr.ts` — all UI strings
+- Sections: common, auth, dashboard, modules, attendance, materials, tasks, hub, report, profile, roles, errors
+- Date/time locale switches dynamically via `i18n.language` (`fr-CA` or `en-CA`)
+- User switches language from Profile → Language
 
 ### Testing
 ```powershell

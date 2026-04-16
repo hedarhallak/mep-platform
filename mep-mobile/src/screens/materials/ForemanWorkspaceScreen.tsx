@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { apiClient } from '../../api/client';
+import Colors from '../../theme/colors';
 
 // ------------------------------------------------------------------ types --
 
@@ -176,7 +177,7 @@ export default function ForemanWorkspaceScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#1e3a5f" />
+        <ActivityIndicator size="large" color={Colors.primary} />
       </View>
     );
   }
@@ -186,12 +187,12 @@ export default function ForemanWorkspaceScreen() {
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1e3a5f" />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
       >
         {/* ---- SECTION 1: Worker Requests ---- */}
         <View style={styles.sectionRow}>
           <View style={styles.titleRow}>
-            <Ionicons name="people-outline" size={17} color="#1e3a5f" />
+            <Ionicons name="people-outline" size={17} color={Colors.primary} />
             <Text style={styles.sectionTitle}>Worker Requests</Text>
             <View style={styles.badge}>
               <Text style={styles.badgeText}>{requests.length}</Text>
@@ -233,7 +234,7 @@ export default function ForemanWorkspaceScreen() {
               >
                 <View style={styles.cardHeader}>
                   <View style={[styles.checkbox, checked && styles.checkboxOn]}>
-                    {checked && <Ionicons name="checkmark" size={14} color="#fff" />}
+                    {checked && <Ionicons name="checkmark" size={14} color={Colors.white} />}
                   </View>
 
                   <View style={styles.cardInfo}>
@@ -252,7 +253,7 @@ export default function ForemanWorkspaceScreen() {
                     onPress={() => setExpandedId(expanded ? null : req.id)}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
-                    <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color="#9ca3af" />
+                    <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={Colors.textLight} />
                   </TouchableOpacity>
                 </View>
 
@@ -267,7 +268,7 @@ export default function ForemanWorkspaceScreen() {
                     ))}
                     {req.note ? (
                       <View style={styles.noteRow}>
-                        <Ionicons name="document-text-outline" size={13} color="#9ca3af" />
+                        <Ionicons name="document-text-outline" size={13} color={Colors.textLight} />
                         <Text style={styles.noteText}>{req.note}</Text>
                       </View>
                     ) : null}
@@ -282,7 +283,7 @@ export default function ForemanWorkspaceScreen() {
         {selectedIds.size > 0 && (
           <>
             <View style={[styles.titleRow, { marginTop: 8 }]}>
-              <Ionicons name="git-merge-outline" size={17} color="#1e3a5f" />
+              <Ionicons name="git-merge-outline" size={17} color={Colors.primary} />
               <Text style={styles.sectionTitle}>Merged Preview</Text>
               <View style={styles.badge}>
                 <Text style={styles.badgeText}>{mergedItems.length} items</Text>
@@ -299,7 +300,7 @@ export default function ForemanWorkspaceScreen() {
             </View>
 
             <View style={[styles.titleRow, { marginTop: 8 }]}>
-              <Ionicons name="send-outline" size={17} color="#1e3a5f" />
+              <Ionicons name="send-outline" size={17} color={Colors.primary} />
               <Text style={styles.sectionTitle}>Send To</Text>
             </View>
 
@@ -312,7 +313,7 @@ export default function ForemanWorkspaceScreen() {
                 <View style={styles.destLeft}>
                   <Ionicons
                     name="business-outline" size={20}
-                    color={destination === 'procurement' ? '#1e3a5f' : '#9ca3af'}
+                    color={destination === 'procurement' ? Colors.primary : Colors.textLight}
                   />
                   <View>
                     <Text style={[styles.destTitle, destination === 'procurement' && styles.destTitleOn]}>
@@ -336,7 +337,7 @@ export default function ForemanWorkspaceScreen() {
                 <View style={styles.destLeft}>
                   <Ionicons
                     name="storefront-outline" size={20}
-                    color={typeof destination === 'number' ? '#1e3a5f' : '#9ca3af'}
+                    color={typeof destination === 'number' ? Colors.primary : Colors.textLight}
                   />
                   <View>
                     <Text style={[styles.destTitle, typeof destination === 'number' && styles.destTitleOn]}>
@@ -360,10 +361,10 @@ export default function ForemanWorkspaceScreen() {
               disabled={sending || destination === null}
             >
               {sending ? (
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color={Colors.white} />
               ) : (
                 <>
-                  <Ionicons name="paper-plane-outline" size={20} color="#fff" />
+                  <Ionicons name="paper-plane-outline" size={20} color={Colors.white} />
                   <Text style={styles.sendBtnText}>
                     Merge & Send ({selectedIds.size} request{selectedIds.size !== 1 ? 's' : ''})
                   </Text>
@@ -398,7 +399,7 @@ export default function ForemanWorkspaceScreen() {
                       <Text style={styles.supplierEmail}>{s.email}</Text>
                       {s.address ? <Text style={styles.supplierAddress}>{s.address}</Text> : null}
                     </View>
-                    {destination === s.id && <Ionicons name="checkmark" size={20} color="#1e3a5f" />}
+                    {destination === s.id && <Ionicons name="checkmark" size={20} color={Colors.primary} />}
                   </TouchableOpacity>
                 )}
               />
@@ -415,76 +416,76 @@ export default function ForemanWorkspaceScreen() {
 const S = StyleSheet;
 
 const styles = S.create({
-  container:   { flex: 1, backgroundColor: '#f3f4f6' },
+  container:   { flex: 1, backgroundColor: Colors.background },
   content:     { padding: 16, gap: 12, paddingBottom: 48 },
   center:      { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
   sectionRow:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   titleRow:    { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  sectionTitle:{ fontSize: 15, fontWeight: '700', color: '#111827' },
-  badge:       { backgroundColor: '#eff6ff', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 },
-  badgeText:   { fontSize: 12, fontWeight: '700', color: '#1e3a5f' },
+  sectionTitle:{ fontSize: 15, fontWeight: '700', color: Colors.textPrimary },
+  badge:       { backgroundColor: Colors.primaryPale, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 },
+  badgeText:   { fontSize: 12, fontWeight: '700', color: Colors.primary },
 
   selectRow:   { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  selectAllText:{ fontSize: 13, fontWeight: '600', color: '#1e3a5f' },
-  dot:         { fontSize: 13, color: '#9ca3af' },
-  clearText:   { fontSize: 13, fontWeight: '600', color: '#dc2626' },
+  selectAllText:{ fontSize: 13, fontWeight: '600', color: Colors.primary },
+  dot:         { fontSize: 13, color: Colors.textLight },
+  clearText:   { fontSize: 13, fontWeight: '600', color: Colors.danger },
 
-  emptyCard:   { backgroundColor: '#fff', borderRadius: 14, padding: 32, alignItems: 'center', gap: 8 },
-  emptyText:   { fontSize: 14, color: '#9ca3af' },
+  emptyCard:   { backgroundColor: Colors.cardBg, borderRadius: 14, padding: 32, alignItems: 'center', gap: 8 },
+  emptyText:   { fontSize: 14, color: Colors.textLight },
 
   card: {
-    backgroundColor: '#fff', borderRadius: 14, overflow: 'hidden',
+    backgroundColor: Colors.cardBg, borderRadius: 14, overflow: 'hidden',
     borderWidth: 2, borderColor: 'transparent',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowColor: Colors.shadowColor, shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
   },
-  cardSelected:  { borderColor: '#1e3a5f' },
+  cardSelected:  { borderColor: Colors.primary },
   cardHeader:    { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 12 },
-  checkbox:      { width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: '#d1d5db', justifyContent: 'center', alignItems: 'center', backgroundColor: '#f9fafb' },
-  checkboxOn:    { backgroundColor: '#1e3a5f', borderColor: '#1e3a5f' },
+  checkbox:      { width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: '#d1d5db', justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.inputBg },
+  checkboxOn:    { backgroundColor: Colors.primary, borderColor: Colors.primary },
   cardInfo:      { flex: 1 },
-  cardProject:   { fontSize: 14, fontWeight: '700', color: '#111827' },
-  cardMeta:      { fontSize: 12, color: '#9ca3af', marginTop: 2 },
-  cardItemCount: { fontSize: 12, color: '#6b7280', marginTop: 3 },
+  cardProject:   { fontSize: 14, fontWeight: '700', color: Colors.textPrimary },
+  cardMeta:      { fontSize: 12, color: Colors.textLight, marginTop: 2 },
+  cardItemCount: { fontSize: 12, color: Colors.textMuted, marginTop: 3 },
   expandBtn:     { padding: 4 },
 
-  itemsList:  { borderTopWidth: 1, borderTopColor: '#f3f4f6', paddingHorizontal: 14, paddingBottom: 12, gap: 8 },
+  itemsList:  { borderTopWidth: 1, borderTopColor: Colors.background, paddingHorizontal: 14, paddingBottom: 12, gap: 8 },
   itemRow:    { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 2 },
-  itemDot:    { width: 6, height: 6, borderRadius: 3, backgroundColor: '#1e3a5f' },
-  itemName:   { flex: 1, fontSize: 13, color: '#374151' },
-  itemQty:    { fontSize: 13, color: '#6b7280', fontWeight: '500' },
-  noteRow:    { flexDirection: 'row', gap: 6, backgroundColor: '#f9fafb', borderRadius: 8, padding: 8, marginTop: 4 },
-  noteText:   { fontSize: 12, color: '#6b7280', flex: 1 },
+  itemDot:    { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.primary },
+  itemName:   { flex: 1, fontSize: 13, color: Colors.textSecondary },
+  itemQty:    { fontSize: 13, color: Colors.textMuted, fontWeight: '500' },
+  noteRow:    { flexDirection: 'row', gap: 6, backgroundColor: Colors.inputBg, borderRadius: 8, padding: 8, marginTop: 4 },
+  noteText:   { fontSize: 12, color: Colors.textMuted, flex: 1 },
 
-  mergedCard:   { backgroundColor: '#fff', borderRadius: 14, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 },
+  mergedCard:   { backgroundColor: Colors.cardBg, borderRadius: 14, overflow: 'hidden', shadowColor: Colors.shadowColor, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 },
   mergedRow:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 },
-  mergedBorder: { borderTopWidth: 1, borderTopColor: '#f3f4f6' },
-  mergedName:   { fontSize: 14, color: '#111827', fontWeight: '500', flex: 1 },
-  mergedQty:    { fontSize: 14, color: '#1e3a5f', fontWeight: '700' },
+  mergedBorder: { borderTopWidth: 1, borderTopColor: Colors.background },
+  mergedName:   { fontSize: 14, color: Colors.textPrimary, fontWeight: '500', flex: 1 },
+  mergedQty:    { fontSize: 14, color: Colors.primary, fontWeight: '700' },
 
-  destCard:    { backgroundColor: '#fff', borderRadius: 14, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 },
+  destCard:    { backgroundColor: Colors.cardBg, borderRadius: 14, overflow: 'hidden', shadowColor: Colors.shadowColor, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 },
   destOption:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
-  destSelected:{ backgroundColor: '#eff6ff' },
+  destSelected:{ backgroundColor: Colors.primaryPale },
   destLeft:    { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  destTitle:   { fontSize: 15, fontWeight: '600', color: '#374151' },
-  destTitleOn: { color: '#1e3a5f' },
-  destSub:     { fontSize: 12, color: '#9ca3af', marginTop: 2 },
-  divider:     { height: 1, backgroundColor: '#f3f4f6' },
+  destTitle:   { fontSize: 15, fontWeight: '600', color: Colors.textSecondary },
+  destTitleOn: { color: Colors.primary },
+  destSub:     { fontSize: 12, color: Colors.textLight, marginTop: 2 },
+  divider:     { height: 1, backgroundColor: Colors.background },
   radio:       { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: '#d1d5db', justifyContent: 'center', alignItems: 'center' },
-  radioOn:     { borderColor: '#1e3a5f' },
-  radioDot:    { width: 10, height: 10, borderRadius: 5, backgroundColor: '#1e3a5f' },
+  radioOn:     { borderColor: Colors.primary },
+  radioDot:    { width: 10, height: 10, borderRadius: 5, backgroundColor: Colors.primary },
 
-  sendBtn:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: '#16a34a', borderRadius: 16, padding: 18, shadowColor: '#16a34a', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5, marginTop: 4 },
+  sendBtn:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: Colors.success, borderRadius: 16, padding: 18, shadowColor: Colors.success, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5, marginTop: 4 },
   sendBtnDisabled: { opacity: 0.4 },
-  sendBtnText:     { fontSize: 16, fontWeight: 'bold', color: '#fff' },
+  sendBtnText:     { fontSize: 16, fontWeight: 'bold', color: Colors.white },
 
   overlay:     { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  sheet:       { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, maxHeight: '65%' },
-  handle:      { width: 40, height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
-  sheetTitle:  { fontSize: 18, fontWeight: 'bold', color: '#111827', marginBottom: 16 },
-  supplierRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f3f4f6', gap: 12 },
-  supplierName:{ fontSize: 15, fontWeight: '600', color: '#111827' },
-  supplierEmail:{ fontSize: 13, color: '#6b7280', marginTop: 2 },
-  supplierAddress:{ fontSize: 12, color: '#9ca3af', marginTop: 1 },
+  sheet:       { backgroundColor: Colors.cardBg, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, maxHeight: '65%' },
+  handle:      { width: 40, height: 4, backgroundColor: Colors.divider, borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
+  sheetTitle:  { fontSize: 18, fontWeight: 'bold', color: Colors.textPrimary, marginBottom: 16 },
+  supplierRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: Colors.background, gap: 12 },
+  supplierName:{ fontSize: 15, fontWeight: '600', color: Colors.textPrimary },
+  supplierEmail:{ fontSize: 13, color: Colors.textMuted, marginTop: 2 },
+  supplierAddress:{ fontSize: 12, color: Colors.textLight, marginTop: 1 },
 });

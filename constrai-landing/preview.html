@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ConstrAI — Construction Intelligence Platform</title>
+  <meta name="description" content="ConstrAI is a workforce ERP platform built for MEP construction companies in Quebec. Coming soon.">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='2' y='18' width='6' height='12' rx='2' fill='%232d3436' opacity='.7'/%3E%3Crect x='10' y='10' width='6' height='20' rx='2' fill='%232d3436' opacity='.85'/%3E%3Crect x='18' y='2' width='6' height='28' rx='2' fill='%237fb069'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --olive: #5a7a4a;
+      --olive-light: #7fb069;
+      --olive-bright: #a8d88d;
+      --charcoal: #2d3436;
+      --gray-600: #6b7280;
+      --gray-400: #9ca3af;
+      --gray-200: #e5e7eb;
+      --white: #ffffff;
+      --bg: #fafbf9;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--charcoal);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    /* Subtle background pattern */
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background:
+        radial-gradient(ellipse at 20% 50%, rgba(127,176,105,0.08) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 20%, rgba(90,122,74,0.06) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 80%, rgba(168,216,141,0.05) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 24px;
+      text-align: center;
+    }
+
+    /* Language toggle */
+    .lang-toggle {
+      position: absolute;
+      top: 24px;
+      right: 24px;
+      display: flex;
+      gap: 0;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--gray-200);
+      background: var(--white);
+      z-index: 10;
+    }
+    .lang-btn {
+      padding: 8px 16px;
+      border: none;
+      background: transparent;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--gray-400);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .lang-btn.active {
+      background: var(--olive);
+      color: var(--white);
+    }
+    .lang-btn:hover:not(.active) {
+      color: var(--charcoal);
+      background: #f3f4f6;
+    }
+
+    /* Logo */
+    .logo-wrapper {
+      margin-bottom: 48px;
+    }
+    .logo-wrapper svg {
+      width: 320px;
+      height: auto;
+    }
+    @media (min-width: 768px) {
+      .logo-wrapper svg { width: 400px; }
+    }
+
+    /* Divider line */
+    .divider {
+      width: 60px;
+      height: 3px;
+      background: linear-gradient(90deg, var(--olive), var(--olive-light));
+      border-radius: 2px;
+      margin-bottom: 40px;
+    }
+
+    /* Coming soon text */
+    .coming-soon {
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: var(--olive);
+      margin-bottom: 24px;
+    }
+
+    /* Headline */
+    .headline {
+      font-size: clamp(28px, 5vw, 44px);
+      font-weight: 800;
+      line-height: 1.2;
+      color: var(--charcoal);
+      margin-bottom: 20px;
+      max-width: 600px;
+    }
+    .headline .accent {
+      background: linear-gradient(135deg, var(--olive), var(--olive-light));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* Subtext */
+    .subtext {
+      font-size: 17px;
+      line-height: 1.7;
+      color: var(--gray-600);
+      max-width: 520px;
+      margin-bottom: 48px;
+    }
+
+    /* Features row */
+    .features {
+      display: flex;
+      gap: 32px;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-bottom: 48px;
+    }
+    .feature {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--charcoal);
+    }
+    .feature-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, rgba(127,176,105,0.15), rgba(90,122,74,0.1));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .feature-icon svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    /* Contact */
+    .contact {
+      font-size: 14px;
+      color: var(--gray-400);
+    }
+    .contact a {
+      color: var(--olive);
+      text-decoration: none;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+    .contact a:hover {
+      color: var(--olive-light);
+    }
+
+    /* Footer */
+    .footer {
+      position: relative;
+      z-index: 1;
+      text-align: center;
+      padding: 24px;
+      font-size: 12px;
+      color: var(--gray-400);
+    }
+
+    /* Animations */
+    .fade-in {
+      animation: fadeUp 0.8s ease-out both;
+    }
+    .fade-in:nth-child(2) { animation-delay: 0.1s; }
+    .fade-in:nth-child(3) { animation-delay: 0.2s; }
+    .fade-in:nth-child(4) { animation-delay: 0.3s; }
+    .fade-in:nth-child(5) { animation-delay: 0.4s; }
+    .fade-in:nth-child(6) { animation-delay: 0.5s; }
+    .fade-in:nth-child(7) { animation-delay: 0.6s; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+
+    <!-- Language toggle -->
+    <div class="lang-toggle">
+      <button class="lang-btn active" onclick="setLang('en')" id="btn-en">EN</button>
+      <button class="lang-btn" onclick="setLang('fr')" id="btn-fr">FR</button>
+    </div>
+
+    <!-- Logo -->
+    <div class="logo-wrapper fade-in">
+      <svg viewBox="0 0 400 100" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="aiG" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#5a7a4a"/>
+            <stop offset="100%" style="stop-color:#7fb069"/>
+          </linearGradient>
+          <linearGradient id="bG" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#7fb069"/>
+            <stop offset="100%" style="stop-color:#5a7a4a"/>
+          </linearGradient>
+        </defs>
+        <g transform="translate(10,15)">
+          <rect x="0" y="42" width="12" height="28" rx="3" fill="#2d3436" opacity="0.7"/>
+          <rect x="16" y="26" width="12" height="44" rx="3" fill="#2d3436" opacity="0.85"/>
+          <rect x="32" y="10" width="12" height="60" rx="3" fill="url(#bG)"/>
+          <circle cx="6" cy="38" r="2.5" fill="#7fb069"/>
+          <circle cx="22" cy="22" r="2.5" fill="#7fb069"/>
+          <circle cx="38" cy="6" r="2.5" fill="#7fb069"/>
+          <line x1="6" y1="38" x2="22" y2="22" stroke="#7fb069" stroke-width="1.2" opacity="0.6"/>
+          <line x1="22" y1="22" x2="38" y2="6" stroke="#7fb069" stroke-width="1.2" opacity="0.6"/>
+        </g>
+        <text x="65" y="62" font-family="Inter,Helvetica Neue,Arial,sans-serif" font-size="42" font-weight="700" fill="#2d3436" letter-spacing="-1">Constr</text>
+        <text x="248" y="62" font-family="Inter,Helvetica Neue,Arial,sans-serif" font-size="42" font-weight="700" fill="url(#aiG)" letter-spacing="-1">AI</text>
+        <text x="66" y="82" font-family="Inter,Helvetica Neue,Arial,sans-serif" font-size="11" font-weight="400" fill="#6b7280" letter-spacing="3.5">CONSTRUCTION INTELLIGENCE</text>
+      </svg>
+    </div>
+
+    <!-- Divider -->
+    <div class="divider fade-in"></div>
+
+    <!-- Coming soon badge -->
+    <p class="coming-soon fade-in" data-en="Coming Soon" data-fr="Bientot disponible">Coming Soon</p>
+
+    <!-- Headline -->
+    <h1 class="headline fade-in"
+        data-en="The smarter way to manage <span class='accent'>construction</span> workforce"
+        data-fr="La facon intelligente de gerer votre main-d'oeuvre en <span class='accent'>construction</span>">
+      The smarter way to manage <span class="accent">construction</span> workforce
+    </h1>
+
+    <!-- Subtext -->
+    <p class="subtext fade-in"
+       data-en="ConstrAI is a workforce ERP platform built for MEP companies in Quebec. Attendance, materials, task management, smart assignments, and bilingual support — all in one place."
+       data-fr="ConstrAI est une plateforme ERP de main-d'oeuvre concue pour les entreprises MEP au Quebec. Presences, materiaux, gestion des taches, affectations intelligentes et support bilingue — tout en un seul endroit.">
+      ConstrAI is a workforce ERP platform built for MEP companies in Quebec. Attendance, materials, task management, smart assignments, and bilingual support — all in one place.
+    </p>
+
+    <!-- Features -->
+    <div class="features fade-in">
+      <div class="feature">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#5a7a4a" stroke-width="2" stroke-linecap="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg>
+        </div>
+        <span data-en="Attendance" data-fr="Presences">Attendance</span>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#5a7a4a" stroke-width="2" stroke-linecap="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
+        </div>
+        <span data-en="Materials & PO" data-fr="Materiaux & BC">Materials & PO</span>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#5a7a4a" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+        </div>
+        <span data-en="Workforce" data-fr="Main-d'oeuvre">Workforce</span>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#5a7a4a" stroke-width="2" stroke-linecap="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        </div>
+        <span data-en="Smart Reports" data-fr="Rapports intelligents">Smart Reports</span>
+      </div>
+    </div>
+
+    <!-- Contact -->
+    <p class="contact fade-in"
+       data-en="Interested? Reach us at <a href='mailto:info@constrai.ca'>info@constrai.ca</a>"
+       data-fr="Interesse? Contactez-nous a <a href='mailto:info@constrai.ca'>info@constrai.ca</a>">
+      Interested? Reach us at <a href="mailto:info@constrai.ca">info@constrai.ca</a>
+    </p>
+
+  </div>
+
+  <footer class="footer">
+    &copy; 2026 ConstrAI. Quebec, Canada.
+  </footer>
+
+  <script>
+    function setLang(lang) {
+      document.querySelectorAll('[data-en]').forEach(el => {
+        el.innerHTML = el.getAttribute('data-' + lang);
+      });
+      document.getElementById('btn-en').classList.toggle('active', lang === 'en');
+      document.getElementById('btn-fr').classList.toggle('active', lang === 'fr');
+      document.documentElement.lang = lang === 'fr' ? 'fr' : 'en';
+      localStorage.setItem('constrai_lang', lang);
+    }
+
+    // Auto-detect: prefer French for Quebec
+    (function() {
+      var saved = localStorage.getItem('constrai_lang');
+      if (saved) { setLang(saved); return; }
+      var nav = (navigator.language || '').toLowerCase();
+      if (nav.startsWith('fr')) { setLang('fr'); }
+    })();
+  </script>
+
+</body>
+</html>

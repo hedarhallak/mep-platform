@@ -5,12 +5,14 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
+import Colors from '../../theme/colors';
 
 // ------------------------------------------------------------------ types --
 
 export interface SubMenuItem {
   id: string;
   label: string;
+  description?: string;
   icon: any;
   color: string;
   bg: string;
@@ -22,11 +24,12 @@ export interface SubMenuItem {
 
 interface SubMenuScreenProps {
   items: SubMenuItem[];
+  title?: string;
 }
 
 // ================================================================ screen --
 
-export default function SubMenuScreen({ items }: SubMenuScreenProps) {
+export default function SubMenuScreen({ items, title }: SubMenuScreenProps) {
   const { t } = useTranslation();
   const navigation = useNavigation<any>();
 
@@ -45,6 +48,7 @@ export default function SubMenuScreen({ items }: SubMenuScreenProps) {
         contentContainerStyle={styles.grid}
         showsVerticalScrollIndicator={false}
       >
+        {title && <Text style={styles.screenTitle}>{title}</Text>}
         <View style={styles.modulesGrid}>
           {items.map(item => (
             <TouchableOpacity
@@ -57,6 +61,11 @@ export default function SubMenuScreen({ items }: SubMenuScreenProps) {
                 <Ionicons name={item.icon} size={28} color={item.color} />
               </View>
               <Text style={styles.moduleLabel}>{item.label}</Text>
+              {item.description && (
+                <Text style={styles.moduleDescription} numberOfLines={2}>
+                  {item.description}
+                </Text>
+              )}
               {item.badge != null && item.badge > 0 && (
                 <View style={styles.badge}>
                   <Text style={styles.badgeText}>
@@ -80,9 +89,22 @@ export default function SubMenuScreen({ items }: SubMenuScreenProps) {
 // ----------------------------------------------------------------- styles --
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f3f4f6' },
+  container: { flex: 1, backgroundColor: Colors.background },
   scroll:    { flex: 1 },
   grid:      { padding: 20, gap: 16, paddingBottom: 40 },
+
+  screenTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+    marginBottom: 4,
+  },
+  moduleDescription: {
+    fontSize: 11,
+    color: Colors.textMuted,
+    textAlign: 'center',
+    marginTop: 2,
+  },
 
   modulesGrid: {
     flexDirection: 'row',
@@ -91,12 +113,12 @@ const styles = StyleSheet.create({
   },
   moduleCard: {
     width: '47%',
-    backgroundColor: '#ffffff',
+    backgroundColor: Colors.cardBg,
     borderRadius: 16,
     padding: 20,
     alignItems: 'center',
     gap: 10,
-    shadowColor: '#000',
+    shadowColor: Colors.shadowColor,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
     shadowRadius: 8,
@@ -113,11 +135,11 @@ const styles = StyleSheet.create({
   moduleLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#374151',
+    color: Colors.textSecondary,
     textAlign: 'center',
   },
   badge: {
-    backgroundColor: '#dc2626',
+    backgroundColor: Colors.danger,
     borderRadius: 10,
     minWidth: 20,
     height: 20,
@@ -128,12 +150,12 @@ const styles = StyleSheet.create({
     top: 8,
     right: 8,
   },
-  badgeText: { fontSize: 10, color: '#fff', fontWeight: '700' },
+  badgeText: { fontSize: 10, color: Colors.white, fontWeight: '700' },
   soonBadge: {
-    backgroundColor: '#f3f4f6',
+    backgroundColor: Colors.background,
     borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 2,
   },
-  soonText: { fontSize: 10, color: '#9ca3af', fontWeight: '600' },
+  soonText: { fontSize: 10, color: Colors.textLight, fontWeight: '600' },
 });

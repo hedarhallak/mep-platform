@@ -10,7 +10,9 @@ import {
   RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { apiClient } from '../../api/client';
+import Colors from '../../theme/colors';
 
 interface TodayAssignment {
   assignment_id: number;
@@ -46,6 +48,8 @@ function fmtHours(h: number | null): string {
 }
 
 export default function AttendanceScreen() {
+  const { t, i18n } = useTranslation();
+  const dateLocale = i18n.language === 'fr' ? 'fr-CA' : 'en-CA';
   const [assignment, setAssignment] = useState<TodayAssignment | null>(null);
   const [attendance, setAttendance] = useState<AttendanceRecord | null>(null);
   const [loading, setLoading] = useState(true);
@@ -80,7 +84,7 @@ export default function AttendanceScreen() {
       }
     } catch (err: any) {
       if (err.response?.status !== 404) {
-        Alert.alert('Error', 'Could not load data.');
+        Alert.alert(t('common.error'), t('attendance.loadError'));
       }
     } finally {
       setLoading(false);
@@ -106,8 +110,8 @@ export default function AttendanceScreen() {
       });
       await fetchData();
     } catch (err: any) {
-      const msg = err.response?.data?.message || err.response?.data?.error || 'Check-in failed.';
-      Alert.alert('Check-in Failed', msg);
+      const msg = err.response?.data?.message || err.response?.data?.error || t('attendance.checkinFailed');
+      Alert.alert(t('attendance.checkIn'), msg);
     } finally {
       setActionLoading(false);
     }
@@ -115,16 +119,16 @@ export default function AttendanceScreen() {
 
   const handleCheckout = async () => {
     if (!attendance?.attendance_id) {
-      Alert.alert('Error', 'No attendance record found.');
+      Alert.alert(t('common.error'), t('attendance.noRecord'));
       return;
     }
     Alert.alert(
-      'Confirm Checkout',
-      'Are you sure you want to check out?',
+      t('attendance.confirmCheckout'),
+      t('attendance.confirmCheckoutMsg'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Check Out',
+          text: t('attendance.checkOut'),
           style: 'destructive',
           onPress: async () => {
             setActionLoading(true);
@@ -132,8 +136,8 @@ export default function AttendanceScreen() {
               await apiClient.patch(`/api/attendance/${attendance.attendance_id}/checkout`);
               await fetchData();
             } catch (err: any) {
-              const msg = err.response?.data?.message || err.response?.data?.error || 'Check-out failed.';
-              Alert.alert('Check-out Failed', msg);
+              const msg = err.response?.data?.message || err.response?.data?.error || t('attendance.checkoutFailed');
+              Alert.alert(t('attendance.checkOut'), msg);
             } finally {
               setActionLoading(false);
             }
@@ -146,7 +150,7 @@ export default function AttendanceScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#1e3a5f" />
+        <ActivityIndicator size="large" color={Colors.primary} />
       </View>
     );
   }
@@ -159,58 +163,58 @@ export default function AttendanceScreen() {
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1e3a5f" />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
     >
       <View style={styles.timeCard}>
         <Text style={styles.timeText}>
-          {now.toLocaleTimeString('en-CA', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
+          {now.toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
         </Text>
         <Text style={styles.dateText}>
-          {now.toLocaleDateString('en-CA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+          {now.toLocaleDateString(dateLocale, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
         </Text>
       </View>
 
       {assignment ? (
         <View style={styles.projectCard}>
           <View style={styles.projectHeader}>
-            <Ionicons name="business-outline" size={20} color="#1e3a5f" />
-            <Text style={styles.projectLabel}>Today's Assignment</Text>
+            <Ionicons name="business-outline" size={20} color={Colors.primary} />
+            <Text style={styles.projectLabel}>{t('attendance.todaysAssignment')}</Text>
           </View>
           <Text style={styles.projectName}>{assignment.project_name}</Text>
           <Text style={styles.projectNumber}>{assignment.project_code}</Text>
           {assignment.site_address ? (
             <View style={styles.infoRow}>
-              <Ionicons name="location-outline" size={16} color="#6b7280" />
+              <Ionicons name="location-outline" size={16} color={Colors.textMuted} />
               <Text style={styles.infoText}>{assignment.site_address}</Text>
             </View>
           ) : null}
           <View style={styles.infoRow}>
-            <Ionicons name="time-outline" size={16} color="#6b7280" />
+            <Ionicons name="time-outline" size={16} color={Colors.textMuted} />
             <Text style={styles.infoText}>
               {String(assignment.shift_start).substring(0, 5)} — {String(assignment.shift_end).substring(0, 5)}
             </Text>
           </View>
           <View style={styles.infoRow}>
-            <Ionicons name="construct-outline" size={16} color="#6b7280" />
+            <Ionicons name="construct-outline" size={16} color={Colors.textMuted} />
             <Text style={styles.infoText}>{assignment.assignment_role}</Text>
           </View>
         </View>
       ) : (
         <View style={styles.noAssignmentCard}>
           <Ionicons name="calendar-outline" size={40} color="#d1d5db" />
-          <Text style={styles.noAssignmentText}>No assignment for today</Text>
+          <Text style={styles.noAssignmentText}>{t('attendance.noActiveAssignment')}</Text>
         </View>
       )}
 
       <View style={styles.statusCard}>
         <View style={styles.statusRow}>
           <View style={styles.statusItem}>
-            <Text style={styles.statusLabel}>Check In</Text>
+            <Text style={styles.statusLabel}>{t('attendance.checkIn')}</Text>
             <Text style={styles.statusValue}>{fmtTime(attendance?.check_in_time || null)}</Text>
           </View>
           <View style={styles.statusDivider} />
           <View style={styles.statusItem}>
-            <Text style={styles.statusLabel}>Check Out</Text>
+            <Text style={styles.statusLabel}>{t('attendance.checkOut')}</Text>
             <Text style={styles.statusValue}>{fmtTime(attendance?.check_out_time || null)}</Text>
           </View>
         </View>
@@ -218,20 +222,20 @@ export default function AttendanceScreen() {
         {isCheckedOut && (
           <View style={styles.hoursRow}>
             <View style={styles.hoursItem}>
-              <Text style={styles.hoursLabel}>Regular</Text>
+              <Text style={styles.hoursLabel}>{t('attendance.regular')}</Text>
               <Text style={styles.hoursValue}>{fmtHours(attendance?.regular_hours || null)}</Text>
             </View>
             <View style={styles.hoursItem}>
-              <Text style={styles.hoursLabel}>Overtime</Text>
-              <Text style={[styles.hoursValue, { color: '#f59e0b' }]}>{fmtHours(attendance?.overtime_hours || null)}</Text>
+              <Text style={styles.hoursLabel}>{t('attendance.overtime')}</Text>
+              <Text style={[styles.hoursValue, { color: Colors.warning }]}>{fmtHours(attendance?.overtime_hours || null)}</Text>
             </View>
           </View>
         )}
 
         {attendance?.is_late && (
           <View style={styles.lateBadge}>
-            <Ionicons name="warning-outline" size={14} color="#dc2626" />
-            <Text style={styles.lateText}>Marked as Late</Text>
+            <Ionicons name="warning-outline" size={14} color={Colors.danger} />
+            <Text style={styles.lateText}>{t('attendance.markedLate')}</Text>
           </View>
         )}
       </View>
@@ -247,16 +251,16 @@ export default function AttendanceScreen() {
           disabled={!assignment || actionLoading}
         >
           {actionLoading ? (
-            <ActivityIndicator color="#ffffff" />
+            <ActivityIndicator color={Colors.white} />
           ) : (
             <>
               <Ionicons
                 name={isCheckedIn ? 'log-out-outline' : 'log-in-outline'}
                 size={24}
-                color="#ffffff"
+                color={Colors.white}
               />
               <Text style={styles.actionButtonText}>
-                {isCheckedIn ? 'Check Out' : 'Check In'}
+                {isCheckedIn ? t('attendance.checkOut') : t('attendance.checkIn')}
               </Text>
             </>
           )}
@@ -265,11 +269,11 @@ export default function AttendanceScreen() {
 
       {isCheckedOut && (
         <View style={styles.completedBadge}>
-          <Ionicons name="checkmark-circle" size={24} color="#16a34a" />
+          <Ionicons name="checkmark-circle" size={24} color={Colors.success} />
           <Text style={styles.completedText}>
             {['CONFIRMED', 'ADJUSTED'].includes(recordStatus)
-              ? 'Shift Confirmed'
-              : 'Shift Completed — Pending Confirmation'}
+              ? t('attendance.shiftConfirmed')
+              : t('attendance.shiftCompleted')}
           </Text>
         </View>
       )}
@@ -278,51 +282,51 @@ export default function AttendanceScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f3f4f6' },
+  container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: 16, gap: 16 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  timeCard: { backgroundColor: '#1e3a5f', borderRadius: 16, padding: 24, alignItems: 'center' },
-  timeText: { fontSize: 42, fontWeight: 'bold', color: '#ffffff', letterSpacing: 2 },
-  dateText: { fontSize: 14, color: '#93c5fd', marginTop: 4 },
+  timeCard: { backgroundColor: Colors.primary, borderRadius: 16, padding: 24, alignItems: 'center' },
+  timeText: { fontSize: 42, fontWeight: 'bold', color: Colors.white, letterSpacing: 2 },
+  dateText: { fontSize: 14, color: Colors.primaryBright, marginTop: 4 },
   projectCard: {
-    backgroundColor: '#ffffff', borderRadius: 16, padding: 20,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3,
+    backgroundColor: Colors.cardBg, borderRadius: 16, padding: 20,
+    shadowColor: Colors.shadowColor, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3,
   },
   projectHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-  projectLabel: { fontSize: 13, fontWeight: '600', color: '#1e3a5f', textTransform: 'uppercase', letterSpacing: 1 },
-  projectName: { fontSize: 18, fontWeight: 'bold', color: '#111827', marginBottom: 4 },
-  projectNumber: { fontSize: 13, color: '#6b7280', marginBottom: 12 },
+  projectLabel: { fontSize: 13, fontWeight: '600', color: Colors.primary, textTransform: 'uppercase', letterSpacing: 1 },
+  projectName: { fontSize: 18, fontWeight: 'bold', color: Colors.textPrimary, marginBottom: 4 },
+  projectNumber: { fontSize: 13, color: Colors.textMuted, marginBottom: 12 },
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
-  infoText: { fontSize: 14, color: '#374151', flex: 1 },
-  noAssignmentCard: { backgroundColor: '#ffffff', borderRadius: 16, padding: 40, alignItems: 'center', gap: 12 },
-  noAssignmentText: { fontSize: 15, color: '#9ca3af' },
+  infoText: { fontSize: 14, color: Colors.textSecondary, flex: 1 },
+  noAssignmentCard: { backgroundColor: Colors.cardBg, borderRadius: 16, padding: 40, alignItems: 'center', gap: 12 },
+  noAssignmentText: { fontSize: 15, color: Colors.textLight },
   statusCard: {
-    backgroundColor: '#ffffff', borderRadius: 16, padding: 20,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3,
+    backgroundColor: Colors.cardBg, borderRadius: 16, padding: 20,
+    shadowColor: Colors.shadowColor, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3,
   },
   statusRow: { flexDirection: 'row', alignItems: 'center' },
   statusItem: { flex: 1, alignItems: 'center' },
-  statusDivider: { width: 1, height: 40, backgroundColor: '#e5e7eb' },
-  statusLabel: { fontSize: 12, color: '#9ca3af', marginBottom: 4 },
-  statusValue: { fontSize: 22, fontWeight: 'bold', color: '#111827' },
-  hoursRow: { flexDirection: 'row', marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#f3f4f6' },
+  statusDivider: { width: 1, height: 40, backgroundColor: Colors.divider },
+  statusLabel: { fontSize: 12, color: Colors.textLight, marginBottom: 4 },
+  statusValue: { fontSize: 22, fontWeight: 'bold', color: Colors.textPrimary },
+  hoursRow: { flexDirection: 'row', marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: Colors.background },
   hoursItem: { flex: 1, alignItems: 'center' },
-  hoursLabel: { fontSize: 12, color: '#9ca3af', marginBottom: 4 },
-  hoursValue: { fontSize: 18, fontWeight: '600', color: '#111827' },
-  lateBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, backgroundColor: '#fef2f2', borderRadius: 8, padding: 8 },
-  lateText: { fontSize: 13, color: '#dc2626', fontWeight: '500' },
+  hoursLabel: { fontSize: 12, color: Colors.textLight, marginBottom: 4 },
+  hoursValue: { fontSize: 18, fontWeight: '600', color: Colors.textPrimary },
+  lateBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, backgroundColor: Colors.dangerBg, borderRadius: 8, padding: 8 },
+  lateText: { fontSize: 13, color: Colors.danger, fontWeight: '500' },
   actionButton: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12,
     borderRadius: 16, padding: 18,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 5,
+    shadowColor: Colors.shadowColor, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 5,
   },
-  checkinButton: { backgroundColor: '#16a34a' },
-  checkoutButton: { backgroundColor: '#dc2626' },
+  checkinButton: { backgroundColor: Colors.success },
+  checkoutButton: { backgroundColor: Colors.danger },
   disabledButton: { opacity: 0.5 },
-  actionButtonText: { fontSize: 18, fontWeight: 'bold', color: '#ffffff' },
+  actionButtonText: { fontSize: 18, fontWeight: 'bold', color: Colors.white },
   completedBadge: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: '#f0fdf4', borderRadius: 16, padding: 18, borderWidth: 1, borderColor: '#bbf7d0',
+    backgroundColor: Colors.successBg, borderRadius: 16, padding: 18, borderWidth: 1, borderColor: Colors.successBorder,
   },
-  completedText: { fontSize: 15, fontWeight: '600', color: '#16a34a', textAlign: 'center' },
+  completedText: { fontSize: 15, fontWeight: '600', color: Colors.success, textAlign: 'center' },
 });

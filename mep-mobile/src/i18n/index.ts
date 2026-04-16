@@ -35,7 +35,6 @@ i18n
       fr: { translation: fr },
     },
     interpolation: { escapeValue: false },
-    compatibilityJSON: 'v3',
   });
 
 export const changeLanguage = async (lang: string) => {

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import SubMenuScreen, { SubMenuItem } from '../shared/SubMenuScreen';
 import { useTranslation } from 'react-i18next';
 import { apiClient } from '../../api/client';
+import Colors from '../../theme/colors';
 
 export default function TasksMenuScreen() {
   const { t } = useTranslation();
@@ -19,8 +20,8 @@ export default function TasksMenuScreen() {
       label: t('tasks.newTask'),
       description: t('tasks.newTaskDesc'),
       icon: 'send-outline',
-      color: '#dc2626',
-      bg: '#fef2f2',
+      color: Colors.danger,
+      bg: Colors.dangerBg,
       screen: 'NewTask',
     },
     {

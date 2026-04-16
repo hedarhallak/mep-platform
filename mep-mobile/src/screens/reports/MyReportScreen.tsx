@@ -16,6 +16,7 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { apiClient } from '../../api/client';
 import { useAuthStore } from '../../store/useAuthStore';
+import Colors from '../../theme/colors';
 
 interface ReportRecord {
   attendance_date: string;
@@ -64,11 +65,11 @@ function fmtDateDisplay(d: Date): string {
 
 function getStatusColor(status: string): string {
   switch (status) {
-    case 'CONFIRMED': return '#16a34a';
+    case 'CONFIRMED': return Colors.success;
     case 'ADJUSTED': return '#7c3aed';
     case 'CHECKED_OUT': return '#2563eb';
     case 'CHECKED_IN': return '#d97706';
-    default: return '#6b7280';
+    default: return Colors.textMuted;
   }
 }
 
@@ -121,11 +122,11 @@ function CalendarPicker({ value, onChange, maxDate }: {
     <View style={cal.container}>
       <View style={cal.header}>
         <TouchableOpacity onPress={prevMonth} style={cal.navBtn}>
-          <Ionicons name="chevron-back" size={20} color="#1e3a5f" />
+          <Ionicons name="chevron-back" size={20} color={Colors.primary} />
         </TouchableOpacity>
         <Text style={cal.title}>{MONTHS[viewMonth]} {viewYear}</Text>
         <TouchableOpacity onPress={nextMonth} style={cal.navBtn}>
-          <Ionicons name="chevron-forward" size={20} color="#1e3a5f" />
+          <Ionicons name="chevron-forward" size={20} color={Colors.primary} />
         </TouchableOpacity>
       </View>
       <View style={cal.daysRow}>
@@ -171,9 +172,9 @@ function generatePdfHtml(records: ReportRecord[], from: string, to: string, empl
       <td>${fmtDate(r.attendance_date)}</td><td>${r.project_name}</td>
       <td>${fmtTime(r.check_in_time)}</td><td>${fmtTime(r.check_out_time)}</td>
       <td>${fmtHours(r.regular_hours)}</td>
-      <td>${Number(r.overtime_hours) > 0 ? fmtHours(r.overtime_hours) : 'â€”'}</td>
-      <td>${Number(r.distance_km) >= 41 ? `${r.distance_km} km` : 'â€”'}</td>
-      <td>${Number(r.daily_allowance) > 0 ? `$${Number(r.daily_allowance).toFixed(2)}` : r.needs_t2200 ? 'T2200' : 'â€”'}</td>
+      <td>${Number(r.overtime_hours) > 0 ? fmtHours(r.overtime_hours) : 'â€"'}</td>
+      <td>${Number(r.distance_km) >= 41 ? `${r.distance_km} km` : 'â€"'}</td>
+      <td>${Number(r.daily_allowance) > 0 ? `$${Number(r.daily_allowance).toFixed(2)}` : r.needs_t2200 ? 'T2200' : 'â€"'}</td>
       <td style="color:${getStatusColor(r.status)};font-weight:600">${r.status}</td>
     </tr>`).join('');
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
@@ -190,7 +191,7 @@ function generatePdfHtml(records: ReportRecord[], from: string, to: string, empl
     tr:nth-child(even){background:#f9fafb}
     .footer{margin-top:24px;text-align:center;font-size:11px;color:#9ca3af}
   </style></head><body>
-  <div class="header"><div><div class="brand">CONSTRAI</div><div style="font-size:14px;color:#6b7280">MEP Platform â€” Attendance Report</div></div>
+  <div class="header"><div><div class="brand">CONSTRAI</div><div style="font-size:14px;color:#6b7280">MEP Platform â€" Attendance Report</div></div>
   <div style="text-align:right;font-size:13px"><div><strong>${employeeName}</strong></div><div>Period: ${from} to ${to}</div><div>Generated: ${new Date().toLocaleDateString('en-CA')}</div></div></div>
   <div class="summary">
     <div class="summary-item"><div class="summary-label">Days Worked</div><div class="summary-value">${totalDays}</div></div>
@@ -200,7 +201,7 @@ function generatePdfHtml(records: ReportRecord[], from: string, to: string, empl
   </div>
   <table><thead><tr><th>Date</th><th>Project</th><th>In</th><th>Out</th><th>Regular</th><th>OT</th><th>Distance</th><th>Allowance</th><th>Status</th></tr></thead>
   <tbody>${rows}</tbody></table>
-  <div class="footer">CONSTRAI MEP Platform â€” Confidential</div>
+  <div class="footer">CONSTRAI MEP Platform â€" Confidential</div>
   </body></html>`;
 }
 
@@ -258,11 +259,11 @@ export default function MyReportScreen() {
   const totalOvertime = records.reduce((s, r) => s + Number(r.overtime_hours || 0), 0);
   const totalAllowance = records.reduce((s, r) => s + Number(r.daily_allowance || 0), 0);
 
-  if (loading) return <View style={styles.center}><ActivityIndicator size="large" color="#1e3a5f" /></View>;
+  if (loading) return <View style={styles.center}><ActivityIndicator size="large" color={Colors.primary} /></View>;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1e3a5f" />}>
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View style={styles.rangeRow}>
@@ -280,14 +281,14 @@ export default function MyReportScreen() {
             <View style={styles.customField}>
               <Text style={styles.customLabel}>From</Text>
               <TouchableOpacity style={styles.dateButton} onPress={() => setShowFromCal(true)}>
-                <Ionicons name="calendar-outline" size={16} color="#1e3a5f" />
+                <Ionicons name="calendar-outline" size={16} color={Colors.primary} />
                 <Text style={styles.dateButtonText}>{fmtDateDisplay(customFrom)}</Text>
               </TouchableOpacity>
             </View>
             <View style={styles.customField}>
               <Text style={styles.customLabel}>To</Text>
               <TouchableOpacity style={styles.dateButton} onPress={() => setShowToCal(true)}>
-                <Ionicons name="calendar-outline" size={16} color="#1e3a5f" />
+                <Ionicons name="calendar-outline" size={16} color={Colors.primary} />
                 <Text style={styles.dateButtonText}>{fmtDateDisplay(customTo)}</Text>
               </TouchableOpacity>
             </View>
@@ -329,9 +330,9 @@ export default function MyReportScreen() {
         <View style={styles.summaryDivider} />
         <View style={styles.summaryItem}><Text style={styles.summaryLabel}>Regular</Text><Text style={styles.summaryValue}>{fmtHours(totalRegular)}</Text></View>
         <View style={styles.summaryDivider} />
-        <View style={styles.summaryItem}><Text style={styles.summaryLabel}>OT</Text><Text style={[styles.summaryValue, { color: '#f59e0b' }]}>{fmtHours(totalOvertime)}</Text></View>
+        <View style={styles.summaryItem}><Text style={styles.summaryLabel}>OT</Text><Text style={[styles.summaryValue, { color: Colors.warning }]}>{fmtHours(totalOvertime)}</Text></View>
         <View style={styles.summaryDivider} />
-        <View style={styles.summaryItem}><Text style={styles.summaryLabel}>Allowance</Text><Text style={[styles.summaryValue, { color: '#16a34a', fontSize: 14 }]}>${totalAllowance.toFixed(2)}</Text></View>
+        <View style={styles.summaryItem}><Text style={styles.summaryLabel}>Allowance</Text><Text style={[styles.summaryValue, { color: Colors.success, fontSize: 14 }]}>${totalAllowance.toFixed(2)}</Text></View>
       </View>
 
       {records.length > 0 && (
@@ -364,16 +365,16 @@ export default function MyReportScreen() {
               <View style={styles.recordItem}><Ionicons name="log-out-outline" size={14} color="#6b7280" /><Text style={styles.recordLabel}>Out</Text><Text style={styles.recordVal}>{fmtTime(r.check_out_time)}</Text></View>
               <View style={styles.recordItem}><Ionicons name="time-outline" size={14} color="#6b7280" /><Text style={styles.recordLabel}>Reg</Text><Text style={styles.recordVal}>{fmtHours(r.regular_hours)}</Text></View>
               {Number(r.overtime_hours) > 0 && (
-                <View style={styles.recordItem}><Ionicons name="flash-outline" size={14} color="#f59e0b" /><Text style={styles.recordLabel}>OT</Text><Text style={[styles.recordVal, { color: '#f59e0b' }]}>{fmtHours(r.overtime_hours)}</Text></View>
+                <View style={styles.recordItem}><Ionicons name="flash-outline" size={14} color={Colors.warning} /><Text style={styles.recordLabel}>OT</Text><Text style={[styles.recordVal, { color: Colors.warning }]}>{fmtHours(r.overtime_hours)}</Text></View>
               )}
             </View>
             {r.late_minutes > 0 && (
-              <View style={styles.lateRow}><Ionicons name="warning-outline" size={13} color="#dc2626" /><Text style={styles.lateText}>Late by {r.late_minutes} min</Text></View>
+              <View style={styles.lateRow}><Ionicons name="warning-outline" size={13} color={Colors.danger} /><Text style={styles.lateText}>Late by {r.late_minutes} min</Text></View>
             )}
             {Number(r.distance_km) >= 41 && (
               <View style={styles.travelRow}>
-                <Ionicons name="car-outline" size={14} color="#1e3a5f" />
-                <Text style={styles.travelText}>{r.distance_km} km{r.needs_t2200 ? ' â€” T2200 / TP-64.3' : ''}{r.needs_allowance && r.daily_allowance > 0 ? ` â€” $${Number(r.daily_allowance).toFixed(2)}` : ''}</Text>
+                <Ionicons name="car-outline" size={14} color={Colors.primary} />
+                <Text style={styles.travelText}>{r.distance_km} km{r.needs_t2200 ? ' — T2200 / TP-64.3' : ''}{r.needs_allowance && r.daily_allowance > 0 ? ` — $${Number(r.daily_allowance).toFixed(2)}` : ''}</Text>
               </View>
             )}
           </View>
@@ -387,62 +388,62 @@ const cal = StyleSheet.create({
   container: { paddingVertical: 8 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   navBtn: { padding: 8 },
-  title: { fontSize: 16, fontWeight: '700', color: '#1e3a5f' },
+  title: { fontSize: 16, fontWeight: '700', color: Colors.primary },
   daysRow: { flexDirection: 'row', marginBottom: 4 },
-  dayLabel: { width: '14.28%', textAlign: 'center', fontSize: 11, color: '#9ca3af', fontWeight: '600' },
+  dayLabel: { width: '14.28%', textAlign: 'center', fontSize: 11, color: Colors.textLight, fontWeight: '600' },
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
   cell: { width: '14.28%', aspectRatio: 1, alignItems: 'center', justifyContent: 'center' },
-  selectedCell: { backgroundColor: '#1e3a5f', borderRadius: 20 },
+  selectedCell: { backgroundColor: Colors.primary, borderRadius: 20 },
   disabledCell: { opacity: 0.3 },
-  dayNum: { fontSize: 14, color: '#111827' },
-  selectedNum: { color: '#ffffff', fontWeight: '700' },
-  disabledNum: { color: '#9ca3af' },
+  dayNum: { fontSize: 14, color: Colors.textPrimary },
+  selectedNum: { color: Colors.white, fontWeight: '700' },
+  disabledNum: { color: Colors.textLight },
 });
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f3f4f6' },
+  container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: 16, gap: 16, paddingBottom: 40 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   rangeRow: { flexDirection: 'row', gap: 8 },
-  rangeButton: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e5e7eb' },
-  rangeButtonActive: { backgroundColor: '#1e3a5f', borderColor: '#1e3a5f' },
-  rangeText: { fontSize: 13, color: '#6b7280', fontWeight: '500' },
-  rangeTextActive: { color: '#ffffff', fontWeight: '700' },
-  customCard: { backgroundColor: '#ffffff', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 },
+  rangeButton: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: Colors.cardBg, borderWidth: 1, borderColor: Colors.divider },
+  rangeButtonActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  rangeText: { fontSize: 13, color: Colors.textMuted, fontWeight: '500' },
+  rangeTextActive: { color: Colors.white, fontWeight: '700' },
+  customCard: { backgroundColor: Colors.cardBg, borderRadius: 16, padding: 16, shadowColor: Colors.shadowColor, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 },
   customRow: { flexDirection: 'row', gap: 12, marginBottom: 12 },
   customField: { flex: 1 },
-  customLabel: { fontSize: 12, fontWeight: '600', color: '#374151', marginBottom: 6 },
-  dateButton: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 44, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, paddingHorizontal: 12, backgroundColor: '#f9fafb' },
-  dateButtonText: { fontSize: 12, color: '#111827', fontWeight: '500', flex: 1 },
-  applyButton: { backgroundColor: '#1e3a5f', borderRadius: 10, padding: 12, alignItems: 'center' },
-  applyText: { color: '#ffffff', fontWeight: '700', fontSize: 14 },
+  customLabel: { fontSize: 12, fontWeight: '600', color: Colors.textSecondary, marginBottom: 6 },
+  dateButton: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 44, borderWidth: 1, borderColor: Colors.divider, borderRadius: 10, paddingHorizontal: 12, backgroundColor: Colors.inputBg },
+  dateButtonText: { fontSize: 12, color: Colors.textPrimary, fontWeight: '500', flex: 1 },
+  applyButton: { backgroundColor: Colors.primary, borderRadius: 10, padding: 12, alignItems: 'center' },
+  applyText: { color: Colors.white, fontWeight: '700', fontSize: 14 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 },
-  modalCard: { backgroundColor: '#ffffff', borderRadius: 20, padding: 20, width: '100%' },
-  modalTitle: { fontSize: 16, fontWeight: '700', color: '#1e3a5f', marginBottom: 12, textAlign: 'center' },
-  modalDone: { backgroundColor: '#1e3a5f', borderRadius: 10, padding: 12, alignItems: 'center', marginTop: 12 },
-  modalDoneText: { color: '#ffffff', fontWeight: '700', fontSize: 14 },
-  summaryRow: { flexDirection: 'row', backgroundColor: '#ffffff', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 },
+  modalCard: { backgroundColor: Colors.cardBg, borderRadius: 20, padding: 20, width: '100%' },
+  modalTitle: { fontSize: 16, fontWeight: '700', color: Colors.primary, marginBottom: 12, textAlign: 'center' },
+  modalDone: { backgroundColor: Colors.primary, borderRadius: 10, padding: 12, alignItems: 'center', marginTop: 12 },
+  modalDoneText: { color: Colors.white, fontWeight: '700', fontSize: 14 },
+  summaryRow: { flexDirection: 'row', backgroundColor: Colors.cardBg, borderRadius: 16, padding: 16, shadowColor: Colors.shadowColor, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 },
   summaryItem: { flex: 1, alignItems: 'center' },
-  summaryDivider: { width: 1, backgroundColor: '#e5e7eb' },
-  summaryLabel: { fontSize: 11, color: '#9ca3af', marginBottom: 4 },
-  summaryValue: { fontSize: 16, fontWeight: 'bold', color: '#111827' },
-  pdfButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#1e3a5f', borderRadius: 12, padding: 14 },
+  summaryDivider: { width: 1, backgroundColor: Colors.divider },
+  summaryLabel: { fontSize: 11, color: Colors.textLight, marginBottom: 4 },
+  summaryValue: { fontSize: 16, fontWeight: 'bold', color: Colors.textPrimary },
+  pdfButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: Colors.primary, borderRadius: 12, padding: 14 },
   disabledButton: { opacity: 0.5 },
-  pdfText: { fontSize: 15, fontWeight: '600', color: '#ffffff' },
-  emptyCard: { backgroundColor: '#ffffff', borderRadius: 16, padding: 40, alignItems: 'center', gap: 12 },
-  emptyText: { fontSize: 15, color: '#9ca3af' },
-  recordCard: { backgroundColor: '#ffffff', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 },
+  pdfText: { fontSize: 15, fontWeight: '600', color: Colors.white },
+  emptyCard: { backgroundColor: Colors.cardBg, borderRadius: 16, padding: 40, alignItems: 'center', gap: 12 },
+  emptyText: { fontSize: 15, color: Colors.textLight },
+  recordCard: { backgroundColor: Colors.cardBg, borderRadius: 16, padding: 16, shadowColor: Colors.shadowColor, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 },
   recordHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
-  recordDate: { fontSize: 15, fontWeight: 'bold', color: '#111827' },
-  recordProject: { fontSize: 13, color: '#6b7280', marginTop: 2 },
+  recordDate: { fontSize: 15, fontWeight: 'bold', color: Colors.textPrimary },
+  recordProject: { fontSize: 13, color: Colors.textMuted, marginTop: 2 },
   statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
   statusText: { fontSize: 11, fontWeight: '700' },
   recordRow: { flexDirection: 'row', gap: 12 },
   recordItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  recordLabel: { fontSize: 12, color: '#9ca3af' },
-  recordVal: { fontSize: 13, fontWeight: '600', color: '#111827' },
+  recordLabel: { fontSize: 12, color: Colors.textLight },
+  recordVal: { fontSize: 13, fontWeight: '600', color: Colors.textPrimary },
   lateRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8 },
-  lateText: { fontSize: 12, color: '#dc2626' },
-  travelRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, backgroundColor: '#eff6ff', borderRadius: 8, padding: 8 },
-  travelText: { fontSize: 13, color: '#1e3a5f', fontWeight: '500' },
+  lateText: { fontSize: 12, color: Colors.danger },
+  travelRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, backgroundColor: Colors.primaryPale, borderRadius: 8, padding: 8 },
+  travelText: { fontSize: 13, color: Colors.primary, fontWeight: '500' },
 });

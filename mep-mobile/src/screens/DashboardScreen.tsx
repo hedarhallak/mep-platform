@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useAuthStore } from '../store/useAuthStore';
 import { useTranslation } from 'react-i18next';
+import Colors from '../theme/colors';
 
 // ------------------------------------------------------------------ types --
 
@@ -51,10 +52,10 @@ export default function DashboardScreen() {
   const user = useAuthStore(s => s.user);
 
   const ALL_MODULES: Module[] = [
-    { id: 'attendance', label: t('modules.attendance'), icon: 'location-outline', color: '#1e3a5f', bg: '#eff6ff', screen: 'Attendance', roles: ['ALL'] },
+    { id: 'attendance', label: t('modules.attendance'), icon: 'location-outline', color: Colors.primary, bg: Colors.primaryPale, screen: 'Attendance', roles: ['ALL'] },
     { id: 'materials', label: t('modules.materials'), icon: 'cube-outline', color: '#0891b2', bg: '#ecfeff', screen: 'Materials', roles: ['ALL'] },
     { id: 'report', label: t('modules.report'), icon: 'bar-chart-outline', color: '#7c3aed', bg: '#f5f3ff', screen: 'Report', roles: ['ALL'] },
-    { id: 'tasks', label: t('modules.tasks'), icon: 'checkmark-circle-outline', color: '#dc2626', bg: '#fef2f2', screen: 'Tasks', roles: ['FOREMAN', 'TRADE_ADMIN', 'TRADE_PROJECT_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN', 'IT_ADMIN'] },
+    { id: 'tasks', label: t('modules.tasks'), icon: 'checkmark-circle-outline', color: Colors.danger, bg: Colors.dangerBg, screen: 'Tasks', roles: ['FOREMAN', 'TRADE_ADMIN', 'TRADE_PROJECT_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN', 'IT_ADMIN'] },
     { id: 'assignments', label: t('modules.assignments'), icon: 'clipboard-outline', color: '#d97706', bg: '#fffbeb', screen: null, roles: ['FOREMAN', 'TRADE_ADMIN', 'TRADE_PROJECT_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN', 'IT_ADMIN'] },
     { id: 'standup', label: t('modules.standup'), icon: 'people-outline', color: '#059669', bg: '#ecfdf5', screen: null, roles: ['FOREMAN', 'TRADE_ADMIN', 'TRADE_PROJECT_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN'] },
     { id: 'purchase_orders', label: t('modules.purchaseOrders'), icon: 'document-text-outline', color: '#6d28d9', bg: '#f5f3ff', screen: null, roles: ['FOREMAN', 'TRADE_ADMIN', 'TRADE_PROJECT_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN', 'IT_ADMIN'] },
@@ -77,7 +78,7 @@ export default function DashboardScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#1e3a5f" />
+      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
 
       {/* Header */}
       <View style={styles.header}>
@@ -126,10 +127,10 @@ export default function DashboardScreen() {
 // ----------------------------------------------------------------- styles --
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f3f4f6' },
+  container: { flex: 1, backgroundColor: Colors.background },
 
   header: {
-    backgroundColor: '#1e3a5f',
+    backgroundColor: Colors.primary,
     paddingTop: 56,
     paddingBottom: 24,
     paddingHorizontal: 24,
@@ -138,7 +139,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   greeting: { fontSize: 14, color: 'rgba(255,255,255,0.7)', marginBottom: 2 },
-  name: { fontSize: 24, fontWeight: 'bold', color: '#ffffff' },
+  name: { fontSize: 24, fontWeight: 'bold', color: Colors.white },
   roleBadge: {
     backgroundColor: 'rgba(255,255,255,0.15)',
     borderRadius: 20,
@@ -147,7 +148,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.2)',
   },
-  roleText: { fontSize: 12, color: '#ffffff', fontWeight: '600' },
+  roleText: { fontSize: 12, color: Colors.white, fontWeight: '600' },
 
   scroll: { flex: 1 },
   grid: { padding: 20, gap: 16, paddingBottom: 40 },
@@ -155,7 +156,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#6b7280',
+    color: Colors.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 1,
     marginBottom: 4,
@@ -168,12 +169,12 @@ const styles = StyleSheet.create({
   },
   moduleCard: {
     width: '47%',
-    backgroundColor: '#ffffff',
+    backgroundColor: Colors.cardBg,
     borderRadius: 16,
     padding: 20,
     alignItems: 'center',
     gap: 10,
-    shadowColor: '#000',
+    shadowColor: Colors.shadowColor,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
     shadowRadius: 8,
@@ -192,18 +193,18 @@ const styles = StyleSheet.create({
   moduleLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#374151',
+    color: Colors.textSecondary,
     textAlign: 'center',
   },
   soonBadge: {
-    backgroundColor: '#f3f4f6',
+    backgroundColor: Colors.background,
     borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 2,
   },
   soonText: {
     fontSize: 10,
-    color: '#9ca3af',
+    color: Colors.textLight,
     fontWeight: '600',
   },
 });
