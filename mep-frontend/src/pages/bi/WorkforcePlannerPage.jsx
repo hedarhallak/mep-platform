@@ -90,7 +90,7 @@ export default function WorkforcePlannerPage() {
       <div className="bg-white border-b border-slate-200 px-6 py-5 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center">
+            <div className="w-9 h-9 bg-primary rounded-xl flex items-center justify-center">
               <Brain className="w-5 h-5 text-white" />
             </div>
             <div>
@@ -130,7 +130,7 @@ export default function WorkforcePlannerPage() {
           <>
             {/* Summary cards */}
             <div className="grid grid-cols-4 gap-3">
-              <SummaryCard icon={Users}        label="Active Today"       value={data.summary.total_assignments} color="bg-indigo-50 text-indigo-600" />
+              <SummaryCard icon={Users}        label="Active Today"       value={data.summary.total_assignments} color="bg-primary-pale text-primary" />
               <SummaryCard icon={AlertTriangle} label={`Beyond ${data.threshold_km}km`} value={data.summary.far_assignments}   color="bg-red-50 text-red-500" />
               <SummaryCard icon={Zap}           label="Can Optimize"       value={data.summary.optimizable}       color="bg-amber-50 text-amber-500" />
               <SummaryCard icon={Route}         label="Total Saving (km)"  value={data.summary.total_saving_km}   color="bg-emerald-50 text-emerald-600" />
@@ -145,7 +145,7 @@ export default function WorkforcePlannerPage() {
               ].map(f => (
                 <button key={f.id} onClick={() => setFilter(f.id)}
                   className={`px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${
-                    filter === f.id ? 'bg-indigo-600 text-white' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'
+                    filter === f.id ? 'bg-primary text-white' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'
                   }`}>
                   {f.label}
                 </button>
@@ -220,7 +220,7 @@ export default function WorkforcePlannerPage() {
                         {/* Apply button */}
                         {s.can_optimize && (
                           <button onClick={() => handleApply(s)} disabled={applying === s.assignment_id}
-                            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-60 whitespace-nowrap">
+                            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 bg-primary text-white text-xs font-bold rounded-lg hover:bg-primary-dark transition-colors disabled:opacity-60 whitespace-nowrap">
                             {applying === s.assignment_id
                               ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
                               : <><Check className="w-3.5 h-3.5" />Apply</>

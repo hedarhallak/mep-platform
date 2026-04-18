@@ -38,7 +38,7 @@ function inviteEmailHtml({ firstName, lastName, role, tradeName, inviteUrl, appN
     body { font-family: 'Segoe UI', Arial, sans-serif; background: #f1f5f9; padding: 40px 16px; }
     .wrapper { max-width: 560px; margin: 0 auto; background: #fff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 32px rgba(0,0,0,0.08); }
     .header { background: #0f172a; padding: 36px 40px; text-align: center; }
-    .header-logo { display: inline-flex; align-items: center; justify-content: center; width: 52px; height: 52px; background: #6366f1; border-radius: 14px; margin-bottom: 16px; }
+    .header-logo { display: inline-flex; align-items: center; justify-content: center; width: 52px; height: 52px; background: #1e3a5f; border-radius: 14px; margin-bottom: 16px; }
     .header h1 { color: #fff; font-size: 20px; font-weight: 700; letter-spacing: 0.5px; }
     .header p  { color: #94a3b8; font-size: 13px; margin-top: 4px; }
     .body { padding: 40px; }
@@ -49,14 +49,14 @@ function inviteEmailHtml({ firstName, lastName, role, tradeName, inviteUrl, appN
     .info-row:last-child { border-bottom: none; padding-bottom: 0; }
     .info-label { font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600; }
     .info-value { font-size: 14px; color: #1e293b; font-weight: 600; }
-    .btn { display: block; background: #6366f1; color: #fff !important; text-align: center; padding: 16px 24px; border-radius: 12px; text-decoration: none; font-weight: 700; font-size: 16px; letter-spacing: 0.3px; margin-bottom: 20px; }
+    .btn { display: block; background: #1e3a5f; color: #fff !important; text-align: center; padding: 16px 24px; border-radius: 12px; text-decoration: none; font-weight: 700; font-size: 16px; letter-spacing: 0.3px; margin-bottom: 20px; }
     .expiry { font-size: 13px; color: #94a3b8; text-align: center; margin-bottom: 28px; }
     .steps { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 12px; padding: 20px 24px; margin-bottom: 28px; }
     .steps-title { font-size: 13px; font-weight: 700; color: #0369a1; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 12px; }
     .step { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 10px; font-size: 14px; color: #334155; }
     .step:last-child { margin-bottom: 0; }
-    .step-num { width: 22px; height: 22px; background: #6366f1; color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; margin-top: 1px; }
-    .url-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 16px; font-family: monospace; font-size: 12px; color: #6366f1; word-break: break-all; margin-bottom: 28px; }
+    .step-num { width: 22px; height: 22px; background: #1e3a5f; color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; margin-top: 1px; }
+    .url-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 16px; font-family: monospace; font-size: 12px; color: #1e3a5f; word-break: break-all; margin-bottom: 28px; }
     .footer { background: #f8fafc; padding: 20px 40px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #f1f5f9; }
   </style>
 </head>

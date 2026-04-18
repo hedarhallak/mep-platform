@@ -16,14 +16,14 @@ function StepBar({ current, total }) {
       {Array.from({ length: total }).map((_, i) => (
         <div key={i} className="flex items-center gap-2">
           <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold transition-all ${
-            i < current ? 'bg-indigo-600 text-white'
-            : i === current ? 'bg-indigo-600 text-white ring-4 ring-indigo-100'
+            i < current ? 'bg-primary text-white'
+            : i === current ? 'bg-primary text-white ring-4 ring-primary-pale'
             : 'bg-slate-100 text-slate-400'
           }`}>
             {i < current ? <CheckCircle size={16} /> : i + 1}
           </div>
           {i < total - 1 && (
-            <div className={`h-0.5 w-12 transition-all ${i < current ? 'bg-indigo-600' : 'bg-slate-200'}`} />
+            <div className={`h-0.5 w-12 transition-all ${i < current ? 'bg-primary' : 'bg-slate-200'}`} />
           )}
         </div>
       ))}
@@ -62,7 +62,7 @@ function AddressInput({ value, onChange, onCoords }) {
           }}
           onBlur={() => setTimeout(() => setOpen(false), 200)}
           onFocus={() => suggestions.length && setOpen(true)}
-          className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary"
           placeholder="Start typing your home address..."
         />
       </div>
@@ -74,7 +74,7 @@ function AddressInput({ value, onChange, onCoords }) {
               onCoords({ lng: f.center[0], lat: f.center[1] })
               setSuggestions([]); setOpen(false)
             }}
-              className="px-4 py-2.5 text-sm hover:bg-indigo-50 cursor-pointer flex items-start gap-2 border-b border-slate-50 last:border-0">
+              className="px-4 py-2.5 text-sm hover:bg-primary-pale cursor-pointer flex items-start gap-2 border-b border-slate-50 last:border-0">
               <MapPin size={13} className="text-slate-400 mt-0.5 flex-shrink-0" />
               <span>{f.place_name}</span>
             </li>
@@ -162,7 +162,7 @@ export default function OnboardingPage() {
   // ── Loading ───────────────────────────────────────────────
   if (loading) return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-      <Loader2 size={32} className="animate-spin text-indigo-500" />
+      <Loader2 size={32} className="animate-spin text-primary-light" />
     </div>
   )
 
@@ -193,7 +193,7 @@ export default function OnboardingPage() {
         </p>
         <button
           onClick={() => navigate('/login')}
-          className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-xl transition-colors"
+          className="w-full bg-primary hover:bg-primary-dark text-white font-semibold py-3 rounded-xl transition-colors"
         >
           Go to Sign In
         </button>
@@ -206,7 +206,7 @@ export default function OnboardingPage() {
       <div className="w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-indigo-600 mb-4">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary mb-4">
             <Building2 size={28} className="text-white" />
           </div>
           <h1 className="text-2xl font-bold text-white">MEP Platform</h1>
@@ -223,7 +223,7 @@ export default function OnboardingPage() {
               </h2>
               <div className="flex items-center gap-3 mt-2">
                 {invite.trade_name && (
-                  <span className="text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-md font-medium">
+                  <span className="text-xs bg-primary-pale text-primary-dark border border-primary-pale px-2 py-0.5 rounded-md font-medium">
                     {invite.trade_name}
                   </span>
                 )}
@@ -251,7 +251,7 @@ export default function OnboardingPage() {
                   <User size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input type="text" value={form.username}
                     onChange={e => set('username', e.target.value.toLowerCase().replace(/\s/g, ''))}
-                    className="w-full pl-9 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full pl-9 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                     placeholder="Choose a username" autoFocus />
                 </div>
               </div>
@@ -262,7 +262,7 @@ export default function OnboardingPage() {
                   <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input type={showPin ? 'text' : 'password'} value={form.pin}
                     onChange={e => set('pin', e.target.value)}
-                    className="w-full pl-9 pr-10 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full pl-9 pr-10 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                     placeholder="Choose a secure PIN" />
                   <button type="button" onClick={() => setShowPin(s => !s)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
@@ -277,7 +277,7 @@ export default function OnboardingPage() {
                   <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input type={showPin ? 'text' : 'password'} value={form.pin_confirm}
                     onChange={e => set('pin_confirm', e.target.value)}
-                    className="w-full pl-9 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full pl-9 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                     placeholder="Confirm your PIN" />
                 </div>
               </div>
@@ -289,7 +289,7 @@ export default function OnboardingPage() {
               )}
 
               <button type="submit"
-                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-xl transition-colors flex items-center justify-center gap-2">
+                className="w-full bg-primary hover:bg-primary-dark text-white font-semibold py-3 rounded-xl transition-colors flex items-center justify-center gap-2">
                 Continue <ChevronRight size={16} />
               </button>
             </form>
@@ -311,7 +311,7 @@ export default function OnboardingPage() {
                 </label>
                 <input type="tel" value={form.phone}
                   onChange={e => set('phone', e.target.value)}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                   placeholder="+1 514 000 0000" />
               </div>
 
@@ -346,7 +346,7 @@ export default function OnboardingPage() {
                   <ChevronLeft size={15} /> Back
                 </button>
                 <button type="submit" disabled={submitting}
-                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-semibold py-3 rounded-xl transition-colors flex items-center justify-center gap-2">
+                  className="flex-1 bg-primary hover:bg-primary-dark disabled:opacity-60 text-white font-semibold py-3 rounded-xl transition-colors flex items-center justify-center gap-2">
                   {submitting && <Loader2 size={14} className="animate-spin" />}
                   Complete Setup
                 </button>

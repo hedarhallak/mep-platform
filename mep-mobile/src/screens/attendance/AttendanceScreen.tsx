@@ -287,7 +287,7 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   timeCard: { backgroundColor: Colors.primary, borderRadius: 16, padding: 24, alignItems: 'center' },
   timeText: { fontSize: 42, fontWeight: 'bold', color: Colors.white, letterSpacing: 2 },
-  dateText: { fontSize: 14, color: Colors.primaryBright, marginTop: 4 },
+  dateText: { fontSize: 14, color: 'rgba(255,255,255,0.85)', marginTop: 4 },
   projectCard: {
     backgroundColor: Colors.cardBg, borderRadius: 16, padding: 20,
     shadowColor: Colors.shadowColor, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3,

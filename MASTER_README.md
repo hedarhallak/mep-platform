@@ -1,8 +1,10 @@
 # MEP Platform — Master Project README
-> Last updated: April 15, 2026 | Maintainer: Hedar Hallak
+> Last updated: April 16, 2026 | Maintainer: Hedar Hallak
 > Production: https://app.constrai.ca
+> Website: https://www.constrai.ca (Coming Soon landing page)
 > Server: root@143.110.218.84
 > Backend path on server: /var/www/mep
+> Landing page path on server: /var/www/constrai-landing
 > DB: mepdb / mepuser / MepSecure2026X
 > Repo: hedarhallak/mep-platform
 
@@ -62,7 +64,7 @@ MEP Platform (Constrai) is a Quebec construction workforce ERP for MEP companies
 | Backend | Node.js / Express / PostgreSQL |
 | Frontend Web | React / Vite / Tailwind CSS |
 | Mobile | React Native + Expo (TypeScript) |
-| Auth | JWT + PIN |
+| Auth | JWT + PIN + Refresh Token Rotation |
 | Email | SendGrid |
 | Maps | Mapbox |
 | PDF | Puppeteer |
@@ -74,7 +76,7 @@ MEP Platform (Constrai) is a Quebec construction workforce ERP for MEP companies
 ## Backend — API Routes
 | Route | Feature | Status |
 |---|---|---|
-| auth.js | Login / JWT + PIN + full_name | ✅ |
+| auth.js | Login / JWT + PIN + full_name + refresh tokens + logout/logout-all | ✅ |
 | hub.js | My Hub — tasks + complete + file upload | ✅ |
 | assignments.js | Assignments | ✅ |
 | attendance.js | Attendance + CCQ hours | ✅ |
@@ -87,8 +89,8 @@ MEP Platform (Constrai) is a Quebec construction workforce ERP for MEP companies
 ---
 
 ## Database
-- Migrations: 030
-- Tables: 55
+- Migrations: 031
+- Tables: 56 (includes refresh_tokens)
 - PostGIS extension: installed
 - Hub tables: task_messages, task_recipients
 - Status flow: PENDING → SENT → READ → ACKNOWLEDGED
@@ -114,9 +116,22 @@ Permission matrix: 284 mappings — see DECISIONS.md for full matrix.
 
 ---
 
-## Frontend Web
+## Company Website — www.constrai.ca
+- Location on server: /var/www/constrai-landing/
+- Source in repo: constrai-landing/
+- Bilingual (EN/FR) with auto-detect + toggle
+- SSL via Let's Encrypt (certbot)
+- Nginx config: /etc/nginx/sites-enabled/default (handles both constrai.ca and www.constrai.ca)
+- Status: 🔄 Live — color palette under review (dark blue #1e3a5f)
+
+---
+
+## Frontend Web (app.constrai.ca)
 - Build: `cd /var/www/mep/mep-frontend && npm run build`
 - Nginx serves: /var/www/mep/public/
+- Centralized Theme: `src/index.css` @theme directive — all colors via CSS variables (--color-primary, etc.)
+- All 19 page/component files use `bg-primary`, `text-primary` etc. — zero hardcoded indigo classes
+- Color palette matches mobile: Dark Blue primary (#1e3a5f)
 
 ### Web Pages Status
 | Page | Status |
@@ -141,7 +156,9 @@ Permission matrix: 284 mappings — see DECISIONS.md for full matrix.
 > TestFlight App ID: 6762187466
 > TestFlight URL: https://appstoreconnect.apple.com/apps/6762187466/testflight/ios
 > i18n: react-i18next — default FR, EN secondary (user picks from Profile)
-> Last Build: April 15, 2026 — includes full i18n for all screens + localized dates
+> Theme: Centralized via src/theme/colors.ts — dark blue (#1e3a5f) primary
+> Auth: JWT refresh token rotation + expo-secure-store (encrypted storage)
+> Last Build: April 16, 2026 — includes centralized color theme + full i18n + secure auth
 
 ### Navigation Structure (Unified Icon Grid — April 2026)
 ```
@@ -192,6 +209,13 @@ Profile → ProfileNavigator
 | ForemanMaterialsTab + MergeEditScreen | ✅ | ✅ |
 | Profile + Change PIN | ✅ | ✅ |
 | Navigation Headers (all stacks) | ✅ | ✅ |
+
+### Centralized Theme
+- `src/theme/colors.ts` — single source of truth for all colors across the app
+- All 23 screen files import from Colors — zero hardcoded color values
+- Palette: Dark Blue primary (#1e3a5f) + Blue accent (#3b82f6)
+- Includes: primaryDark, primaryLight, primaryBright, primaryPale, accent, accentDark, accentLight, accentPale
+- Convenience export: `headerColors` for navigation headers
 
 ### Shared Components
 - `src/screens/shared/SubMenuScreen.tsx` — unified icon grid (same design as Dashboard) used by all sub-menus

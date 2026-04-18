@@ -39,7 +39,7 @@ function SupplierModal({ supplier, onClose, onSaved }) {
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Truck className="w-4 h-4 text-indigo-600" />
+            <Truck className="w-4 h-4 text-primary" />
             <h3 className="text-sm font-bold text-slate-800">{isEdit ? 'Edit Supplier' : 'New Supplier'}</h3>
           </div>
           <button onClick={onClose} className="p-1.5 text-slate-400 hover:bg-slate-100 rounded-lg"><X className="w-4 h-4" /></button>
@@ -56,7 +56,7 @@ function SupplierModal({ supplier, onClose, onSaved }) {
               <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">{label}</label>
               <input type={type} value={form[key]} onChange={e => set(key, e.target.value)}
                 placeholder={placeholder}
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-slate-300" />
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-light placeholder:text-slate-300" />
             </div>
           ))}
 
@@ -66,7 +66,7 @@ function SupplierModal({ supplier, onClose, onSaved }) {
               {TRADES.map(t => (
                 <button key={t.value} onClick={() => set('trade_code', t.value)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
-                    form.trade_code === t.value ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                    form.trade_code === t.value ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                   }`}>
                   {t.label}
                 </button>
@@ -78,7 +78,7 @@ function SupplierModal({ supplier, onClose, onSaved }) {
             <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Note (optional)</label>
             <textarea value={form.note} onChange={e => set('note', e.target.value)}
               rows={2} placeholder="Any notes about this supplier..."
-              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-slate-300 resize-none" />
+              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-light placeholder:text-slate-300 resize-none" />
           </div>
 
           {error && (
@@ -91,7 +91,7 @@ function SupplierModal({ supplier, onClose, onSaved }) {
         <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3">
           <button onClick={onClose} className="px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors">Cancel</button>
           <button onClick={handleSave} disabled={saving}
-            className="flex items-center gap-2 px-5 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl hover:bg-indigo-700 disabled:opacity-60 transition-colors">
+            className="flex items-center gap-2 px-5 py-2 bg-primary text-white text-xs font-bold rounded-xl hover:bg-primary-dark disabled:opacity-60 transition-colors">
             {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><Check className="w-3.5 h-3.5" />{isEdit ? 'Update' : 'Add Supplier'}</>}
           </button>
         </div>
@@ -146,7 +146,7 @@ export default function SuppliersPage() {
       <div className="bg-white border-b border-slate-200 px-6 py-4 flex-shrink-0">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center">
+            <div className="w-9 h-9 bg-primary rounded-xl flex items-center justify-center">
               <Truck className="w-5 h-5 text-white" />
             </div>
             <div>
@@ -155,7 +155,7 @@ export default function SuppliersPage() {
             </div>
           </div>
           <button onClick={() => setModal('new')}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 transition-colors">
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-xs font-bold rounded-lg hover:bg-primary-dark transition-colors">
             <Plus className="w-3.5 h-3.5" />Add Supplier
           </button>
         </div>
@@ -165,13 +165,13 @@ export default function SuppliersPage() {
           <div className="relative flex-1 max-w-xs">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search suppliers..."
-              className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-slate-400" />
+              className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary-light placeholder:text-slate-400" />
           </div>
           <div className="flex items-center gap-1">
             {TRADES.map(t => (
               <button key={t.value} onClick={() => setTradeFilter(t.value)}
                 className={`px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
-                  tradeFilter === t.value ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-100'
+                  tradeFilter === t.value ? 'bg-primary text-white' : 'text-slate-500 hover:bg-slate-100'
                 }`}>
                 {t.label}
               </button>
@@ -203,8 +203,8 @@ export default function SuppliersPage() {
           <div className="grid grid-cols-1 gap-3 max-w-4xl">
             {filtered.map(s => (
               <div key={s.id} className="bg-white rounded-xl border border-slate-200 px-5 py-4 flex items-start gap-4">
-                <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <Truck className="w-5 h-5 text-indigo-500" />
+                <div className="w-10 h-10 bg-primary-pale rounded-xl flex items-center justify-center flex-shrink-0">
+                  <Truck className="w-5 h-5 text-primary-light" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -230,7 +230,7 @@ export default function SuppliersPage() {
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
                   <button onClick={() => setModal(s)}
-                    className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
+                    className="p-1.5 text-slate-400 hover:text-primary hover:bg-primary-pale rounded-lg transition-colors">
                     <Edit2 className="w-3.5 h-3.5" />
                   </button>
                   <button onClick={() => handleDelete(s.id)} disabled={deleting === s.id}

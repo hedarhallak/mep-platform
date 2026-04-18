@@ -66,14 +66,14 @@ function FilterBar({ from, to, setFrom, setTo, onRun, loading, extra }) {
       <div className="flex items-center gap-1.5">
         <span className="text-xs text-slate-400">From</span>
         <input type="date" value={from} onChange={e => setFrom(e.target.value)}
-          className="px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+          className="px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary-light" />
         <span className="text-xs text-slate-400">To</span>
         <input type="date" value={to} min={from} onChange={e => setTo(e.target.value)}
-          className="px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+          className="px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary-light" />
       </div>
       {extra}
       <button onClick={onRun} disabled={loading}
-        className="flex items-center gap-2 px-4 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-60">
+        className="flex items-center gap-2 px-4 py-1.5 bg-primary text-white text-xs font-bold rounded-lg hover:bg-primary-dark transition-colors disabled:opacity-60">
         {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><BarChart2 className="w-3.5 h-3.5" />Run</>}
       </button>
     </div>
@@ -143,7 +143,7 @@ function HoursReport() {
         <div className="grid grid-cols-4 gap-3">
           {[
             { label: 'Days Worked',   value: totals.days_worked,                   color: 'bg-slate-100 text-slate-700' },
-            { label: 'Regular Hours', value: fmtHours(totals.total_regular),       color: 'bg-indigo-100 text-indigo-700' },
+            { label: 'Regular Hours', value: fmtHours(totals.total_regular),       color: 'bg-primary-pale text-primary-dark' },
             { label: 'Overtime',      value: fmtHours(totals.total_overtime),      color: 'bg-amber-100 text-amber-700' },
             { label: 'Total Hours',   value: fmtHours(totals.total_hours),         color: 'bg-emerald-100 text-emerald-700' },
           ].map(s => (
@@ -182,7 +182,7 @@ function HoursReport() {
                     </td>
                     <td className="px-4 py-2.5 text-xs text-slate-600">{r.project_code}</td>
                     <td className="px-4 py-2.5 text-xs font-bold text-slate-700">{r.days_worked}</td>
-                    <td className="px-4 py-2.5 text-xs font-bold text-indigo-600">{fmtHours(r.total_regular)}</td>
+                    <td className="px-4 py-2.5 text-xs font-bold text-primary">{fmtHours(r.total_regular)}</td>
                     <td className="px-4 py-2.5">
                       {parseFloat(r.total_overtime) > 0
                         ? <span className="text-xs font-bold text-amber-600">+{fmtHours(r.total_overtime)}</span>
@@ -277,10 +277,10 @@ function AttendanceReport() {
           </div>
           {grouped.map(group => (
             <div key={group.project_code} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-              <div className="px-4 py-2.5 bg-indigo-50 border-b border-indigo-100 flex items-center gap-2">
-                <span className="text-sm font-bold text-indigo-800">{group.project_code}</span>
-                {group.project_name && <span className="text-xs text-indigo-500">{group.project_name}</span>}
-                <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-lg">{group.rows.length} employees</span>
+              <div className="px-4 py-2.5 bg-primary-pale border-b border-primary-pale flex items-center gap-2">
+                <span className="text-sm font-bold text-primary-dark">{group.project_code}</span>
+                {group.project_name && <span className="text-xs text-primary-light">{group.project_name}</span>}
+                <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 bg-primary-pale text-primary-dark rounded-lg">{group.rows.length} employees</span>
               </div>
               <table className="w-full">
                 <thead>
@@ -540,7 +540,7 @@ function AssignmentsReport() {
                 <span className="text-sm font-bold text-slate-800">{group.project_code}</span>
                 {group.project_name && <span className="text-xs text-slate-400">{group.project_name}</span>}
                 {group.site_address && <span className="text-[10px] text-slate-400 ml-1">· 📍 {group.site_address}</span>}
-                <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-lg">{group.rows.length}</span>
+                <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 bg-primary-pale text-primary rounded-lg">{group.rows.length}</span>
               </div>
               <table className="w-full">
                 <thead>
@@ -606,7 +606,7 @@ function DistanceReport() {
 
   const SortIcon = ({ col }) => {
     if (sortCol !== col) return <span className="text-slate-300 ml-1">↕</span>
-    return <span className="text-indigo-500 ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>
+    return <span className="text-primary-light ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>
   }
 
   const handleExport = () => {
@@ -682,12 +682,12 @@ function DistanceReport() {
           {/* Filters + Export */}
           <div className="flex items-center gap-2 flex-wrap">
             <select value={filterEmp} onChange={e => setFilterEmp(e.target.value)}
-              className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
+              className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary-light">
               <option value="">All Employees</option>
               {employees.map(e => <option key={e} value={e}>{e}</option>)}
             </select>
             <select value={filterProj} onChange={e => setFilterProj(e.target.value)}
-              className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
+              className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary-light">
               <option value="">All Projects</option>
               {projects.map(p => <option key={p} value={p}>{p}</option>)}
             </select>
@@ -805,7 +805,7 @@ function MyReport() {
   const STATUS_BADGE = {
     CHECKED_IN:  'bg-emerald-100 text-emerald-700',
     CHECKED_OUT: 'bg-amber-100 text-amber-700',
-    CONFIRMED:   'bg-indigo-100 text-indigo-700',
+    CONFIRMED:   'bg-primary-pale text-primary-dark',
     ADJUSTED:    'bg-purple-100 text-purple-700',
   }
 
@@ -852,9 +852,9 @@ function MyReport() {
             <p className="text-xs font-semibold text-slate-400">Days Worked</p>
             <p className="text-2xl font-extrabold text-slate-700 mt-1">{distFilter === '41plus' ? visibleRecords.length : t.days_worked}</p>
           </div>
-          <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-3">
-            <p className="text-xs font-semibold text-indigo-400">Regular Hours</p>
-            <p className="text-2xl font-extrabold text-indigo-700 mt-1">{fmtHours(t.total_regular)}</p>
+          <div className="bg-primary-pale border border-primary-pale rounded-xl px-4 py-3">
+            <p className="text-xs font-semibold text-primary-light">Regular Hours</p>
+            <p className="text-2xl font-extrabold text-primary-dark mt-1">{fmtHours(t.total_regular)}</p>
           </div>
           <div className={`border rounded-xl px-4 py-3 ${t.total_overtime > 0 ? 'bg-amber-50 border-amber-100' : 'bg-slate-50 border-slate-200'}`}>
             <p className={`text-xs font-semibold ${t.total_overtime > 0 ? 'text-amber-400' : 'text-slate-400'}`}>Overtime</p>
@@ -891,7 +891,7 @@ function MyReport() {
                   </td>
                   <td className="px-4 py-2.5 text-xs text-slate-600">{fmtTime(r.check_in_time)}</td>
                   <td className="px-4 py-2.5 text-xs text-slate-600">{r.check_out_time ? fmtTime(r.check_out_time) : '—'}</td>
-                  <td className="px-4 py-2.5 text-xs font-bold text-indigo-600">{fmtHours(r.regular_hours)}</td>
+                  <td className="px-4 py-2.5 text-xs font-bold text-primary">{fmtHours(r.regular_hours)}</td>
                   <td className="px-4 py-2.5">
                     {parseFloat(r.overtime_hours) > 0
                       ? <span className="text-xs font-bold text-amber-600">+{fmtHours(r.overtime_hours)}</span>
@@ -969,7 +969,7 @@ export default function ReportsPage() {
       {/* Header */}
       <div className="bg-white border-b border-slate-200 px-6 py-4 flex-shrink-0">
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center">
+          <div className="w-9 h-9 bg-primary rounded-xl flex items-center justify-center">
             <BarChart2 className="w-5 h-5 text-white" />
           </div>
           <div>
@@ -981,7 +981,7 @@ export default function ReportsPage() {
           {TABS.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap ${
-                tab === t.id ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
+                tab === t.id ? 'bg-primary text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
               }`}>
               <t.icon className="w-3.5 h-3.5" />{t.label}
             </button>

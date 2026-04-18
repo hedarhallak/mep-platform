@@ -54,7 +54,7 @@ function MyRequestsTab() {
   if (selected) return (
     <div className="space-y-4">
       <button onClick={() => setSelected(null)}
-        className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors">
+        className="flex items-center gap-1.5 text-xs font-semibold text-primary hover:text-primary-dark transition-colors">
         ← Back to My Requests
       </button>
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
@@ -92,7 +92,7 @@ function MyRequestsTab() {
               <tr key={i} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
                 <td className="px-5 py-3 text-xs text-slate-400">{i + 1}</td>
                 <td className="px-5 py-3 text-sm font-medium text-slate-700">{it.item_name}</td>
-                <td className="px-5 py-3 text-sm font-bold text-indigo-600">{it.quantity}</td>
+                <td className="px-5 py-3 text-sm font-bold text-primary">{it.quantity}</td>
                 <td className="px-5 py-3 text-xs text-slate-400">{it.unit}</td>
                 {selected.items?.some(i => i.note) && <td className="px-5 py-3 text-xs text-slate-400">{it.note || '—'}</td>}
               </tr>
@@ -108,12 +108,12 @@ function MyRequestsTab() {
       {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">
         <select value={filterProj} onChange={e => setFilterProj(e.target.value)}
-          className="px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 text-slate-600">
+          className="px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary-light text-slate-600">
           <option value="">All Projects</option>
           {projects.map(p => <option key={p.id} value={p.id}>{p.code}{p.name ? ` — ${p.name}` : ''}</option>)}
         </select>
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-          className="px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 text-slate-600">
+          className="px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary-light text-slate-600">
           <option value="">All Statuses</option>
           {['PENDING','REVIEWED','MERGED','SENT','CANCELLED'].map(s => <option key={s} value={s}>{s}</option>)}
         </select>
@@ -214,13 +214,13 @@ function ItemRow({ item, index, onChange, onRemove }) {
           onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
           onFocus={() => item.item_name.length >= 2 && suggestions.length && setShowSuggestions(true)}
           placeholder="e.g. Copper pipe 3/4 inch"
-          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-slate-300"
+          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light placeholder:text-slate-300"
         />
         {showSuggestions && suggestions.length > 0 && (
           <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
             {suggestions.map((s, i) => (
               <button key={i} onMouseDown={() => selectSuggestion(s)}
-                className="w-full flex items-center justify-between px-3 py-2 hover:bg-indigo-50 transition-colors text-left">
+                className="w-full flex items-center justify-between px-3 py-2 hover:bg-primary-pale transition-colors text-left">
                 <span className="text-sm text-slate-700">{s.item_name}</span>
                 <span className="text-[10px] text-slate-400 ml-2 flex-shrink-0">
                   {s.default_unit} · used {s.use_count}×
@@ -235,7 +235,7 @@ function ItemRow({ item, index, onChange, onRemove }) {
             value={item.note}
             onChange={e => onChange(index, 'note', e.target.value)}
             placeholder="Note (optional)"
-            className="w-full px-3 py-1.5 border border-slate-100 rounded-lg text-xs mt-1 focus:outline-none focus:ring-1 focus:ring-indigo-300 placeholder:text-slate-300 bg-slate-50"
+            className="w-full px-3 py-1.5 border border-slate-100 rounded-lg text-xs mt-1 focus:outline-none focus:ring-1 focus:ring-primary-pale placeholder:text-slate-300 bg-slate-50"
           />
         )}
       </div>
@@ -247,14 +247,14 @@ function ItemRow({ item, index, onChange, onRemove }) {
         value={item.quantity}
         onChange={e => onChange(index, 'quantity', Math.floor(Math.abs(e.target.value)) || '')}
         placeholder="Qty"
-        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 text-center"
+        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light text-center"
       />
       {/* Unit */}
       <div className="relative">
         <select
           value={item.unit}
           onChange={e => onChange(index, 'unit', e.target.value)}
-          className="w-full px-2 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 appearance-none pr-6"
+          className="w-full px-2 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-light appearance-none pr-6"
         >
           {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
         </select>
@@ -364,7 +364,7 @@ export default function MaterialRequestPage() {
       <p className="text-sm text-slate-400 mb-6">Your foreman will review it shortly.</p>
       <div className="flex gap-3">
         <button onClick={handleReset}
-          className="px-6 py-2.5 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-700 transition-colors">
+          className="px-6 py-2.5 bg-primary text-white text-sm font-bold rounded-xl hover:bg-primary-dark transition-colors">
           New Request
         </button>
         <button onClick={() => { handleReset(); setTab('my') }}
@@ -381,7 +381,7 @@ export default function MaterialRequestPage() {
       {/* Header */}
       <div className="bg-white border-b border-slate-200 px-6 py-4 flex-shrink-0">
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center">
+          <div className="w-9 h-9 bg-primary rounded-xl flex items-center justify-center">
             <Package className="w-5 h-5 text-white" />
           </div>
           <div>
@@ -396,7 +396,7 @@ export default function MaterialRequestPage() {
           ].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${
-                tab === t.id ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-100'
+                tab === t.id ? 'bg-primary text-white' : 'text-slate-500 hover:bg-slate-100'
               }`}>
               <t.icon className="w-3.5 h-3.5" />{t.label}
             </button>
@@ -420,18 +420,18 @@ export default function MaterialRequestPage() {
         <div>
           <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Project</label>
           {todayAssignment ? (
-            <div className="flex items-center gap-3 px-4 py-3 bg-indigo-50 border border-indigo-200 rounded-xl max-w-sm">
-              <div className="w-2 h-2 rounded-full bg-indigo-500 flex-shrink-0" />
+            <div className="flex items-center gap-3 px-4 py-3 bg-primary-pale border border-primary-pale rounded-xl max-w-sm">
+              <div className="w-2 h-2 rounded-full bg-primary-pale0 flex-shrink-0" />
               <div>
-                <div className="text-sm font-bold text-indigo-800">
+                <div className="text-sm font-bold text-primary-dark">
                   {todayAssignment.project_code}{todayAssignment.project_name ? ` — ${todayAssignment.project_name}` : ''}
                 </div>
-                <div className="text-[10px] text-indigo-500 mt-0.5">Today's assignment · {todayAssignment.assignment_role}</div>
+                <div className="text-[10px] text-primary-light mt-0.5">Today's assignment · {todayAssignment.assignment_role}</div>
               </div>
             </div>
           ) : (
             <select value={selectedProj} onChange={e => setSelectedProj(e.target.value)}
-              className="w-full max-w-sm px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
+              className="w-full max-w-sm px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-light">
               <option value="">Select project...</option>
               {projects.map(p => (
                 <option key={p.id} value={p.id}>
@@ -466,7 +466,7 @@ export default function MaterialRequestPage() {
                 />
                 <button
                   onClick={() => toggleNote(i)}
-                  className="text-[10px] text-indigo-400 hover:text-indigo-600 transition-colors font-semibold">
+                  className="text-[10px] text-primary-light hover:text-primary transition-colors font-semibold">
                   {item.note === undefined ? '+ Add note' : '− Remove note'}
                 </button>
               </div>
@@ -474,7 +474,7 @@ export default function MaterialRequestPage() {
           </div>
 
           <button onClick={addItem}
-            className="mt-3 flex items-center gap-2 px-4 py-2 bg-white border border-dashed border-slate-300 text-slate-500 text-xs font-semibold rounded-xl hover:border-indigo-400 hover:text-indigo-600 transition-colors w-full justify-center">
+            className="mt-3 flex items-center gap-2 px-4 py-2 bg-white border border-dashed border-slate-300 text-slate-500 text-xs font-semibold rounded-xl hover:border-primary-light hover:text-primary transition-colors w-full justify-center">
             <Plus className="w-3.5 h-3.5" />Add Item
           </button>
         </div>
@@ -489,7 +489,7 @@ export default function MaterialRequestPage() {
             onChange={e => setNote(e.target.value)}
             rows={2}
             placeholder="Any additional context for the foreman..."
-            className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-slate-300 resize-none"
+            className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-light placeholder:text-slate-300 resize-none"
           />
         </div>
 
@@ -504,7 +504,7 @@ export default function MaterialRequestPage() {
       <div className="flex-shrink-0 px-6 py-4 bg-white border-t border-slate-100 flex items-center justify-between">
         <span className="text-xs text-slate-400">{items.filter(i => i.item_name.trim()).length} item{items.filter(i => i.item_name.trim()).length !== 1 ? 's' : ''}</span>
         <button onClick={handleSubmit} disabled={saving}
-          className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-60">
+          className="flex items-center gap-2 px-6 py-2.5 bg-primary text-white text-sm font-bold rounded-xl hover:bg-primary-dark transition-colors disabled:opacity-60">
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Send className="w-4 h-4" />Submit Request</>}
         </button>
       </div>

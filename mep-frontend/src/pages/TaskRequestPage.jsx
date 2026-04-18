@@ -13,7 +13,7 @@ const PRIORITY_STYLE = {
   HIGH:   'bg-amber-50   text-amber-700  border-amber-200',
   URGENT: 'bg-red-50     text-red-600    border-red-200',
 }
-const AVATAR_COLORS = ['bg-indigo-500','bg-emerald-500','bg-amber-500','bg-rose-500','bg-violet-500','bg-cyan-500']
+const AVATAR_COLORS = ['bg-primary-pale0','bg-emerald-500','bg-amber-500','bg-rose-500','bg-violet-500','bg-cyan-500']
 const avatarColor = name => AVATAR_COLORS[(name?.charCodeAt(0)||0) % AVATAR_COLORS.length]
 
 // ── New Task Form ─────────────────────────────────────────────
@@ -80,7 +80,7 @@ function NewTaskTab({ workers, projects, defaultProject, onSent }) {
           <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Title *</label>
           <input type="text" value={form.title} onChange={e => set('title', e.target.value)}
             placeholder="e.g. Install main water line — Section A"
-            className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-400"/>
+            className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-primary-light"/>
         </div>
 
         {/* Instructions */}
@@ -90,7 +90,7 @@ function NewTaskTab({ workers, projects, defaultProject, onSent }) {
           </label>
           <textarea value={form.body} onChange={e => set('body', e.target.value)}
             rows={4} placeholder="Describe the task in detail..."
-            className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"/>
+            className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-primary-light resize-none"/>
         </div>
 
         {/* Priority */}
@@ -121,7 +121,7 @@ function NewTaskTab({ workers, projects, defaultProject, onSent }) {
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Project</label>
             <select value={form.project_id} onChange={e => set('project_id', e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
+              className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-primary-light">
               <option value="">No project</option>
               {projects.map(p => <option key={p.id} value={p.id}>{p.project_code} — {p.project_name}</option>)}
             </select>
@@ -129,7 +129,7 @@ function NewTaskTab({ workers, projects, defaultProject, onSent }) {
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Due Date</label>
             <input type="date" value={form.due_date} onChange={e => set('due_date', e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400"/>
+              className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-light"/>
           </div>
         </div>
 
@@ -139,10 +139,10 @@ function NewTaskTab({ workers, projects, defaultProject, onSent }) {
             Attachment <span className="font-normal normal-case text-slate-400">(PDF or image, max 20MB)</span>
           </label>
           <label className={`flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-colors ${
-            file ? 'border-indigo-300 bg-indigo-50' : 'border-dashed border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/30'
+            file ? 'border-primary-pale bg-primary-pale' : 'border-dashed border-slate-200 hover:border-primary-pale hover:bg-primary-pale/30'
           }`}>
             <Upload size={16} className="text-slate-400 flex-shrink-0"/>
-            <span className={`text-sm flex-1 truncate ${file ? 'text-indigo-700 font-medium' : 'text-slate-400'}`}>
+            <span className={`text-sm flex-1 truncate ${file ? 'text-primary-dark font-medium' : 'text-slate-400'}`}>
               {file ? file.name : 'Click to upload'}
             </span>
             {file && <button type="button" onClick={e => { e.preventDefault(); setFile(null) }} className="text-slate-400 hover:text-red-500"><X size={14}/></button>}
@@ -153,7 +153,7 @@ function NewTaskTab({ workers, projects, defaultProject, onSent }) {
         {/* Send */}
         <div className="flex justify-end pt-1">
           <button onClick={handleSend} disabled={sending}
-            className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-sm font-bold transition-colors">
+            className="flex items-center gap-2 px-6 py-2.5 bg-primary hover:bg-primary-dark disabled:opacity-50 text-white rounded-xl text-sm font-bold transition-colors">
             {sending ? <><Loader2 size={15} className="animate-spin"/>Sending...</> : <><Send size={15}/>Send Task</>}
           </button>
         </div>
@@ -166,7 +166,7 @@ function NewTaskTab({ workers, projects, defaultProject, onSent }) {
             <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
               Recipients *
               {recipients.length > 0 && (
-                <span className="ml-2 px-1.5 py-0.5 bg-indigo-100 text-indigo-600 rounded-full text-[10px] font-bold normal-case">
+                <span className="ml-2 px-1.5 py-0.5 bg-primary-pale text-primary rounded-full text-[10px] font-bold normal-case">
                   {recipients.length}
                 </span>
               )}
@@ -274,7 +274,7 @@ function SentTasksTab() {
                     <div className="text-sm font-semibold text-slate-800">{task.title}</div>
                     <div className="text-xs text-slate-400 mt-0.5">
                       {new Date(task.created_at).toLocaleDateString('en-CA',{month:'short',day:'numeric'})}
-                      {task.file_url && <span className="ml-1.5 text-indigo-400">· 📎</span>}
+                      {task.file_url && <span className="ml-1.5 text-primary-light">· 📎</span>}
                     </div>
                   </td>
 
@@ -319,7 +319,7 @@ function SentTasksTab() {
                   <td className="px-5 py-4">
                     <div className="flex items-center gap-2">
                       <div className="w-20 bg-slate-100 rounded-full h-1.5">
-                        <div className={`h-1.5 rounded-full transition-all ${ackPct===100?'bg-emerald-500':'bg-indigo-500'}`}
+                        <div className={`h-1.5 rounded-full transition-all ${ackPct===100?'bg-emerald-500':'bg-primary-pale0'}`}
                           style={{width:`${ackPct}%`}}/>
                       </div>
                       <span className="text-xs text-slate-500 whitespace-nowrap">{acked}/{total}</span>
@@ -429,7 +429,7 @@ export default function TaskRequestPage() {
       {/* Header — matches Material Request style */}
       <div className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-4">
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center">
+          <div className="w-9 h-9 bg-primary rounded-xl flex items-center justify-center">
             <Send size={18} className="text-white"/>
           </div>
           <div>
@@ -442,7 +442,7 @@ export default function TaskRequestPage() {
           {tabs.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${
-                tab===t.id ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
+                tab===t.id ? 'bg-primary text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
               }`}>
               <t.icon size={14}/>{t.label}
             </button>

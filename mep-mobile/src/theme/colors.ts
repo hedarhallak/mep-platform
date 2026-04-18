@@ -8,20 +8,28 @@
  */
 
 const Colors = {
-  // ── Primary (Olive Green — brand identity) ────────────────────────
-  primary:       '#3d5a2e',   // Main brand — headers, nav bars, primary buttons
-  primaryLight:  '#5a7a4a',   // Hover states, secondary elements
-  primaryBright: '#7fb069',   // Highlights, active indicators
-  primaryPale:   '#e8f0e4',   // Very light backgrounds, selected cards
+  // ── Primary (Dark Blue — bold & professional) ─────────────────────
+  primary:       '#1e3a5f',   // Main brand — headers, nav bars, primary buttons
+  primaryDark:   '#162d4a',   // Darker variant — pressed states, emphasis
+  primaryLight:  '#2563eb',   // Lighter blue — hover states, secondary elements
+  primaryBright: '#60a5fa',   // Light blue — highlights, active indicators
+  primaryPale:   '#dbeafe',   // Very light blue backgrounds, selected cards
 
-  // ── Accent ────────────────────────────────────────────────────────
+  // ── Accent (Light Blue — clean & unified) ─────────────────────────
+  accent:        '#3b82f6',   // Accent buttons, highlights, CTAs
+  accentDark:    '#2563eb',   // Pressed state for accent
+  accentLight:   '#93c5fd',   // Hover states, badges
+  accentPale:    '#eff6ff',   // Light accent backgrounds
+  accentBorder:  '#bfdbfe',   // Accent badge borders
+
+  // ── Status ────────────────────────────────────────────────────────
   success:       '#16a34a',   // Check-in, completed, positive actions
   danger:        '#dc2626',   // Check-out, delete, destructive actions
   warning:       '#f59e0b',   // Overtime, late badge, attention
   info:          '#3b82f6',   // Informational badges
 
   // ── Neutrals ──────────────────────────────────────────────────────
-  charcoal:      '#2d3436',   // Primary text (headings, important)
+  charcoal:      '#1e293b',   // Primary text (headings, important)
   textPrimary:   '#111827',   // Default body text
   textSecondary: '#374151',   // Secondary body text
   textMuted:     '#6b7280',   // Muted / helper text
@@ -40,7 +48,7 @@ const Colors = {
   successBorder: '#bbf7d0',   // Success badge border
   dangerBg:      '#fef2f2',   // Danger/late badge backgrounds
   warningBg:     '#fffbeb',   // Warning badge backgrounds
-  primaryBg:     '#eff6ff',   // was blue tint — now olive tint for badges
+  primaryBg:     '#eff6ff',   // Blue tint for badges
 
   // ── Shadows (used with shadow* style props) ───────────────────────
   shadowColor:   '#000000',

@@ -78,7 +78,7 @@ function MapTab({ selectedProj, form, onAssign, onModify, assigning, modifying, 
     markersRef.current = []
     if (selectedProj?.site_lat && selectedProj?.site_lng) {
       const el = document.createElement('div')
-      el.innerHTML = `<div style="background:#4f46e5;color:white;border-radius:12px;padding:4px 10px;font-size:11px;font-weight:700;box-shadow:0 4px 12px rgba(79,70,229,0.4);white-space:nowrap;border:2px solid white;">📍 ${selectedProj.project_code}</div>`
+      el.innerHTML = `<div style="background:#162d4a;color:white;border-radius:12px;padding:4px 10px;font-size:11px;font-weight:700;box-shadow:0 4px 12px rgba(79,70,229,0.4);white-space:nowrap;border:2px solid white;">📍 ${selectedProj.project_code}</div>`
       const m = new window.mapboxgl.Marker({ element: el }).setLngLat([selectedProj.site_lng, selectedProj.site_lat]).addTo(map)
       markersRef.current.push(m)
       map.flyTo({ center: [selectedProj.site_lng, selectedProj.site_lat], zoom: 11 })
@@ -114,20 +114,20 @@ function MapTab({ selectedProj, form, onAssign, onModify, assigning, modifying, 
         <div ref={mapRef} className="w-full h-full" />
         {loading && (
           <div className="absolute top-3 left-3 bg-white rounded-lg px-3 py-2 shadow-md flex items-center gap-2">
-            <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-500" /><span className="text-xs text-slate-600">Loading...</span>
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-primary-light" /><span className="text-xs text-slate-600">Loading...</span>
           </div>
         )}
         {!selectedProj && (
           <div className="absolute inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center rounded-xl">
             <div className="bg-white rounded-2xl px-8 py-6 text-center shadow-xl">
-              <MapPin className="w-8 h-8 text-indigo-400 mx-auto mb-2" />
+              <MapPin className="w-8 h-8 text-primary-light mx-auto mb-2" />
               <p className="text-sm font-semibold text-slate-700">Select a project to view the map</p>
             </div>
           </div>
         )}
         <div className="absolute bottom-4 left-4 bg-white rounded-xl shadow-lg px-4 py-3 space-y-1.5 border border-slate-100">
           <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-2">Legend</div>
-          <div className="flex items-center gap-2 text-xs text-slate-600"><div className="w-4 h-4 rounded bg-indigo-600 border-2 border-white shadow" />Project site</div>
+          <div className="flex items-center gap-2 text-xs text-slate-600"><div className="w-4 h-4 rounded bg-primary border-2 border-white shadow" />Project site</div>
           <div className="flex items-center gap-2 text-xs text-slate-600"><div className="w-4 h-4 rounded-full bg-emerald-500 border-2 border-white shadow" />Available · Click to assign</div>
           <div className="flex items-center gap-2 text-xs text-slate-400"><div className="w-4 h-4 rounded-full bg-slate-400 border-2 border-white shadow" />Busy this period</div>
         </div>
@@ -161,9 +161,9 @@ function MapTab({ selectedProj, form, onAssign, onModify, assigning, modifying, 
                     <TradePill code={emp.trade_code} />
                   </div>
                   {assigning === emp.id
-                    ? <button disabled className="flex-shrink-0 px-2.5 py-1 bg-indigo-600 text-white rounded-lg opacity-50 text-xs font-semibold"><Loader2 className="w-3 h-3 animate-spin" /></button>
+                    ? <button disabled className="flex-shrink-0 px-2.5 py-1 bg-primary text-white rounded-lg opacity-50 text-xs font-semibold"><Loader2 className="w-3 h-3 animate-spin" /></button>
                     : <button onClick={() => onAssign(emp.id)}
-                        className="flex-shrink-0 px-2.5 py-1 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-xs font-semibold whitespace-nowrap">
+                        className="flex-shrink-0 px-2.5 py-1 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors text-xs font-semibold whitespace-nowrap">
                         Assign
                       </button>
                   }
@@ -190,7 +190,7 @@ function MapTab({ selectedProj, form, onAssign, onModify, assigning, modifying, 
                         <TradePill code={a.trade_code} />
                       </div>
                       <button onClick={() => onModify(a)} disabled={modifying === a.id}
-                        className="flex-shrink-0 flex items-center gap-1 px-2 py-1 text-[10px] font-semibold text-indigo-500 hover:bg-indigo-50 rounded-lg transition-colors border border-indigo-200 whitespace-nowrap">
+                        className="flex-shrink-0 flex items-center gap-1 px-2 py-1 text-[10px] font-semibold text-primary-light hover:bg-primary-pale rounded-lg transition-colors border border-primary-pale whitespace-nowrap">
                         {modifying === a.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <><ArrowLeftRight className="w-3 h-3" />Modify</>}
                       </button>
                     </div>
@@ -248,7 +248,7 @@ function RepeatTodayModal({ onClose, onSaved }) {
         </div>
         <h3 className="text-base font-bold text-slate-800 mb-1">Done!</h3>
         <p className="text-xs text-slate-400 mb-6">Today's assignments repeated for {targetDate}</p>
-        <button onClick={onClose} className="px-5 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-colors">Close</button>
+        <button onClick={onClose} className="px-5 py-2 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary-dark transition-colors">Close</button>
       </div>
     </div>
   )
@@ -260,7 +260,7 @@ function RepeatTodayModal({ onClose, onSaved }) {
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <RefreshCw className="w-4 h-4 text-indigo-600" />
+            <RefreshCw className="w-4 h-4 text-primary" />
             <h3 className="text-sm font-bold text-slate-800">Repeat Today</h3>
           </div>
           <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
@@ -275,7 +275,7 @@ function RepeatTodayModal({ onClose, onSaved }) {
             <div className="flex gap-2">
               <input type="date" value={targetDate} min={tomorrowStr}
                 onChange={e => { setTargetDate(e.target.value); setPreview(null) }}
-                className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-light" />
               <button onClick={handlePreview} disabled={loading}
                 className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-200 transition-colors disabled:opacity-60">
                 {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Preview'}
@@ -361,7 +361,7 @@ function RepeatTodayModal({ onClose, onSaved }) {
 
 const ROLES = [
   { value: 'WORKER',     label: 'Worker',     color: 'bg-slate-100 text-slate-700' },
-  { value: 'FOREMAN',    label: 'Foreman',    color: 'bg-indigo-100 text-indigo-700' },
+  { value: 'FOREMAN',    label: 'Foreman',    color: 'bg-primary-pale text-primary-dark' },
   { value: 'JOURNEYMAN', label: 'Journeyman', color: 'bg-amber-100 text-amber-700' },
 ]
 
@@ -434,7 +434,7 @@ function NewAssignmentModal({ projects, onClose, onSaved }) {
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Plus className="w-4 h-4 text-indigo-600" />
+            <Plus className="w-4 h-4 text-primary" />
             <h3 className="text-sm font-bold text-slate-800">New Assignment</h3>
           </div>
           <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
@@ -448,7 +448,7 @@ function NewAssignmentModal({ projects, onClose, onSaved }) {
           <div>
             <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Project</label>
             <select value={form.project_id} onChange={e => set('project_id', e.target.value)}
-              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
+              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-light">
               <option value="">Select project...</option>
               {projects.map(p => (
                 <option key={p.id} value={p.id}>{p.project_code}{p.project_name ? ` — ${p.project_name}` : ''}</option>
@@ -492,7 +492,7 @@ function NewAssignmentModal({ projects, onClose, onSaved }) {
             <div className="flex gap-2">
               {ROLES.map(r => (
                 <button key={r.value} onClick={() => set('assignment_role', r.value)}
-                  className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-colors ${form.assignment_role === r.value ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
+                  className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-colors ${form.assignment_role === r.value ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
                   {r.label}
                 </button>
               ))}
@@ -504,12 +504,12 @@ function NewAssignmentModal({ projects, onClose, onSaved }) {
             <div>
               <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Start Date</label>
               <input type="date" value={form.start_date} onChange={e => set('start_date', e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-light" />
             </div>
             <div>
               <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">End Date</label>
               <input type="date" value={form.end_date} min={form.start_date} onChange={e => set('end_date', e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-light" />
             </div>
           </div>
 
@@ -519,7 +519,7 @@ function NewAssignmentModal({ projects, onClose, onSaved }) {
               <div key={key}>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">{label}</label>
                 <select value={form[key]} onChange={e => set(key, e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-light">
                   {SHIFTS.map(s => <option key={s} value={s}>{fmtTime(s)}</option>)}
                 </select>
               </div>
@@ -531,7 +531,7 @@ function NewAssignmentModal({ projects, onClose, onSaved }) {
             <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Notes (optional)</label>
             <input type="text" value={form.notes} onChange={e => set('notes', e.target.value)}
               placeholder="Any special instructions..."
-              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-slate-300" />
+              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-light placeholder:text-slate-300" />
           </div>
 
           {error && (
@@ -547,7 +547,7 @@ function NewAssignmentModal({ projects, onClose, onSaved }) {
             Cancel
           </button>
           <button onClick={handleSave} disabled={saving}
-            className="flex items-center gap-2 px-5 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-60">
+            className="flex items-center gap-2 px-5 py-2 bg-primary text-white text-xs font-bold rounded-xl hover:bg-primary-dark transition-colors disabled:opacity-60">
             {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><Check className="w-3.5 h-3.5" />Assign</>}
           </button>
         </div>
@@ -605,17 +605,17 @@ function ListTab({ projects, assignments, loadingAsgn, onModify, modifying, succ
         <div className="relative flex-1 max-w-[200px]">
           <Briefcase className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
           <input value={filterProject} onChange={e => setFilterProject(e.target.value)} placeholder="Filter by project..."
-            className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-slate-400" />
+            className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary-light placeholder:text-slate-400" />
         </div>
         <div className="relative flex-1 max-w-[200px]">
           <User className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
           <input value={filterEmployee} onChange={e => setFilterEmployee(e.target.value)} placeholder="Filter by employee..."
-            className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-slate-400" />
+            className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary-light placeholder:text-slate-400" />
         </div>
         <div className="relative">
           <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
           <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)}
-            className="pl-8 pr-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+            className="pl-8 pr-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary-light" />
         </div>
         {(filterProject || filterEmployee || filterDate) && (
           <button onClick={() => { setFilterProject(''); setFilterEmployee(''); setFilterDate('') }}
@@ -649,7 +649,7 @@ function ListTab({ projects, assignments, loadingAsgn, onModify, modifying, succ
                     {/* Project header */}
                     <button onClick={() => toggleCollapse(group.project_id)}
                       className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors text-left">
-                      <div className="w-7 h-7 bg-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <div className="w-7 h-7 bg-primary rounded-lg flex items-center justify-center flex-shrink-0">
                         <Briefcase className="w-3.5 h-3.5 text-white" />
                       </div>
                       <div className="flex-1 min-w-0">
@@ -664,7 +664,7 @@ function ListTab({ projects, assignments, loadingAsgn, onModify, modifying, succ
                         )}
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className="text-[10px] font-semibold px-2 py-1 bg-indigo-50 text-indigo-600 rounded-lg">{group.employees.length} assigned</span>
+                        <span className="text-[10px] font-semibold px-2 py-1 bg-primary-pale text-primary rounded-lg">{group.employees.length} assigned</span>
                         {onSiteNow > 0 && <span className="text-[10px] font-semibold px-2 py-1 bg-emerald-50 text-emerald-600 rounded-lg">{onSiteNow} on site</span>}
                         <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
                       </div>
@@ -707,7 +707,7 @@ function ListTab({ projects, assignments, loadingAsgn, onModify, modifying, succ
                               {/* Actions */}
                               <div className="flex items-center gap-1.5">
                                 <button onClick={() => onModify(a)} disabled={modifying === a.id}
-                                  className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-indigo-500 hover:bg-indigo-50 rounded-lg transition-colors border border-indigo-200 whitespace-nowrap disabled:opacity-50">
+                                  className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-primary-light hover:bg-primary-pale rounded-lg transition-colors border border-primary-pale whitespace-nowrap disabled:opacity-50">
                                   {modifying === a.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <><ArrowLeftRight className="w-3 h-3" />Move</>}
                                 </button>
                               </div>
@@ -798,7 +798,7 @@ export default function AssignmentsPage() {
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => setNewAssignModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 transition-colors shadow-sm">
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-xs font-bold rounded-lg hover:bg-primary-dark transition-colors shadow-sm">
             <Plus className="w-3.5 h-3.5" />Assign Employee
           </button>
           <button onClick={() => setRepeatModal(true)}
@@ -811,7 +811,7 @@ export default function AssignmentsPage() {
             { id: 'map',  icon: MapIcon, label: 'Geographical Assignment' },
           ].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${tab === t.id ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'}`}>
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${tab === t.id ? 'bg-primary text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'}`}>
               <t.icon className="w-3.5 h-3.5" />{t.label}
             </button>
           ))}
@@ -836,7 +836,7 @@ export default function AssignmentsPage() {
               <div className="flex-1 overflow-y-auto">
                 {projects.map(p => (
                   <button key={p.id} onClick={() => setMapProj(p)}
-                    className={`w-full text-left px-4 py-3 border-b border-slate-50 transition-all ${mapProj?.id === p.id ? 'bg-indigo-50 border-l-[3px] border-l-indigo-500' : 'hover:bg-slate-50 border-l-[3px] border-l-transparent'}`}>
+                    className={`w-full text-left px-4 py-3 border-b border-slate-50 transition-all ${mapProj?.id === p.id ? 'bg-primary-pale border-l-[3px] border-l-primary-light' : 'hover:bg-slate-50 border-l-[3px] border-l-transparent'}`}>
                     <div className="text-[10px] font-bold text-slate-400">{p.project_code}</div>
                     <div className="text-xs font-semibold text-slate-800 truncate">{p.project_name || p.name}</div>
                   </button>
@@ -850,7 +850,7 @@ export default function AssignmentsPage() {
                       const v = e.target.value
                       setMapForm(f => ({ start_date: v, end_date: f.end_date < v ? v : f.end_date }))
                     }}
-                    className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                    className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary-light" />
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">End</label>
@@ -859,7 +859,7 @@ export default function AssignmentsPage() {
                       const v = e.target.value
                       if (v >= mapForm.start_date) setMapForm(f => ({ ...f, end_date: v }))
                     }}
-                    className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                    className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary-light" />
                 </div>
               </div>
             </div>
@@ -897,7 +897,7 @@ export default function AssignmentsPage() {
               <div>
                 <h3 className="text-sm font-bold text-slate-800">Move to Project</h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Moving <span className="font-semibold text-slate-600">{reassignModal.assignment.employee_name}</span> from <span className="font-semibold text-indigo-600">{reassignModal.assignment.project_code}</span>
+                  Moving <span className="font-semibold text-slate-600">{reassignModal.assignment.employee_name}</span> from <span className="font-semibold text-primary">{reassignModal.assignment.project_code}</span>
                 </p>
               </div>
               <button onClick={() => setReassignModal(null)} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
@@ -911,7 +911,7 @@ export default function AssignmentsPage() {
                     <button key={proj.id} onClick={() => handleModifyConfirm(proj.id)}
                       disabled={modifying === proj.id}
                       className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors text-left disabled:opacity-60">
-                      <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center flex-shrink-0">
                         <Briefcase className="w-4 h-4 text-white" />
                       </div>
                       <div className="flex-1 min-w-0">
@@ -919,7 +919,7 @@ export default function AssignmentsPage() {
                         {proj.project_name && <div className="text-xs text-slate-400 truncate">{proj.project_name || proj.name}</div>}
                       </div>
                       {modifying === proj.id
-                        ? <Loader2 className="w-4 h-4 animate-spin text-indigo-500 flex-shrink-0" />
+                        ? <Loader2 className="w-4 h-4 animate-spin text-primary-light flex-shrink-0" />
                         : <ArrowLeftRight className="w-4 h-4 text-slate-300 flex-shrink-0" />}
                     </button>
                   ))

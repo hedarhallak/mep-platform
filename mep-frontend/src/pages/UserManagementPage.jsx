@@ -20,7 +20,7 @@ const ROLE_COLORS = {
   IT_ADMIN:              'bg-orange-100 text-orange-700 border-orange-200',
   COMPANY_ADMIN:         'bg-violet-100 text-violet-700 border-violet-200',
   TRADE_PROJECT_MANAGER: 'bg-blue-100   text-blue-700   border-blue-200',
-  TRADE_ADMIN:           'bg-indigo-100 text-indigo-700 border-indigo-200',
+  TRADE_ADMIN:           'bg-primary-pale text-primary-dark border-primary-pale',
   WORKER:                'bg-slate-100  text-slate-600  border-slate-200',
 }
 
@@ -39,7 +39,7 @@ function Avatar({ name, size = 'md' }) {
     ? name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
     : '?'
   const colors = [
-    'bg-indigo-500', 'bg-emerald-500', 'bg-amber-500',
+    'bg-primary-pale0', 'bg-emerald-500', 'bg-amber-500',
     'bg-rose-500',   'bg-violet-500',  'bg-cyan-500',
   ]
   const color = colors[initials.charCodeAt(0) % colors.length]
@@ -106,7 +106,7 @@ function EditRoleModal({ user, onClose }) {
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
           <div className="flex items-center gap-2">
-            <Shield size={16} className="text-indigo-600" />
+            <Shield size={16} className="text-primary" />
             <h2 className="font-semibold text-slate-800">Change Role</h2>
           </div>
           <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-lg">
@@ -130,7 +130,7 @@ function EditRoleModal({ user, onClose }) {
             <select
               value={role}
               onChange={e => setRole(e.target.value)}
-              className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+              className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
             >
               {ROLES.map(r => (
                 <option key={r.value} value={r.value}>{r.label}</option>
@@ -152,7 +152,7 @@ function EditRoleModal({ user, onClose }) {
             <button
               onClick={() => mutation.mutate(role)}
               disabled={mutation.isPending || role === user.role}
-              className="flex-1 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white rounded-lg text-sm font-semibold flex items-center justify-center gap-2"
+              className="flex-1 px-4 py-2.5 bg-primary hover:bg-primary-dark disabled:opacity-60 text-white rounded-lg text-sm font-semibold flex items-center justify-center gap-2"
             >
               {mutation.isPending
                 ? <><Loader2 size={14} className="animate-spin" />Saving...</>
@@ -267,13 +267,13 @@ export default function UserManagementPage() {
           <input
             type="text" value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search users..."
-            className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary"
           />
         </div>
         <div className="relative">
           <Filter size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <select value={filterRole} onChange={e => setFilterRole(e.target.value)}
-            className="pl-8 pr-8 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none">
+            className="pl-8 pr-8 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary appearance-none">
             <option value="">All Roles</option>
             {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
           </select>
@@ -281,7 +281,7 @@ export default function UserManagementPage() {
         <div className="relative">
           <Filter size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-            className="pl-8 pr-8 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none">
+            className="pl-8 pr-8 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary appearance-none">
             <option value="">All Status</option>
             <option value="active">Active</option>
             <option value="pending">Pending Activation</option>
@@ -294,7 +294,7 @@ export default function UserManagementPage() {
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         {isLoading ? (
           <div className="flex items-center justify-center py-16">
-            <Loader2 size={24} className="animate-spin text-indigo-500" />
+            <Loader2 size={24} className="animate-spin text-primary-light" />
           </div>
         ) : filtered.length === 0 ? (
           <div className="text-center py-16">
@@ -369,7 +369,7 @@ export default function UserManagementPage() {
                       {/* Change Role */}
                       <button
                         onClick={() => setEditModal(u)}
-                        className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                        className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-primary hover:bg-primary-pale rounded-lg transition-colors"
                         title="Change role"
                       >
                         <Shield size={12} />Role

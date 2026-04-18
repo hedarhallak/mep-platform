@@ -13,7 +13,10 @@ export function AuthProvider({ children }) {
 
     api.get('/auth/whoami')
       .then(res => { if (res.data.ok) setUser(res.data.user) })
-      .catch(() => localStorage.removeItem('mep_token'))
+      .catch(() => {
+        localStorage.removeItem('mep_token')
+        localStorage.removeItem('mep_refresh_token')
+      })
       .finally(() => setLoading(false))
   }, [])
 
@@ -21,14 +24,24 @@ export function AuthProvider({ children }) {
     const res = await api.post('/auth/login', { username, pin })
     if (res.data.ok) {
       localStorage.setItem('mep_token', res.data.token)
+      if (res.data.refresh_token) {
+        localStorage.setItem('mep_refresh_token', res.data.refresh_token)
+      }
       setUser(res.data.user)
       return res.data
     }
     throw new Error(res.data.error)
   }
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      const refreshToken = localStorage.getItem('mep_refresh_token')
+      await api.post('/auth/logout', { refresh_token: refreshToken })
+    } catch {
+      // Best effort — continue with local cleanup
+    }
     localStorage.removeItem('mep_token')
+    localStorage.removeItem('mep_refresh_token')
     setUser(null)
   }
 

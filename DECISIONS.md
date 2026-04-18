@@ -202,7 +202,8 @@ requests status → SENT
 |---|---|---|
 | Mobile framework | React Native + Expo | March 2026 |
 | Auth mobile | JWT + PIN | March 2026 |
-| Token storage | AsyncStorage — mep_token / mep_user | April 2026 |
+| Token storage (web) | localStorage — mep_token / mep_refresh_token | April 2026 |
+| Token storage (mobile) | expo-secure-store (encrypted) — mep_token / mep_refresh_token | April 16, 2026 |
 | Role check | Permission-based from DB | April 2026 |
 | Roles | Mutable from UI, no code needed | April 2026 |
 | Permissions | Fixed in code | April 2026 |
@@ -219,6 +220,18 @@ requests status → SENT
 | Language detector | Custom AsyncStorage detector, key: mep_language | April 15, 2026 |
 | Date/time locale | Dynamic via i18n.language → fr-CA or en-CA | April 15, 2026 |
 | @expo/vector-icons path | Resolved via tsconfig paths (nested install) | April 15, 2026 |
+| Centralized color theme | src/theme/colors.ts — all 23 files use it, zero hardcoded colors | April 15, 2026 |
+| Brand colors v1 (olive) | Primary #3d5a2e — rejected (too military/dull) | April 15, 2026 |
+| Brand colors v2 (vibrant) | Primary #16a34a (green) + Accent #ea580c (dark orange) — rejected | April 16, 2026 |
+| Brand colors v3 (dark blue) | Primary #1e3a5f — approved for both mobile + web | April 16, 2026 |
+| Website domain | www.constrai.ca = company site, app.constrai.ca = login/app | April 16, 2026 |
+| Landing page | Bilingual Coming Soon page, SSL via certbot | April 16, 2026 |
+| Nginx setup | constrai.ca + www.constrai.ca both served from /var/www/constrai-landing | April 16, 2026 |
+| Auth: Refresh tokens | Access token 1h + Refresh token 7d + rotation on refresh | April 16, 2026 |
+| Auth: Server-side logout | POST /auth/logout revokes refresh token, POST /auth/logout-all revokes all | April 16, 2026 |
+| Auth: Secure storage (mobile) | expo-secure-store replaces AsyncStorage for tokens | April 16, 2026 |
+| Web centralized theme | index.css @theme + Tailwind v4 CSS variables (--color-primary-*) | April 16, 2026 |
+| Web indigo→primary migration | All 19 source files: indigo-* classes replaced with primary-* theme classes | April 16, 2026 |
 
 ---
 
@@ -235,9 +248,14 @@ requests status → SENT
 7. ✅ Report Menu (This Week / Last Week / Custom)
 8. ✅ Apple TestFlight Build
 9. ✅ Mobile Bilingual (EN/FR) — all screens + headers + localized dates
-10. 🟡 Web Frontend Bilingual (EN/FR) — not yet started
-11. 🟡 Android Google Play Build
-12. 🟡 PDF / Email templates in FR (follow Company language setting)
+10. ✅ Company website www.constrai.ca (Coming Soon + SSL)
+11. ✅ Centralized color theme (src/theme/colors.ts — 23 files migrated)
+12. ✅ Brand color palette — dark blue (#1e3a5f) approved for mobile + web
+12b. ✅ Security: Refresh token rotation + expo-secure-store
+12c. ✅ Web frontend: centralized theme (indigo→primary migration, 346 replacements)
+13. 🟡 Web Frontend Bilingual (EN/FR) — not yet started
+14. 🟡 Android Google Play Build
+15. 🟡 PDF / Email templates in FR (follow Company language setting)
 ```
 
 ### 5.2 Planned Features — High Priority
@@ -442,7 +460,44 @@ Automatic assignment suggestions based on:
 
 ---
 
-## 12. Decisions About Ideas Management
+## 12. Session Log — April 16, 2026
+
+### Completed:
+- Set up www.constrai.ca on production server (143.110.218.84)
+  - Created bilingual Coming Soon landing page (EN/FR with auto-detect)
+  - ConstrAI logo (inline SVG: ascending bars + AI nodes + "ConstrAI" text)
+  - Login button → app.constrai.ca
+  - DNS: added www A record on Namecheap
+  - Nginx config for both constrai.ca and www.constrai.ca
+  - SSL certificate via certbot (Let's Encrypt)
+- Created centralized color theme (src/theme/colors.ts)
+  - Replaced ALL hardcoded colors across 23 mobile screen files (241 occurrences)
+  - Eliminated old blue (#1e3a5f) identity completely
+- Brand color iteration:
+  - v1: Olive green (#3d5a2e) — rejected ("too military, no life")
+  - v2: Vibrant green (#16a34a) + Dark orange (#ea580c) — rejected
+  - v3: Teal (#005f5f) — rejected (light on dark readability issues)
+  - v4: Dark blue (#1e3a5f) — approved (temporary, may revisit later)
+- Updated landing page with new color palette
+- Security audit and fix:
+  - Implemented refresh token rotation (access 1h, refresh 7d)
+  - Migration 031: refresh_tokens table (token_hash, expires_at, revoked)
+  - Backend: POST /auth/refresh (rotation), POST /auth/logout, POST /auth/logout-all
+  - Web frontend: automatic 401 retry with refresh token queue
+  - Mobile: expo-secure-store replaces AsyncStorage for encrypted token storage
+- Web frontend centralized theme:
+  - index.css @theme directive with CSS variables (--color-primary-*)
+  - Replaced ALL indigo Tailwind classes (346 occurrences across 19 files) with primary-* theme classes
+  - Web colors now match mobile: dark blue (#1e3a5f)
+
+### Pending:
+- Deploy updated landing page with approved dark blue palette
+- Build new TestFlight with secure auth (refresh tokens + expo-secure-store)
+- Web frontend bilingual (EN/FR)
+
+---
+
+## 13. Decisions About Ideas Management
 
 > **Rule: Never delete any idea from this file.**
 > When two similar ideas exist → keep both, note the similarity, merge during dedicated discussion.

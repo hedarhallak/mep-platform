@@ -15,7 +15,7 @@ import { useState, useRef, useEffect } from 'react'
 import { X, Check } from 'lucide-react'
 
 const AVATAR_COLORS = [
-  'bg-indigo-500','bg-emerald-500','bg-amber-500',
+  'bg-primary-pale0','bg-emerald-500','bg-amber-500',
   'bg-rose-500','bg-violet-500','bg-cyan-500','bg-sky-500','bg-orange-500'
 ]
 
@@ -49,7 +49,7 @@ function WorkerRow({ worker, selected, showAssigned, projectSelected, onClick })
     <button
       type="button"
       onMouseDown={onClick}
-      className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-indigo-50 ${selected ? 'bg-indigo-50' : ''}`}
+      className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-primary-pale ${selected ? 'bg-primary-pale' : ''}`}
     >
       <WorkerAvatar worker={worker} size="sm" />
       <div className="flex-1 min-w-0">
@@ -65,7 +65,7 @@ function WorkerRow({ worker, selected, showAssigned, projectSelected, onClick })
           )}
         </div>
       </div>
-      {selected && <Check size={15} className="text-indigo-600 flex-shrink-0" />}
+      {selected && <Check size={15} className="text-primary flex-shrink-0" />}
     </button>
   )
 }
@@ -141,7 +141,7 @@ export default function WorkerPicker({
           disabled
             ? 'bg-slate-50 border-slate-200 cursor-not-allowed opacity-60'
             : focused
-              ? 'border-indigo-500 ring-2 ring-indigo-100'
+              ? 'border-primary ring-2 ring-primary-pale'
               : 'border-slate-200 hover:border-slate-300'
         }`}
       >

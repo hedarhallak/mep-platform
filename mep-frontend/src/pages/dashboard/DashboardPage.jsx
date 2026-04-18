@@ -67,7 +67,7 @@ export default function DashboardPage() {
           label="Active Projects"
           value={activeProjects}
           sub={`${totalProjects} total`}
-          color="bg-indigo-500"
+          color="bg-primary-light"
         />
         <StatCard
           icon={Users}
@@ -101,7 +101,7 @@ export default function DashboardPage() {
           {projects?.filter(p => p.status_code === 'ACTIVE').slice(0, 5).map(p => (
             <div key={p.id} className="px-6 py-3 flex items-center justify-between">
               <div>
-                <span className="text-sm font-medium text-indigo-600">{p.project_code}</span>
+                <span className="text-sm font-medium text-primary">{p.project_code}</span>
                 <span className="text-sm text-slate-700 ml-2">{p.project_name}</span>
               </div>
               <span className="text-xs text-slate-400">{p.trade_name}</span>

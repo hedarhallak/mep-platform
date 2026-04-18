@@ -64,7 +64,7 @@ function AddressInput({ value, onChange, onCoords }) {
           onChange={handleChange}
           onBlur={() => setTimeout(() => setOpen(false), 200)}
           onFocus={() => suggestions.length && setOpen(true)}
-          className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light"
           placeholder="Search address..."
         />
       </div>
@@ -72,7 +72,7 @@ function AddressInput({ value, onChange, onCoords }) {
         <ul className="absolute z-50 w-full bg-white border border-slate-200 rounded-lg shadow-lg mt-1 max-h-48 overflow-auto">
           {suggestions.map((f, i) => (
             <li key={i} onMouseDown={() => pick(f)}
-              className="px-3 py-2 text-sm hover:bg-indigo-50 cursor-pointer flex items-start gap-2">
+              className="px-3 py-2 text-sm hover:bg-primary-pale cursor-pointer flex items-start gap-2">
               <MapPin size={12} className="text-slate-400 mt-0.5 flex-shrink-0" />
               <span>{f.place_name}</span>
             </li>
@@ -132,7 +132,7 @@ function ProjectModal({ project, meta, onClose, onSaved }) {
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
           <div className="flex items-center gap-2">
-            <FolderKanban size={18} className="text-indigo-600" />
+            <FolderKanban size={18} className="text-primary" />
             <h2 className="font-semibold text-slate-800">
               {isEdit ? 'Edit Project' : 'New Project'}
             </h2>
@@ -152,7 +152,7 @@ function ProjectModal({ project, meta, onClose, onSaved }) {
               type="text"
               value={form.project_name}
               onChange={e => set('project_name', e.target.value)}
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light"
               placeholder="Enter project name"
             />
           </div>
@@ -165,7 +165,7 @@ function ProjectModal({ project, meta, onClose, onSaved }) {
             <select
               value={form.ccq_sector}
               onChange={e => set('ccq_sector', e.target.value)}
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light bg-white"
             >
               <option value="IC">Institutionnel / Commercial (IC)</option>
               <option value="INDUSTRIAL">Industriel (I)</option>
@@ -182,7 +182,7 @@ function ProjectModal({ project, meta, onClose, onSaved }) {
               <select
                 value={form.trade_type_id}
                 onChange={e => set('trade_type_id', e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light bg-white"
               >
                 <option value="">Select trade</option>
                 {meta?.trade_types?.map(t => (
@@ -197,7 +197,7 @@ function ProjectModal({ project, meta, onClose, onSaved }) {
               <select
                 value={form.status_id}
                 onChange={e => set('status_id', e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light bg-white"
               >
                 <option value="">Select status</option>
                 {meta?.project_statuses?.map(s => (
@@ -234,7 +234,7 @@ function ProjectModal({ project, meta, onClose, onSaved }) {
                 type="date"
                 value={form.start_date}
                 onChange={e => set('start_date', e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light"
               />
             </div>
             <div>
@@ -245,7 +245,7 @@ function ProjectModal({ project, meta, onClose, onSaved }) {
                 type="date"
                 value={form.end_date}
                 onChange={e => set('end_date', e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light"
               />
             </div>
           </div>
@@ -259,7 +259,7 @@ function ProjectModal({ project, meta, onClose, onSaved }) {
               <select
                 value={form.client_id}
                 onChange={e => set('client_id', e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light bg-white"
               >
                 <option value="">No client</option>
                 {meta.clients.map(c => (
@@ -284,7 +284,7 @@ function ProjectModal({ project, meta, onClose, onSaved }) {
               Cancel
             </button>
             <button type="submit" disabled={mutation.isPending}
-              className="flex-1 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2">
+              className="flex-1 px-4 py-2.5 bg-primary hover:bg-primary-dark disabled:opacity-60 text-white rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2">
               {mutation.isPending && <Loader2 size={14} className="animate-spin" />}
               {isEdit ? 'Save Changes' : 'Create Project'}
             </button>
@@ -334,7 +334,7 @@ export default function ProjectsPage() {
         </div>
         <button
           onClick={() => setModal('new')}
-          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors"
+          className="flex items-center gap-2 bg-primary hover:bg-primary-dark text-white px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors"
         >
           <Plus size={16} />
           New Project
@@ -350,7 +350,7 @@ export default function ProjectsPage() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search projects..."
-            className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-light"
           />
         </div>
         <div className="relative">
@@ -358,7 +358,7 @@ export default function ProjectsPage() {
           <select
             value={filterStatus}
             onChange={e => setFilterStatus(e.target.value)}
-            className="pl-8 pr-8 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none"
+            className="pl-8 pr-8 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-light appearance-none"
           >
             <option value="">All Statuses</option>
             {meta?.project_statuses?.map(s => (
@@ -372,7 +372,7 @@ export default function ProjectsPage() {
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         {isLoading ? (
           <div className="flex items-center justify-center py-16">
-            <Loader2 size={24} className="animate-spin text-indigo-500" />
+            <Loader2 size={24} className="animate-spin text-primary-light" />
           </div>
         ) : filtered.length === 0 ? (
           <div className="text-center py-16">
@@ -399,7 +399,7 @@ export default function ProjectsPage() {
               {filtered.map(p => (
                 <tr key={p.id} className="hover:bg-slate-50 transition-colors group">
                   <td className="px-5 py-3.5">
-                    <span className="text-xs font-mono font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">
+                    <span className="text-xs font-mono font-semibold text-primary bg-primary-pale px-2 py-0.5 rounded">
                       {p.project_code}
                     </span>
                   </td>
@@ -430,7 +430,7 @@ export default function ProjectsPage() {
                   <td className="px-5 py-3.5">
                     <button
                       onClick={() => setModal(p)}
-                      className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-indigo-50 rounded-lg transition-all text-slate-400 hover:text-indigo-600"
+                      className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-primary-pale rounded-lg transition-all text-slate-400 hover:text-primary"
                     >
                       <Edit2 size={14} />
                     </button>

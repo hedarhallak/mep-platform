@@ -20,7 +20,7 @@ function generatePOHtml(d) {
     <tr style="background:${i % 2 === 0 ? '#f8fafc' : '#fff'}">
       <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#1e293b">${i + 1}</td>
       <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#1e293b;font-weight:500">${it.item_name}</td>
-      <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#4f46e5;font-weight:700;text-align:center">${it.quantity}</td>
+      <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#162d4a;font-weight:700;text-align:center">${it.quantity}</td>
       <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#64748b;text-align:center">${it.unit}</td>
     </tr>
   `).join('')
@@ -56,15 +56,15 @@ function generatePOHtml(d) {
 </head>
 <body style="padding:40px;max-width:800px;margin:0 auto">
   <div class="no-print" style="margin-bottom:20px;text-align:right">
-    <button onclick="window.print()" style="background:#4f46e5;color:#fff;border:none;padding:10px 24px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">
+    <button onclick="window.print()" style="background:#162d4a;color:#fff;border:none;padding:10px 24px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">
       🖨 Print / Save as PDF
     </button>
   </div>
 
   <!-- Header -->
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;padding-bottom:20px;border-bottom:2px solid #4f46e5">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;padding-bottom:20px;border-bottom:2px solid #162d4a">
     <div>
-      <div style="font-size:22px;font-weight:800;color:#4f46e5">${d.company_name || 'Company'}</div>
+      <div style="font-size:22px;font-weight:800;color:#162d4a">${d.company_name || 'Company'}</div>
       ${d.company_address ? `<div style="font-size:12px;color:#64748b;margin-top:4px">📍 ${d.company_address}</div>` : ''}
       ${d.company_phone   ? `<div style="font-size:12px;color:#64748b">📞 ${d.company_phone}</div>` : ''}
     </div>
@@ -72,7 +72,7 @@ function generatePOHtml(d) {
       <div style="font-size:20px;font-weight:800;color:#1e293b">Purchase Order</div>
       <div style="font-size:13px;color:#64748b;margin-top:4px">Ref: <strong>${d.ref}</strong></div>
       <div style="font-size:13px;color:#64748b">Date: ${sentDate}</div>
-      ${d.po_number ? `<div style="font-size:15px;font-weight:800;color:#4f46e5;margin-top:6px">PO # ${d.po_number}</div>` : ''}
+      ${d.po_number ? `<div style="font-size:15px;font-weight:800;color:#162d4a;margin-top:6px">PO # ${d.po_number}</div>` : ''}
     </div>
   </div>
 
@@ -88,7 +88,7 @@ function generatePOHtml(d) {
       <div>
         <div style="font-size:11px;font-weight:600;color:#92400e;margin-bottom:4px">On-Site Contact (Foreman)</div>
         <div style="font-size:15px;font-weight:800;color:#1e293b">${d.foreman_name || '—'}</div>
-        ${d.foreman_phone ? `<div style="font-size:14px;font-weight:700;color:#4f46e5;margin-top:6px">📞 ${d.foreman_phone}</div>` : ''}
+        ${d.foreman_phone ? `<div style="font-size:14px;font-weight:700;color:#162d4a;margin-top:6px">📞 ${d.foreman_phone}</div>` : ''}
         ${d.foreman_email ? `<div style="font-size:12px;color:#64748b;margin-top:2px">✉ ${d.foreman_email}</div>` : ''}
       </div>
     </div>
@@ -100,7 +100,7 @@ function generatePOHtml(d) {
   <!-- Items table -->
   <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
     <thead>
-      <tr style="background:#4f46e5">
+      <tr style="background:#162d4a">
         <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:1px;width:40px">#</th>
         <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:1px">Item Description</th>
         <th style="padding:10px 14px;text-align:center;font-size:11px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:1px;width:80px">Qty</th>
@@ -167,7 +167,7 @@ export default function PurchaseOrdersPage() {
       <div className="bg-white border-b border-slate-200 px-6 py-4 flex-shrink-0">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center">
+            <div className="w-9 h-9 bg-primary rounded-xl flex items-center justify-center">
               <FileText className="w-5 h-5 text-white" />
             </div>
             <div>
@@ -180,7 +180,7 @@ export default function PurchaseOrdersPage() {
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search by ref, project, foreman..."
-            className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-slate-400" />
+            className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary-light placeholder:text-slate-400" />
         </div>
       </div>
 
@@ -221,7 +221,7 @@ export default function PurchaseOrdersPage() {
                 {filtered.map(o => (
                   <tr key={o.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60 transition-colors">
                     <td className="px-4 py-3">
-                      <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg">{o.ref}</span>
+                      <span className="text-xs font-bold text-primary bg-primary-pale px-2 py-1 rounded-lg">{o.ref}</span>
                     </td>
                     <td className="px-4 py-3">
                       {o.po_number
@@ -245,7 +245,7 @@ export default function PurchaseOrdersPage() {
                     </td>
                     <td className="px-4 py-3">
                       <button onClick={() => handleReprint(o.id)} disabled={printing === o.id}
-                        className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-indigo-600 border border-indigo-200 hover:bg-indigo-50 rounded-lg transition-colors disabled:opacity-50">
+                        className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-primary border border-primary-pale hover:bg-primary-pale rounded-lg transition-colors disabled:opacity-50">
                         {printing === o.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Printer className="w-3 h-3" />}
                         Reprint
                       </button>

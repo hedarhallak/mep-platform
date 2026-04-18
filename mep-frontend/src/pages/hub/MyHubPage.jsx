@@ -104,7 +104,7 @@ function AttendanceApprovalTab() {
     <div className="space-y-4">
       <div className="flex items-center gap-3">
         <input type="date" value={date} onChange={e => setDate(e.target.value)}
-          className="px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+          className="px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary-light" />
         <button onClick={fetchRecords} disabled={loading} className="p-2 bg-white border border-slate-200 rounded-lg text-slate-400 hover:bg-slate-50">
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
         </button>
@@ -134,12 +134,12 @@ function AttendanceApprovalTab() {
       {!loading && groups.map(group => (
         <div key={group.project_code} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
           <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center gap-2">
-            <div className="w-7 h-7 bg-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0">
+            <div className="w-7 h-7 bg-primary rounded-lg flex items-center justify-center flex-shrink-0">
               <Briefcase className="w-3.5 h-3.5 text-white" />
             </div>
             <span className="text-sm font-bold text-slate-800">{group.project_code}</span>
             {group.project_name && <span className="text-xs text-slate-400">{group.project_name}</span>}
-            <span className="ml-auto text-[10px] font-semibold px-2 py-1 bg-indigo-50 text-indigo-600 rounded-lg">
+            <span className="ml-auto text-[10px] font-semibold px-2 py-1 bg-primary-pale text-primary rounded-lg">
               {group.records.length} employees
             </span>
           </div>
@@ -184,7 +184,7 @@ function AttendanceApprovalTab() {
                       {status === 'OPEN'        && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-400">Absent</span>}
                       {status === 'CHECKED_IN'  && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-600">On Site</span>}
                       {status === 'CHECKED_OUT' && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-600">Pending</span>}
-                      {status === 'CONFIRMED'   && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">Confirmed</span>}
+                      {status === 'CONFIRMED'   && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary-pale text-primary-dark">Confirmed</span>}
                       {status === 'ADJUSTED'    && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">Adjusted</span>}
                     </td>
                     <td className="px-4 py-3">
@@ -363,7 +363,7 @@ function SendTaskTab() {
                     placeholder="Search..."
                     className="pl-7 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg w-36 focus:outline-none focus:ring-2 focus:ring-slate-900 bg-white" />
                 </div>
-                <button onClick={selectAll} className="text-[11px] text-indigo-600 hover:underline font-medium">All</button>
+                <button onClick={selectAll} className="text-[11px] text-primary hover:underline font-medium">All</button>
                 <button onClick={clearAll} className="text-[11px] text-slate-400 hover:underline">Clear</button>
               </div>
             </div>
@@ -434,9 +434,9 @@ function SendTaskTab() {
             <button onClick={() => setExpanded(p => ({...p, [task.id]: !p[task.id]}))}
               className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-slate-50 text-left">
               <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                task.type==='BLUEPRINT' ? 'bg-cyan-100' : task.type==='NOTE' ? 'bg-slate-100' : 'bg-indigo-100'
+                task.type==='BLUEPRINT' ? 'bg-cyan-100' : task.type==='NOTE' ? 'bg-slate-100' : 'bg-primary-pale'
               }`}>
-                <Icon className={`w-4 h-4 ${task.type==='BLUEPRINT' ? 'text-cyan-600' : task.type==='NOTE' ? 'text-slate-500' : 'text-indigo-600'}`} />
+                <Icon className={`w-4 h-4 ${task.type==='BLUEPRINT' ? 'text-cyan-600' : task.type==='NOTE' ? 'text-slate-500' : 'text-primary'}`} />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -460,7 +460,7 @@ function SendTaskTab() {
                 <div className="w-10 h-10 flex-shrink-0 relative">
                   <svg viewBox="0 0 36 36" className="w-10 h-10 -rotate-90">
                     <circle cx="18" cy="18" r="15" fill="none" stroke="#f1f5f9" strokeWidth="3" />
-                    <circle cx="18" cy="18" r="15" fill="none" stroke={ackPct===100?"#10b981":"#6366f1"} strokeWidth="3"
+                    <circle cx="18" cy="18" r="15" fill="none" stroke={ackPct===100?"#10b981":"#1e3a5f"} strokeWidth="3"
                       strokeDasharray={`${ackPct * 0.942} 94.2`} strokeLinecap="round" />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
@@ -620,10 +620,10 @@ function WorkerInboxTab() {
                     {msg.file_type?.startsWith('image/')
                       ? <img src={`/uploads${msg.file_url}`} alt={msg.file_name} className="max-w-full rounded-lg border border-slate-200 max-h-96 object-contain" />
                       : <a href={`/uploads${msg.file_url}`} target="_blank" rel="noopener noreferrer"
-                          className="flex items-center gap-3 px-4 py-3 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition-colors">
-                          <FileText className="w-5 h-5 text-indigo-600 flex-shrink-0" />
-                          <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-indigo-700 truncate">{msg.file_name}</p><p className="text-xs text-indigo-500">Click to open</p></div>
-                          <ChevronRight className="w-4 h-4 text-indigo-400" />
+                          className="flex items-center gap-3 px-4 py-3 bg-primary-pale border border-primary-pale rounded-lg hover:bg-primary-pale transition-colors">
+                          <FileText className="w-5 h-5 text-primary flex-shrink-0" />
+                          <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-primary-dark truncate">{msg.file_name}</p><p className="text-xs text-primary-light">Click to open</p></div>
+                          <ChevronRight className="w-4 h-4 text-primary-light" />
                         </a>}
                   </div>
                 )}
@@ -728,7 +728,7 @@ function InboxTab() {
           <tr style="background:${i%2===0?'#f8fafc':'#fff'}">
             <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-size:13px">${i+1}</td>
             <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-size:13px;font-weight:500">${it.item_name}</td>
-            <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#4f46e5;font-weight:700;text-align:center">${it.quantity}</td>
+            <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#162d4a;font-weight:700;text-align:center">${it.quantity}</td>
             <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-size:13px;text-align:center">${it.unit}</td>
           </tr>`).join('')
 
@@ -749,18 +749,18 @@ function InboxTab() {
           <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,sans-serif;padding:40px;max-width:800px;margin:0 auto}@media print{.noprint{display:none}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style>
         </head><body>
           <div class="noprint" style="margin-bottom:20px;text-align:right">
-            <button onclick="window.print()" style="background:#4f46e5;color:#fff;border:none;padding:10px 24px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">Ã°Å¸â€“Â¨ Print / Save PDF</button>
+            <button onclick="window.print()" style="background:#162d4a;color:#fff;border:none;padding:10px 24px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">Ã°Å¸â€“Â¨ Print / Save PDF</button>
           </div>
-          <div style="display:flex;justify-content:space-between;margin-bottom:28px;padding-bottom:20px;border-bottom:2px solid #4f46e5">
+          <div style="display:flex;justify-content:space-between;margin-bottom:28px;padding-bottom:20px;border-bottom:2px solid #162d4a">
             <div>
-              <div style="font-size:22px;font-weight:800;color:#4f46e5">${d.company?.name||'Company'}</div>
+              <div style="font-size:22px;font-weight:800;color:#162d4a">${d.company?.name||'Company'}</div>
               ${d.company?.address ? `<div style="font-size:12px;color:#64748b;margin-top:4px">Ã°Å¸â€œÂ ${d.company.address}</div>` : ''}
               ${d.company?.phone   ? `<div style="font-size:12px;color:#64748b">Ã°Å¸â€œÅ¾ ${d.company.phone}</div>` : ''}
             </div>
             <div style="text-align:right">
               <div style="font-size:20px;font-weight:800">Purchase Order</div>
               <div style="font-size:13px;color:#64748b;margin-top:4px">Ref: <strong>${d.ref}</strong> Â· ${d.date}</div>
-              ${d.po_number ? `<div style="font-size:14px;font-weight:800;color:#4f46e5;margin-top:4px">PO # ${d.po_number}</div>` : ''}
+              ${d.po_number ? `<div style="font-size:14px;font-weight:800;color:#162d4a;margin-top:4px">PO # ${d.po_number}</div>` : ''}
             </div>
           </div>
 
@@ -778,7 +778,7 @@ function InboxTab() {
               <div>
                 <div style="font-size:11px;font-weight:600;color:#92400e;margin-bottom:4px">On-Site Contact (Foreman)</div>
                 <div style="font-size:15px;font-weight:800;color:#1e293b">${d.foreman?.full_name||'Ã¢â‚¬â€'}</div>
-                ${d.foreman?.foreman_phone ? `<div style="font-size:14px;font-weight:700;color:#4f46e5;margin-top:6px">Ã°Å¸â€œÅ¾ ${d.foreman.foreman_phone}</div>` : ''}
+                ${d.foreman?.foreman_phone ? `<div style="font-size:14px;font-weight:700;color:#162d4a;margin-top:6px">Ã°Å¸â€œÅ¾ ${d.foreman.foreman_phone}</div>` : ''}
                 ${d.foreman?.contact_email ? `<div style="font-size:12px;color:#64748b;margin-top:2px">Ã¢Å“â€° ${d.foreman.contact_email}</div>` : ''}
               </div>
             </div>
@@ -786,7 +786,7 @@ function InboxTab() {
 
           ${toSection}
           <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
-            <thead><tr style="background:#4f46e5">
+            <thead><tr style="background:#162d4a">
               ${['#','Item','Qty','Unit'].map(h=>`<th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:700;color:#fff;text-transform:uppercase">${h}</th>`).join('')}
             </tr></thead>
             <tbody>${itemRows}</tbody>
@@ -816,7 +816,7 @@ function InboxTab() {
         </div>
         <div className="flex items-center gap-2">
           {pending.length > 0 && !mergedItems && (
-            <button onClick={handleMerge} className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700"><Package className="w-3.5 h-3.5" />Merge & Review</button>
+            <button onClick={handleMerge} className="flex items-center gap-1.5 px-4 py-2 bg-primary text-white text-xs font-bold rounded-lg hover:bg-primary-dark"><Package className="w-3.5 h-3.5" />Merge & Review</button>
           )}
           <button onClick={fetchInbox} disabled={loading} className="p-2 bg-white border border-slate-200 rounded-lg text-slate-400 hover:bg-slate-50 disabled:opacity-50"><RefreshCw className={`w-3.5 h-3.5 ${loading?'animate-spin':''}`} /></button>
         </div>
@@ -825,9 +825,9 @@ function InboxTab() {
       {error && <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-100 rounded-xl text-xs text-red-600"><AlertCircle className="w-4 h-4" />{error}</div>}
       {loading && <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-slate-300" /></div>}
       {!loading && mergedItems && (
-        <div className="bg-white rounded-xl border border-indigo-200 overflow-hidden">
-          <div className="px-4 py-3 bg-indigo-50 border-b border-indigo-100 flex items-center justify-between">
-            <div className="flex items-center gap-2"><Package className="w-4 h-4 text-indigo-600" /><span className="text-sm font-bold text-indigo-800">Merged Ã¢â‚¬â€ {mergedItems.length} items from {pending.length} requests</span></div>
+        <div className="bg-white rounded-xl border border-primary-pale overflow-hidden">
+          <div className="px-4 py-3 bg-primary-pale border-b border-primary-pale flex items-center justify-between">
+            <div className="flex items-center gap-2"><Package className="w-4 h-4 text-primary" /><span className="text-sm font-bold text-primary-dark">Merged Ã¢â‚¬â€ {mergedItems.length} items from {pending.length} requests</span></div>
             <div className="flex gap-2">
               <button onClick={() => setMergedItems(null)} className="px-3 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100 rounded-lg">Cancel</button>
               <button onClick={() => setSendModal(true)} className="flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700"><Check className="w-3.5 h-3.5" />Send Request</button>
@@ -838,7 +838,7 @@ function InboxTab() {
             const si = surplus[item.item_name.toLowerCase()]||[]; const ts = si.reduce((s,x)=>s+Number(x.qty_available),0)
             return <tr key={i} className="border-b border-slate-50 last:border-0">
               <td className="px-4 py-3 text-sm font-medium text-slate-700">{item.item_name}</td>
-              <td className="px-4 py-3"><input type="number" min="0" value={item.quantity} onChange={e=>setMergedItems(prev=>prev.map((it,j)=>j===i?{...it,quantity:Math.max(0,Math.floor(Number(e.target.value)||0))}:it))} className="w-20 px-2 py-1 border border-slate-200 rounded-lg text-sm font-bold text-indigo-600 text-center focus:outline-none focus:ring-2 focus:ring-indigo-300" /></td>
+              <td className="px-4 py-3"><input type="number" min="0" value={item.quantity} onChange={e=>setMergedItems(prev=>prev.map((it,j)=>j===i?{...it,quantity:Math.max(0,Math.floor(Number(e.target.value)||0))}:it))} className="w-20 px-2 py-1 border border-slate-200 rounded-lg text-sm font-bold text-primary text-center focus:outline-none focus:ring-2 focus:ring-primary-pale" /></td>
               <td className="px-4 py-3 text-xs text-slate-400">{item.unit}</td>
               <td className="px-4 py-3">{item.sources.map((s,j)=><span key={j} className="text-[10px] text-slate-400 block">{s.requester}: {s.qty}</span>)}</td>
               <td className="px-4 py-3">{ts>0?si.map((s,j)=><span key={j} className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full block w-fit">{s.qty_available} {item.unit} @ {s.project_code}</span>):<span className="text-[10px] text-slate-300">None</span>}</td>
@@ -850,7 +850,7 @@ function InboxTab() {
       {!loading && requests.map(req => (
         <div key={req.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
           <button onClick={() => toggleExpand(req.id)} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 text-left">
-            <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white" style={{background:'#6366f1'}}>{(req.requester_name||'?')[0]}</div>
+            <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white" style={{background:'#1e3a5f'}}>{(req.requester_name||'?')[0]}</div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap"><span className="text-sm font-semibold text-slate-800">{req.requester_name}</span><span className="text-xs text-slate-400">{req.project_code}</span><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${sc(req.status)}`}>{req.status}</span></div>
               <div className="text-[10px] text-slate-400 mt-0.5">{req.items?.length||0} items Â· {new Date(req.created_at).toLocaleString('en-CA',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
@@ -861,7 +861,7 @@ function InboxTab() {
             <div className="border-t border-slate-100">
               {req.note && <div className="px-4 py-2 bg-amber-50 text-xs text-amber-700 border-b border-amber-100">Ã°Å¸â€œÂ {req.note}</div>}
               <table className="w-full"><thead><tr className="bg-slate-50 border-b border-slate-100">{['Item','Qty','Unit','Note'].map(h=><th key={h} className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2">{h}</th>)}</tr></thead>
-              <tbody>{(req.items||[]).map((item,i)=><tr key={i} className="border-b border-slate-50 last:border-0"><td className="px-4 py-2.5 text-sm font-medium text-slate-700">{item.item_name}</td><td className="px-4 py-2.5 text-sm font-bold text-indigo-600">{item.quantity}</td><td className="px-4 py-2.5 text-xs text-slate-400">{item.unit}</td><td className="px-4 py-2.5 text-xs text-slate-400">{item.note||'Ã¢â‚¬â€'}</td></tr>)}</tbody></table>
+              <tbody>{(req.items||[]).map((item,i)=><tr key={i} className="border-b border-slate-50 last:border-0"><td className="px-4 py-2.5 text-sm font-medium text-slate-700">{item.item_name}</td><td className="px-4 py-2.5 text-sm font-bold text-primary">{item.quantity}</td><td className="px-4 py-2.5 text-xs text-slate-400">{item.unit}</td><td className="px-4 py-2.5 text-xs text-slate-400">{item.note||'Ã¢â‚¬â€'}</td></tr>)}</tbody></table>
             </div>
           )}
         </div>
@@ -871,16 +871,16 @@ function InboxTab() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between"><h3 className="text-sm font-bold text-slate-800">Send Request To</h3><button onClick={()=>setSendModal(false)} className="p-1.5 text-slate-400 hover:bg-slate-100 rounded-lg"><X className="w-4 h-4" /></button></div>
             <div className="px-6 py-4 space-y-2 max-h-[55vh] overflow-y-auto">
-              <button onClick={()=>setSendTarget('procurement')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-left ${sendTarget==='procurement'?'border-indigo-400 bg-indigo-50':'border-slate-200 hover:bg-slate-50'}`}>
-                <div className="w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center"><Briefcase className="w-4 h-4 text-indigo-600" /></div>
+              <button onClick={()=>setSendTarget('procurement')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-left ${sendTarget==='procurement'?'border-primary-light bg-primary-pale':'border-slate-200 hover:bg-slate-50'}`}>
+                <div className="w-8 h-8 bg-primary-pale rounded-lg flex items-center justify-center"><Briefcase className="w-4 h-4 text-primary" /></div>
                 <div><div className="text-sm font-semibold text-slate-800">Procurement Department</div><div className="text-[10px] text-slate-400">Internal</div></div>
-                {sendTarget==='procurement' && <Check className="w-4 h-4 text-indigo-600 ml-auto" />}
+                {sendTarget==='procurement' && <Check className="w-4 h-4 text-primary ml-auto" />}
               </button>
               {suppliers.length > 0 && (<><div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pt-1">Suppliers</div>
-                {suppliers.map(s=><button key={s.id} onClick={()=>setSendTarget(String(s.id))} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-left ${sendTarget===String(s.id)?'border-indigo-400 bg-indigo-50':'border-slate-200 hover:bg-slate-50'}`}>
+                {suppliers.map(s=><button key={s.id} onClick={()=>setSendTarget(String(s.id))} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-left ${sendTarget===String(s.id)?'border-primary-light bg-primary-pale':'border-slate-200 hover:bg-slate-50'}`}>
                   <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center"><Package className="w-4 h-4 text-slate-500" /></div>
                   <div className="flex-1 min-w-0"><div className="text-sm font-semibold text-slate-800 truncate">{s.name}</div><div className="text-[10px] text-slate-400">{s.trade_code} Â· {s.email}</div></div>
-                  {sendTarget===String(s.id) && <Check className="w-4 h-4 text-indigo-600 ml-auto" />}
+                  {sendTarget===String(s.id) && <Check className="w-4 h-4 text-primary ml-auto" />}
                 </button>)}</>)}
             </div>
             <div className="px-6 py-3 border-t border-slate-100 space-y-2">
@@ -899,10 +899,10 @@ function InboxTab() {
                   className={`w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:ring-2 placeholder:text-slate-300 ${
                     sendTarget && sendTarget !== 'procurement' && !sendPoNumber.trim()
                       ? 'border-red-300 focus:ring-red-400'
-                      : 'border-slate-200 focus:ring-indigo-400'
+                      : 'border-slate-200 focus:ring-primary-light'
                   }`} />
               </div>
-              <textarea value={sendNote} onChange={e=>setSendNote(e.target.value)} rows={2} placeholder="Notes (optional)" className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none" />
+              <textarea value={sendNote} onChange={e=>setSendNote(e.target.value)} rows={2} placeholder="Notes (optional)" className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-primary-light resize-none" />
             </div>
             <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3">
               <button onClick={()=>setSendModal(false)} className="px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 rounded-xl">Cancel</button>
@@ -959,15 +959,15 @@ export default function MyHubPage() {
     <div className="flex flex-col h-screen bg-slate-50 overflow-hidden">
       <div className="bg-white border-b border-slate-200 px-6 py-4 flex-shrink-0">
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center"><Inbox className="w-5 h-5 text-white" /></div>
+          <div className="w-9 h-9 bg-primary rounded-xl flex items-center justify-center"><Inbox className="w-5 h-5 text-white" /></div>
           <div><h1 className="text-lg font-bold text-slate-900">My Hub</h1><p className="text-xs text-slate-400 mt-0.5">Your daily tasks, approvals and requests</p></div>
         </div>
         <div className="flex items-center gap-1">
           {tabs.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${tab===t.id ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'}`}>
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${tab===t.id ? 'bg-primary text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'}`}>
               <t.icon className="w-3.5 h-3.5" />{t.label}
-              {t.count > 0 && <span className={`min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full flex items-center justify-center ${tab===t.id ? 'bg-white text-indigo-600' : 'bg-red-500 text-white'}`}>{t.count>99?'99+':t.count}</span>}
+              {t.count > 0 && <span className={`min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full flex items-center justify-center ${tab===t.id ? 'bg-white text-primary' : 'bg-red-500 text-white'}`}>{t.count>99?'99+':t.count}</span>}
             </button>
           ))}
         </div>

@@ -59,14 +59,14 @@ function ItemRow({ item, requestId, onUpdate, onDelete }) {
           <input
             type="number" min="1" step="1" value={qty}
             onChange={e => setQty(e.target.value.replace(/[^0-9]/g, ''))}
-            className="w-20 px-2 py-1 border border-slate-200 rounded-lg text-sm text-center focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            className="w-20 px-2 py-1 border border-slate-200 rounded-lg text-sm text-center focus:outline-none focus:ring-2 focus:ring-primary-light"
           />
           <select value={unit} onChange={e => setUnit(e.target.value)}
-            className="px-2 py-1 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
+            className="px-2 py-1 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-light">
             {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
           </select>
           <button onClick={handleSave} disabled={saving}
-            className="p-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50">
+            className="p-1.5 bg-primary text-white rounded-lg hover:bg-primary-dark disabled:opacity-50">
             {saving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
           </button>
           <button onClick={() => setEditing(false)}
@@ -76,10 +76,10 @@ function ItemRow({ item, requestId, onUpdate, onDelete }) {
         </div>
       ) : (
         <div className="flex items-center gap-2">
-          <span className="text-sm font-bold text-indigo-600">{item.quantity}</span>
+          <span className="text-sm font-bold text-primary">{item.quantity}</span>
           <span className="text-xs text-slate-400">{item.unit}</span>
           <button onClick={() => setEditing(true)}
-            className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all">
+            className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-primary hover:bg-primary-pale rounded-lg transition-all">
             <Edit2 size={13} />
           </button>
           <button onClick={handleDelete} disabled={deleting}
@@ -148,7 +148,7 @@ function AddItemForm({ requestId, onAdded }) {
 
   if (!show) return (
     <button onClick={() => setShow(true)}
-      className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-indigo-600 hover:bg-indigo-50 transition-colors border-t border-slate-100">
+      className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-primary hover:bg-primary-pale transition-colors border-t border-slate-100">
       <Plus size={15} />Add item
     </button>
   )
@@ -166,13 +166,13 @@ function AddItemForm({ requestId, onAdded }) {
           onFocus={() => name.length >= 2 && suggestions.length && setShowSug(true)}
           placeholder="e.g. Copper pipe 3/4 inch"
           autoFocus
-          className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-slate-300"
+          className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-light placeholder:text-slate-300"
         />
         {showSug && suggestions.length > 0 && (
           <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
             {suggestions.map((s, i) => (
               <button key={i} onMouseDown={() => selectSuggestion(s)}
-                className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-indigo-50 text-left transition-colors">
+                className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-primary-pale text-left transition-colors">
                 <span className="text-sm text-slate-700">{s.item_name}</span>
                 <span className="text-[10px] text-slate-400 ml-2 flex-shrink-0">
                   {s.default_unit} · used {s.use_count}×
@@ -192,10 +192,10 @@ function AddItemForm({ requestId, onAdded }) {
           value={qty}
           onChange={e => setQty(e.target.value.replace(/[^0-9]/g, ''))}
           placeholder="Qty *"
-          className="w-24 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
+          className="w-24 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-light"
         />
         <select value={unit} onChange={e => setUnit(e.target.value)}
-          className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
+          className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-light">
           {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
         </select>
       </div>
@@ -203,7 +203,7 @@ function AddItemForm({ requestId, onAdded }) {
       <input
         type="text" value={note} onChange={e => setNote(e.target.value)}
         placeholder="Note (optional)"
-        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
+        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-light"
       />
 
       {error && <p className="text-xs text-red-500">{error}</p>}
@@ -214,7 +214,7 @@ function AddItemForm({ requestId, onAdded }) {
           Cancel
         </button>
         <button onClick={handleAdd} disabled={saving}
-          className="flex-1 px-3 py-2 text-sm font-semibold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-1.5">
+          className="flex-1 px-3 py-2 text-sm font-semibold bg-primary text-white rounded-lg hover:bg-primary-dark disabled:opacity-50 flex items-center justify-center gap-1.5">
           {saving ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}Add
         </button>
       </div>
@@ -301,11 +301,11 @@ function ProjectStandupCard({ project, onComplete }) {
       <button onClick={() => setExpanded(v => !v)}
         className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-slate-50 transition-colors">
         <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
-          isCompleted ? 'bg-emerald-100' : 'bg-indigo-100'
+          isCompleted ? 'bg-emerald-100' : 'bg-primary-pale'
         }`}>
           {isCompleted
             ? <CheckCircle2 size={20} className="text-emerald-600" />
-            : <ClipboardList size={20} className="text-indigo-600" />}
+            : <ClipboardList size={20} className="text-primary" />}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
@@ -363,7 +363,7 @@ function ProjectStandupCard({ project, onComplete }) {
               </div>
               {!matRequest && !loading && (
                 <button onClick={handleOpenMaterials}
-                  className="text-xs text-indigo-600 hover:underline font-medium">
+                  className="text-xs text-primary hover:underline font-medium">
                   + Add materials
                 </button>
               )}
@@ -471,7 +471,7 @@ export default function StandupPage() {
       <div className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center">
+            <div className="w-9 h-9 bg-primary rounded-xl flex items-center justify-center">
               <ClipboardList size={18} className="text-white" />
             </div>
             <div>

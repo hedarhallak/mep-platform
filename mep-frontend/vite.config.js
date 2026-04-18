@@ -15,7 +15,7 @@ export default defineConfig({
         name: 'MEP Platform',
         short_name: 'MEP',
         description: 'MEP Construction & Workforce Management Platform',
-        theme_color: '#4f46e5',
+        theme_color: '#1e3a5f',
         background_color: '#0f172a',
         display: 'standalone',
         orientation: 'portrait-primary',

@@ -128,7 +128,7 @@ export default function AppLayout() {
 
           {/* Brand */}
           <div className="flex items-center gap-2 px-5 py-5 border-b border-slate-800">
-            <Building2 size={20} className="text-indigo-400" />
+            <Building2 size={20} className="text-primary-light" />
             <span className="font-bold text-white text-sm">MEP Platform</span>
           </div>
 
@@ -139,7 +139,7 @@ export default function AppLayout() {
               <NavLink key={to} to={to}
                 className={({ isActive }) =>
                   `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    isActive ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                    isActive ? 'bg-primary text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                   }`
                 }
               >
@@ -181,7 +181,7 @@ export default function AppLayout() {
                       <NavLink key={to} to={to}
                         className={({ isActive }) =>
                           `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                            isActive ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                            isActive ? 'bg-primary text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                           }`
                         }
                       >
@@ -202,7 +202,7 @@ export default function AppLayout() {
               <NavLink to="/user-management"
                 className={({ isActive }) =>
                   `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    isActive ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                    isActive ? 'bg-primary text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                   }`
                 }
               >
@@ -215,7 +215,7 @@ export default function AppLayout() {
               <NavLink to="/permissions"
                 className={({ isActive }) =>
                   `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    isActive ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                    isActive ? 'bg-primary text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                   }`
                 }
               >
@@ -228,7 +228,7 @@ export default function AppLayout() {
               <NavLink to="/settings"
                 className={({ isActive }) =>
                   `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    isActive ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                    isActive ? 'bg-primary text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                   }`
                 }
               >
@@ -244,7 +244,7 @@ export default function AppLayout() {
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-medium text-white truncate">{user?.username}</div>
-                <div className="text-xs text-indigo-400">{user?.role}</div>
+                <div className="text-xs text-primary-light">{user?.role}</div>
               </div>
               <button onClick={handleLogout}
                 className="flex-shrink-0 p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
@@ -269,10 +269,10 @@ export default function AppLayout() {
 
           {/* Update banner */}
           {updateAvailable && (
-            <div className="flex-shrink-0 flex items-center justify-between gap-2 bg-indigo-600 text-white text-xs font-semibold py-2 px-4">
+            <div className="flex-shrink-0 flex items-center justify-between gap-2 bg-primary text-white text-xs font-semibold py-2 px-4">
               <span>🆕 A new version is available</span>
               <button onClick={applyUpdate}
-                className="flex items-center gap-1.5 px-3 py-1 bg-white text-indigo-600 rounded-full font-bold hover:bg-indigo-50 transition-colors">
+                className="flex items-center gap-1.5 px-3 py-1 bg-white text-primary rounded-full font-bold hover:bg-primary-pale transition-colors">
                 <RefreshCw size={11} />Update now
               </button>
             </div>
@@ -288,7 +288,7 @@ export default function AppLayout() {
       {installPrompt && (
         <div className="fixed bottom-4 left-4 right-4 z-50 md:left-auto md:right-6 md:max-w-sm">
           <div className="bg-slate-900 text-white rounded-2xl shadow-2xl p-4 flex items-center gap-3 border border-slate-700">
-            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center flex-shrink-0">
+            <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center flex-shrink-0">
               <Download size={18} />
             </div>
             <div className="flex-1 min-w-0">
@@ -296,7 +296,7 @@ export default function AppLayout() {
               <p className="text-xs text-slate-400 mt-0.5">Add to home screen for quick access</p>
             </div>
             <button onClick={promptInstall}
-              className="flex-shrink-0 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg transition-colors">
+              className="flex-shrink-0 px-3 py-1.5 bg-primary hover:bg-primary-dark text-white text-xs font-bold rounded-lg transition-colors">
               Install
             </button>
           </div>

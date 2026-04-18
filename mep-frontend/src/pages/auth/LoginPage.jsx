@@ -35,7 +35,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-indigo-600 mb-4">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary mb-4">
             <Building2 size={28} className="text-white" />
           </div>
           <h1 className="text-2xl font-bold text-white">MEP Platform</h1>
@@ -58,7 +58,7 @@ export default function LoginPage() {
                   type="text"
                   value={form.username}
                   onChange={e => setForm(f => ({ ...f, username: e.target.value }))}
-                  className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light focus:border-transparent"
                   placeholder="Enter username"
                   required
                 />
@@ -76,7 +76,7 @@ export default function LoginPage() {
                   type={showPin ? 'text' : 'password'}
                   value={form.pin}
                   onChange={e => setForm(f => ({ ...f, pin: e.target.value }))}
-                  className="w-full pl-9 pr-10 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full pl-9 pr-10 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light focus:border-transparent"
                   placeholder="Enter PIN"
                   required
                 />
@@ -101,7 +101,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-semibold py-2.5 rounded-lg text-sm transition-colors"
+              className="w-full bg-primary hover:bg-primary-dark disabled:opacity-60 text-white font-semibold py-2.5 rounded-lg text-sm transition-colors"
             >
               {loading ? 'Signing in...' : 'Sign In'}
             </button>

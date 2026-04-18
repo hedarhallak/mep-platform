@@ -23,7 +23,7 @@ const STATUS_CONFIG = {
   OPEN:        { label: 'Absent',     color: 'bg-slate-100 text-slate-500' },
   CHECKED_IN:  { label: 'On Site',    color: 'bg-emerald-100 text-emerald-700' },
   CHECKED_OUT: { label: 'Pending',    color: 'bg-amber-100 text-amber-700' },
-  CONFIRMED:   { label: 'Confirmed',  color: 'bg-indigo-100 text-indigo-700' },
+  CONFIRMED:   { label: 'Confirmed',  color: 'bg-primary-pale text-primary-dark' },
   ADJUSTED:    { label: 'Adjusted',   color: 'bg-purple-100 text-purple-700' },
 }
 
@@ -101,9 +101,9 @@ function ConfirmModal({ record, onClose, onSaved }) {
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Final Hours (Foreman Decision)</p>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-[10px] font-semibold text-indigo-500 mb-1.5">Regular Hours</label>
+                <label className="block text-[10px] font-semibold text-primary-light mb-1.5">Regular Hours</label>
                 <select value={regularHours} onChange={e => setRegularHours(parseFloat(e.target.value))}
-                  className={selectCls('border-indigo-200 focus:ring-indigo-400 bg-white text-indigo-700')}>
+                  className={selectCls('border-primary-pale focus:ring-primary-light bg-white text-primary-dark')}>
                   {REGULAR_OPTIONS.map(v => (
                     <option key={v} value={v}>{v === 0 ? '0h' : `${v}h`}</option>
                   ))}
@@ -125,7 +125,7 @@ function ConfirmModal({ record, onClose, onSaved }) {
             <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Note (optional)</label>
             <textarea value={note} onChange={e => setNote(e.target.value)} rows={2}
               placeholder="e.g. Road conditions caused 15min delay..."
-              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-slate-300" />
+              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs resize-none focus:outline-none focus:ring-2 focus:ring-primary-light placeholder:text-slate-300" />
           </div>
 
           {error && (
@@ -140,7 +140,7 @@ function ConfirmModal({ record, onClose, onSaved }) {
             Cancel
           </button>
           <button onClick={handleSave} disabled={saving}
-            className="flex items-center gap-2 px-5 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-60">
+            className="flex items-center gap-2 px-5 py-2 bg-primary text-white text-xs font-bold rounded-xl hover:bg-primary-dark transition-colors disabled:opacity-60">
             {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><Check className="w-3.5 h-3.5" />Confirm</>}
           </button>
         </div>
@@ -162,7 +162,7 @@ function AttendanceRow({ record, canApprove, onCheckin, onCheckout, onConfirm, a
     <div className="grid grid-cols-[1.5fr_80px_90px_90px_70px_70px_90px_auto] items-center px-4 py-3 border-t border-slate-50 hover:bg-slate-50/70 transition-colors">
       {/* Employee */}
       <div className="flex items-center gap-2.5 min-w-0">
-        <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
+        <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
           {(record.full_name || '?')[0]}
         </div>
         <div className="min-w-0">
@@ -202,14 +202,14 @@ function AttendanceRow({ record, canApprove, onCheckin, onCheckout, onConfirm, a
       {/* Confirmed by */}
       <div className="text-[10px] text-slate-400 truncate">
         {record.confirmed_by_name
-          ? <span className="text-indigo-600 font-semibold">{record.confirmed_by_name}</span>
+          ? <span className="text-primary font-semibold">{record.confirmed_by_name}</span>
           : status === 'CHECKED_OUT' ? <span className="text-amber-500">Pending</span> : '—'}
       </div>
 
       {/* Actions */}
       <div className="flex items-center justify-end gap-1.5">
         {isLoading
-          ? <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+          ? <Loader2 className="w-4 h-4 animate-spin text-primary-light" />
           : (
             <>
               {/* Worker: Check In */}
@@ -229,7 +229,7 @@ function AttendanceRow({ record, canApprove, onCheckin, onCheckout, onConfirm, a
               {/* Foreman/Admin: Confirm */}
               {canApprove && status === 'CHECKED_OUT' && (
                 <button onClick={() => onConfirm(record)}
-                  className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white text-[11px] font-bold rounded-lg hover:bg-indigo-700 transition-colors whitespace-nowrap">
+                  className="flex items-center gap-1 px-3 py-1.5 bg-primary text-white text-[11px] font-bold rounded-lg hover:bg-primary-dark transition-colors whitespace-nowrap">
                   <Check className="w-3 h-3" />Confirm
                 </button>
               )}
@@ -352,7 +352,7 @@ export default function AttendancePage() {
       <div className="bg-white border-b border-slate-200 px-6 py-4 flex-shrink-0">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center">
+            <div className="w-9 h-9 bg-primary rounded-xl flex items-center justify-center">
               <CheckCircle className="w-5 h-5 text-white" />
             </div>
             <div>
@@ -364,10 +364,10 @@ export default function AttendancePage() {
           <div className="flex items-center gap-2">
             <Calendar className="w-4 h-4 text-slate-400" />
             <input type="date" value={date} onChange={e => { setDate(e.target.value); setSelectedProj(null) }}
-              className="px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white" />
+              className="px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-light bg-white" />
             <button onClick={fetchRecords}
               className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">
-              <Loader2 className={`w-4 h-4 ${loading ? 'animate-spin text-indigo-500' : ''}`} />
+              <Loader2 className={`w-4 h-4 ${loading ? 'animate-spin text-primary' : ''}`} />
             </button>
           </div>
         </div>
@@ -375,13 +375,13 @@ export default function AttendancePage() {
         {/* Project tabs (FOREMAN/ADMIN) or badge (WORKER) */}
         <div className="flex items-center gap-1 overflow-x-auto">
           {!canApprove && todayAssignment ? (
-            <div className="flex items-center gap-3 px-4 py-2 bg-indigo-50 border border-indigo-200 rounded-lg">
-              <div className="w-2 h-2 rounded-full bg-indigo-500 flex-shrink-0" />
+            <div className="flex items-center gap-3 px-4 py-2 bg-primary-pale border border-primary-pale rounded-lg">
+              <div className="w-2 h-2 rounded-full bg-primary-light flex-shrink-0" />
               <div>
-                <span className="text-xs font-bold text-indigo-800">
+                <span className="text-xs font-bold text-primary-dark">
                   {todayAssignment.project_code}{todayAssignment.project_name ? ` — ${todayAssignment.project_name}` : ''}
                 </span>
-                <span className="text-[10px] text-indigo-400 ml-2">Today's assignment</span>
+                <span className="text-[10px] text-primary-light ml-2">Today's assignment</span>
               </div>
             </div>
           ) : canApprove ? (
@@ -390,7 +390,7 @@ export default function AttendancePage() {
                 <button key={p.id} onClick={() => setSelectedProj(p.id)}
                   className={`flex-shrink-0 px-4 py-2 rounded-lg text-xs font-bold transition-colors ${
                     selectedProj === p.id
-                      ? 'bg-indigo-600 text-white shadow-sm'
+                      ? 'bg-primary text-white shadow-sm'
                       : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
                   }`}>
                   {p.project_code}
@@ -412,7 +412,7 @@ export default function AttendancePage() {
           { label: 'Total',       value: summary.total,       color: 'bg-slate-100 text-slate-600'   },
           { label: 'On Site',     value: summary.checked_in,  color: 'bg-emerald-100 text-emerald-700' },
           { label: 'Checked Out', value: summary.checked_out, color: 'bg-amber-100 text-amber-700'   },
-          { label: 'Confirmed',   value: summary.confirmed,   color: 'bg-indigo-100 text-indigo-700' },
+          { label: 'Confirmed',   value: summary.confirmed,   color: 'bg-primary-pale text-primary-dark' },
         ].map(s => (
           <div key={s.label} className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold ${s.color}`}>
             <span className="text-base font-extrabold">{s.value}</span>

@@ -23,9 +23,9 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       const response = await apiClient.post('/api/auth/login', { username, pin });
-      const { ok, token, user } = response.data;
+      const { ok, token, refresh_token, user } = response.data;
       if (!ok) throw new Error('Login failed');
-      await setAuth(user, token);
+      await setAuth(user, token, refresh_token);
     } catch (err: any) {
       Alert.alert(t('common.error'), t('errors.serverError'));
     } finally {
