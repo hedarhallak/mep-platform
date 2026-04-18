@@ -41,7 +41,7 @@ function assignmentEmployeeEmailHtml({
     body { font-family: 'Segoe UI', Arial, sans-serif; background: #f1f5f9; padding: 40px 16px; }
     .wrapper { max-width: 560px; margin: 0 auto; background: #fff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 32px rgba(0,0,0,0.08); }
     .header { background: #0f172a; padding: 36px 40px; text-align: center; }
-    .header-logo { display: inline-flex; align-items: center; justify-content: center; width: 52px; height: 52px; background: #6366f1; border-radius: 14px; margin-bottom: 16px; }
+    .header-logo { display: inline-flex; align-items: center; justify-content: center; width: 52px; height: 52px; background: #1e3a5f; border-radius: 14px; margin-bottom: 16px; }
     .header h1 { color: #fff; font-size: 20px; font-weight: 700; }
     .header p  { color: #94a3b8; font-size: 13px; margin-top: 4px; }
     .body { padding: 40px; }
@@ -113,13 +113,13 @@ function assignmentEmployeeEmailHtml({
         </div>
         ${foremanName ? `
         <div style="display:flex;align-items:center;gap:14px;">
-          <div style="width:44px;height:44px;background:#6366f1;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;font-weight:700;flex-shrink:0;">
+          <div style="width:44px;height:44px;background:#1e3a5f;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;font-weight:700;flex-shrink:0;">
             ${foremanName[0]}
           </div>
           <div>
             <div style="font-size:15px;font-weight:700;color:#0f172a;">${foremanName}</div>
             ${foremanPhone ? `<div style="font-size:13px;color:#475569;margin-top:2px;">📞 ${foremanPhone}</div>` : '<div style="font-size:12px;color:#94a3b8;margin-top:2px;">No phone on file</div>'}
-            ${foremanEmail ? `<div style="font-size:13px;color:#6366f1;margin-top:2px;">✉ ${foremanEmail}</div>` : '<div style="font-size:12px;color:#94a3b8;margin-top:2px;">No email on file</div>'}
+            ${foremanEmail ? `<div style="font-size:13px;color:#1e3a5f;margin-top:2px;">✉ ${foremanEmail}</div>` : '<div style="font-size:12px;color:#94a3b8;margin-top:2px;">No email on file</div>'}
           </div>
         </div>
         <div style="margin-top:12px;font-size:12px;color:#64748b;">
@@ -184,7 +184,7 @@ function assignmentAdminSummaryEmailHtml({
     .subtitle { font-size: 14px; color: #64748b; margin-bottom: 24px; }
     .stats { display: flex; gap: 12px; margin-bottom: 24px; }
     .stat { flex: 1; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; text-align: center; }
-    .stat-num { font-size: 24px; font-weight: 800; color: #6366f1; }
+    .stat-num { font-size: 24px; font-weight: 800; color: #1e3a5f; }
     .stat-label { font-size: 11px; color: #94a3b8; text-transform: uppercase; font-weight: 600; margin-top: 2px; }
     table { width: 100%; border-collapse: collapse; border-radius: 10px; overflow: hidden; border: 1px solid #e2e8f0; margin-bottom: 24px; }
     thead tr { background: #f8fafc; }

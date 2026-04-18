@@ -21,6 +21,7 @@ import UserManagementPage  from '@/pages/UserManagementPage'
 import TaskRequestPage     from '@/pages/TaskRequestPage'
 import StandupPage         from '@/pages/StandupPage'
 import ReportsPage          from '@/pages/ReportsPage'
+import ProfilePage          from '@/pages/profile/ProfilePage'
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
@@ -74,6 +75,7 @@ function AppRoutes() {
         {/* Always accessible */}
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="my-hub"    element={<MyHubPage />} />
+        <Route path="profile"  element={<ProfilePage />} />
 
         {/* Single permission routes */}
         <Route path="employees" element={

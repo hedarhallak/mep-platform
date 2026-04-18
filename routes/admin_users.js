@@ -228,7 +228,7 @@ router.post("/", can("settings.user_management"), async (req, res) => {
           <h2 style="color:#0f172a">Activate your MEP Platform account</h2>
           <p>You've been invited as <strong>${roleLabel}</strong>.</p>
           <p>Click the link below to set up your account:</p>
-          <p><a href="${activateLink}" style="color:#6366f1">${activateLink}</a></p>
+          <p><a href="${activateLink}" style="color:#1e3a5f">${activateLink}</a></p>
           <p style="color:#94a3b8;font-size:13px">This link expires in ${expiresHours} hours.</p>
         </div>
       `;

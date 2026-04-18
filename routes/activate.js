@@ -1,5 +1,5 @@
 const express = require("express");
-const bcrypt = require("bcrypt");
+const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
 const router = express.Router();
 const { pool } = require("../db");
@@ -129,7 +129,7 @@ router.post("/set-pin", express.urlencoded({ extended: false }), async (req, res
       return res.status(400).send("Invite already used");
     }
 
-    const pinHash = await bcrypt.hash(pin, 10);
+    const pinHash = await bcrypt.hash(pin, 12);
 
     // Create or update the user by email (works even if user already exists)
     // Policy: username defaults to email (Option A).
@@ -171,7 +171,7 @@ router.post("/set-pin", express.urlencoded({ extended: false }), async (req, res
     );
 
     await client.query("COMMIT");
-    return res.redirect("/app.html");
+    return res.redirect("/login?activated=1");
   } catch (e) {
     try { await client.query("ROLLBACK"); } catch (_) {}
     console.error("POST /activate/set-pin error:", e);

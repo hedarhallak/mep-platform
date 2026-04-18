@@ -242,10 +242,10 @@ export default function AppLayout() {
           <div className="px-4 py-4 border-t border-slate-800">
             <div className="text-xs text-slate-500 mb-1 truncate">{user?.company_name || 'Company'}</div>
             <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0 flex-1">
+              <NavLink to="/profile" className="min-w-0 flex-1 hover:opacity-80 transition-opacity">
                 <div className="text-sm font-medium text-white truncate">{user?.username}</div>
                 <div className="text-xs text-primary-light">{user?.role}</div>
-              </div>
+              </NavLink>
               <button onClick={handleLogout}
                 className="flex-shrink-0 p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
                 title="Logout"
