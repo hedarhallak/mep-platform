@@ -232,6 +232,11 @@ requests status → SENT
 | Auth: Secure storage (mobile) | expo-secure-store replaces AsyncStorage for tokens | April 16, 2026 |
 | Web centralized theme | index.css @theme + Tailwind v4 CSS variables (--color-primary-*) | April 16, 2026 |
 | Web indigo→primary migration | All 19 source files: indigo-* classes replaced with primary-* theme classes | April 16, 2026 |
+| DB backup storage | DigitalOcean Spaces, bucket `constrai-backups`, region NYC3 | April 18, 2026 |
+| DB backup retention | 7 daily + 4 weekly + 3 monthly | April 18, 2026 |
+| DB backup tooling | s3cmd + pg_dump, scripts in `scripts/backup/`, config in `/etc/mep-backup.env` (chmod 600) | April 18, 2026 |
+| DB backup schedule | Cron 03:00 daily (backup) + 03:30 daily (retention cleanup), server timezone | April 18, 2026 |
+| Recovery documentation | `RECOVERY.md` at repo root — full DR + bus-factor mitigation playbook | April 18, 2026 |
 
 ---
 
@@ -253,9 +258,11 @@ requests status → SENT
 12. ✅ Brand color palette — dark blue (#1e3a5f) approved for mobile + web
 12b. ✅ Security: Refresh token rotation + expo-secure-store
 12c. ✅ Web frontend: centralized theme (indigo→primary migration, 346 replacements)
+12d. ✅ Disaster Recovery foundation: DB backups to DigitalOcean Spaces + RECOVERY.md
 13. 🟡 Web Frontend Bilingual (EN/FR) — not yet started
 14. 🟡 Android Google Play Build
 15. 🟡 PDF / Email templates in FR (follow Company language setting)
+16. 🟡 Bus-factor hardening — see Section 14
 ```
 
 ### 5.2 Planned Features — High Priority
@@ -502,3 +509,81 @@ Automatic assignment suggestions based on:
 > **Rule: Never delete any idea from this file.**
 > When two similar ideas exist → keep both, note the similarity, merge during dedicated discussion.
 > Example: Material surplus system (Section 8) and Smart Assignment proximity (Section 10) both use geographic data — they should be discussed together for a unified geo-intelligence layer.
+
+---
+
+## 14. Disaster Recovery & Bus-Factor Mitigation 🔄
+
+### Context (April 18, 2026):
+The mobile dev tooling crashed and had to be reinstalled — some uncommitted local work was lost.
+This raised two real risks that need to be hardened:
+1. **Data loss** — no automated DB backups existed; a corrupted DB or destroyed Droplet would lose everything.
+2. **Bus factor = 1** — every account, password, and piece of operational knowledge lives only in Hedar's head + laptop. If Hedar is unavailable, the business stops.
+
+### Strategy:
+Defense in depth across three layers — data, infrastructure, and human knowledge.
+
+### Layer 1 — Data (DB backups) ✅
+- Daily pg_dump → DigitalOcean Spaces (`constrai-backups`, NYC3)
+- Retention: 7 daily + 4 weekly + 3 monthly
+- Restore tested via `restore_db.sh` (always restore to a different DB name first, then swap)
+- Scripts: `scripts/backup/{backup_db.sh, cleanup_old_backups.sh, restore_db.sh}`
+- Config: `/etc/mep-backup.env` (chmod 600, root)
+- Setup guide: `scripts/backup/SETUP.md`
+- Optional: healthchecks.io dead-man's-switch for failure alerts
+
+### Layer 2 — Infrastructure 🟡
+- 🟡 DigitalOcean weekly Droplet snapshots — enable in dashboard
+- 🟡 SSL auto-renew verification (quarterly `certbot renew --dry-run`)
+- 🟡 Commit Nginx config template + `.env.example` to repo
+
+### Layer 3 — Human Knowledge & Access 🟡
+- 🟡 Password manager (Bitwarden / 1Password) holding ALL credentials — see `RECOVERY.md` Section 2.1 for required inventory
+- 🟡 Emergency access for one trusted contact (spouse / business partner / lawyer with sealed envelope)
+- 🟡 Second GitHub collaborator with admin rights
+- 🟡 Apple ID recovery contacts (2FA backup)
+- 🟡 Eventually: Apple Developer Organization account (vs current Individual)
+- 🟡 Eventually: second developer/contractor onboarded and given `RECOVERY.md`
+
+### Operational Rule:
+- **Quarterly** (1st of Jan/Apr/Jul/Oct): run the verification checklist in `RECOVERY.md` Section 8.
+- **After every infra change**: update `RECOVERY.md`.
+
+### Status: 🔄 In progress — backup automation deployed, hardening items pending (see `RECOVERY.md` Section 10)
+
+---
+
+## 15. Session Log — April 18, 2026
+
+### Context:
+Mobile dev environment crashed on Hedar's laptop and had to be reinstalled. Some uncommitted work was lost. Triggered a discussion about disaster recovery and bus-factor risk.
+
+### Completed:
+- Created automated DB backup pipeline:
+  - `scripts/backup/backup_db.sh` — pg_dump + sanity checks + gzip + upload to Spaces
+  - `scripts/backup/cleanup_old_backups.sh` — applies 7/4/3 retention
+  - `scripts/backup/restore_db.sh` — interactive restore with safety guards (blocks accidental overwrite of `mepdb`)
+  - `scripts/backup/SETUP.md` — full server setup guide (DigitalOcean Spaces config, s3cmd, cron)
+- Created `RECOVERY.md` at repo root — comprehensive DR playbook covering:
+  - Credential inventory (password manager requirements)
+  - DB recovery procedure (RPO 24h / RTO 30min)
+  - Server recovery (snapshot restore + full rebuild from scratch)
+  - Domain / SSL recovery
+  - Mobile app recovery (Apple/Expo single points of failure)
+  - GitHub recovery
+  - Quarterly verification checklist
+  - Prioritized hardening TODO list
+- Updated `DECISIONS.md`:
+  - Added Section 14 (DR & Bus-Factor)
+  - Added technical decisions for backup tooling
+  - Added Section 15 (this session log)
+
+### Pending (next steps for Hedar):
+- Execute `scripts/backup/SETUP.md` Parts 1–2 (create Spaces bucket, configure server, run first backup)
+- Execute `scripts/backup/SETUP.md` Part 3 (one-time restore test to validate backups are usable)
+- Begin working through `RECOVERY.md` Section 10 — Critical hardening items (password manager emergency access, Apple ID recovery contacts, Droplet snapshots, second GitHub admin)
+
+### Pending Discussion (future sessions):
+- Second technical contact — who, what level of involvement, NDA?
+- Apple Developer Organization account transition — requires business entity decisions
+- Web Frontend i18n (mirror mobile setup) — still on the roadmap from last session

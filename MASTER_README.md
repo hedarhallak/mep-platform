@@ -1,5 +1,5 @@
 # MEP Platform — Master Project README
-> Last updated: April 16, 2026 | Maintainer: Hedar Hallak
+> Last updated: April 18, 2026 | Maintainer: Hedar Hallak
 > Production: https://app.constrai.ca
 > Website: https://www.constrai.ca (Coming Soon landing page)
 > Server: root@143.110.218.84
@@ -95,6 +95,19 @@ MEP Platform (Constrai) is a Quebec construction workforce ERP for MEP companies
 - Hub tables: task_messages, task_recipients
 - Status flow: PENDING → SENT → READ → ACKNOWLEDGED
 - material_requests: status flow PENDING → SENT (after Foreman sends PO)
+
+### Backups (April 2026)
+- Automated daily pg_dump → DigitalOcean Spaces (`constrai-backups`, region NYC3)
+- Retention: 7 daily + 4 weekly + 3 monthly
+- Scripts: `scripts/backup/{backup_db.sh, cleanup_old_backups.sh, restore_db.sh}`
+- Setup + operations guide: `scripts/backup/SETUP.md`
+- Cron: 03:00 daily (backup) + 03:30 daily (cleanup)
+- Config (secrets): `/etc/mep-backup.env` (mode 600, root-only)
+
+### Disaster Recovery
+- Full DR playbook: `RECOVERY.md` at repo root
+- Covers DB / server / domain / mobile / GitHub recovery
+- Includes quarterly verification checklist + prioritized hardening TODO
 
 ---
 
