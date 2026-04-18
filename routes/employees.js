@@ -74,6 +74,25 @@ router.get("/", can("employees.view"), async (req, res) => {
 
     const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
+    // Detect available columns in employee_profiles to avoid missing column errors
+    if (!module._epCols) {
+      const colRes = await pool.query(
+        `SELECT column_name FROM information_schema.columns
+         WHERE table_schema='public' AND table_name='employee_profiles'`
+      );
+      module._epCols = new Set(colRes.rows.map(r => r.column_name));
+    }
+    const has = col => module._epCols.has(col);
+
+    const epFields = [
+      'ep.trade_code',
+      has('role_code')  ? 'ep.role_code'  : "NULL AS role_code",
+      has('rank_code')  ? 'ep.rank_code'  : "NULL AS rank_code",
+      'ep.full_name',
+      has('phone')      ? 'ep.phone'      : "NULL AS phone",
+      has('city')       ? 'ep.city'       : "NULL AS city",
+    ].join(',\n         ');
+
     const result = await pool.query(
       `SELECT
          e.id,
@@ -85,12 +104,7 @@ router.get("/", can("employees.view"), async (req, res) => {
          e.company_id,
          e.is_active,
          e.created_at,
-         ep.trade_code,
-         ep.role_code,
-         ep.rank_code,
-         ep.full_name,
-         ep.phone,
-         ep.city,
+         ${epFields},
          au.id                  AS user_id,
          au.username,
          au.profile_status,
