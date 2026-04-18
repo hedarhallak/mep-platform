@@ -39,7 +39,7 @@ function Avatar({ name, size = 'md' }) {
     ? name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
     : '?'
   const colors = [
-    'bg-primary-pale0', 'bg-emerald-500', 'bg-amber-500',
+    'bg-primary-light', 'bg-emerald-500', 'bg-amber-500',
     'bg-rose-500',   'bg-violet-500',  'bg-cyan-500',
   ]
   const color = colors[initials.charCodeAt(0) % colors.length]

@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
 import {
   Plus, Search, Filter, Edit2, Loader2,
-  AlertCircle, Users, Phone, Mail,
+  AlertCircle, Users, Phone, Mail, ClipboardCheck,
   BadgeCheck, X, UserX, UserCheck, Shield, Save, Trash2
 } from 'lucide-react'
 
@@ -504,6 +504,7 @@ export default function EmployeesPage() {
   })
 
   const inactiveCount = employees.filter(e => e.is_active === false).length
+  const incompleteProfileCount = employees.filter(e => e.is_active !== false && e.username && e.profile_status !== 'COMPLETED').length
 
   return (
     <div className="p-8">
@@ -514,6 +515,7 @@ export default function EmployeesPage() {
           <p className="text-slate-500 text-sm mt-0.5">
             {employees.filter(e => e.is_active !== false).length} active
             {inactiveCount > 0 && <span className="text-slate-400"> · {inactiveCount} inactive</span>}
+            {incompleteProfileCount > 0 && <span className="text-amber-500"> · {incompleteProfileCount} incomplete profiles</span>}
           </p>
         </div>
         <button onClick={() => setModal('invite')}
@@ -589,6 +591,7 @@ export default function EmployeesPage() {
                 <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Level</th>
                 <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Contact</th>
                 <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Status</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Profile</th>
                 <th className="px-5 py-3"></th>
               </tr>
             </thead>
@@ -650,6 +653,19 @@ export default function EmployeesPage() {
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium border bg-amber-50 text-amber-600 border-amber-200">
                         <Mail size={11} />Invited
                       </span>
+                    )}
+                  </td>
+                  <td className="px-5 py-3.5">
+                    {emp.profile_status === 'COMPLETED' ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium border bg-emerald-50 text-emerald-700 border-emerald-200">
+                        <ClipboardCheck size={11} />Complete
+                      </span>
+                    ) : emp.username ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium border bg-amber-50 text-amber-600 border-amber-200">
+                        <AlertCircle size={11} />Incomplete
+                      </span>
+                    ) : (
+                      <span className="text-slate-300 text-xs">—</span>
                     )}
                   </td>
                   <td className="px-5 py-3.5">

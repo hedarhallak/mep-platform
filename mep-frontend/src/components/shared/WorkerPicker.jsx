@@ -15,7 +15,7 @@ import { useState, useRef, useEffect } from 'react'
 import { X, Check } from 'lucide-react'
 
 const AVATAR_COLORS = [
-  'bg-primary-pale0','bg-emerald-500','bg-amber-500',
+  'bg-primary-light','bg-emerald-500','bg-amber-500',
   'bg-rose-500','bg-violet-500','bg-cyan-500','bg-sky-500','bg-orange-500'
 ]
 

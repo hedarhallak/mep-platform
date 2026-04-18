@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/hooks/useAuth'
 import api from '@/lib/api'
 import {
-  User, Phone, MapPin, Mail, Shield, Wrench,
+  User, Phone, MapPin, Mail, Shield, Wrench, Users, Settings,
   AlertCircle, CheckCircle, Loader2, Save, Lock, Eye, EyeOff
 } from 'lucide-react'
 
@@ -66,10 +66,13 @@ export default function ProfilePage() {
   const { user } = useAuth()
   const qc = useQueryClient()
 
-  const { data: profile, isLoading } = useQuery({
+  const { data: profileData, isLoading } = useQuery({
     queryKey: ['my-profile'],
-    queryFn: () => api.get('/profile/me').then(r => r.data.profile),
+    queryFn: () => api.get('/profile/me').then(r => r.data),
   })
+
+  const profile = profileData?.profile
+  const isAdmin = profileData?.is_admin === true
 
   const { data: dropdowns } = useQuery({
     queryKey: ['profile-dropdowns'],
@@ -166,7 +169,112 @@ export default function ProfilePage() {
         {user?.role && <span className="ml-2 text-xs bg-primary-pale text-primary-dark px-2 py-0.5 rounded-md font-medium">{user.role.replace(/_/g, ' ')}</span>}
       </p>
 
-      {form && (
+      {/* Incomplete profile banner for employees */}
+      {!isAdmin && profileData && !profileData.exists && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 mb-6">
+          <div className="flex items-start gap-3">
+            <AlertCircle size={18} className="text-amber-600 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-amber-800 mb-1">Complete Your Profile</p>
+              <p className="text-sm text-amber-700">
+                Please fill in all required fields below to complete your employee profile. Your administrator needs this information on file.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin profile — no employee record */}
+      {isAdmin && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <h2 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
+              <Settings size={15} /> Account Info
+            </h2>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Username</label>
+                <div className="text-sm font-medium text-slate-800">{user?.username || '—'}</div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Role</label>
+                <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-primary-pale text-primary-dark px-2.5 py-1 rounded-md">
+                  <Shield size={12} />
+                  {(user?.role || 'Admin').replace(/_/g, ' ')}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
+            <div className="flex items-start gap-3">
+              <Users size={18} className="text-amber-600 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-amber-800 mb-1">Admin Account</p>
+                <p className="text-sm text-amber-700">
+                  This is an admin account without an employee profile. You can manage employees from the{' '}
+                  <a href="/employees" className="font-medium underline hover:text-amber-900">Employees</a> page.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Change PIN section for admin */}
+          <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <button onClick={() => setShowPinSection(s => !s)}
+              className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+              <Lock size={15} /> Change PIN
+            </button>
+            {showPinSection && (
+              <div className="mt-4 space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1.5">Current PIN</label>
+                  <div className="relative">
+                    <input type={showPin ? 'text' : 'password'} value={pinForm.current}
+                      onChange={e => setPinForm(f => ({ ...f, current: e.target.value }))}
+                      className="w-full px-3 pr-10 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light" />
+                    <button type="button" onClick={() => setShowPin(s => !s)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+                      {showPin ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1.5">New PIN</label>
+                    <input type={showPin ? 'text' : 'password'} value={pinForm.new_pin}
+                      onChange={e => setPinForm(f => ({ ...f, new_pin: e.target.value }))}
+                      className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1.5">Confirm New PIN</label>
+                    <input type={showPin ? 'text' : 'password'} value={pinForm.confirm}
+                      onChange={e => setPinForm(f => ({ ...f, confirm: e.target.value }))}
+                      className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light" />
+                  </div>
+                </div>
+                {pinError && (
+                  <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-2.5">
+                    <AlertCircle size={14} />{pinError}
+                  </div>
+                )}
+                {pinSuccess && (
+                  <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm rounded-lg px-4 py-2.5">
+                    <CheckCircle size={14} />PIN changed successfully
+                  </div>
+                )}
+                <button onClick={handleChangePin} disabled={pinMutation.isPending}
+                  className="bg-slate-800 hover:bg-slate-900 disabled:opacity-60 text-white font-medium py-2.5 px-4 rounded-lg text-sm flex items-center gap-2">
+                  {pinMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Lock size={14} />}
+                  Update PIN
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {form && !isAdmin && (
         <div className="space-y-6">
           {/* Trade & Level */}
           <div className="bg-white rounded-xl border border-slate-200 p-6">

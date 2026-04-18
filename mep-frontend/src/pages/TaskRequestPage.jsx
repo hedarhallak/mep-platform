@@ -13,7 +13,7 @@ const PRIORITY_STYLE = {
   HIGH:   'bg-amber-50   text-amber-700  border-amber-200',
   URGENT: 'bg-red-50     text-red-600    border-red-200',
 }
-const AVATAR_COLORS = ['bg-primary-pale0','bg-emerald-500','bg-amber-500','bg-rose-500','bg-violet-500','bg-cyan-500']
+const AVATAR_COLORS = ['bg-primary-light','bg-emerald-500','bg-amber-500','bg-rose-500','bg-violet-500','bg-cyan-500']
 const avatarColor = name => AVATAR_COLORS[(name?.charCodeAt(0)||0) % AVATAR_COLORS.length]
 
 // ── New Task Form ─────────────────────────────────────────────
@@ -319,7 +319,7 @@ function SentTasksTab() {
                   <td className="px-5 py-4">
                     <div className="flex items-center gap-2">
                       <div className="w-20 bg-slate-100 rounded-full h-1.5">
-                        <div className={`h-1.5 rounded-full transition-all ${ackPct===100?'bg-emerald-500':'bg-primary-pale0'}`}
+                        <div className={`h-1.5 rounded-full transition-all ${ackPct===100?'bg-emerald-500':'bg-primary-light'}`}
                           style={{width:`${ackPct}%`}}/>
                       </div>
                       <span className="text-xs text-slate-500 whitespace-nowrap">{acked}/{total}</span>

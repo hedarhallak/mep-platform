@@ -421,7 +421,7 @@ export default function MaterialRequestPage() {
           <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Project</label>
           {todayAssignment ? (
             <div className="flex items-center gap-3 px-4 py-3 bg-primary-pale border border-primary-pale rounded-xl max-w-sm">
-              <div className="w-2 h-2 rounded-full bg-primary-pale0 flex-shrink-0" />
+              <div className="w-2 h-2 rounded-full bg-primary-light flex-shrink-0" />
               <div>
                 <div className="text-sm font-bold text-primary-dark">
                   {todayAssignment.project_code}{todayAssignment.project_name ? ` — ${todayAssignment.project_name}` : ''}

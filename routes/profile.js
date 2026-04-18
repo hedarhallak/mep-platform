@@ -201,8 +201,51 @@ router.get("/me", async (req, res) => {
     const employeeIdRaw = user.employee_id ?? user.employeeId ?? null;
     const employee_id = employeeIdRaw ? Number(employeeIdRaw) : null;
 
+    // Admin/company users without employee_id — return basic info from app_users
     if (!employee_id || Number.isNaN(employee_id)) {
-      return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+      const userId = user.user_id || user.id || user.userId;
+      if (!userId) {
+        return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+      }
+
+      const adminSql = `
+        SELECT id, username, role, company_id, is_active, profile_status,
+               created_at
+        FROM public.app_users
+        WHERE id = $1
+        LIMIT 1
+      `;
+      const adminResult = await q(adminSql, [userId]);
+      const adminRow = (adminResult.rows && adminResult.rows[0]) || null;
+
+      if (!adminRow) {
+        return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+      }
+
+      return res.json({
+        ok: true,
+        exists: false,
+        is_admin: true,
+        profile: {
+          employee_id: null,
+          employee_code: null,
+          first_name: adminRow.username,
+          last_name: null,
+          is_active: adminRow.is_active,
+          role_code: adminRow.role,
+          trade_code: null,
+          rank_code: null,
+          phone: null,
+          home_address: null,
+          home_unit: null,
+          city: null,
+          postal_code: null,
+          emergency_contact_name: null,
+          emergency_contact_phone: null,
+          emergency_contact_relationship: null,
+          profile_status: adminRow.profile_status,
+        },
+      });
     }
 
     const sql = `
