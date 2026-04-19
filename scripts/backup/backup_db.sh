@@ -56,12 +56,14 @@ log "===== Starting backup for database '$DB_NAME' ====="
 DUMP_FILE="$TMP_DIR/mepdb_${DATE}.sql"
 log "Running pg_dump..."
 export PGPASSWORD="$DB_PASSWORD"
+# Note: ownership info is INCLUDED (no --no-owner) so restore as postgres
+# superuser correctly reassigns objects back to mepuser. Required because
+# PostGIS extension creation needs superuser at restore time.
 pg_dump \
     -U "$DB_USER" \
     -h "$DB_HOST" \
     -p "$DB_PORT" \
     -d "$DB_NAME" \
-    --no-owner \
     --clean \
     --if-exists \
     --format=plain \

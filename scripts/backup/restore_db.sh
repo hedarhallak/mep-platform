@@ -25,9 +25,14 @@ CONFIG_FILE="/etc/mep-backup.env"
 # shellcheck source=/dev/null
 source "$CONFIG_FILE"
 : "${DB_USER:?DB_USER not set}"
-: "${DB_PASSWORD:?DB_PASSWORD not set}"
 : "${DB_HOST:=localhost}"
 : "${DB_PORT:=5432}"
+
+# Note: restore uses `sudo -u postgres psql` (peer auth, no password needed).
+# Postgres superuser is required because dump contains CREATE EXTENSION (PostGIS),
+# which only superusers can run. Object ownership is preserved from the dump
+# so tables end up owned by $DB_USER as in production.
+PSQL_AS_SUPER="sudo -u postgres psql"
 
 if [ $# -lt 1 ]; then
     cat <<EOF
@@ -92,16 +97,14 @@ if [ "$confirm" != "yes" ]; then
     exit 1
 fi
 
-export PGPASSWORD="$DB_PASSWORD"
-
 echo "==> Dropping + recreating '$TARGET_DB' ..."
-psql -U "$DB_USER" -h "$DB_HOST" -p "$DB_PORT" -d postgres -c "DROP DATABASE IF EXISTS \"$TARGET_DB\";"
-psql -U "$DB_USER" -h "$DB_HOST" -p "$DB_PORT" -d postgres -c "CREATE DATABASE \"$TARGET_DB\";"
+$PSQL_AS_SUPER -d postgres -c "DROP DATABASE IF EXISTS \"$TARGET_DB\";"
+$PSQL_AS_SUPER -d postgres -c "CREATE DATABASE \"$TARGET_DB\" OWNER \"$DB_USER\";"
 
 echo "==> Restoring (this may take a minute) ..."
-psql -U "$DB_USER" -h "$DB_HOST" -p "$DB_PORT" -d "$TARGET_DB" -v ON_ERROR_STOP=1 -f "$LOCAL_SQL" > /dev/null
-
-unset PGPASSWORD
+# Restore as postgres superuser so CREATE EXTENSION (PostGIS) works.
+# Object ownership statements in the dump will assign tables back to $DB_USER.
+$PSQL_AS_SUPER -d "$TARGET_DB" -v ON_ERROR_STOP=1 -f "$LOCAL_SQL" > /dev/null
 
 echo ""
 echo "==> Restore complete. Database: $TARGET_DB"
