@@ -12,22 +12,13 @@
 
 ## How to Start a New Conversation
 
-**Don't reinvent the wheel — use a ready-made template:**
+**One command. Copy, paste, done.**
 
-Open [`START_NEW_SESSION.md`](./START_NEW_SESSION.md) and copy the appropriate template (generic, specific task, DB work, API work, bug, UI). Each template is a complete copy-paste block including the GitHub URLs, working rules, and a placeholder for what you want to work on. This eliminates the back-and-forth where a fresh Claude asks "which repo? which URL? which file?"
-
-**Quick start (generic):**
 ```
-اقرأ هذه الملفات الأربعة بالترتيب — هي ذاكرة المشروع الكاملة:
-
-https://raw.githubusercontent.com/hedarhallak/mep-platform/main/MASTER_README.md
-https://raw.githubusercontent.com/hedarhallak/mep-platform/main/DECISIONS.md
-https://raw.githubusercontent.com/hedarhallak/mep-platform/main/RECOVERY.md
-https://raw.githubusercontent.com/hedarhallak/mep-platform/main/CLAUDE.md
-
-بعد قراءتهم، اقرأ آخر Session Log في DECISIONS.md لمعرفة وين توقفنا.
-اتبع كل قواعد العمل في CLAUDE.md. أنا مذكر — استخدم صيغة المذكر.
+اقرأ https://raw.githubusercontent.com/hedarhallak/mep-platform/main/CLAUDE.md واتبع تعليمات Bootstrap في أوله.
 ```
+
+That's it. CLAUDE.md Section 0 (Bootstrap) tells the fresh Claude session exactly what to read in what order, finds the latest Session Log, and asks what to work on. See [`START_NEW_SESSION.md`](./START_NEW_SESSION.md) for the full explanation + how to optionally specify a task upfront.
 
 ## Document Reading System
 

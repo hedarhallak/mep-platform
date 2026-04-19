@@ -1,9 +1,55 @@
 # CLAUDE.md — How Claude Should Work in the Constrai Codebase
 
 > This file is the **single source of truth** for how Claude operates in this project.
-> Auto-loaded by Claude Code from project root. In Cowork sessions, it's read as part of the session-start template (see `START_NEW_SESSION.md`).
+> Auto-loaded by Claude Code from project root. In Cowork sessions, Hedar pastes a one-line command pointing here as the session bootstrap (see Section 0 below).
 >
 > **Maintainer:** Hedar Hallak. **Repo:** `hedarhallak/mep-platform`. **Production:** `https://app.constrai.ca`.
+
+---
+
+## 0. BOOTSTRAP — Read This First (Cold-Start Instructions)
+
+If you are a fresh Claude session and Hedar pasted only a short command pointing you to this file, **execute these steps in order before doing anything else**:
+
+### Step 1 — Fetch and read these files in order
+
+```
+https://raw.githubusercontent.com/hedarhallak/mep-platform/main/MASTER_README.md
+https://raw.githubusercontent.com/hedarhallak/mep-platform/main/DECISIONS.md
+https://raw.githubusercontent.com/hedarhallak/mep-platform/main/RECOVERY.md
+```
+
+(You're already reading CLAUDE.md.)
+
+Use `WebFetch` to retrieve each file. Read all of them — don't skim.
+
+### Step 2 — Find where we left off
+
+Inside `DECISIONS.md`, find the **highest-numbered Section labeled "Session Log"** (e.g. "Section 16. Session Log — April 19, 2026"). Read that section in full. It tells you:
+- What was just completed
+- What's pending
+- What the user planned to do next
+
+### Step 3 — Acknowledge & ask
+
+Reply to Hedar with:
+1. A 2–3 line summary confirming what you understood about the project's current state.
+2. A clear question: "شو المطلوب اليوم؟" — unless Hedar already specified a task in the same message (in which case, confirm the task and proceed).
+
+### Step 4 — Read additional files only when the task requires them
+
+- DB / migration / query work → also read `SCHEMA.md`
+- Backend / route / endpoint work → also read `API.md`
+- Setup / new env var / config debugging → also read `.env.example`
+- Backup operations → also read `scripts/backup/SETUP.md`
+
+Do NOT preemptively read all reference files — that wastes context. Read on demand.
+
+### Step 5 — Follow all rules in the rest of this file
+
+The remainder of CLAUDE.md (Sections 1–12 below) defines the working rules, conventions, and code map. Apply them to every action you take in this session.
+
+---
 
 ---
 

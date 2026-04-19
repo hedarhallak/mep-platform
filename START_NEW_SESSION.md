@@ -1,174 +1,76 @@
 # How to Start a New Claude Conversation for Constrai
 
-> **Purpose:** Eliminate the friction of bringing a fresh Claude up to speed.
-> Instead of writing instructions from scratch each time, copy one of the templates below verbatim into the new conversation.
->
-> **Why this exists:** Claude has zero memory between conversations. Every new session starts blank. The MASTER_README.md + DECISIONS.md + RECOVERY.md + CLAUDE.md + SCHEMA.md + API.md files on GitHub are the persistent shared memory. The templates below tell a fresh Claude exactly which files to read, in what order, and what to do next.
+> **The whole system is ONE command.** Save it once, paste it any time.
 
 ---
 
-## Template 1 — Generic Session Start (use 90% of the time)
-
-Copy everything between the lines verbatim:
+## The Command (copy-paste verbatim)
 
 ```
-اقرأ هذه الملفات الأربعة بالترتيب — هي ذاكرة المشروع الكاملة (MEP Platform / Constrai):
-
-https://raw.githubusercontent.com/hedarhallak/mep-platform/main/MASTER_README.md
-https://raw.githubusercontent.com/hedarhallak/mep-platform/main/DECISIONS.md
-https://raw.githubusercontent.com/hedarhallak/mep-platform/main/RECOVERY.md
-https://raw.githubusercontent.com/hedarhallak/mep-platform/main/CLAUDE.md
-
-CLAUDE.md فيه كل قواعد عملك معي + قواعد الكود + خريطة الملفات + الـ Always Suggest Better Tools rule.
-بعد قراءتهم، اقرأ آخر Section في DECISIONS.md (Session Log الأخير) لمعرفة وين توقفنا.
-
-ثم اسألني عن المهمة المحددة لهذه الجلسة قبل ما تبدأ شغل.
-
-أنا مذكر — استخدم صيغة المذكر بالعربي.
+اقرأ https://raw.githubusercontent.com/hedarhallak/mep-platform/main/CLAUDE.md واتبع تعليمات Bootstrap في أوله.
 ```
+
+That's it. One line.
+
+The receiving Claude will:
+1. Fetch CLAUDE.md
+2. Follow Section 0 (Bootstrap) which tells it to read MASTER_README, DECISIONS, RECOVERY in order
+3. Find the latest Session Log to know where you left off
+4. Ask you what to work on today
 
 ---
 
-## Template 2 — Continue a Specific Pending Task
+## Optional: Specify the Task Upfront
 
-Use when you know exactly what you want to work on. Replace `<TASK>` with what you want.
+If you already know what you want to work on, add it as a second line:
 
 ```
-اقرأ هذه الملفات الأربعة بالترتيب — هي ذاكرة المشروع الكاملة:
+اقرأ https://raw.githubusercontent.com/hedarhallak/mep-platform/main/CLAUDE.md واتبع تعليمات Bootstrap في أوله.
 
-https://raw.githubusercontent.com/hedarhallak/mep-platform/main/MASTER_README.md
-https://raw.githubusercontent.com/hedarhallak/mep-platform/main/DECISIONS.md
-https://raw.githubusercontent.com/hedarhallak/mep-platform/main/RECOVERY.md
-https://raw.githubusercontent.com/hedarhallak/mep-platform/main/CLAUDE.md
-
-نريد نكمل من <TASK>. السياق المحدد:
-<اكتب 1-3 أسطر عن وين توقفنا وشو المتوقع>
-
-اتبع كل قواعد العمل في CLAUDE.md. أنا مذكر.
+اليوم نكمل: <اكتب المهمة هنا>
 ```
 
-**Examples for `<TASK>`:**
-- "DECISIONS.md Section 14 Layer 3 hardening — Password Manager + Emergency Access"
-- "Web Frontend bilingual EN/FR setup (mirror of mobile i18n)"
-- "Material Surplus System design (DECISIONS.md Section 8)"
-- "Add new endpoint for X feature"
+**Examples for the second line:**
+- `اليوم نكمل Layer 3 hardening (Password Manager + Emergency Access)`
+- `اليوم نضيف endpoint جديد لـ X feature`
+- `اليوم في bug في الموبايل: <وصف>`
+- `اليوم نشتغل على web frontend i18n`
+
+Claude reads the bootstrap, then sees your specified task, and pulls in any extra reference files needed (SCHEMA.md for DB work, API.md for backend, etc.) automatically.
 
 ---
 
-## Template 3 — DB / Schema Work
+## Why This Works
 
-When working on database, queries, migrations, or anything touching tables.
-
-```
-اقرأ هذه الملفات بالترتيب:
-
-https://raw.githubusercontent.com/hedarhallak/mep-platform/main/MASTER_README.md
-https://raw.githubusercontent.com/hedarhallak/mep-platform/main/CLAUDE.md
-https://raw.githubusercontent.com/hedarhallak/mep-platform/main/SCHEMA.md
-https://raw.githubusercontent.com/hedarhallak/mep-platform/main/DECISIONS.md
-
-أحتاج أعمل تعديل/استعلام/migration على الـ database. التفاصيل:
-<اكتب ما تريد>
-
-تذكر: الـ user table اسمه `app_users` وليس `users`. اتبع conventions في CLAUDE.md.
-أنا مذكر.
-```
+- **One thing to remember.** No template selection. No fill-in-the-blanks.
+- **Intelligence on Claude's side, not yours.** CLAUDE.md tells fresh Claude exactly which files to read and in what order.
+- **Self-updating.** When we add new files or change the bootstrap procedure, we update CLAUDE.md once. The command you save never changes.
+- **Works from any device, any platform.** All the state lives in GitHub. Even if your laptop dies mid-session, you open Claude on another device, paste the command, continue.
 
 ---
 
-## Template 4 — API / Backend Work
+## What If Claude Doesn't Follow the Bootstrap?
 
-When working on routes, endpoints, or backend logic.
-
-```
-اقرأ هذه الملفات بالترتيب:
-
-https://raw.githubusercontent.com/hedarhallak/mep-platform/main/MASTER_README.md
-https://raw.githubusercontent.com/hedarhallak/mep-platform/main/CLAUDE.md
-https://raw.githubusercontent.com/hedarhallak/mep-platform/main/API.md
-https://raw.githubusercontent.com/hedarhallak/mep-platform/main/SCHEMA.md
-https://raw.githubusercontent.com/hedarhallak/mep-platform/main/DECISIONS.md
-
-أحتاج أعمل تعديل/إضافة على الـ backend API:
-<اكتب ما تريد>
-
-اتبع conventions في CLAUDE.md (لا أرابيك في الكود، ملفات كاملة، إلخ). أنا مذكر.
-```
+Very rare, but if a fresh Claude misreads or skips Bootstrap:
+- Reply: "اقرأ Section 0 في CLAUDE.md من جديد ونفذ خطواتها بالترتيب"
+- That should reset it.
 
 ---
 
-## Template 5 — Bug or Production Incident
+## Where to Save the Command
 
-Use when production has a problem and you need help debugging.
+Pick whichever is easiest for you to access from any new conversation:
 
-```
-اقرأ هذه الملفات الأربعة:
+1. **Sticky note on desktop** (low-tech, always visible)
+2. **Saved snippet in your text expander** (TextBlaze, PhraseExpress) — type `;constrai` and it expands
+3. **Pinned in your browser bookmarks** as a note
+4. **At the top of your password manager** as a "Quick Note"
+5. **Pinned message in your own Slack/Discord/notes app**
 
-https://raw.githubusercontent.com/hedarhallak/mep-platform/main/MASTER_README.md
-https://raw.githubusercontent.com/hedarhallak/mep-platform/main/DECISIONS.md
-https://raw.githubusercontent.com/hedarhallak/mep-platform/main/RECOVERY.md
-https://raw.githubusercontent.com/hedarhallak/mep-platform/main/CLAUDE.md
-
-عندي مشكلة في الإنتاج:
-
-الأعراض:
-<صف ما يحدث>
-
-السلوك المتوقع:
-<صف ما المفروض يحدث>
-
-ما جربت لحد الآن:
-<اذكر الخطوات اللي حاولتها>
-
-السيرفر: ssh root@143.110.218.84 (Ubuntu 24.04)
-ابدأ بسؤالي عن المعلومات اللي تحتاجها لتشخيص المشكلة قبل ما تقترح أي حل.
-
-اتبع debug protocol في CLAUDE.md Section 9. أنا مذكر.
-```
-
----
-
-## Template 6 — UI / Design Work
-
-Use when working on web frontend or mobile UI.
-
-```
-اقرأ هذه الملفات:
-
-https://raw.githubusercontent.com/hedarhallak/mep-platform/main/MASTER_README.md
-https://raw.githubusercontent.com/hedarhallak/mep-platform/main/CLAUDE.md
-https://raw.githubusercontent.com/hedarhallak/mep-platform/main/DECISIONS.md
-
-أحتاج أعمل شي على الـ UI:
-<اكتب ما تريد — ويب أو موبايل>
-
-تذكير: قبل ما تبدأ تكتب كود، اتبع "Always Suggest Better Tools" rule في CLAUDE.md Section 4 — هل في أداة (Plasmic، v0.dev، Figma Make، Lovable) ممكن تنفذها أبسط من اليد؟
-
-UI Law (mobile): icon-grid عبر SubMenuScreen. نظام الألوان من src/theme/colors.ts.
-أنا مذكر.
-```
-
----
-
-## Reference: All Files in the Reading System
-
-| Tier | File | When to read |
-|---|---|---|
-| **Always** | `MASTER_README.md` | Every session — project overview + state |
-| **Always** | `DECISIONS.md` | Every session — decisions + Session Logs |
-| **Always** | `RECOVERY.md` | Every session — operational knowledge |
-| **Always** | `CLAUDE.md` | Every session — Claude-specific rules |
-| **On demand** | `SCHEMA.md` | DB / migration / query work |
-| **On demand** | `API.md` | Backend / routes / endpoint work |
-| **On demand** | `.env.example` | Setup / new env var / debugging config |
-| **On demand** | `scripts/backup/SETUP.md` | DB backup operations / restore drills |
-| **Reference** | `START_NEW_SESSION.md` | This file — copy a template |
+The Password Manager option is recommended — you'll already be opening it for credentials anyway.
 
 ---
 
 ## Maintenance
 
-- **Add a new template** when you discover a new "type" of conversation that benefits from one.
-- **The templates are deliberately verbose** — better to over-specify than under-specify when the receiver has zero context.
-- **GitHub URL pattern:** `https://raw.githubusercontent.com/hedarhallak/mep-platform/main/<filename>`
-- After editing this file: commit + push to GitHub (auto-checkpoint rule from MASTER_README #21).
+This file rarely changes. The bootstrap procedure lives in [`CLAUDE.md`](./CLAUDE.md) Section 0 — update there if the workflow needs to evolve. The one-line command in this doc stays the same.

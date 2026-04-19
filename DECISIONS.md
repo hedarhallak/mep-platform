@@ -650,3 +650,14 @@ The agent returned structured data; I then organized it into the three reference
 - Resume Layer 3 hardening (Password Manager + Emergency Access) — see Section 14
 - Move `do-spaces-keys.txt` from desktop into Password Manager + delete the file
 - The "tooling exploration" for UI design (Plasmic vs v0.dev vs Figma Make vs Lovable) — Hedar wants a dedicated session on this
+
+### Late-session insight (April 19, 2026):
+Hedar pushed back on the 6-template START_NEW_SESSION.md design — said it was over-engineered. He's right. The cognitive load was on him to pick a template. The smart design is ONE simple command that puts intelligence on Claude's side.
+
+**Redesigned:**
+- Added `## 0. BOOTSTRAP` section at the top of CLAUDE.md with explicit cold-start instructions for fresh sessions
+- Simplified `START_NEW_SESSION.md` to ONE command (4 lines total in the doc, the command itself is one line)
+- Updated MASTER_README.md "How to Start a New Conversation" to show the one-line command
+- The user now saves a single line of text and pastes it any time. Optional second line specifies the task.
+
+**Lesson for future Claude (encoded in CLAUDE.md Rule #4 / Section 4):** When designing a workflow for Hedar, ask "is the cognitive load on me or on him?" and minimize his load. Multiple options + selection = friction. One command + intelligent dispatch = friction-free.
