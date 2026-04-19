@@ -104,7 +104,8 @@ $PSQL_AS_SUPER -d postgres -c "CREATE DATABASE \"$TARGET_DB\" OWNER \"$DB_USER\"
 echo "==> Restoring (this may take a minute) ..."
 # Restore as postgres superuser so CREATE EXTENSION (PostGIS) works.
 # Object ownership statements in the dump will assign tables back to $DB_USER.
-$PSQL_AS_SUPER -d "$TARGET_DB" -v ON_ERROR_STOP=1 -f "$LOCAL_SQL" > /dev/null
+# Pipe via stdin (cat) because postgres OS user cannot read root's $TMP_DIR.
+cat "$LOCAL_SQL" | $PSQL_AS_SUPER -d "$TARGET_DB" -v ON_ERROR_STOP=1 > /dev/null
 
 echo ""
 echo "==> Restore complete. Database: $TARGET_DB"
