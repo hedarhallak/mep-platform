@@ -232,10 +232,13 @@ requests status → SENT
 | Auth: Secure storage (mobile) | expo-secure-store replaces AsyncStorage for tokens | April 16, 2026 |
 | Web centralized theme | index.css @theme + Tailwind v4 CSS variables (--color-primary-*) | April 16, 2026 |
 | Web indigo→primary migration | All 19 source files: indigo-* classes replaced with primary-* theme classes | April 16, 2026 |
-| DB backup storage | DigitalOcean Spaces, bucket `constrai-backups`, region NYC3 | April 18, 2026 |
+| DB backup storage | DigitalOcean Spaces, bucket `constrai-backups`, region **TOR1** (Toronto, same as Droplet) | April 19, 2026 |
 | DB backup retention | 7 daily + 4 weekly + 3 monthly | April 18, 2026 |
 | DB backup tooling | s3cmd + pg_dump, scripts in `scripts/backup/`, config in `/etc/mep-backup.env` (chmod 600) | April 18, 2026 |
-| DB backup schedule | Cron 03:00 daily (backup) + 03:30 daily (retention cleanup), server timezone | April 18, 2026 |
+| DB backup schedule | Cron 07:00 UTC daily (backup) + 07:30 UTC daily (retention cleanup) — server runs UTC, equals 03:00 Quebec EDT | April 19, 2026 |
+| DB restore strategy | Use `sudo -u postgres psql` (peer auth) — required for `CREATE EXTENSION postgis` superuser permission. Pipe SQL via stdin to bypass /tmp permission issues. | April 19, 2026 |
+| pg_dump options | `--clean --if-exists` (drops + recreates objects on restore). Ownership preserved (no `--no-owner`) so tables end up owned by `mepuser` after restore. | April 19, 2026 |
+| Spaces Access Key | Limited Access scoped to single bucket only with Read/Write/Delete (principle of least privilege) | April 19, 2026 |
 | Recovery documentation | `RECOVERY.md` at repo root — full DR + bus-factor mitigation playbook | April 18, 2026 |
 
 ---
@@ -578,10 +581,30 @@ Mobile dev environment crashed on Hedar's laptop and had to be reinstalled. Some
   - Added technical decisions for backup tooling
   - Added Section 15 (this session log)
 
+### Final state (end of session, April 19):
+- ✅ DigitalOcean Spaces bucket `constrai-backups` created in **TOR1 region** (not NYC3 as originally documented). Private (File Listing: Restricted), CDN disabled.
+- ✅ Spaces Access Key `mep-backup-key` created with **Limited Access** scoped to `constrai-backups` only, permissions `Read/Write/Delete`. Keys currently in `do-spaces-keys.txt` on user's desktop (TODO: move to password manager + delete file).
+- ✅ Server fully configured: s3cmd installed + configured for TOR1 endpoint, `/etc/mep-backup.env` created (mode 600 root-only) with real DB credentials, scripts pulled and made executable, log file initialized.
+- ✅ First manual backup ran successfully: 700K raw → 56K compressed, uploaded to Spaces, also auto-copied to weekly folder (was Sunday).
+- ✅ Cron jobs scheduled at 07:00 UTC (= 03:00 Quebec EDT) for backup + 07:30 UTC for retention cleanup.
+- ✅ End-to-end restore test passed: row counts match production (app_users: 51, companies: 1, employee_profiles: 50, assignment_requests: 58), table ownership preserved as `mepuser`.
+
+### Issues discovered + fixed during testing:
+1. **PostGIS extension restore failure** — original `restore_db.sh` used `mepuser` for restore, but `CREATE EXTENSION postgis` requires superuser. Fixed: restore script now uses `sudo -u postgres psql` (peer auth, no password). Also removed `--no-owner` from `pg_dump` so ownership is preserved through the restore.
+2. **`Permission denied` reading SQL file from root's tmp dir** — postgres OS user couldn't access `/tmp/mep-restore-XXX/*.sql`. Fixed: restore script now pipes SQL via `cat | psql` instead of `psql -f`.
+3. **`git pull` fails with "would be overwritten"** — `chmod +x` on the server registers as a file-mode change in git. Workaround documented: `git checkout scripts/backup/ && git pull && chmod +x scripts/backup/*.sh`.
+4. **`s3cmd --configure` test fails with `403 AccessDenied`** — expected behavior with Limited Access keys (no `s3:ListAllMyBuckets` permission). Documented in SETUP.md as expected; verify via `s3cmd ls s3://constrai-backups/` against the specific bucket instead.
+5. **DigitalOcean UI changes** — Spaces Access Keys are no longer at `/account/api/spaces` (which redirects to API tokens page). Correct path: Spaces Object Storage → Access Keys tab.
+
 ### Pending (next steps for Hedar):
-- Execute `scripts/backup/SETUP.md` Parts 1–2 (create Spaces bucket, configure server, run first backup)
-- Execute `scripts/backup/SETUP.md` Part 3 (one-time restore test to validate backups are usable)
-- Begin working through `RECOVERY.md` Section 10 — Critical hardening items (password manager emergency access, Apple ID recovery contacts, Droplet snapshots, second GitHub admin)
+- 🔴 **Critical hardening — do this next session:**
+  1. Move `do-spaces-keys.txt` contents from desktop into a password manager (Bitwarden/1Password). Delete the desktop file after.
+  2. Set up password manager emergency access for one trusted contact.
+  3. Enable DigitalOcean Droplet weekly snapshots ($2/month).
+  4. Add Apple ID 2FA recovery contacts.
+  5. Add a second GitHub collaborator with admin rights.
+- 🟡 Optional: set up healthchecks.io dead-man's-switch (SETUP.md Part 4).
+- 🟡 Server has a pending kernel update — schedule a reboot for off-hours.
 
 ### Pending Discussion (future sessions):
 - Second technical contact — who, what level of involvement, NDA?

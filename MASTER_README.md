@@ -96,13 +96,15 @@ MEP Platform (Constrai) is a Quebec construction workforce ERP for MEP companies
 - Status flow: PENDING → SENT → READ → ACKNOWLEDGED
 - material_requests: status flow PENDING → SENT (after Foreman sends PO)
 
-### Backups (April 2026)
-- Automated daily pg_dump → DigitalOcean Spaces (`constrai-backups`, region NYC3)
+### Backups (deployed April 19, 2026 — fully tested end-to-end)
+- Automated daily pg_dump → DigitalOcean Spaces (`constrai-backups`, region **TOR1**)
 - Retention: 7 daily + 4 weekly + 3 monthly
 - Scripts: `scripts/backup/{backup_db.sh, cleanup_old_backups.sh, restore_db.sh}`
 - Setup + operations guide: `scripts/backup/SETUP.md`
-- Cron: 03:00 daily (backup) + 03:30 daily (cleanup)
+- Cron: 07:00 UTC daily (backup) + 07:30 UTC daily (cleanup) = 03:00 Quebec EDT
 - Config (secrets): `/etc/mep-backup.env` (mode 600, root-only)
+- Restore uses `sudo -u postgres psql` (superuser required for PostGIS extension)
+- Verified: full restore tested, row counts match production, ownership preserved
 
 ### Disaster Recovery
 - Full DR playbook: `RECOVERY.md` at repo root

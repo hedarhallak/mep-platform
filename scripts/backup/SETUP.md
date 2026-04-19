@@ -16,7 +16,7 @@
 1. Go to https://cloud.digitalocean.com/spaces
 2. Click **Create a Space**
 3. Settings:
-   - **Datacenter region:** `NYC3` (closest to Montreal; change if you prefer)
+   - **Datacenter region:** `TOR1` (Toronto — closest to Quebec, same region as the Droplet for low-latency transfer, keeps data in Canada)
    - **Enable CDN:** No (not needed for backups)
    - **Restrict File Listing:** Yes (private)
    - **Space name:** `constrai-backups`
@@ -64,9 +64,9 @@ Answer the prompts as follows (press Enter for anything not listed):
 |---|---|
 | Access Key | `<paste Access Key from step 1.2>` |
 | Secret Key | `<paste Secret Key from step 1.2>` |
-| Default Region | `nyc3` |
-| S3 Endpoint | `nyc3.digitaloceanspaces.com` |
-| DNS-style bucket+hostname | `%(bucket)s.nyc3.digitaloceanspaces.com` |
+| Default Region | `tor1` |
+| S3 Endpoint | `tor1.digitaloceanspaces.com` |
+| DNS-style bucket+hostname | `%(bucket)s.tor1.digitaloceanspaces.com` |
 | Encryption password | *(leave empty, just press Enter)* |
 | Path to GPG program | *(default)* |
 | Use HTTPS protocol | `Yes` |
@@ -74,7 +74,9 @@ Answer the prompts as follows (press Enter for anything not listed):
 | Test access with supplied credentials | `Y` |
 | Save settings | `y` |
 
-> If the test fails, re-run `s3cmd --configure` and double-check the endpoint values.
+> **Expected behavior with Limited Access keys:** the test will fail with `403 AccessDenied: Are you sure your keys have s3:ListAllMyBuckets permissions?` — this is correct and expected. Limited Access keys are scoped to a single bucket and don't have account-wide list permissions. Choose `n` (don't retry) and `y` (save settings), then verify against the specific bucket below.
+>
+> If you see any other error (network failure, authentication error, etc.), re-run `s3cmd --configure` and double-check the endpoint values.
 
 Quick smoke test — list your bucket (should return an empty listing):
 ```bash
@@ -155,12 +157,14 @@ crontab -e
 
 Add these lines at the bottom:
 ```cron
-# MEP DB backup — daily 03:00 server time
-0 3 * * * /var/www/mep/scripts/backup/backup_db.sh >> /var/log/mep-backup.log 2>&1
+# MEP DB backup — daily 07:00 UTC (= 03:00 Quebec EDT / 02:00 EST)
+0 7 * * * /var/www/mep/scripts/backup/backup_db.sh >> /var/log/mep-backup.log 2>&1
 
-# MEP DB retention cleanup — daily 03:30 (after backup finishes)
-30 3 * * * /var/www/mep/scripts/backup/cleanup_old_backups.sh >> /var/log/mep-backup.log 2>&1
+# MEP DB retention cleanup — daily 07:30 UTC (after backup finishes)
+30 7 * * * /var/www/mep/scripts/backup/cleanup_old_backups.sh >> /var/log/mep-backup.log 2>&1
 ```
+
+> Server time is UTC. We schedule at `07:00 UTC` so backups run during the early-morning quiet window in Quebec (3 AM EDT / 2 AM EST), well outside business hours.
 
 Save and exit (Ctrl+O, Enter, Ctrl+X in nano).
 
@@ -274,9 +278,12 @@ pm2 start mep-backend
 | Symptom | Likely cause / fix |
 |---|---|
 | `s3cmd: command not found` | `apt-get install -y s3cmd` |
-| `access denied` on s3cmd | Re-run `s3cmd --configure`; check keys, endpoint `nyc3.digitaloceanspaces.com` |
+| `access denied` on s3cmd | Re-run `s3cmd --configure`; check keys, endpoint `tor1.digitaloceanspaces.com` |
 | `pg_dump: role does not exist` | Check `DB_USER` in `/etc/mep-backup.env` |
 | `pg_dump: password authentication failed` | Check `DB_PASSWORD` in `/etc/mep-backup.env` |
 | Backups run but nothing appears in Spaces | Check `SPACES_BUCKET` name matches exactly |
 | Log shows `another backup is already running` | A previous run is stuck — `rm /var/run/mep-backup.lock` |
 | Cron runs but backups don't appear | Check the cron user (should be root) — `sudo crontab -l` |
+| Restore: `permission denied to create extension "postgis"` | Restore must use postgres superuser. Confirm `restore_db.sh` uses `sudo -u postgres psql` (already fixed in current version) |
+| Restore: `psql: error: ... Permission denied` reading SQL file | postgres OS user can't read root's `/tmp` dirs. Confirm restore script pipes via `cat \| psql` (already fixed in current version) |
+| `git pull` fails with "would be overwritten" on `scripts/backup/*.sh` | File-mode (chmod +x) drift. Run `git checkout scripts/backup/ && git pull && chmod +x scripts/backup/*.sh` |
