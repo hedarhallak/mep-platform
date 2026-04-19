@@ -11,11 +11,37 @@
 ---
 
 ## How to Start a New Conversation
-Paste these two URLs at the start:
+
+**Don't reinvent the wheel — use a ready-made template:**
+
+Open [`START_NEW_SESSION.md`](./START_NEW_SESSION.md) and copy the appropriate template (generic, specific task, DB work, API work, bug, UI). Each template is a complete copy-paste block including the GitHub URLs, working rules, and a placeholder for what you want to work on. This eliminates the back-and-forth where a fresh Claude asks "which repo? which URL? which file?"
+
+**Quick start (generic):**
 ```
+اقرأ هذه الملفات الأربعة بالترتيب — هي ذاكرة المشروع الكاملة:
+
 https://raw.githubusercontent.com/hedarhallak/mep-platform/main/MASTER_README.md
 https://raw.githubusercontent.com/hedarhallak/mep-platform/main/DECISIONS.md
+https://raw.githubusercontent.com/hedarhallak/mep-platform/main/RECOVERY.md
+https://raw.githubusercontent.com/hedarhallak/mep-platform/main/CLAUDE.md
+
+بعد قراءتهم، اقرأ آخر Session Log في DECISIONS.md لمعرفة وين توقفنا.
+اتبع كل قواعد العمل في CLAUDE.md. أنا مذكر — استخدم صيغة المذكر.
 ```
+
+## Document Reading System
+
+| Tier | File | When |
+|---|---|---|
+| Always | `MASTER_README.md` | Every session — overview + state |
+| Always | `DECISIONS.md` | Every session — decisions + Session Logs |
+| Always | `RECOVERY.md` | Every session — operational knowledge |
+| Always | `CLAUDE.md` | Every session — Claude-specific rules + code map |
+| On demand | `SCHEMA.md` | DB / migration / query work |
+| On demand | `API.md` | Backend / routes / endpoint work |
+| On demand | `.env.example` | Setup / config / new env var |
+| On demand | `scripts/backup/SETUP.md` | Backup operations |
+| Reference | `START_NEW_SESSION.md` | Templates for opening a new session |
 
 ---
 
@@ -300,3 +326,4 @@ eas submit --platform ios
     - After resolving a non-trivial bug or incident
     - At least once per active hour of work
     This protects against losing progress between sessions or after a crash.
+22. **Always Suggest Better Tools rule (Claude must follow):** Before writing custom code in a NEW area (UI design, monitoring, automation, deployment, AI features, scheduling, etc.), Claude must first check whether a dedicated tool / MCP / SaaS / library already solves it cleanly, and surface that to Hedar BEFORE writing code. Use `search_mcp_registry` first; then web search for 2–3 top options; then present a comparison and recommendation. Rationale: the original workflow (copy-paste files manually) wasted months until Cowork was discovered. Apply the same critical eye to every new area. See CLAUDE.md Section 4 for examples.

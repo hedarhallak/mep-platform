@@ -240,6 +240,12 @@ requests status → SENT
 | pg_dump options | `--clean --if-exists` (drops + recreates objects on restore). Ownership preserved (no `--no-owner`) so tables end up owned by `mepuser` after restore. | April 19, 2026 |
 | Spaces Access Key | Limited Access scoped to single bucket only with Read/Write/Delete (principle of least privilege) | April 19, 2026 |
 | Recovery documentation | `RECOVERY.md` at repo root — full DR + bus-factor mitigation playbook | April 18, 2026 |
+| Documentation reading system | 4 always-read files (MASTER_README, DECISIONS, RECOVERY, CLAUDE) + 5 on-demand files (SCHEMA, API, .env.example, scripts/backup/SETUP, START_NEW_SESSION) | April 19, 2026 |
+| CLAUDE.md | Single source of truth for Claude-specific rules, code conventions, file map. Replaces scattered "Working Rules" duplication. | April 19, 2026 |
+| SCHEMA.md | Full DB schema reference (56 tables grouped by domain, key columns, common queries). Prevents repeated mistakes like assuming `users` instead of `app_users`. | April 19, 2026 |
+| API.md | Full backend endpoint reference (~30 routes organized by domain, with required permissions). | April 19, 2026 |
+| Always Suggest Better Tools rule | New rule (#22 in MASTER_README): before writing custom code in a new area, check for existing tools/MCPs/SaaS first. Triggered by Cowork discovery analogy. | April 19, 2026 |
+| Session start templates | 6 templates in `START_NEW_SESSION.md` (generic, specific task, DB, API, bug, UI) — eliminates cold-start friction in new conversations. | April 19, 2026 |
 
 ---
 
@@ -610,3 +616,37 @@ Mobile dev environment crashed on Hedar's laptop and had to be reinstalled. Some
 - Second technical contact — who, what level of involvement, NDA?
 - Apple Developer Organization account transition — requires business entity decisions
 - Web Frontend i18n (mirror mobile setup) — still on the roadmap from last session
+
+---
+
+## 16. Session Log — April 19, 2026 (later same day)
+
+### Context:
+After successful end-to-end backup deployment, Hedar opened a new conversation to continue with Layer 3 hardening. Discovered that the new Claude session asked clarifying questions despite a "simple" prompt — exposed the cold-start friction problem.
+
+### Discussion that led to this work:
+Hedar made two strategic points:
+1. **Cold-start friction is real** — every new session starts from zero, even with the bootstrap message. Need explicit, copy-paste templates that contain everything a fresh Claude needs.
+2. **Always look for better tools** — the original workflow (manual file copy-paste between chat and disk) wasted months until Cowork was discovered. Apply the same scrutiny to every new area: ask "is there a tool that does this better?" BEFORE writing custom code.
+
+### Completed:
+- Created 4 new documentation files at repo root:
+  - **`CLAUDE.md`** — single source of truth for Claude rules + code conventions + file map. Eliminates duplication that was scattered across MASTER_README and other docs.
+  - **`SCHEMA.md`** — full DB schema reference: 56 tables grouped by 10 domains, key columns, relationships, PostGIS notes, common query patterns. Built from systematic exploration of all 31 migration files.
+  - **`API.md`** — full backend API reference: ~30 routes organized by domain, HTTP methods, required permissions, common workflows. Built from systematic exploration of all 27 route files.
+  - **`.env.example`** — improved (was minimal). Now lists every env var with purpose, format, required/optional, and default.
+- Updated **`START_NEW_SESSION.md`** with 6 templates (generic, specific task, DB, API, bug, UI) — each a complete copy-paste block.
+- Added **MASTER_README.md Rule #22** — Always Suggest Better Tools rule.
+- Updated MASTER_README.md "How to Start a New Conversation" section to reference all new files + show full reading-tier table.
+
+### How the docs were built:
+Used an Explore agent (`Agent` tool with `subagent_type: Explore`) to systematically inventory the codebase:
+- Read every migration in `migrations/` and extracted table definitions
+- Read every route file in `routes/` and extracted endpoints + permissions
+- Searched for all `process.env.*` references to inventory env vars
+The agent returned structured data; I then organized it into the three reference docs. This pattern (Explore → structure → docs) is faster than manual file-by-file reading.
+
+### Pending (next session):
+- Resume Layer 3 hardening (Password Manager + Emergency Access) — see Section 14
+- Move `do-spaces-keys.txt` from desktop into Password Manager + delete the file
+- The "tooling exploration" for UI design (Plasmic vs v0.dev vs Figma Make vs Lovable) — Hedar wants a dedicated session on this
