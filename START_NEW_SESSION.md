@@ -57,6 +57,23 @@ Very rare, but if a fresh Claude misreads or skips Bootstrap:
 
 ---
 
+## Prerequisite: Web Access Must Be Allowed
+
+For the bootstrap to work, the Claude session needs permission to fetch URLs from `raw.githubusercontent.com`. If you see a warning like:
+
+```
+Access to this website is blocked by your network egress settings.
+```
+
+…then your Claude account / workspace has restrictive web access settings that may block the bootstrap from completing.
+
+**Check + fix:**
+1. **Claude desktop app / claude.ai:** Settings → Capabilities → Web Search/Fetch → make sure it's ON. If you're on a Team/Enterprise plan, an admin may need to enable it.
+2. **Cowork mode:** by default WebFetch should work for `raw.githubusercontent.com`. If it doesn't, try: Settings → Network → allowlist `raw.githubusercontent.com`.
+3. **Verify quickly:** in any Claude conversation, paste the bootstrap command. If Claude reads the files without warnings, you're good. If it shows the blocked-network message, fix the setting before relying on the workflow for important sessions.
+
+---
+
 ## Where to Save the Command
 
 Pick whichever is easiest for you to access from any new conversation:

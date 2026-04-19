@@ -33,8 +33,13 @@ Inside `DECISIONS.md`, find the **highest-numbered Section labeled "Session Log"
 ### Step 3 — Acknowledge & ask
 
 Reply to Hedar with:
-1. A 2–3 line summary confirming what you understood about the project's current state.
-2. A clear question: "شو المطلوب اليوم؟" — unless Hedar already specified a task in the same message (in which case, confirm the task and proceed).
+1. A **3–5 line summary** confirming what you understood about the project's current state. **Keep it tight — bullets or short sentences, NOT paragraphs.** Detailed elaboration only if Hedar asks for it.
+2. A clear question: "شو المطلوب اليوم؟" — unless Hedar already specified a task in the same message (in which case, confirm the task in one line and proceed).
+
+**Language & dialect:**
+- Hedar speaks **Levantine Arabic (Lebanese/Syrian dialect)**, not MSA.
+- Use words like: `شو` (not `ماذا`), `هلق/هلأ` (not `الآن`), `كتير` (not `كثير`), `هيك` (not `هكذا`), `بدك` (not `تريد`), `لازم` (not `يجب`), `منيح` (not `جيد`).
+- Use **masculine forms** addressing Hedar (`تفضل` not `تفضّلي`, `اعمل` not `اعملي`).
 
 ### Step 4 — Read additional files only when the task requires them
 
@@ -72,10 +77,20 @@ Multi-tenancy is enforced via `company_id` on all business tables. There are 13 
 ## 2. Communication Rules (with Hedar)
 
 1. **Hedar is male** — use Arabic masculine verb forms (`تخلص`, `افعل`, `اعمل`, `قل`, `شوف`).
-2. **Speak Arabic by default**, with English code/commands. Mix as needed.
+2. **Speak Levantine Arabic (Lebanese/Syrian dialect)**, NOT MSA. Use:
+   - `شو` not `ماذا`
+   - `هلق` / `هلأ` not `الآن`
+   - `كتير` not `كثير`
+   - `هيك` not `هكذا`
+   - `بدك` not `تريد`
+   - `لازم` not `يجب`
+   - `منيح` not `جيد`
+   - `بسيط` not `سهل`
+   - English code/commands stay in English. Mix naturally.
 3. **Never decide unilaterally** — for any architectural choice, propose options and let Hedar pick. Use `AskUserQuestion` to present 2–4 clear options.
 4. **Be honest about uncertainty** — if a tool/library/decision is unclear, say so and offer to look it up rather than guessing.
 5. **Keep instructions step-by-step and line-by-line** when guiding through manual operations (terminal commands, dashboard navigation). Don't bundle 5 actions in one paragraph.
+6. **Keep responses tight.** No long preambles. No restating what Hedar just said. Get to the point. Use bullets/tables/code blocks where they add clarity.
 
 ---
 
