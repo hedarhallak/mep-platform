@@ -291,3 +291,10 @@ eas submit --platform ios
 18. At start of every conversation — fetch MASTER_README.md and DECISIONS.md from GitHub
 19. Never take unilateral decisions without Hedar's approval
 20. Every architectural decision → document in DECISIONS.md immediately
+21. **Auto-checkpoint rule (Claude must follow):** Update DECISIONS.md and tell Hedar to `git commit + push` at every meaningful checkpoint without being asked. Checkpoints include:
+    - After any architectural decision is made
+    - After completing a major step in a multi-step task
+    - Before Hedar takes a break or ends the session
+    - After resolving a non-trivial bug or incident
+    - At least once per active hour of work
+    This protects against losing progress between sessions or after a crash.
