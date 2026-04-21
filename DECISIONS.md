@@ -290,6 +290,7 @@ requests status → SENT
 2. 🔵 Material Return / Surplus System — see Section 8
 3. 🔵 Smart Assignment System
 4. 🔵 Dynamic Permissions UI
+5. 🔵 Assignment enhancements — Hot Work Permit + Site Safety Officer — see Section 16
 ```
 
 ### 5.4 Future Ideas
@@ -616,6 +617,54 @@ Mobile dev environment crashed on Hedar's laptop and had to be reinstalled. Some
 - Second technical contact — who, what level of involvement, NDA?
 - Apple Developer Organization account transition — requires business entity decisions
 - Web Frontend i18n (mirror mobile setup) — still on the roadmap from last session
+
+---
+
+## 15.5. Assignment Feature Enhancements 🔵 (noted April 19, 2026 — details pending)
+
+Hedar flagged two real-world construction requirements that must be integrated into the Assignment workflow before going live with actual customers. Captured here as placeholders — detailed design/implementation will happen in a dedicated session.
+
+### A. Hot Work Permit (رخصة العمل الساخن)
+
+Certain trade operations require a formal permit before work can be performed on-site. Examples mentioned:
+- **Copper brazing (لحام نحاس)** — common in plumbing/HVAC
+- Other hot work: welding, torch cutting, grinding with sparks
+
+**Why it matters (business rule, to be refined with Hedar):**
+- Regulatory / insurance requirement in Quebec construction
+- The foreman/worker must hold a valid permit for the specific type of hot work
+- Assignment creation must check permit validity for the planned work
+- Likely fields on the assignment: `hot_work_required` (bool), `hot_work_type` (enum), `permit_number`, `permit_expiry`, `permit_document_url`
+
+**Open design questions (to discuss):**
+- Is the permit attached to the **employee** (their credential) or the **assignment** (the permit issued for that specific job)?
+- Does Quebec have a central verifiable registry, or is it paper-based?
+- Block assignment creation if permit missing/expired, or warn only?
+
+### B. Site Safety Officer (مسؤول السلامة بالموقع)
+
+For projects above a certain size/risk level, a designated safety officer must be on-site.
+
+**Why it matters (business rule, to be refined with Hedar):**
+- CSST / CNESST (Quebec workplace safety) requirements
+- Specific trades or project sizes trigger the requirement
+- The safety officer is an assignment role in itself
+
+**Open design questions (to discuss):**
+- Is the safety officer a separate `assignment_role` alongside WORKER/FOREMAN/JOURNEYMAN, or a separate entity on the project?
+- One safety officer per project, per shift, or per trade?
+- Required for all projects or only those matching certain criteria (size, trades, hot work)?
+- Can the foreman double as safety officer with appropriate certification, or must they be separate people?
+
+### Implementation scope (when prioritized):
+
+- DB migration: new columns on `assignment_requests` / `assignments` for permit fields, possibly new table for permit credentials per employee
+- New table: `site_safety_assignments` (project_id, employee_id, date_range, certification_ref)
+- Backend validation: assignment creation endpoint checks permit validity + safety officer presence
+- Mobile UI: assignment form adds permit/safety fields conditionally based on trade + project
+- Audit: log any assignment created that bypasses the safety check (exception flow)
+
+### Status: 🔵 Planned — Hedar will walk through the full business rules in a dedicated session before implementation.
 
 ---
 
