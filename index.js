@@ -9,6 +9,11 @@ const rateLimit = require("express-rate-limit");
 const { pool } = require("./db");
 const app = express();
 
+// --- Trust the first reverse proxy (Nginx) ---
+// Required so req.ip and rate-limit key generation use the real client IP
+// from X-Forwarded-For instead of Nginx's loopback address.
+app.set('trust proxy', 1);
+
 // --- Security headers ---
 app.use(helmet({
   contentSecurityPolicy: {
