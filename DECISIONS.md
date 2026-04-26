@@ -710,3 +710,96 @@ Hedar pushed back on the 6-template START_NEW_SESSION.md design — said it was 
 - The user now saves a single line of text and pastes it any time. Optional second line specifies the task.
 
 **Lesson for future Claude (encoded in CLAUDE.md Rule #4 / Section 4):** When designing a workflow for Hedar, ask "is the cognitive load on me or on him?" and minimize his load. Multiple options + selection = friction. One command + intelligent dispatch = friction-free.
+
+---
+
+## 17. Session Log — April 26, 2026
+
+### Context
+Session opened to walk through Constrai menus one-by-one and discuss notes. The very first menu raised a foundational gap (no tenant onboarding lifecycle), which triggered a strategic reset before any code changes. Then a small concrete fix (demo project addresses) was executed.
+
+### Phase 1 — Strategic Discussion (no code changes)
+
+**The gap that triggered the reset:**
+Hedar asked: as SUPER_ADMIN, how do I sign a contract with a new company and provision them in the system as an isolated tenant?
+
+**Investigation findings (`routes/super_admin.js` + middleware):**
+- `POST /api/super/companies` exists and works: creates a company + a single admin user + sends optional welcome email.
+- Multiple gaps identified (all deferred to launch hardening — see "Pending" below):
+  1. Creates `app_users.role = 'ADMIN'` (legacy), not `'COMPANY_ADMIN'`. Mitigated at runtime by `middleware/roles.js` ROLE_ALIASES (ADMIN → COMPANY_ADMIN). Tech debt, not a hard bug.
+  2. New companies start as `status='ACTIVE'`, never `'TRIAL'` (even though TRIAL is a valid status).
+  3. `companies.plan` is just a text field {BASIC/PRO/ENTERPRISE}. No `plans` table, no limits (max_users/projects/employees), no features map.
+  4. No subscription/contract concept — no `subscriptions` table, no start/end dates, no billing.
+  5. COMPANY_ADMIN onboarding flow is weak — PIN sent in email plaintext, no activation link.
+  6. Admin user is created without an `employee_id` — likely breaks code that assumes user = employee.
+
+**Strategic reset:**
+Hedar pushed back on continuing depth-first into super_admin code without a product concept first. Agreed to build a `PRODUCT.md` document at repo root — separate from `MASTER_README.md` (state) and `DECISIONS.md` (decision log) — to define what Constrai IS conceptually before any architectural change. Drafting deferred to next session in favor of shipping a small concrete fix.
+
+**Competitive positioning (vs ProgressionLive, vs Procore):**
+- **ProgressionLive** (Quebec, acquired by Valsoft 2024): task-based + dispatch-driven (reactive field service). Different domain. Strong moat = accounting integrations (Acomba, Sage 50, QuickBooks, Avantage). Cannot be beaten head-on.
+- **Procore:** generic PM platform, expensive, not CCQ-native.
+- **Constrai's positioning:** project-based + assignment-driven workforce ERP for Quebec MEP subs. Moats = CCQ travel allowances, ACQ sectors, CSST/safety, hot-work permits, Law 101.
+
+**The Constrai Vision — 4 pillars (articulated by Hedar):**
+1. **Productivity uplift** — the outcome metric.
+2. **Simplicity** — organizing work with the minimum process.
+3. **Waste reduction** — material + time + effort.
+4. **Quantity takeoff + project performance monitoring** — the destination/advanced layer.
+
+All 4 in scope, but multi-month rollout (NOT one month). Current codebase ≈ 30-40% of the way there (raw data layer: attendance + assignments + materials). Missing: BOQ, planned-vs-actual tracking, waste quantification, productivity KPIs, performance dashboard. These become Constrai's differentiation, not features to copy from competitors.
+
+### Phase 2 — Demo Project Address Fix (executed)
+
+**Goal:** Move 3 demo projects to real, distinct Quebec addresses so the workforce-distribution map demo doesn't show every project at the same point (the "demo embarrassment" reported by Hedar).
+
+**Scope reduction:**
+- Originally proposed: replace 5 projects + reset 50 employees + create new SA/FM/JM hierarchy + delete 2 projects.
+- Hedar reduced scope to: only update 3 project addresses + delete 2 unused projects + keep employees/foremen/users untouched. Reason: minimize disruption now, real cleanup at launch.
+
+**Migration 034 — FAILED:**
+`migrations/034_update_demo_project_addresses.sql` failed with silent error inside its DO safety-check block. Two root causes uncovered:
+- **`SCHEMA.md` documentation bug:** the table is `materials_requests` (plural), not `material_requests`. The safety check referenced the wrong name and aborted the transaction.
+- **Two undocumented FK relationships:** `materials_tickets` and `project_geofences` both reference `projects(id)` with `ON DELETE RESTRICT`. The DELETE step would have failed even if the DO block had passed.
+
+**Migration 035 — SUCCESS (Path A: address-only):**
+`migrations/035_update_demo_project_addresses_v2.sql` applied 3 simple UPDATEs in a transaction. No DELETE, no NULL on coords. Coords are overwritten by a separate force-geocoder.
+
+**Force-geocoder — SUCCESS:**
+`scripts/force_geocode_demo.js` — one-off Node script that targets the 3 specific projects and unconditionally overwrites their `site_lat`/`site_lng` using Nominatim (OpenStreetMap, free, no token). The existing `scripts/geocode_projects.js` couldn't be used as-is because it skips rows that already have non-NULL coords (the demo projects had placeholder coords from the original seed).
+
+PROJ-11 needed an address fix on first run: Nominatim couldn't resolve `"3175 Chem. de la Cote-Sainte-Catherine"` (abbreviated + no accents). Retried with the full spelling and accents → matched perfectly.
+
+**Final demo state (company_id=5):**
+
+| Project | Address | Coords | Source |
+|---|---|---|---|
+| PROJ-11 Alpha   | 3175 Chemin de la Côte-Sainte-Catherine, Montréal | 45.503440, -73.624468 | nominatim-force |
+| PROJ-12 Beta    | 520 Bd Arthur-Sauvé, Saint-Eustache (Hôpital) | 45.571180, -73.914081 | nominatim-force |
+| PROJ-21 Gamma   | 9449 Rue de Tilly, Laval (Aréna St-François) | 45.675721, -73.579957 | nominatim-force |
+| PROJ-22 Delta   | (unchanged — placeholder)                                | 45.559, -73.62        | (none) |
+| PROJ-23 Epsilon | (unchanged — placeholder)                                | 45.559, -73.62        | (none) |
+
+3 active demo projects spread across ~30 km in Greater Montréal / Laval / Saint-Eustache. Map demo no longer collapses to one point.
+
+### Lessons & Documentation Debt
+- **psql display can mislead:** the verification SELECT showed all coords as `45.559 / -73.62`, suggesting all 5 projects were at one point. In reality the column was being truncated in the aligned output — only PROJ-11/22/23 had the placeholder; PROJ-12 and PROJ-21 already had real coords. Always cast to text or use `\x` expanded mode when verifying numeric precision.
+- **`SCHEMA.md` is wrong:** says `material_requests`; actual is `materials_requests`. Plus two tables completely missing: `materials_tickets`, `project_geofences`. **Must fix.**
+- **`API.md` is wrong:** claims `POST /api/projects` and `PATCH /api/projects/:id` "auto-geocode via Mapbox" — false. The route stores `site_address` text only; geocoding is a separate manual step via `scripts/geocode_projects.js` (which uses Nominatim, NOT Mapbox). **Must fix.**
+
+### Pending (next session)
+- Resume `PRODUCT.md` work — write Section 1 capturing the 4-pillar vision + competitive positioning + scope (what's IN, what's OUT).
+- Fix `SCHEMA.md` and `API.md` documentation debt above.
+- Optional cleanup: extend `scripts/geocode_projects.js` to support a `--force` or `--project-codes` flag, then delete the one-off `scripts/force_geocode_demo.js`.
+
+### Deferred to launch hardening (do NOT touch in normal sessions)
+- Delete PROJ-22 and PROJ-23 (after handling `materials_tickets` / `project_geofences` / `materials_requests` rows).
+- Migrate `app_users.role = 'ADMIN'` → `'COMPANY_ADMIN'` and remove the legacy alias.
+- Build the Tenant Lifecycle:
+  - `plans` table (code, name, price_cad, max_users, max_projects, features JSONB)
+  - `subscriptions` table (company_id, plan_id, status, start_date, end_date, trial_ends_at, billing_email, stripe_customer_id)
+  - Extended `companies.status` enum: TRIAL / ACTIVE / PAST_DUE / SUSPENDED / CANCELLED
+  - Proper COMPANY_ADMIN onboarding (activation link, no plaintext PIN in email, link admin to an `employees` row)
+  - Stripe Customer Portal integration (do not build invoicing custom)
+  - Limits enforcement middleware (block create when at max)
+- SUPER_ADMIN web UI: Companies list + New Company wizard + per-company detail (usage vs limits, subscription actions).
