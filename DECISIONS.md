@@ -823,6 +823,43 @@ The `home_location` column being missing from production while 4 routes depend o
 
 The full BI optimization loop is now functional end-to-end.
 
+### Phase 5 — Comprehensive Audit + Security Batch (executed)
+
+After the BI/map work, Hedar requested a full audit before opening the Tenant Lifecycle work. The audit ran via 4 parallel Explore agents (schema-vs-code drift, duplicate fields, dead code, security) and produced `AUDIT_2026-04-26.md` at the repo root with 32 findings categorized by severity.
+
+**Headline discovery — schema diverged from migrations:**
+The audit surfaced that the production DB has been modified manually via psql over time, and the migration files no longer reflect the live schema. Two examples that the live `\d` checks confirmed:
+- `materials_requests` (plural), `materials_tickets`, `materials_request_items`, `materials_ticket_items` — exist on prod, defined in NO migration. Manually created.
+- `project_foremen.foreman_employee_id` and `project_foremen.is_active` — exist on prod, defined in NO migration. Manually added.
+
+**Reframe:** The DB is the source of truth, NOT the migrations. This downgraded several "broken feature" findings to "tech debt — undocumented schema". The fix is a schema baseline (C1) — see Phase 5 work below.
+
+**Fixes applied + deployed (single commit `71bb673`):**
+
+| # | Severity | Description | File |
+|---|---|---|---|
+| C4-C6 + M7 | 🔴/🟡 | Rate limits added: `/api/auth/refresh` (60/15min), `/api/auth/change-pin` (10/15min), `/api/onboarding/*` and `/activate` (30/15min), `/api/super/*` (200/hour) | `index.js` |
+| (added) | 🔴 | `app.set('trust proxy', 1)` so rate limiters use the real client IP from the X-Forwarded-For header (Nginx is in front) — fixes ERR_ERL_UNEXPECTED_X_FORWARDED_FOR validation error | `index.js` |
+| H6 | 🟠 | Upload validated by **magic bytes** (PDF/JPEG/PNG/WebP signatures) instead of trusting the client-supplied MIME header. Filename extension is forced to match the detected type. | `routes/hub.js` |
+| H7-H9 | 🟠 | All user-controlled values in email templates are HTML-escaped via a new `escapeHtml()` helper (alias `e()`) — kills the stored-XSS-via-email vector across welcome, assignment, and PO emails | `lib/email.js` |
+| H10 | 🟠 | Hard cap of 200 recipients per Hub message — prevents batch-DoS via massive `recipient_ids` array | `routes/hub.js` |
+| M9 | 🟡 | Added `FOR UPDATE` to the `user_invites` lookup in `/api/onboarding/complete` — closes the race condition where two concurrent requests could both consume the same invite token | `routes/onboarding.js` |
+| L1-L4 | 🟢 | Deleted dead files: `middleware/adminKey.js`, `middleware/profile_required.js`, `scripts/diag_assignments_v2.js`, `scripts/seed_codes_company_employee.js` (v1, superseded by v2). `lib/geocoding.js` was already absent — the audit's claim was a stale reference. | various |
+| C7 | — | "Parameter index bug" in `routes/onboarding.js` — verified to be a **false positive** from the audit agent. The `params.length-1` / `params.length` arithmetic is correctly evaluated at template-literal construction time, after both pushes. No fix needed. | (none) |
+
+**Verification:** PM2 restart on prod, log flush, and 3 sec wait → error log was **completely empty**. No X-Forwarded-For validation warnings, no other errors. All routes live.
+
+**Remaining for a future "Sprint 2" session (deferred — none of these are critical):**
+- C3 Cross-tenant `/activate` — partly addressed by the new rate limit. A deeper hardening (require fresh session OR no session for the activator) is design-dependent. Acceptable risk for now given strong tokens + single-use + expiry + rate limit.
+- C1 Schema baseline — Hedar to run `pg_dump -s` on prod and commit `db/schema_baseline_2026-04-26.sql`. From that point forward, all schema changes go through `migrations/` only.
+- H1-H5 Materials table consolidation (`materials_requests` plural vs `material_requests` singular) — design decision needed before migration.
+- H11, M5 Drop dead `employees.home_lat/lng` and `employees.phone` — needs a migration after confirming no external SQL writes them.
+- M1, M2, M6 Add sync triggers (or drop duplicates) for `contact_email`, `role_code`, `full_name`.
+- M3 Auto-sync trigger for `home_location` ↔ `home_lat`/`home_lng`.
+- M4 Document the email/username/contact_email semantics; consider consolidation.
+- M8 CSP nonce (drop `'unsafe-inline'`) — needs frontend rebuild + test, may break inline service-worker registration.
+- L5 (optional) Proxy Mapbox API to hide the public token.
+
 ### Lessons & Documentation Debt
 - **psql display can mislead:** the verification SELECT showed all coords as `45.559 / -73.62`, suggesting all 5 projects were at one point. In reality the column was being truncated in the aligned output — only PROJ-11/22/23 had the placeholder; PROJ-12 and PROJ-21 already had real coords. Always cast to text or use `\x` expanded mode when verifying numeric precision.
 - **`SCHEMA.md` is wrong:** says `material_requests`; actual is `materials_requests`. Plus two tables completely missing: `materials_tickets`, `project_geofences`. **Must fix.**
