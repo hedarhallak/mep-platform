@@ -157,7 +157,11 @@ app.use("/api/project-trades",  auth, require("./routes/project_trades"));
 app.use("/api/project-foremen", auth, require("./routes/project_foremen"));
 
 // ── Materials & Purchase Orders ───────────────────────────────
-app.use("/api/materials", auth, loadRouter("./routes/materials"));
+// NOTE (2026-04-26): routes/materials.js (the "v1" daily-ticket workflow)
+// is no longer mounted — verified zero frontend/mobile usage. The active
+// flow is routes/material_requests.js (the merge-and-send-PO workflow).
+// File kept on disk for one sprint as a safety net; delete after no
+// incidents.
 app.use("/api/materials", auth, require("./routes/material_requests"));
 
 // ── Business Intelligence ─────────────────────────────────────
