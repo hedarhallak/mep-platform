@@ -183,7 +183,7 @@ export default function WorkforcePlannerPage() {
                       {/* Employee info */}
                       <div className="flex items-start gap-3 mb-3">
                         <div className="w-9 h-9 rounded-full flex-shrink-0 flex items-center justify-center text-sm font-bold text-white"
-                          style={{ background: tradeColor(s.trade_code).dot }}>
+                          style={{ background: trade(s.trade_code).dot }}>
                           {(s.employee_name || '?')[0]}
                         </div>
                         <div className="flex-1 min-w-0">
