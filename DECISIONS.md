@@ -782,14 +782,41 @@ PROJ-11 needed an address fix on first run: Nominatim couldn't resolve `"3175 Ch
 
 3 active demo projects spread across ~30 km in Greater Montréal / Laval / Saint-Eustache. Map demo no longer collapses to one point.
 
+### Phase 3 — Workforce Planner Map Fix (executed)
+
+**Problem reported by Hedar:** The workforce planner map showed projects but ZERO employees — geographic distribution feature was unusable.
+
+**Root cause (much bigger than expected):**
+- 5 backend files reference `employee_profiles.home_location` as a PostGIS Point: `routes/assignments.js` (3 separate queries), `routes/auto_assign.js`, `routes/onboarding.js`, `routes/profile.js` (defensive — checks `information_schema` first, only consumer that survives), and `seed.js`.
+- **The `home_location` column was never actually created in production.** All 4 non-defensive routes silently 500-error on every request.
+- Additionally, all 50 demo employees had NULL `home_lat` / `home_lng` and placeholder addresses ("Test Address 1" through "Test Address 50"). Even with the route fixed, no data would render.
+
+**Fix strategy chosen:** Align DB with code (add the missing column) instead of editing 4 route files (Path A pattern, consistent with the demo project address fix).
+
+**Migration 036 — SUCCESS:**
+`migrations/036_add_employee_home_location_with_demo_coords.sql`:
+1. `ALTER TABLE employee_profiles ADD COLUMN IF NOT EXISTS home_location geometry(Point, 4326)` + GIST spatial index.
+2. Populated `home_lat` / `home_lng` for the 50 demo employees with random coords in a Greater Montréal bounding box: lat 45.3-45.8, lng -74.0 to -73.4 (~50 km × 50 km, centered near the Montréal/Laval border).
+3. Mirrored lat/lng into the new PostGIS column via `ST_SetSRID(ST_MakePoint(lng, lat), 4326)`.
+
+**Verification:** 50/50 profiles with both lat/lng and PostGIS location. Range realistic (45.3241-45.7976 lat, -73.9941 to -73.4076 lng).
+
+**Result:** Workforce planner map now shows 50 employees scattered across Greater Montréal with the 3 project sites in their midst — exactly the geographic distribution Hedar wanted to demo.
+
+**Architectural insight (significant):**
+The `home_location` column being missing from production while 4 routes depend on it is a sign that **DB schema is out of sync with code expectations**. There may be other columns the code expects that don't exist. Worth a systematic audit at some point — grep the routes for column names, cross-check against `information_schema.columns`. Filed under follow-up.
+
 ### Lessons & Documentation Debt
 - **psql display can mislead:** the verification SELECT showed all coords as `45.559 / -73.62`, suggesting all 5 projects were at one point. In reality the column was being truncated in the aligned output — only PROJ-11/22/23 had the placeholder; PROJ-12 and PROJ-21 already had real coords. Always cast to text or use `\x` expanded mode when verifying numeric precision.
 - **`SCHEMA.md` is wrong:** says `material_requests`; actual is `materials_requests`. Plus two tables completely missing: `materials_tickets`, `project_geofences`. **Must fix.**
 - **`API.md` is wrong:** claims `POST /api/projects` and `PATCH /api/projects/:id` "auto-geocode via Mapbox" — false. The route stores `site_address` text only; geocoding is a separate manual step via `scripts/geocode_projects.js` (which uses Nominatim, NOT Mapbox). **Must fix.**
 
 ### Pending (next session)
+- **Next priority (Hedar's call):** Tenant Lifecycle — adding new companies as SUPER_ADMIN. See "Deferred to launch hardening" below for the full scope; will discuss reduced first-pass scope in next session.
 - Resume `PRODUCT.md` work — write Section 1 capturing the 4-pillar vision + competitive positioning + scope (what's IN, what's OUT).
-- Fix `SCHEMA.md` and `API.md` documentation debt above.
+- Fix `SCHEMA.md` (add `home_location` column to `employee_profiles` doc, fix `material_requests` → `materials_requests`, add `materials_tickets` and `project_geofences` tables).
+- Fix `API.md` (remove the false "auto-geocodes via Mapbox" claim on POST/PATCH /api/projects).
+- Systematic schema-vs-code audit: grep all route files for column references, cross-check against `information_schema.columns`. The `home_location` discovery suggests other columns may also be missing.
 - Optional cleanup: extend `scripts/geocode_projects.js` to support a `--force` or `--project-codes` flag, then delete the one-off `scripts/force_geocode_demo.js`.
 
 ### Deferred to launch hardening (do NOT touch in normal sessions)
