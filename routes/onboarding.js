@@ -79,9 +79,9 @@ router.post("/complete", async (req, res) => {
 
     const tokenHash = hashToken(token);
 
-    // ── Verify token ──────────────────────────────────────────
+    // ── Verify token (FOR UPDATE prevents race-condition double-use) ──
     const inviteRes = await client.query(
-      `SELECT * FROM public.user_invites WHERE token_hash = $1 LIMIT 1`,
+      `SELECT * FROM public.user_invites WHERE token_hash = $1 LIMIT 1 FOR UPDATE`,
       [tokenHash]
     );
 

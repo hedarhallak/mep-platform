@@ -21,6 +21,57 @@ const multer   = require("multer");
 const { pool } = require("../db");
 const { can, logAudit } = require("../middleware/permissions");
 
+// ── Constants ─────────────────────────────────────────────────
+const MAX_RECIPIENTS_PER_MESSAGE = 200; // hard cap to prevent batch DoS
+const ALLOWED_UPLOAD_MIMES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
+
+// Magic-byte signatures for upload validation (defense vs spoofed MIME headers)
+const MAGIC_BYTES = [
+  { mime: 'application/pdf', ext: '.pdf',  match: (b) => b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46 },
+  { mime: 'image/jpeg',      ext: '.jpg',  match: (b) => b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF },
+  { mime: 'image/png',       ext: '.png',  match: (b) => b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4E && b[3] === 0x47 },
+  { mime: 'image/webp',      ext: '.webp', match: (b) => b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50 },
+];
+
+function detectFileType(buffer) {
+  for (const t of MAGIC_BYTES) {
+    if (buffer.length >= 12 && t.match(buffer)) return t;
+  }
+  return null;
+}
+
+// Validate uploaded file by reading magic bytes; deletes file + throws if unsafe
+async function validateUploadedFile(filePath) {
+  let fd;
+  try {
+    fd = await fs.promises.open(filePath, 'r');
+    const buffer = Buffer.alloc(12);
+    await fd.read(buffer, 0, 12, 0);
+    const detected = detectFileType(buffer);
+    if (!detected || !ALLOWED_UPLOAD_MIMES.includes(detected.mime)) {
+      // Delete the unsafe file before throwing
+      await fd.close().catch(() => {});
+      await fs.promises.unlink(filePath).catch(() => {});
+      const err = new Error('UNSAFE_FILE_TYPE');
+      err.code = 'UNSAFE_FILE_TYPE';
+      throw err;
+    }
+    // Force a safe extension based on real content (overrides client-supplied ext)
+    const dir = path.dirname(filePath);
+    const base = path.basename(filePath, path.extname(filePath));
+    const safePath = path.join(dir, base + detected.ext);
+    if (safePath !== filePath) {
+      await fd.close().catch(() => {});
+      fd = null;
+      await fs.promises.rename(filePath, safePath);
+      return { mime: detected.mime, path: safePath, filename: base + detected.ext };
+    }
+    return { mime: detected.mime, path: filePath, filename: path.basename(filePath) };
+  } finally {
+    if (fd) await fd.close().catch(() => {});
+  }
+}
+
 // ── File Upload Setup ─────────────────────────────────────────
 const UPLOAD_DIR = path.join(__dirname, "../uploads/hub");
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -28,8 +79,8 @@ if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, UPLOAD_DIR),
   filename:    (req, file, cb) => {
-    const ext  = path.extname(file.originalname);
-    const name = `${Date.now()}_${Math.random().toString(36).slice(2)}${ext}`;
+    // Do NOT trust client extension; we'll force it after magic-byte detection
+    const name = `${Date.now()}_${Math.random().toString(36).slice(2)}.bin`;
     cb(null, name);
   },
 });
@@ -38,8 +89,8 @@ const upload = multer({
   storage,
   limits: { fileSize: 20 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const allowed = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
-    if (allowed.includes(file.mimetype)) cb(null, true);
+    // First-pass MIME check (cheap; real validation is magic bytes after upload)
+    if (ALLOWED_UPLOAD_MIMES.includes(file.mimetype)) cb(null, true);
     else cb(new Error('Only PDF and images are allowed'));
   },
 });
@@ -141,6 +192,20 @@ router.get("/workers", can("hub.send_tasks"), async (req, res) => {
 //   - If not assigned yet → status = 'PENDING' (deliver when assigned)
 router.post("/messages", can("hub.send_tasks"), upload.single("file"), async (req, res) => {
   const client = await pool.connect();
+  // Validate uploaded file by magic bytes (defends vs spoofed MIME header)
+  let validatedFile = null;
+  if (req.file) {
+    try {
+      validatedFile = await validateUploadedFile(req.file.path);
+      // Update req.file to reflect new path/filename if extension was forced
+      req.file.path = validatedFile.path;
+      req.file.filename = validatedFile.filename;
+      req.file.mimetype = validatedFile.mime;
+    } catch (e) {
+      client.release();
+      return res.status(400).json({ ok: false, error: "UNSAFE_FILE_TYPE", message: "Uploaded file content does not match an allowed type." });
+    }
+  }
   try {
     const {
       title, body, type = "TASK", priority = "NORMAL",
@@ -163,6 +228,14 @@ router.post("/messages", can("hub.send_tasks"), upload.single("file"), async (re
 
     if (!recipients.length) {
       return res.status(400).json({ ok: false, error: "RECIPIENTS_REQUIRED" });
+    }
+
+    if (recipients.length > MAX_RECIPIENTS_PER_MESSAGE) {
+      return res.status(400).json({
+        ok: false,
+        error: "TOO_MANY_RECIPIENTS",
+        message: `Maximum ${MAX_RECIPIENTS_PER_MESSAGE} recipients per message.`,
+      });
     }
 
     const projectIdNum = project_id ? Number(project_id) : null;

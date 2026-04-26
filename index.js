@@ -29,7 +29,7 @@ app.use(helmet({
 // --- Body parsing ---
 app.use(express.json());
 
-// --- Rate limiting on auth endpoints ---
+// --- Rate limiting ---
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
@@ -37,8 +37,50 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
   message: { ok: false, error: "TOO_MANY_REQUESTS", message: "Too many attempts, please try again later." },
 });
-app.use("/api/auth/login",  authLimiter);
-app.use("/api/auth/signup", authLimiter);
+
+// Refresh endpoint — moderate limit to prevent token brute-force
+const refreshLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { ok: false, error: "TOO_MANY_REQUESTS" },
+});
+
+// PIN change — strict (prevents stolen-token PIN reset abuse)
+const changePinLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { ok: false, error: "TOO_MANY_REQUESTS" },
+});
+
+// Public onboarding / activation — strict (prevents invite-token brute-force)
+const onboardingLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { ok: false, error: "TOO_MANY_REQUESTS" },
+});
+
+// SUPER_ADMIN endpoints — moderate (defense in depth even though SA is auth-gated)
+const superAdminLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { ok: false, error: "TOO_MANY_REQUESTS" },
+});
+
+app.use("/api/auth/login",      authLimiter);
+app.use("/api/auth/signup",     authLimiter);
+app.use("/api/auth/refresh",    refreshLimiter);
+app.use("/api/auth/change-pin", changePinLimiter);
+app.use("/api/onboarding",      onboardingLimiter);
+app.use("/activate",            onboardingLimiter);
+app.use("/api/super",           superAdminLimiter);
 
 function loadRouter(modPath) {
   const mod = require(modPath);
