@@ -806,6 +806,23 @@ PROJ-11 needed an address fix on first run: Nominatim couldn't resolve `"3175 Ch
 **Architectural insight (significant):**
 The `home_location` column being missing from production while 4 routes depend on it is a sign that **DB schema is out of sync with code expectations**. There may be other columns the code expects that don't exist. Worth a systematic audit at some point — grep the routes for column names, cross-check against `information_schema.columns`. Filed under follow-up.
 
+### Phase 4 — Workforce Planner Page Fix (executed)
+
+**Problem:** After fixing the map, Hedar tried `/bi/workforce-planner` and got a completely blank page (no header, no error message).
+
+**Root cause:** `mep-frontend/src/pages/bi/WorkforcePlannerPage.jsx` line 186 referenced an undefined function `tradeColor(s.trade_code).dot`. The file imports `trade` from `@/constants/trades` (which exists and exports `trade(code)` — returning an object with `.dot`/`.bg`/`.light`), but the page code calls the non-existent `tradeColor`. When the suggestions API returned data and React tried to render the suggestion cards, the missing function reference threw a ReferenceError, killing the entire component → blank page.
+
+**Fix:** One-character change — `tradeColor` → `trade` at line 186. Frontend rebuilt (`npm run build`) and deployed (`cp -r dist/* /var/www/mep/public/`).
+
+**Verification (live on production):**
+- Workforce Planner shows 58 active assignments
+- 35 employees flagged as "Can Optimize"
+- Total potential daily savings: 517.2 km
+- Real example: Mohammed Tremblay 1 (PLUMBING) is 27.6 km from PROJ-12 but only 3 km from PROJ-21 → suggested move saves 24.6 km/day
+- Trade colors correctly rendered (PLUMBING blue, GENERAL gray, CARPENTRY orange)
+
+The full BI optimization loop is now functional end-to-end.
+
 ### Lessons & Documentation Debt
 - **psql display can mislead:** the verification SELECT showed all coords as `45.559 / -73.62`, suggesting all 5 projects were at one point. In reality the column was being truncated in the aligned output — only PROJ-11/22/23 had the placeholder; PROJ-12 and PROJ-21 already had real coords. Always cast to text or use `\x` expanded mode when verifying numeric precision.
 - **`SCHEMA.md` is wrong:** says `material_requests`; actual is `materials_requests`. Plus two tables completely missing: `materials_tickets`, `project_geofences`. **Must fix.**
