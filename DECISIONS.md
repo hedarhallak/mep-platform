@@ -860,6 +860,52 @@ The audit surfaced that the production DB has been modified manually via psql ov
 - M8 CSP nonce (drop `'unsafe-inline'`) — needs frontend rebuild + test, may break inline service-worker registration.
 - L5 (optional) Proxy Mapbox API to hide the public token.
 
+### Phase 6 — Sprint 2: Schema Cleanup (executed)
+
+After Phase 5 verified clean, Hedar elected to do "Sprint 2" (schema cleanup) before opening the Tenant Lifecycle work. Goals: drop dead schema objects, consolidate duplicate fields, document the canonical model.
+
+**Discovery investigation:**
+- `db/schema_baseline_2026-04-26.sql` (5837 lines) revealed a second schema `erp` containing 4 tables, 2 views, 2 functions, indexes, triggers — all with **0 references in code** and **0 rows on prod**. An abandoned earlier prototype (single-tenant model, no company_id, simpler shape).
+- The "materials" duplication finding from the audit (H1-H5) resolved into: the `materials_*` (plural) tables + `materials_tickets` were a v1 daily-ticket workflow served by `routes/materials.js`. NO frontend or mobile client calls any of those endpoints. The active workflow is `routes/material_requests.js` (singular `material_requests`, merge-and-send-PO).
+
+**Three migrations + one route deletion (commit `cb83bd7`):**
+
+| Migration | Action |
+|---|---|
+| `037_drop_dead_erp_schema.sql` | `DROP SCHEMA erp CASCADE`. Removed 8 objects. Pre-check: all tables empty, abort if any data exists. |
+| `038_drop_dead_materials_v1_tables.sql` | Dropped 4 tables: `materials_requests`, `materials_request_items`, `materials_tickets`, `materials_ticket_items`. Same safety pre-check. |
+| `039_sync_triggers_and_drop_dead_columns.sql` | Installed 4 sync triggers (full_name, contact_email, role_code, home_location PostGIS), backfilled (all UPDATE 0 — already in sync), dropped dead columns from `employees`: `home_lat`, `home_lng`, `phone`. |
+| `index.js` | Removed mount of `routes/materials.js`. |
+| `routes/materials.js` | Deleted from disk (the v1 workflow file is gone). |
+
+**Sync triggers installed (cleanly resolves M1, M2, M3, M6):**
+- `trg_sync_employee_full_name` — `employees.first_name/last_name` → `employee_profiles.full_name`
+- `trg_sync_employee_contact_email` — `employees.contact_email` → `employee_profiles.contact_email`
+- `trg_sync_app_user_role_to_profile` — `app_users.role` → `employee_profiles.role_code`
+- `trg_sync_home_location` — `employee_profiles.home_lat/home_lng` → `home_location` (PostGIS Point, BEFORE trigger)
+
+**Verification on prod:**
+- erp schema: 0 rows in `information_schema.schemata`
+- materials_* (plural) tables: 0 rows in `information_schema.tables`
+- 4 sync triggers installed (8 rows in `information_schema.triggers` — INSERT + UPDATE per trigger)
+- 0 dead columns left on `employees`
+- PM2 restart, error log empty
+
+**Pre-commit hook caught the cleanup:**
+The `scripts/check-routes.js` pre-commit hook blocked the first commit because `routes/materials.js` was deleted from `index.js` mounts but still on disk. Once the file was deleted, the hook passed. (Two false-positive warnings remain about `/api/onboarding` and `/api/super` "double mounts" — these are middleware + route mounts, not route conflicts. The hook needs a small refinement to distinguish — filed as low-priority follow-up.)
+
+### Audit Status After Sprints 1+2
+
+| Severity | Total | Resolved | Mitigated | Deferred (low priority) | False positive |
+|---|---|---|---|---|---|
+| Critical | 7 | 6 | 1 (C3 via rate limit) | 0 | 0 |
+| High | 11 | 10 | 0 | 1 (H7-9 covered, H1-5 fully resolved by drop) | 0 |
+| Medium | 9 | 6 | 0 | 3 (M4 docs, M8 CSP nonce, plus M9 done) | 0 |
+| Low | 5 | 4 | 0 | 1 (L5 Mapbox proxy) | 0 |
+| **TOTAL** | **32** | **26** | **1** | **5** | **0** |
+
+The deferred items are all low-impact: documentation, optional CSP hardening, and a pre-commit hook refinement. None block paying-customer onboarding.
+
 ### Lessons & Documentation Debt
 - **psql display can mislead:** the verification SELECT showed all coords as `45.559 / -73.62`, suggesting all 5 projects were at one point. In reality the column was being truncated in the aligned output — only PROJ-11/22/23 had the placeholder; PROJ-12 and PROJ-21 already had real coords. Always cast to text or use `\x` expanded mode when verifying numeric precision.
 - **`SCHEMA.md` is wrong:** says `material_requests`; actual is `materials_requests`. Plus two tables completely missing: `materials_tickets`, `project_geofences`. **Must fix.**
