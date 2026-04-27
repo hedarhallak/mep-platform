@@ -716,6 +716,267 @@ Hedar pushed back on the 6-template START_NEW_SESSION.md design — said it was 
 ## 17. Session Log — April 26, 2026
 
 ### Context
+Long, productive session. Started with strategic discussion about the foundational gap (no tenant-onboarding lifecycle), then a strategic reset into building the Product Concept properly, then a series of concrete fixes. Six distinct phases completed.
+
+### Phase 1 — Strategic Discussion (no code)
+
+Hedar opened with: "as SUPER_ADMIN, how do I sign a contract with a new company and provision them in the system as an isolated tenant?" This led to:
+
+**Investigation of `routes/super_admin.js`:**
+- `POST /api/super/companies` exists and works: creates company + single admin user + optional welcome email.
+- Multiple gaps identified, all deferred to launch-hardening:
+  1. Creates `app_users.role = 'ADMIN'` not `'COMPANY_ADMIN'` (mitigated by `middleware/roles.js` ROLE_ALIASES)
+  2. New companies start `status='ACTIVE'`, never `'TRIAL'`
+  3. `companies.plan` is just text {BASIC/PRO/ENTERPRISE} — no `plans` table, no limits, no features map
+  4. No subscription/contract concept
+  5. PIN sent in email plaintext, no activation link
+  6. Admin user created without `employee_id`
+
+**Strategic reset:** agreed to build a `PRODUCT.md` document at repo root (separate from MASTER_README state and DECISIONS.md log) to define WHAT Constrai is conceptually before any architectural change. Drafting deferred to next session in favor of shipping a concrete fix first.
+
+**Competitive positioning:**
+- ProgressionLive (Quebec, acquired by Valsoft 2024): task-based + dispatch-driven (reactive field service). Different domain. Strong moat = accounting integrations (Acomba, Sage 50, QuickBooks, Avantage). Cannot be beaten head-on.
+- Procore: generic PM platform, expensive, not CCQ-native.
+- **Constrai's positioning:** project-based + assignment-driven workforce ERP for Quebec MEP subs. Moats = CCQ travel allowances, ACQ sectors, CSST/safety, hot-work permits, Law 101.
+
+**The Constrai Vision — 4 pillars (articulated by Hedar):**
+1. **Productivity uplift** — the outcome metric.
+2. **Simplicity** — minimum process.
+3. **Waste reduction** — material + time + effort.
+4. **Quantity takeoff + project performance monitoring** — destination/advanced layer.
+
+All 4 in scope, multi-month rollout. Current codebase ≈ 30-40% of the way there.
+
+### Phase 2 — Demo Project Address Fix (executed)
+
+**Goal:** Move 3 demo projects to real, distinct Quebec addresses so the workforce-distribution map demo doesn't show every project at the same point.
+
+- Migration 034 — FAILED (silent error inside DO safety check; uncovered SCHEMA.md typo `material_requests` vs actual `materials_requests`, and 3 RESTRICT FKs on `materials_tickets`/`project_geofences`/`materials_requests`).
+- Migration 035 — SUCCESS (Path A: address-only update, no DELETE, no NULL on coords).
+- `scripts/force_geocode_demo.js` — one-off Node script that force-overwrites coords for 3 specific projects via Nominatim (OpenStreetMap). PROJ-11 needed proper accents on first try.
+
+**Final demo state:** 3 active projects across Greater Montréal / Saint-Eustache / Laval (~30 km spread). PROJ-22/23 left as placeholders (deletion deferred — see Phase 6).
+
+### Phase 3 — Workforce Planner Map Fix (executed)
+
+**Problem:** Map showed projects but ZERO employees.
+
+**Root cause:** 5 backend files reference `employee_profiles.home_location` as PostGIS Point. The column was NEVER created. All 4 non-defensive routes silently 500-error. Plus, all 50 demo employees had NULL `home_lat`/`home_lng`.
+
+**Fix strategy:** Align DB with code (add the missing column) instead of editing 4 route files.
+
+**Migration 036:** added `home_location geometry(Point, 4326)` + GIST spatial index, populated `home_lat`/`home_lng` for 50 employees with random coords in a Greater Montréal box (45.3-45.8 lat, -74.0 to -73.4 lng), mirrored into PostGIS column.
+
+**Result:** Workforce planner map shows 50 employees scattered across Greater Montréal with 3 project sites in their midst.
+
+### Phase 4 — Workforce Planner Page Fix (executed)
+
+**Problem:** `/bi/workforce-planner` returned blank page (no header, no error).
+
+**Root cause:** `mep-frontend/src/pages/bi/WorkforcePlannerPage.jsx` line 186 referenced an undefined function `tradeColor(s.trade_code).dot`. The file imports `trade` from `@/constants/trades` (correct, exports `trade(code)` returning `{dot, bg, light}`), but the page code calls non-existent `tradeColor`. When suggestions API returned data and React tried to render, ReferenceError killed the entire component.
+
+**Fix:** One-character change `tradeColor` → `trade` at line 186. Frontend rebuilt + deployed (`cp -r dist/* /var/www/mep/public/`).
+
+**Verification (live):** 58 active assignments, 35 employees flagged as "Can Optimize", 517.2 km/day potential savings.
+
+### Phase 5 — Comprehensive Audit + Security Batch (executed)
+
+After the BI/map work, Hedar requested a full audit before opening Tenant Lifecycle work. Ran via 4 parallel Explore agents. Produced `AUDIT_2026-04-26.md` at repo root with 32 findings categorized by severity.
+
+**Headline discovery — schema diverged from migrations:**
+The production DB has been modified manually via psql over time. Migrations no longer reflect live schema. Two examples confirmed via live `\d`:
+- `materials_requests` (plural), `materials_tickets`, `materials_request_items`, `materials_ticket_items` — exist on prod, defined in NO migration. Manually created.
+- `project_foremen.foreman_employee_id` and `project_foremen.is_active` — exist on prod, defined in NO migration.
+
+**Reframe:** The DB is the source of truth, NOT the migrations. Downgraded several "broken feature" findings to "tech debt — undocumented schema". The fix is a schema baseline (C1).
+
+**Fixes applied + deployed (single commit `71bb673`):**
+
+| # | Severity | Description | File |
+|---|---|---|---|
+| C4-C6 + M7 | Critical / Medium | Rate limits added: `/api/auth/refresh` (60/15min), `/api/auth/change-pin` (10/15min), `/api/onboarding/*` and `/activate` (30/15min), `/api/super/*` (200/hour) | `index.js` |
+| (added) | Critical | `app.set('trust proxy', 1)` so rate limiters use real client IP from X-Forwarded-For (Nginx in front) — fixes ERR_ERL_UNEXPECTED_X_FORWARDED_FOR | `index.js` |
+| H6 | High | Upload validated by **magic bytes** (PDF/JPEG/PNG/WebP signatures) instead of trusting client-supplied MIME header. Filename extension forced to match detected type. | `routes/hub.js` |
+| H7-H9 | High | All user-controlled values in email templates HTML-escaped via new `escapeHtml()` helper (alias `e()`). Kills stored-XSS-via-email vector. | `lib/email.js` |
+| H10 | High | Hard cap of 200 recipients per Hub message. Prevents batch-DoS via massive `recipient_ids` array. | `routes/hub.js` |
+| M9 | Medium | Added `FOR UPDATE` to `user_invites` lookup in `/api/onboarding/complete`. Closes race condition where two concurrent requests could consume same invite token. | `routes/onboarding.js` |
+| L1-L4 | Low | Deleted dead files: `middleware/adminKey.js`, `middleware/profile_required.js`, `scripts/diag_assignments_v2.js`, `scripts/seed_codes_company_employee.js` (v1, superseded). `lib/geocoding.js` was already absent (false positive). | various |
+| C7 | — | "Parameter index bug" — verified **false positive**. `params.length-1`/`params.length` arithmetic correctly evaluated at template-literal construction time. | (none) |
+
+**Schema baseline (C1):** Hedar ran `pg_dump -s mepdb` on prod, committed as `db/schema_baseline_2026-04-26.sql` (5837 lines, commit `da031c7`). NEW DISCOVERY: a second `erp` schema exists alongside `public` — see Phase 6.
+
+**Verification:** PM2 restart → empty error log → all routes serving 200s.
+
+### Phase 6 — Sprint 2: Schema Cleanup (executed)
+
+**Discovery investigation:**
+- The schema baseline revealed `erp` schema with 4 tables, 2 views, 2 functions, indexes, triggers — all with **0 references in code** and **0 rows on prod**. An abandoned earlier prototype (single-tenant model, no company_id, simpler shape).
+- The "materials" duplication (audit H1-H5) resolved into: `materials_*` (plural) tables + `materials_tickets` were a v1 daily-ticket workflow served by `routes/materials.js`. NO frontend or mobile client calls those endpoints. Active flow is `routes/material_requests.js` (singular, merge-and-send-PO).
+
+**Three migrations + one route deletion (commit `cb83bd7`):**
+
+| Migration | Action |
+|---|---|
+| `037_drop_dead_erp_schema.sql` | `DROP SCHEMA erp CASCADE`. Removed 8 objects. |
+| `038_drop_dead_materials_v1_tables.sql` | Dropped 4 tables: `materials_requests`, `materials_request_items`, `materials_tickets`, `materials_ticket_items`. |
+| `039_sync_triggers_and_drop_dead_columns.sql` | Installed 4 sync triggers (full_name, contact_email, role_code, home_location PostGIS), backfilled (all UPDATE 0 — already in sync), dropped dead columns from `employees`: `home_lat`, `home_lng`, `phone`. |
+| `index.js` | Removed mount of `routes/materials.js`. |
+| `routes/materials.js` | Deleted from disk. |
+
+**Sync triggers installed (resolves M1, M2, M3, M6):**
+- `trg_sync_employee_full_name` — `employees.first_name/last_name` → `employee_profiles.full_name`
+- `trg_sync_employee_contact_email` — `employees.contact_email` → `employee_profiles.contact_email`
+- `trg_sync_app_user_role_to_profile` — `app_users.role` → `employee_profiles.role_code`
+- `trg_sync_home_location` — `employee_profiles.home_lat/home_lng` → `home_location` (BEFORE trigger)
+
+**Verification on prod:** erp schema gone, materials_* (plural) tables gone, 4 triggers installed (8 rows in `information_schema.triggers`), 0 dead columns on `employees`, PM2 restart with empty error log.
+
+### Audit Status After Today
+
+| Severity | Total | Resolved | Mitigated | Deferred (low priority) | False positive |
+|---|---|---|---|---|---|
+| Critical | 7 | 6 | 1 (C3 via rate limit) | 0 | 0 |
+| High | 11 | 10 | 0 | 1 | 0 |
+| Medium | 9 | 6 | 0 | 3 (M4 docs, M8 CSP nonce, plus M9 done) | 0 |
+| Low | 5 | 4 | 0 | 1 (L5 Mapbox proxy) | 0 |
+| **TOTAL** | **32** | **26** | **1** | **5** | **0** |
+
+Deferred items are all low-impact: docs, optional CSP hardening, pre-commit hook refinement, Mapbox proxy. None block paying-customer onboarding.
+
+### Documentation Debt Discovered (must fix in follow-up)
+- `SCHEMA.md`: said `material_requests`; actual is `materials_requests` (plural, dropped Phase 6 — schema doc needs full refresh now)
+- `SCHEMA.md`: missing `materials_tickets` (now dropped) and `project_geofences` (still exists)
+- `SCHEMA.md`: missing the new `home_location` column on `employee_profiles` + the 4 sync triggers
+- `API.md`: claims `POST /api/projects` and `PATCH /api/projects/:id` "auto-geocode via Mapbox" — false. Geocoding is separate via `scripts/geocode_projects.js` (uses Nominatim).
+- The pre-commit hook (`scripts/check-routes.js`) flags rate-limit middleware mounts as "double mounts" — false positive, needs refinement.
+
+### Pending (next session priority order — see Section 18)
+
+**FIRST priority — Engineering Quality Program (Section 18):**
+Build the foundational tooling + tests BEFORE the Tenant Lifecycle work.
+
+**SECOND priority — Tenant Lifecycle:**
+The original gap that started today's session.
+
+**Other deferred items:**
+- Refresh `SCHEMA.md` to match `db/schema_baseline_2026-04-26.sql`
+- Refresh `API.md` to remove false geocoding claim
+- M4: Document email/username/contact_email semantics
+- M8 (optional): CSP nonce — needs frontend rebuild + test
+- L5 (optional): Proxy Mapbox API to hide public token
+- Pre-commit hook refinement (distinguish middleware mounts from route mounts)
+
+---
+
+## 18. Engineering Quality Program 🟡
+
+### Why this exists
+Today's audit was the **fourth** time we did a manual check and uncovered serious issues. Pattern: each audit finds new things because there is **zero automation** verifying the codebase between audits. Manual checks are inherently incomplete and don't catch drift introduced between sessions.
+
+The architectural decision: **invest 3-4 weeks of focused work to build proper engineering discipline before opening Tenant Lifecycle.** Hedar explicitly chose quality-first because: no paying customers yet, no time pressure, and any external reviewer (B2B buyer, pen tester, investor) will judge professionalism by the engineering practices visible in the repo (CI, tests, schema management) more than by the code itself.
+
+### Goal
+A SaaS-grade foundation where:
+- Every PR runs through automated checks (security + code quality + dead code + tests + dependency scan)
+- Schema changes are version-controlled (no more manual psql edits drifting from migrations)
+- Core business flows have regression tests (~50-80 tests covering auth, tenant isolation, RBAC, key workflows, security regressions)
+- A new contributor can read the docs and understand both the *concept* (`PRODUCT.md`) and the *current implementation* (`SCHEMA.md`, `API.md`, `CLAUDE.md`)
+- A pen-test report eventually validates the security posture for B2B sales
+
+### The Plan — 4 weeks of focused work
+
+#### Week 1: Foundation tools (CI + scanners)
+| Day | Work | Tool |
+|---|---|---|
+| 1 | GitHub Actions CI pipeline + Dependabot enabled | GitHub built-in |
+| 2 | ESLint + Prettier + Knip + Husky pre-commit hooks | OSS, free |
+| 3 | Semgrep CI integration with security rule sets | semgrep.dev |
+| 4-5 | Atlas — schema-as-code, snapshot prod baseline, wire into CI | atlasgo.io |
+
+**Outcome:** Every PR is automatically checked for: dependency CVEs, dead code, security smells (SQLi, missing auth, secrets), formatting, schema drift.
+
+#### Week 2-3: Test suite (the missing layer)
+
+~50-80 tests across 5 categories:
+- **Auth flows (15)** — login, refresh, change-pin, logout, invite, activate
+- **Tenant isolation (20)** — Company A cannot see Company B data through any endpoint
+- **RBAC (15)** — each role can/cannot do specific actions per the permission matrix
+- **Core workflows (15)** — assignment lifecycle, attendance, materials, hub
+- **Security regressions (10)** — SQL injection attempts, XSS payloads in emails, rate-limit hits, file-upload bypass attempts
+
+**Tools:** Jest + Supertest. Coverage tracked via `c8`/`istanbul`.
+
+**Outcome:** Confidence that any future change (including the Tenant Lifecycle work) didn't break anything fundamental. Refactoring becomes safe.
+
+#### Week 4: Polish + Documentation
+- Coverage targets enforced (e.g. ≥70% on `routes/`)
+- GitHub branch protection rules — `main` requires passing CI
+- README updated with project setup, dev workflow, deployment runbook
+- Auto-generated docs from schema (Atlas) + JSDoc on routes
+- Pre-launch security checklist drafted
+
+### Tools — full inventory
+
+| Layer | Tool | Cost | Why |
+|---|---|---|---|
+| Schema management | **Atlas** (atlasgo.io) | Free | Diffs live DB vs declared schema, generates migrations, blocks drift |
+| Dead code | **Knip** (knip.dev) | Free OSS | Catches unused files / exports / deps in JS/TS — would have caught `routes/materials.js` v1 dead workflow automatically |
+| Security patterns | **Semgrep** (semgrep.dev) | Free OSS | Pattern-based scanning for SQLi, XSS, missing auth, secrets, etc. |
+| Dependencies | **Dependabot** + **npm audit** | Free | CVE detection + auto-PRs for updates |
+| Code quality | **ESLint** + **Prettier** | Free OSS | Consistent style, catches common bugs |
+| Pre-commit | **Husky** + **lint-staged** | Free OSS | Runs lints/format on commit, blocks bad commits before push |
+| Test framework | **Jest** + **Supertest** | Free OSS | Unit + API integration tests |
+| Coverage | **c8** / **istanbul** | Free OSS | Track + enforce coverage targets |
+| CI/CD | **GitHub Actions** | Free for our scale (2000 min/month) | Run all of the above on every PR |
+
+**Total ongoing tooling cost: $0** for free tiers (sufficient for our scale).
+
+### Pen Test (paid, optional)
+
+**What it is:** External security firm (3-5 specialists) attempts to break in over 1-2 weeks. Tests SQL injection, auth bypass, cross-tenant leak, file upload exploits, business logic flaws, API abuse, session hijacking. Produces a detailed report with severity-rated findings.
+
+**Why it matters for Constrai:**
+- 🔴 **B2B sales accelerator** — first question Quebec construction companies will ask: "how do you protect our employee data?". A pen-test report (with sensitive details redacted) directly removes this objection.
+- 🔴 **Bill 64 / Law 25 compliance** — Quebec's privacy law (in force since 2024) requires "reasonable security measures" for PII. Pen-test report is partial evidence.
+- 🟡 **Insurance** — some cyber-insurance policies discount premium for pen-tested products.
+- 🟡 **Liability protection** — if a breach happens, documented due diligence reduces legal exposure.
+- 🟢 **Catches what we missed** — internal audits catch the obvious. Pen tests catch business logic flaws and edge cases.
+
+**When to do it:** AFTER the Engineering Quality Program is complete + Tenant Lifecycle is built + code is stable. Otherwise the pen tester finds easy stuff that should have been caught internally.
+
+**Cost:** ~$2000-$5000 CAD for a web-application pen test from a reputable Quebec/Canadian firm. Get 3 quotes; require OWASP-aligned testers (CRT or OSCP certifications).
+
+**Hedar's note (April 26, 2026):** Hedar has a computer engineer in his network who could potentially perform the pen test in-house, eliminating the cash cost. To be discussed when timing approaches. Either way: the work happens before first paying customer.
+
+### Decision Criteria — when to start the program
+
+**Start NOW (recommended):** No customer pressure, no time constraint, freshest opportunity to invest properly. Today's discussion confirmed Hedar's preference.
+
+**Alternative (defer):** Do Tenant Lifecycle first if there's external pressure (e.g. specific customer waiting). Risk: the new code enters without test coverage and we're back to manual audits.
+
+**Hedar's stated preference (April 26, 2026):** Quality-first. Build it right. Don't want a future reviewer to come back saying "you have serious vulnerabilities."
+
+### Status: 🟡 PLANNED — pending Hedar's go-ahead to start Week 1
+
+Once started, work happens in dedicated Claude sessions per week. Each session completes one major piece of the plan and ships to repo with passing CI.
+
+### Sequencing in the broader roadmap
+
+```
+✅ Today:           Audit + Sprint 1 (security) + Sprint 2 (schema cleanup)
+🟡 Next 3-4 weeks:  Engineering Quality Program (Section 18)
+🟡 Then ~2 weeks:   Tenant Lifecycle (Sections 1, 7, plans/subscriptions/billing)
+🟡 Then ~2 weeks:   Pen test + remediation (if any findings)
+🟡 Then:            First paying customer onboarding
+```
+
+Total: ~3 months from today to first paying customer with a defensible product.
+
+---
+
+## 17. Session Log — April 26, 2026
+
+### Context
 Session opened to walk through Constrai menus one-by-one and discuss notes. The very first menu raised a foundational gap (no tenant onboarding lifecycle), which triggered a strategic reset before any code changes. Then a small concrete fix (demo project addresses) was executed.
 
 ### Phase 1 — Strategic Discussion (no code changes)
