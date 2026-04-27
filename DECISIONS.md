@@ -1258,11 +1258,30 @@ First session of the Engineering Quality Program (Section 18). Plan: 4 weeks of 
 
 **Known environment quirk (does NOT affect CI on GitHub):** The Linux-side mount of the repo in this Cowork session shows a stale snapshot of `index.js` (truncated to 173 lines, dated Apr 6) while the actual file on Hedar's laptop and on GitHub has 203 lines (post Phase 6 cleanup of April 26). When CI runs on GitHub Actions, it checks out the live repo, so the route audit will see the full file and pass. Filed as informational only.
 
+### Phase 2 — First CI Run + Frontend ERESOLVE Fix (executed)
+
+**First push:** commit `9c75f9f` triggered the brand-new `ci.yml` workflow. Result:
+- ✅ Backend (Node 20) — passed (`npm ci`, `npm run audit:routes` both green; 26/26 routes registered).
+- ❌ **Frontend (Node 20)** — failed at `Install dependencies` (`npm ci`) in 9 seconds.
+- ✅ Mobile (Node 20) — passed.
+
+**Root cause:** `mep-frontend/package.json` declares `vite@^7.3.1` and `vite-plugin-pwa@^0.21.1`. Plugin v0.21.x peer-deps require `vite@"^3 || ^4 || ^5 || ^6"` — does NOT include vite 7. The committed `package-lock.json` was originally generated under legacy peer-deps behavior (older npm or `--legacy-peer-deps`), which is why local `npm install` worked. Modern `npm ci` is strict by default and refuses the conflict.
+
+**Fix chosen (Option A — `.npmrc` legacy-peer-deps):**
+- Added `mep-frontend/.npmrc` with `legacy-peer-deps=true` + a comment block explaining the why and the upgrade path.
+- Zero risk: matches the resolution the lockfile was already built against.
+- Works identically locally and in CI.
+
+**Alternatives considered + rejected for now:**
+- **Option B — upgrade `vite-plugin-pwa` to v1.x** (the proper long-term fix). Rejected today because v1 has breaking changes that need testing; the goal was to unblock Day 1 CI without dragging in a separate dependency-upgrade exercise.
+- **Option C — `--legacy-peer-deps` flag on the CI step only.** Rejected because it hides the issue from any developer doing a fresh `npm ci` locally.
+
 ### Pending — Week 1 Day 2 (next session)
 - ESLint config at repo root (currently only `mep-frontend/` has ESLint).
 - Prettier config + format check in CI.
 - Knip integration for dead-code detection.
 - Husky + lint-staged for local pre-commit hooks (replacing the manual `scripts/check-routes.js` invocation Hedar runs today).
+- **Tech debt (carried from Phase 2):** upgrade `vite-plugin-pwa` from `0.21.x` → `1.x` (native vite 7 support), then remove `mep-frontend/.npmrc`. Verify PWA service worker still registers + offline mode still works after upgrade.
 
 ### Pending — Week 1 Day 3-5
 - Day 3: Semgrep CI integration with security rule sets.
