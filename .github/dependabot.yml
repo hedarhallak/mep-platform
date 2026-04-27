@@ -1,5 +1,13 @@
 # Dependabot — Section 18 Week 1 Day 1.
-# Weekly updates, minor/patch grouped, major separate.
+# Weekly updates, minor/patch grouped per ecosystem.
+#
+# Policy on major version bumps (Section 19 Phase 3, April 27, 2026):
+#   ALL semver-major bumps are IGNORED for normal version-update PRs.
+#   Major upgrades require coordinated manual review (changelog, breaking
+#   changes, migration steps) and don't belong in an automated weekly PR.
+#   Security-driven major bumps still come through automatically because
+#   Dependabot bypasses ignore rules for security advisories.
+#
 # 4 ecosystems: backend root, mep-frontend, mep-mobile, GitHub Actions.
 
 version: 2
@@ -25,6 +33,10 @@ updates:
         update-types:
           - minor
           - patch
+    ignore:
+      - dependency-name: '*'
+        update-types:
+          - version-update:semver-major
 
   # ---------------- Frontend (React + Vite) ----------------
   - package-ecosystem: npm
@@ -47,10 +59,15 @@ updates:
         update-types:
           - minor
           - patch
+    ignore:
+      - dependency-name: '*'
+        update-types:
+          - version-update:semver-major
 
   # ---------------- Mobile (Expo + React Native) ----------------
-  # NOTE: Expo SDK upgrades (major) require manual coordination with native build.
-  # Major bumps stay individual PRs so they don't get merged silently.
+  # Expo SDK upgrades require manual coordination with native build, EAS,
+  # and the entire expo-* package family. NEVER auto-bump anything mobile
+  # at the major level.
   - package-ecosystem: npm
     directory: /mep-mobile
     schedule:
@@ -72,12 +89,7 @@ updates:
           - minor
           - patch
     ignore:
-      # Pin expo + react-native to whatever the current SDK dictates;
-      # SDK upgrades happen manually, never via Dependabot.
-      - dependency-name: expo
-        update-types:
-          - version-update:semver-major
-      - dependency-name: react-native
+      - dependency-name: '*'
         update-types:
           - version-update:semver-major
 
@@ -102,3 +114,7 @@ updates:
         update-types:
           - minor
           - patch
+    ignore:
+      - dependency-name: '*'
+        update-types:
+          - version-update:semver-major

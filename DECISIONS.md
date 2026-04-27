@@ -1276,12 +1276,39 @@ First session of the Engineering Quality Program (Section 18). Plan: 4 weeks of 
 - **Option B — upgrade `vite-plugin-pwa` to v1.x** (the proper long-term fix). Rejected today because v1 has breaking changes that need testing; the goal was to unblock Day 1 CI without dragging in a separate dependency-upgrade exercise.
 - **Option C — `--legacy-peer-deps` flag on the CI step only.** Rejected because it hides the issue from any developer doing a fresh `npm ci` locally.
 
+### Phase 3 — Dependabot First-Scan Backlog Cleanup (executed)
+
+**Symptom:** First push of `dependabot.yml` triggered a one-time backlog scan that opened **17 PRs** simultaneously, flooding the Actions tab with failing CI runs (most failed because they branched from `9c75f9f` before the `.npmrc` fix landed; many were major version bumps that needed manual review anyway).
+
+**Root cause of the noise:**
+- Original `dependabot.yml` only ignored `expo` + `react-native` major bumps. The `expo-*` family (`expo-sharing`, `expo-constants`, `expo-document-picker`, etc.) are separate npm packages and weren't covered, so Dependabot proposed massive jumps like `expo-sharing 14 → 55`.
+- The "Major updates separate" choice is fine in theory but produces too much noise in practice for an actively-developed app where every major bump needs manual coordination.
+
+**Policy change (committed in this phase):** ignore ALL semver-major bumps across every ecosystem for normal version-update PRs. Updated `dependabot.yml` adds:
+
+```yaml
+ignore:
+  - dependency-name: '*'
+    update-types:
+      - version-update:semver-major
+```
+
+…to all 4 ecosystem entries (backend, frontend, mobile, github-actions). Security-advisory PRs still come through automatically because Dependabot bypasses ignore rules for security findings.
+
+**Cleanup steps:**
+1. Updated `.github/dependabot.yml` with the broader ignore policy.
+2. Bulk-closed all 17 first-scan PRs with `gh pr list --author "app/dependabot" --json number --jq '.[].number' | ForEach-Object { gh pr close $_ --comment "..." }`. Reason posted on each PR points back to this Section.
+3. Next Dependabot run (May 4, 08:00 Toronto) will produce a clean inbox: only minor/patch grouped PRs + any security-driven majors.
+
+**Tradeoff acknowledged:** we'll miss some major upgrades unless we proactively check. That's acceptable — major upgrades are decisions, not chores. Better to schedule them quarterly than to dismiss noisy auto-PRs weekly.
+
 ### Pending — Week 1 Day 2 (next session)
 - ESLint config at repo root (currently only `mep-frontend/` has ESLint).
 - Prettier config + format check in CI.
 - Knip integration for dead-code detection.
 - Husky + lint-staged for local pre-commit hooks (replacing the manual `scripts/check-routes.js` invocation Hedar runs today).
 - **Tech debt (carried from Phase 2):** upgrade `vite-plugin-pwa` from `0.21.x` → `1.x` (native vite 7 support), then remove `mep-frontend/.npmrc`. Verify PWA service worker still registers + offline mode still works after upgrade.
+- **Tech debt (carried from Phase 3):** quarterly major-upgrade review — manually scan `npm outdated` per ecosystem, decide which majors to take, run them coordinated.
 
 ### Pending — Week 1 Day 3-5
 - Day 3: Semgrep CI integration with security rule sets.
