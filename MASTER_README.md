@@ -12,14 +12,10 @@
 
 ## How to Start a New Conversation
 
-**One block. Copy, paste, done.**
+**One line. Copy, paste, done.**
 
 ```
-هاي محادثة استكمال لمشروع Constrai الموجود — مش مشروع جديد. الريبو مرفّق محلياً (مجلد mep-fixed). قبل أي رد:
-1. اقرأ CLAUDE.md من المجلد المحلي (مش من GitHub).
-2. اتبع تعليمات Section 0 (Bootstrap) فيها بالحرف، خصوصاً قراءة MASTER_README + DECISIONS + RECOVERY محلياً.
-3. ابدأ ردك بـ "(محادثة استكمال — قرأت Section X)" حتى أتأكد إنك خلصت Bootstrap.
-ما تشتغل أي task قبل ما تخلص الـ Bootstrap.
+محادثة استكمال لمشروع Constrai. استخدم request_cowork_directory لمجلد C:\Users\Lenovo\Desktop\mep-site-backend-fixed\mep-fixed، اقرأ CLAUDE.md، اتبع Section 0.
 ```
 
 The receiving Claude reads CLAUDE.md Section 0 (Bootstrap), reads docs from the local mounted folder (more reliable than GitHub), finds the latest Session Log, echoes back its understanding, then asks what to work on.
