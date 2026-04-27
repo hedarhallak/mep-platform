@@ -19,7 +19,7 @@
     "axios": "^1.15.0",
     "babel-preset-expo": "~54.0.10",
     "expo": "~54.0.33",
-    "expo-constants": "~18.0.13",
+    "expo-constants": "~55.0.15",
     "expo-device": "~8.0.10",
     "expo-document-picker": "~14.0.8",
     "expo-image-picker": "~17.0.10",
