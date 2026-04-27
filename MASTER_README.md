@@ -12,13 +12,19 @@
 
 ## How to Start a New Conversation
 
-**One command. Copy, paste, done.**
+**One block. Copy, paste, done.**
 
 ```
-اقرأ https://raw.githubusercontent.com/hedarhallak/mep-platform/main/CLAUDE.md واتبع تعليمات Bootstrap في أوله.
+هاي محادثة استكمال لمشروع Constrai الموجود — مش مشروع جديد. الريبو مرفّق محلياً (مجلد mep-fixed). قبل أي رد:
+1. اقرأ CLAUDE.md من المجلد المحلي (مش من GitHub).
+2. اتبع تعليمات Section 0 (Bootstrap) فيها بالحرف، خصوصاً قراءة MASTER_README + DECISIONS + RECOVERY محلياً.
+3. ابدأ ردك بـ "(محادثة استكمال — قرأت Section X)" حتى أتأكد إنك خلصت Bootstrap.
+ما تشتغل أي task قبل ما تخلص الـ Bootstrap.
 ```
 
-That's it. CLAUDE.md Section 0 (Bootstrap) tells the fresh Claude session exactly what to read in what order, finds the latest Session Log, and asks what to work on. See [`START_NEW_SESSION.md`](./START_NEW_SESSION.md) for the full explanation + how to optionally specify a task upfront.
+The receiving Claude reads CLAUDE.md Section 0 (Bootstrap), reads docs from the local mounted folder (more reliable than GitHub), finds the latest Session Log, echoes back its understanding, then asks what to work on.
+
+See [`START_NEW_SESSION.md`](./START_NEW_SESSION.md) for the full explanation, why the command was strengthened (April 26, 2026), and how to optionally specify a task upfront.
 
 ## Document Reading System
 

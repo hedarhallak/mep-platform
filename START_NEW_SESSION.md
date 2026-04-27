@@ -7,32 +7,45 @@
 ## The Command (copy-paste verbatim)
 
 ```
-اقرأ https://raw.githubusercontent.com/hedarhallak/mep-platform/main/CLAUDE.md واتبع تعليمات Bootstrap في أوله.
+هاي محادثة استكمال لمشروع Constrai الموجود — مش مشروع جديد. الريبو مرفّق محلياً (مجلد mep-fixed). قبل أي رد:
+1. اقرأ CLAUDE.md من المجلد المحلي (مش من GitHub).
+2. اتبع تعليمات Section 0 (Bootstrap) فيها بالحرف، خصوصاً قراءة MASTER_README + DECISIONS + RECOVERY محلياً.
+3. ابدأ ردك بـ "(محادثة استكمال — قرأت Section X)" حتى أتأكد إنك خلصت Bootstrap.
+ما تشتغل أي task قبل ما تخلص الـ Bootstrap.
 ```
 
-That's it. One line.
+That's it. One block. Paste at the start of every new conversation.
 
-The receiving Claude will:
-1. Fetch CLAUDE.md
-2. Follow Section 0 (Bootstrap) which tells it to read MASTER_README, DECISIONS, RECOVERY in order
-3. Find the latest Session Log to know where you left off
-4. Ask you what to work on today
+---
+
+## Why this version (vs the older shorter command)
+
+The older command (`اقرأ https://raw.githubusercontent.com/.../CLAUDE.md ...`) had two weaknesses:
+
+1. **Pulled docs from GitHub instead of the local mounted folder.** GitHub lags behind the local repo by however long since the last `git push`. If the previous session ended without pushing the doc updates, the new session sees stale state.
+2. **Didn't tell Claude this was an existing project.** Fresh Claude could misread it as "the user wants me to start a new project from this CLAUDE.md template".
+
+The new command fixes both: explicit "this is a continuation", explicit "read locally", and a verification echo (`Section X`) so the user can confirm Bootstrap actually ran.
 
 ---
 
 ## Optional: Specify the Task Upfront
 
-If you already know what you want to work on, add it as a second line:
+If you already know what you want to work on, add it after the bootstrap block:
 
 ```
-اقرأ https://raw.githubusercontent.com/hedarhallak/mep-platform/main/CLAUDE.md واتبع تعليمات Bootstrap في أوله.
+هاي محادثة استكمال لمشروع Constrai الموجود — مش مشروع جديد. الريبو مرفّق محلياً (مجلد mep-fixed). قبل أي رد:
+1. اقرأ CLAUDE.md من المجلد المحلي (مش من GitHub).
+2. اتبع تعليمات Section 0 (Bootstrap) فيها بالحرف، خصوصاً قراءة MASTER_README + DECISIONS + RECOVERY محلياً.
+3. ابدأ ردك بـ "(محادثة استكمال — قرأت Section X)" حتى أتأكد إنك خلصت Bootstrap.
+ما تشتغل أي task قبل ما تخلص الـ Bootstrap.
 
 اليوم نكمل: <اكتب المهمة هنا>
 ```
 
-**Examples for the second line:**
-- `اليوم نكمل Layer 3 hardening (Password Manager + Emergency Access)`
-- `اليوم نضيف endpoint جديد لـ X feature`
+**Examples for the task line:**
+- `اليوم نبلش Engineering Quality Program — Week 1` (per DECISIONS.md Section 18)
+- `اليوم نكمل Tenant Lifecycle (Section 17 pending)`
 - `اليوم في bug في الموبايل: <وصف>`
 - `اليوم نشتغل على web frontend i18n`
 
@@ -40,37 +53,37 @@ Claude reads the bootstrap, then sees your specified task, and pulls in any extr
 
 ---
 
+## What If Claude Doesn't Echo "محادثة استكمال — قرأت Section X"?
+
+That means Bootstrap was skipped. Reply:
+
+```
+انت ما عملت Bootstrap. ارجع لـ Section 0 بـ CLAUDE.md ونفذ الخطوات بالترتيب: اقرأ المحلي MASTER_README + DECISIONS + RECOVERY، ابدأ ردك بـ "(محادثة استكمال — قرأت Section X)".
+```
+
+That should reset it.
+
+---
+
 ## Why This Works
 
 - **One thing to remember.** No template selection. No fill-in-the-blanks.
-- **Intelligence on Claude's side, not yours.** CLAUDE.md tells fresh Claude exactly which files to read and in what order.
-- **Self-updating.** When we add new files or change the bootstrap procedure, we update CLAUDE.md once. The command you save never changes.
-- **Works from any device, any platform.** All the state lives in GitHub. Even if your laptop dies mid-session, you open Claude on another device, paste the command, continue.
+- **Local-first.** New session sees the latest committed state from your laptop, not whatever GitHub had hours ago.
+- **Explicit continuation framing.** "محادثة استكمال" + "مش مشروع جديد" leaves no room for Claude to misinterpret.
+- **Verification echo.** `Section X` is your proof Bootstrap was completed. If you don't see it, you know to retry.
+- **Self-updating.** When the bootstrap procedure evolves, we update CLAUDE.md Section 0 once. The command you save rarely changes.
 
 ---
 
-## What If Claude Doesn't Follow the Bootstrap?
+## Prerequisite: Cowork Mode with Folder Mounted
 
-Very rare, but if a fresh Claude misreads or skips Bootstrap:
-- Reply: "اقرأ Section 0 في CLAUDE.md من جديد ونفذ خطواتها بالترتيب"
-- That should reset it.
+For the local-first workflow:
 
----
+1. The Claude session must be in **Cowork mode** with the `mep-fixed` folder mounted (it should auto-mount if you've done it before).
+2. If the folder isn't mounted, the bootstrap will fall back to GitHub URLs (still works, just slower / can be stale).
+3. To verify the folder is mounted, you can ask Claude: "هل تشوف مجلد mep-fixed؟" — it should answer yes and list a few files.
 
-## Prerequisite: Web Access Must Be Allowed
-
-For the bootstrap to work, the Claude session needs permission to fetch URLs from `raw.githubusercontent.com`. If you see a warning like:
-
-```
-Access to this website is blocked by your network egress settings.
-```
-
-…then your Claude account / workspace has restrictive web access settings that may block the bootstrap from completing.
-
-**Check + fix:**
-1. **Claude desktop app / claude.ai:** Settings → Capabilities → Web Search/Fetch → make sure it's ON. If you're on a Team/Enterprise plan, an admin may need to enable it.
-2. **Cowork mode:** by default WebFetch should work for `raw.githubusercontent.com`. If it doesn't, try: Settings → Network → allowlist `raw.githubusercontent.com`.
-3. **Verify quickly:** in any Claude conversation, paste the bootstrap command. If Claude reads the files without warnings, you're good. If it shows the blocked-network message, fix the setting before relying on the workflow for important sessions.
+**For non-Cowork sessions** (claude.ai web, mobile app, etc.) where there's no local folder, the bootstrap automatically falls back to GitHub. The command works in both scenarios.
 
 ---
 

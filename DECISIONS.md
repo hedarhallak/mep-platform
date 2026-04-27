@@ -850,6 +850,30 @@ Deferred items are all low-impact: docs, optional CSP hardening, pre-commit hook
 - `API.md`: claims `POST /api/projects` and `PATCH /api/projects/:id` "auto-geocode via Mapbox" — false. Geocoding is separate via `scripts/geocode_projects.js` (uses Nominatim).
 - The pre-commit hook (`scripts/check-routes.js`) flags rate-limit middleware mounts as "double mounts" — false positive, needs refinement.
 
+### Phase 7 — Bootstrap Reliability Fix (executed late session)
+
+**Problem:** Hedar opened a new conversation with the existing bootstrap command and the fresh Claude treated it as a new project. Root cause:
+- The command pulled docs from `raw.githubusercontent.com` instead of the local mounted folder. GitHub lagged behind local edits (today's Phase 5/6 weren't even pushed when the test happened).
+- The command didn't explicitly tell Claude this was a continuation of an existing project — it could be misread as "the user wants me to start a project from this CLAUDE.md template."
+- No verification mechanism — Hedar couldn't tell whether Bootstrap actually ran.
+
+**Three updates (commit `<TBD>` after this session ends):**
+
+1. **`CLAUDE.md` Section 0 strengthened:**
+   - Explicit framing: "THIS IS A CONTINUATION OF AN EXISTING PROJECT. NOT a new project."
+   - Step 1 reads from LOCAL mounted folder first, GitHub URLs only as fallback.
+   - Step 3 mandates the response begins with `(محادثة استكمال — قرأت Section X من DECISIONS.md)` so Hedar can verify Bootstrap was completed.
+   - New Step 6 — End-of-Session Checkpoint: hard requirement to update DECISIONS.md before any session "completes". Prevents the exact stale-state scenario that caused this bug.
+
+2. **`START_NEW_SESSION.md` rewritten:**
+   - New canonical command (multi-line block) with explicit continuation framing + local-first instruction + echo-back verification.
+   - "What if Claude doesn't echo X" recovery instruction.
+   - Notes on Cowork-mode prerequisite + GitHub fallback.
+
+3. **`MASTER_README.md` "How to Start a New Conversation" updated** to show the new command.
+
+**Lesson encoded for future Claude:** the End-of-Session Checkpoint rule (Step 6 of Bootstrap) is now mandatory. Today the Phase 5/6 documentation didn't reach DECISIONS.md before a fresh session opened, which directly caused this confusion. Future sessions must update docs before declaring "done".
+
 ### Pending (next session priority order — see Section 18)
 
 **FIRST priority — Engineering Quality Program (Section 18):**

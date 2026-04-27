@@ -9,30 +9,53 @@
 
 ## 0. BOOTSTRAP — Read This First (Cold-Start Instructions)
 
-If you are a fresh Claude session and Hedar pasted only a short command pointing you to this file, **execute these steps in order before doing anything else**:
+> **THIS IS A CONTINUATION OF AN EXISTING PROJECT. NOT a new project.**
+> The project is **Constrai (MEP Platform)** — a Quebec construction workforce ERP. If you are a fresh Claude session and Hedar pasted any command pointing you to this file, **execute these steps in order before doing anything else**:
 
-### Step 1 — Fetch and read these files in order
+### Step 1 — Read project context (LOCAL FOLDER FIRST, GitHub as fallback)
 
+**ALWAYS prefer the local mounted repo folder over GitHub raw URLs.** Local has the latest uncommitted edits; GitHub may lag by hours or days.
+
+If the workspace folder `mep-fixed` is mounted (Cowork mode, normally yes), read these from the LOCAL folder using the `Read` tool:
+
+```
+MASTER_README.md
+DECISIONS.md
+RECOVERY.md
+```
+
+(You're already reading CLAUDE.md.)
+
+**Only if local read fails or no folder is mounted**, fall back to GitHub via WebFetch:
 ```
 https://raw.githubusercontent.com/hedarhallak/mep-platform/main/MASTER_README.md
 https://raw.githubusercontent.com/hedarhallak/mep-platform/main/DECISIONS.md
 https://raw.githubusercontent.com/hedarhallak/mep-platform/main/RECOVERY.md
 ```
 
-(You're already reading CLAUDE.md.)
-
-Use `WebFetch` to retrieve each file. Read all of them — don't skim.
+Read all of them — don't skim. Each is critical for understanding state.
 
 ### Step 2 — Find where we left off
 
-Inside `DECISIONS.md`, find the **highest-numbered Section labeled "Session Log"** (e.g. "Section 16. Session Log — April 19, 2026"). Read that section in full. It tells you:
-- What was just completed
+Inside `DECISIONS.md`, find the **highest-numbered Section labeled "Session Log"** (e.g. "Section 17. Session Log — April 26, 2026"). Read that section in full, including all sub-phases. It tells you:
+- What was just completed (and what commits)
 - What's pending
 - What the user planned to do next
+- Any architectural decisions made
 
-### Step 3 — Acknowledge & ask
+Also scan for any Section ≥18 that might be a planned program or roadmap (e.g. Section 18 = Engineering Quality Program). These set the priority order for upcoming work.
 
-Reply to Hedar with:
+### Step 3 — Acknowledge Bootstrap completion + ask
+
+**Bootstrap verification (mandatory):** Begin your reply with this exact line so Hedar can confirm Bootstrap was completed:
+
+```
+(محادثة استكمال — قرأت Section X من DECISIONS.md)
+```
+
+Where X is the latest Session Log section number you found. Without this line, Hedar will assume Bootstrap was skipped.
+
+Then provide:
 1. A **3–5 line summary** confirming what you understood about the project's current state. **Keep it tight — bullets or short sentences, NOT paragraphs.** Detailed elaboration only if Hedar asks for it.
 2. A clear question: "شو المطلوب اليوم؟" — unless Hedar already specified a task in the same message (in which case, confirm the task in one line and proceed).
 
@@ -43,16 +66,29 @@ Reply to Hedar with:
 
 ### Step 4 — Read additional files only when the task requires them
 
-- DB / migration / query work → also read `SCHEMA.md`
+- DB / migration / query work → also read `SCHEMA.md` AND `db/schema_baseline_2026-04-26.sql` (the canonical live schema)
 - Backend / route / endpoint work → also read `API.md`
 - Setup / new env var / config debugging → also read `.env.example`
 - Backup operations → also read `scripts/backup/SETUP.md`
+- Engineering quality / tooling work → see `DECISIONS.md` Section 18
 
 Do NOT preemptively read all reference files — that wastes context. Read on demand.
 
 ### Step 5 — Follow all rules in the rest of this file
 
 The remainder of CLAUDE.md (Sections 1–12 below) defines the working rules, conventions, and code map. Apply them to every action you take in this session.
+
+### Step 6 — End-of-Session Checkpoint (CRITICAL)
+
+**Before responding with a final summary, before Hedar takes a break, or before suggesting the session is "done", you MUST verify:**
+
+1. `DECISIONS.md` has been updated with a Session Log entry for today's work (find the latest section, append a sub-phase or extend it; do NOT replace).
+2. Hedar has been given exact commit + push commands for all modified files.
+3. Any new migrations / scripts / docs are in the commit set.
+
+**Why this matters:** The next Claude session reads DECISIONS.md to know what happened. If today's work isn't there, the next session sees stale state and may treat the conversation as if today never happened. This is exactly what broke on April 26 evening — Phase 5/6 work didn't reach DECISIONS.md before a new session opened.
+
+**Auto-trigger:** This is a hard requirement, not a suggestion. If you find yourself drafting a "session summary" without having updated DECISIONS.md, stop and update it first.
 
 ---
 
