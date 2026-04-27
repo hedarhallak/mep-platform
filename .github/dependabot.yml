@@ -1,0 +1,104 @@
+# Dependabot — Section 18 Week 1 Day 1.
+# Weekly updates, minor/patch grouped, major separate.
+# 4 ecosystems: backend root, mep-frontend, mep-mobile, GitHub Actions.
+
+version: 2
+updates:
+  # ---------------- Backend (Express + Postgres) ----------------
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '08:00'
+      timezone: America/Toronto
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - backend
+    commit-message:
+      prefix: 'chore(deps)'
+      include: scope
+    groups:
+      backend-minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+
+  # ---------------- Frontend (React + Vite) ----------------
+  - package-ecosystem: npm
+    directory: /mep-frontend
+    schedule:
+      interval: weekly
+      day: monday
+      time: '08:00'
+      timezone: America/Toronto
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - frontend
+    commit-message:
+      prefix: 'chore(deps-frontend)'
+      include: scope
+    groups:
+      frontend-minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+
+  # ---------------- Mobile (Expo + React Native) ----------------
+  # NOTE: Expo SDK upgrades (major) require manual coordination with native build.
+  # Major bumps stay individual PRs so they don't get merged silently.
+  - package-ecosystem: npm
+    directory: /mep-mobile
+    schedule:
+      interval: weekly
+      day: monday
+      time: '08:00'
+      timezone: America/Toronto
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - mobile
+    commit-message:
+      prefix: 'chore(deps-mobile)'
+      include: scope
+    groups:
+      mobile-minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # Pin expo + react-native to whatever the current SDK dictates;
+      # SDK upgrades happen manually, never via Dependabot.
+      - dependency-name: expo
+        update-types:
+          - version-update:semver-major
+      - dependency-name: react-native
+        update-types:
+          - version-update:semver-major
+
+  # ---------------- GitHub Actions ----------------
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '08:00'
+      timezone: America/Toronto
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - github-actions
+    commit-message:
+      prefix: 'chore(deps-actions)'
+      include: scope
+    groups:
+      github-actions-all:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch

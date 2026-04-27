@@ -1215,3 +1215,60 @@ The deferred items are all low-impact: documentation, optional CSP hardening, an
   - Stripe Customer Portal integration (do not build invoicing custom)
   - Limits enforcement middleware (block create when at max)
 - SUPER_ADMIN web UI: Companies list + New Company wizard + per-company detail (usage vs limits, subscription actions).
+
+---
+
+## 19. Session Log — April 27, 2026
+
+### Context
+First session of the Engineering Quality Program (Section 18). Plan: 4 weeks of focused tooling/tests work before opening Tenant Lifecycle. Today = Week 1 Day 1.
+
+### Phase 1 — Week 1 Day 1: GitHub Actions CI + Dependabot (executed)
+
+**Decisions confirmed with Hedar via AskUserQuestion before coding:**
+
+| Question | Choice | Rationale |
+|---|---|---|
+| CI scope on Day 1 | **Minimal** | `npm ci` + project audit + `npm audit` informational. ESLint/Knip/Semgrep layered in Day 2-3, not bundled now. |
+| Coverage | **All 3** (backend + frontend + mobile) | Three parallel jobs from the start. Mobile job avoids Expo native build (just install + tsc). |
+| Dependabot frequency | **Weekly + grouped** | Mondays 08:00 America/Toronto. Minor/patch grouped per ecosystem. Major updates stay individual PRs. Expo + react-native major bumps explicitly ignored (SDK upgrades happen manually). |
+
+**Files added (new — first ever `.github/` content in this repo):**
+
+| Path | Purpose |
+|---|---|
+| `.github/workflows/ci.yml` | 3 jobs (backend / frontend / mobile), Node 20, triggered on push to main + PR to main, concurrency cancel-in-progress, `PUPPETEER_SKIP_DOWNLOAD=true` to keep CI fast. |
+| `.github/dependabot.yml` | 4 ecosystems: npm × root + npm × mep-frontend + npm × mep-mobile + github-actions. Weekly on Monday 08:00 Toronto, grouped minor/patch, scoped commit prefixes (`chore(deps)`, `chore(deps-frontend)`, etc.). |
+
+**CI job details:**
+
+- **Backend (blocking steps):** `npm ci`, `npm run audit:routes` (uses existing `scripts/check-routes.js` — verifies every `routes/*.js` file is mounted in `index.js`).
+- **Backend (informational):** `npm audit --audit-level=high` (continue-on-error so existing transitive vulns don't block; we'll tighten in Week 4).
+- **Frontend (blocking):** `npm ci`, `npm run build` (Vite production build).
+- **Frontend (informational):** `npm run lint` (ESLint already configured in mep-frontend), `npm audit`.
+- **Mobile (blocking):** `npm ci` only (catches lockfile drift).
+- **Mobile (informational):** `npx tsc --noEmit` (type check), `npm audit`.
+
+**Why `audit:db` is NOT in CI:** `scripts/check-db.js` requires a live Postgres connection. Standing up Postgres + PostGIS + applying 39 migrations on every PR is overkill for Day 1. Will be reconsidered when we wire up Atlas (Week 1 Day 4-5).
+
+**Validation done locally:**
+- Both YAML files parse cleanly with `yaml.safe_load` (Python).
+- Structure verified: 3 jobs, 5-6 steps each, correct triggers, correct working-directory per job.
+- Trade-off accepted: actionlint not available in the Cowork sandbox (proxy blocks raw.githubusercontent.com), so we rely on YAML structural validation + GitHub's own validator on first push.
+
+**Known environment quirk (does NOT affect CI on GitHub):** The Linux-side mount of the repo in this Cowork session shows a stale snapshot of `index.js` (truncated to 173 lines, dated Apr 6) while the actual file on Hedar's laptop and on GitHub has 203 lines (post Phase 6 cleanup of April 26). When CI runs on GitHub Actions, it checks out the live repo, so the route audit will see the full file and pass. Filed as informational only.
+
+### Pending — Week 1 Day 2 (next session)
+- ESLint config at repo root (currently only `mep-frontend/` has ESLint).
+- Prettier config + format check in CI.
+- Knip integration for dead-code detection.
+- Husky + lint-staged for local pre-commit hooks (replacing the manual `scripts/check-routes.js` invocation Hedar runs today).
+
+### Pending — Week 1 Day 3-5
+- Day 3: Semgrep CI integration with security rule sets.
+- Day 4-5: Atlas (atlasgo.io) — schema-as-code, snapshot the prod baseline, wire into CI.
+
+### Decisions explicitly deferred (NOT for Day 1)
+- **Branch protection rules** on `main` requiring CI to pass: deferred to Week 4. Rationale: with no test suite yet, blocking merges on a "minimal" CI is symbolic. Better to add real tests first, then turn protection on.
+- **CodeQL / GitHub Advanced Security:** deferred. Semgrep covers the same security-pattern surface for free.
+- **Required CI on every push (not just PR):** kept. PR-only would let direct pushes to main skip CI.

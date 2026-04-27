@@ -1,0 +1,115 @@
+name: CI
+
+# Section 18 — Engineering Quality Program, Week 1 Day 1.
+# Minimal CI: install + project-specific audit + npm audit (informational).
+# ESLint / Knip / Semgrep / tests will be layered on later days.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel in-flight runs of the same ref when a new commit is pushed.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Skip Chromium download — puppeteer is only used at runtime on the server.
+  PUPPETEER_SKIP_DOWNLOAD: 'true'
+  # Don't run native bcrypt build steps if a prebuilt binary is available.
+  NODE_ENV: development
+
+jobs:
+  backend:
+    name: Backend (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: ['20']
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Route audit (check-routes.js)
+        run: npm run audit:routes
+
+      - name: Security audit (informational)
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+  frontend:
+    name: Frontend (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: ['20']
+    defaults:
+      run:
+        working-directory: mep-frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: mep-frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint (informational)
+        run: npm run lint
+        continue-on-error: true
+
+      - name: Build
+        run: npm run build
+
+      - name: Security audit (informational)
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+  mobile:
+    name: Mobile (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: ['20']
+    defaults:
+      run:
+        working-directory: mep-mobile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: mep-mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript type check (informational)
+        run: npx tsc --noEmit
+        continue-on-error: true
+
+      - name: Security audit (informational)
+        run: npm audit --audit-level=high
+        continue-on-error: true
