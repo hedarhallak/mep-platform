@@ -47,9 +47,9 @@ router.get('/', async (req, res) => {
       return res.status(400).send('Invite already used');
     }
 
-    // nosemgrep: javascript.express.security.audit.xss.direct-response-write.direct-response-write
     // The only interpolated value (token) is escaped via the local escapeHtml() helper below.
     // Semgrep can't trace custom local escape helpers, so this rule fires false-positive here.
+    // nosemgrep: javascript.express.security.audit.xss.direct-response-write.direct-response-write
     res.send(`
 <!DOCTYPE html>
 <html>

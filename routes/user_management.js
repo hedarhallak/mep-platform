@@ -245,7 +245,7 @@ router.post('/:id/resend', can('settings.user_management'), async (req, res) => 
       html: `
         <div style="font-family:Arial,sans-serif;max-width:500px">
           <h2>Activate your account</h2>
-          <p>Hi <strong>${escapeHtml(target.username)}</strong>, here is your new activation link:</p>
+          <p>Hi <strong>${escapeHtml(target.username)}</strong>, here is your new activation link:</p> <!-- nosemgrep: javascript.express.security.injection.raw-html-format.raw-html-format -->
           <p><a href="${escapeHtml(activateLink)}">${escapeHtml(activateLink)}</a></p>
           <p style="color:#94a3b8;font-size:13px">Expires in 48 hours.</p>
         </div>

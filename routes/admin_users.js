@@ -136,8 +136,8 @@ router.post('/', can('settings.user_management'), async (req, res) => {
       return res.status(403).json({
         ok: false,
         error: 'INSUFFICIENT_PRIVILEGE',
-        // nosemgrep: javascript.express.security.injection.tainted-sql-string.tainted-sql-string
         // False positive — this is a JSON error message, not a SQL query.
+        // nosemgrep: javascript.express.security.injection.tainted-sql-string.tainted-sql-string
         message: `Cannot create a user with role "${role}" — you need a higher role than the target`,
       });
     }
@@ -243,7 +243,7 @@ router.post('/', can('settings.user_management'), async (req, res) => {
       const html = `
         <div style="font-family: Arial, sans-serif; line-height:1.6; max-width:500px">
           <h2 style="color:#0f172a">Activate your MEP Platform account</h2>
-          <p>You've been invited as <strong>${escapeHtml(roleLabel)}</strong>.</p>
+          <p>You've been invited as <strong>${escapeHtml(roleLabel)}</strong>.</p> <!-- nosemgrep: javascript.express.security.injection.raw-html-format.raw-html-format -->
           <p>Click the link below to set up your account:</p>
           <p><a href="${escapeHtml(activateLink)}" style="color:#1e3a5f">${escapeHtml(activateLink)}</a></p>
           <p style="color:#94a3b8;font-size:13px">This link expires in ${expiresHours} hours.</p>
