@@ -126,3 +126,39 @@ jobs:
       - name: Security audit (informational)
         run: npm audit --audit-level=high
         continue-on-error: true
+
+  # ─── Day 3 — Semgrep static security analysis (informational) ─────────
+  # Scans the codebase for known vulnerability patterns: SQL injection,
+  # XSS, missing auth, hardcoded secrets, prototype pollution, OWASP top
+  # 10. Findings appear in step output and (when configured) in GitHub's
+  # Security tab. Informational first — flip to blocking after triage.
+  security:
+    name: Security (Semgrep)
+    runs-on: ubuntu-latest
+    # Semgrep image already has Python + semgrep CLI installed.
+    container:
+      image: semgrep/semgrep
+    # Skip on Dependabot PRs to save CI minutes — they don't change code logic.
+    if: github.actor != 'dependabot[bot]'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Semgrep scan
+        run: |
+          semgrep scan \
+            --config "p/javascript" \
+            --config "p/nodejs" \
+            --config "p/expressjs" \
+            --config "p/owasp-top-ten" \
+            --config "p/secrets" \
+            --exclude "mep-frontend/" \
+            --exclude "mep-mobile/" \
+            --exclude "node_modules/" \
+            --exclude "public/" \
+            --exclude "dist/" \
+            --exclude "uploads/" \
+            --exclude "data/" \
+            --exclude "constrai-landing/" \
+            --metrics=off
+        continue-on-error: true

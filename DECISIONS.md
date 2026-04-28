@@ -1449,6 +1449,50 @@ Three local fixes attempted, all failed: (1) JSON encoded with explicit UTF-8 no
 
 **Verification:** the next commit (after this Phase 7 batch) is the first under husky. The hook output should print "Running Constrai pre-commit checks..." → route audit → "Running lint-staged..." → format + lint of staged files.
 
+#### Phase 7.5 — Cross-platform lockfile fix (CI #34 → #35)
+
+**Symptom:** Phase 7 commit (`506f0c4`) failed CI with `npm error code EUSAGE: Missing: @emnapi/core@1.10.0 from lock file` and the same for `@emnapi/runtime@1.10.0`.
+
+**Root cause:** knip 5.x ships with `oxc-resolver`, a Rust-native resolver. On Windows, oxc-resolver loads `oxc-resolver/win32-x64-msvc.node` directly. On Linux, it falls back to a WebAssembly build that depends on `@emnapi/core` + `@emnapi/runtime`. When npm install runs on Windows, it records only the Windows binary in the lockfile and skips the Linux WASM fallback (those are platform-conditional optional deps). CI on Linux then can't find them in the lockfile → npm ci fails.
+
+**Workarounds attempted:**
+- `npm install --include=optional --package-lock-only` → npm reports "up to date" (no change). npm 11 trusts the existing platform-specific lockfile.
+- Deleting `package-lock.json` + reinstalling → regenerated lockfile is identical because npm reads `node_modules` and reproduces the same Windows-only resolution.
+- Running `npm install` from a Linux sandbox → the Cowork sandbox is read-only for the project; can't generate a Linux lockfile this way.
+
+**Fix that worked:** pin `@emnapi/core@^1.10` and `@emnapi/runtime@^1.10` as direct devDependencies (`npm install --save-dev "@emnapi/core@^1.10" "@emnapi/runtime@^1.10"`). Direct deps are recorded in the lockfile on every platform regardless of optional-dep heuristics. CI #35 passed in 1m 40s — first fully green run with all of Day 1 + Day 2 wired up.
+
+**Tech debt filed:** this is a workaround for a known npm 11 issue with platform-specific optional deps. If npm fixes the cross-platform lockfile resolution later, we can drop the explicit pins. Tracked at npm/cli#4828 and similar issues. Not blocking.
+
+### Phase 8 — Day 3: Semgrep CI integration (executed)
+
+**Goal:** add static security analysis on every PR. Semgrep scans for known vulnerability patterns (SQL injection, XSS, missing auth, hardcoded secrets, prototype pollution, etc.) and reports findings inline in CI logs. The intent is to catch security issues at PR review time, before they ship to production.
+
+**Configuration:**
+- New `security` job in `.github/workflows/ci.yml` running parallel to backend/frontend/mobile.
+- Runs in the official `semgrep/semgrep` Docker container — Python + semgrep CLI preinstalled, no setup overhead.
+- 5 rule sets enabled (all curated by Semgrep's security team):
+  - `p/javascript` — generic JS pitfalls
+  - `p/nodejs` — Node-specific (uncaught exceptions, file handling, etc.)
+  - `p/expressjs` — Express middleware/routing patterns
+  - `p/owasp-top-ten` — OWASP Top 10 web vulnerabilities
+  - `p/secrets` — leaked API keys / tokens / credentials
+- Excludes mep-frontend, mep-mobile (separate rule sets would apply, deferred), node_modules, public, dist, uploads, data, constrai-landing.
+- `--metrics=off` — opt out of Semgrep's anonymous usage telemetry.
+- Skipped on Dependabot PRs (`if: github.actor != 'dependabot[bot]'`) to save CI minutes — security analysis on auto-bumps adds little value.
+- `continue-on-error: true` — informational first run. Will flip to blocking after triage of baseline findings (consistent with Knip and ESLint/Prettier rollout pattern).
+
+**Expected baseline findings:** unknown — first run will reveal the security debt. Likely candidates given the codebase: a few SQL string concatenations, possible missing input validation, maybe a hardcoded JWT secret default. Triage pass to follow.
+
+### Pending — Day 3 follow-up (next session)
+- **Triage Semgrep baseline.** Read CI #36 (or whichever is the first run with the security job) findings, categorize: real issues to fix vs false positives to suppress via inline comments (`// nosemgrep`) vs rule-level disables in a `.semgrep.yml`.
+- **Flip Semgrep to blocking** after baseline is clean.
+- **Triage Knip baseline** (still informational since Phase 7). Cleanup pass to remove unused exports, files, devDeps.
+- **Cleanup ESLint warnings** (42 `no-unused-vars`) — trivial, mechanical.
+
+### Pending — Day 4-5
+- **Atlas (atlasgo.io) — schema-as-code.** Snapshot the prod baseline (already in `db/schema_baseline_2026-04-26.sql`) into Atlas's HCL format, wire CI to fail on schema drift, and start authoring future migrations through Atlas instead of raw psql. This is the long-term fix for the "DB diverged from migrations" issue called out in Section 17 Phase 5.
+
 ### Pending — Day 3 (next session)
 - **Semgrep CI integration:** add Semgrep to the CI workflow with security rule sets (SQL injection, missing auth, hardcoded secrets, prototype pollution). Likely informational first, then blocking after triage.
 
