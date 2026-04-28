@@ -1348,6 +1348,25 @@ Day 2 was scoped down (with Hedar's confirmation) to **ESLint + Prettier only**.
 - **From Phase 2:** upgrade `vite-plugin-pwa` from `0.21.x` → `1.x` (native vite 7 support), then remove `mep-frontend/.npmrc`. Verify PWA service worker still registers + offline mode still works after upgrade.
 - **From Phase 3:** quarterly major-upgrade review — manually scan `npm outdated` per ecosystem, decide which majors to take, run them coordinated.
 
+### Phase 5 — Dependency Merges + Production Deploy + CLAUDE.md Rule 7 (executed late session)
+
+**3 Dependabot PRs merged via GitHub web UI:**
+- PR #3 — backend-minor-and-patch (multer + puppeteer)
+- PR #18 — frontend-minor-and-patch (12 updates)
+- PR #19 — mobile-minor-and-patch (19 updates)
+
+All 3 had passing CI under the new policy. Pull Requests tab now shows **0 Open**.
+
+**Production deploy:**
+- `git pull origin main` initially failed with `ssh: connect to host github.com port 22: Connection timed out` — likely transient (the `mep-webhook` process may have already auto-pulled earlier). Retry succeeded with `Already up to date`.
+- `npm install` reported `added 63, removed 3, changed 15` — reconciled `node_modules` with the new lockfile.
+- `pm2 restart mep-backend` → online, 18.9 MB, no errors. Logs show clean startup: `Server running on http://localhost:3000`.
+- Sanity check: `curl -I https://app.constrai.ca` → `HTTP/1.1 200 OK`. App live.
+
+**Filed for follow-up:** the SSH-on-port-22 timeout. If it recurs, fix permanently by configuring SSH-over-port-443 (`Host github.com / Hostname ssh.github.com / Port 443` in `~/.ssh/config` on the server). Today it self-resolved on retry, so no config change applied.
+
+**`CLAUDE.md` Rule 7 added:** Hedar's UX feedback — when giving instructions that involve SSH'ing into the server and then running commands ON the server, the `ssh root@...` line must be in its own code block, with on-server commands in a separate block below. Bundling them forces Hedar to manually delete the SSH line each time.
+
 ### Pending — Week 1 Day 3-5
 - Day 3: Semgrep CI integration with security rule sets.
 - Day 4-5: Atlas (atlasgo.io) — schema-as-code, snapshot the prod baseline, wire into CI.
