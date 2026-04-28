@@ -127,6 +127,19 @@ Multi-tenancy is enforced via `company_id` on all business tables. There are 13 
 4. **Be honest about uncertainty** — if a tool/library/decision is unclear, say so and offer to look it up rather than guessing.
 5. **Keep instructions step-by-step and line-by-line** when guiding through manual operations (terminal commands, dashboard navigation). Don't bundle 5 actions in one paragraph.
 6. **Keep responses tight.** No long preambles. No restating what Hedar just said. Get to the point. Use bullets/tables/code blocks where they add clarity.
+7. **Separate SSH from server commands.** Whenever instructions involve SSH'ing into the production server and then running commands ON the server, the `ssh root@...` line MUST be in its own code block, and the on-server commands go in a separate code block below it. Hedar runs the SSH first to establish the connection, then pastes the rest. Never bundle them — it forces Hedar to manually delete the SSH line every time. Example:
+
+   First, connect:
+   ```
+   ssh root@143.110.218.84
+   ```
+
+   Then on the server:
+   ```bash
+   cd /var/www/mep
+   git pull origin main
+   pm2 restart mep-backend
+   ```
 
 ---
 
