@@ -164,3 +164,68 @@ jobs:
             --exclude "constrai-landing/" \
             --error \
             --metrics=off
+
+  # ─── Day 4-5 — Atlas schema validation (informational first) ──────────
+  # Spins up a fresh PostGIS Postgres, applies all migrations on top of the
+  # baseline, and verifies the schema converges without errors. Catches:
+  #  - Broken SQL syntax in new migration files
+  #  - Migrations that depend on prior state not present in the baseline
+  #  - Conflicting/duplicate migrations
+  # Drift detection (comparing applied schema vs prod) is added in Phase 9.5.
+  schema:
+    name: Schema (Atlas)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:14-3.4
+        env:
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: drifttest
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    if: github.actor != 'dependabot[bot]'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Atlas
+        uses: ariga/setup-atlas@v0
+
+      - name: Pre-create roles referenced by the baseline dump
+        env:
+          PGPASSWORD: testpass
+        run: |
+          # The pg_dump from prod includes ALTER TABLE ... OWNER TO mepuser
+          # statements. Without the role, psql errors out. Create it as a
+          # no-privileges placeholder for the duration of the CI run.
+          psql -h localhost -U postgres -d drifttest -c "CREATE ROLE mepuser WITH LOGIN PASSWORD 'testpass';"
+
+      - name: Apply baseline + migrations to fresh Postgres
+        env:
+          PGPASSWORD: testpass
+        run: |
+          # Baseline first: a pg_dump of prod schema. Apply via psql because
+          # it contains CREATE EXTENSION + a 5000+ line schema, simpler than
+          # piping through atlas for the first apply.
+          psql -h localhost -U postgres -d drifttest -v ON_ERROR_STOP=1 -f migrations/000_baseline_2026-04-28.sql
+
+          # Verify: the schema should now have core tables (sanity check).
+          psql -h localhost -U postgres -d drifttest -c "\dt" | head -20
+
+      - name: Atlas migrate lint (informational)
+        env:
+          DEV_URL: postgres://postgres:testpass@localhost:5432/drifttest?sslmode=disable
+        run: |
+          # Lint future migrations on top of the baseline. With only 000 in
+          # place this is mostly a no-op, but it kicks in once new migration
+          # files land. --latest 1 lints the most recent migration only.
+          atlas migrate lint \
+            --dir "file://migrations" \
+            --dev-url "$DEV_URL" \
+            --latest 1 || echo "(lint informational — no fail)"
+        continue-on-error: true

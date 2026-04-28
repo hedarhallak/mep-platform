@@ -1521,6 +1521,58 @@ CI #38 confirmed 0 Semgrep findings on main after the Phase 8.5 triage. Removed 
 
 This completes the Day 3 deliverable. Section 18's Week 1 is **fully complete**: Day 1 (CI + Dependabot), Day 2 (ESLint + Prettier + Knip + Husky), Day 3 (Semgrep). All blocking enforcement live except Knip + frontend lint + npm audit which remain informational.
 
+### Phase 9 — Day 4-5: Migration Consolidation + Atlas (executed)
+
+#### The discovery (Section 17 Phase 5 root cause, finally surfaced)
+
+Investigating Atlas integration revealed two compounding problems:
+
+1. **Two migration directories with overlapping numbers:**
+   - `db/migrations/` — 30+ files (`001_projects_geocoding.sql` through `029_push_tokens.sql` plus odd-named files like `005b/c/d/e_*`, `MC_*_*`, `SAFE_*_*`)
+   - `migrations/` (repo root) — 13 files: `004_roles_and_project_trades.sql`, `005_project_foremen.sql`, `029_new_roles.sql`, and 030–039 (the April-26 cleanup migrations).
+2. **No migration history on prod.** Running `SELECT filename FROM schema_migrations ORDER BY id` on prod returned `ERROR: relation "schema_migrations" does not exist`. The `npm run migrate` script was never executed against the production database — every migration was applied by hand via `psql`. There is no record of which files ran, in what order, or whether they all completed.
+
+The April-26 audit's "DB diverged from migrations" framing was generous — there is no migration tracking system to diverge from. This is the actual root cause of every schema drift symptom we've hit since March.
+
+#### Strategy chosen — start fresh from the live schema, archive the past
+
+We do **not** attempt to reconstruct history. Instead:
+
+- **The current production schema (post Phase-6 cleanup) is the canonical starting point.** A fresh `pg_dump -s` taken today (5,162 lines, 141 KB) is committed as `db/schema_baseline_2026-04-28.sql`.
+- **A copy of the baseline becomes `migrations/000_baseline_2026-04-28.sql`** — the first migration in the new system. Running it against an empty PostGIS database brings the schema to the current production state.
+- **Both old migration folders are archived** under `db/migrations.archive/` (subfolders `db_migrations_old/` and `migrations_root_old/`). They remain in the repo for historical reference and `git blame`, but are not re-applied on fresh setups.
+- **`scripts/migrate.js` repointed** from `db/migrations/` to `migrations/`. Its existing `CREATE TABLE IF NOT EXISTS schema_migrations` clause means the first run on prod (or on a fresh dev DB) will create the tracking table automatically — fixing the "no history" problem from this point forward.
+- **Going-forward policy** (added to `migrate.js` as a header comment): every new schema change is a numbered file in `migrations/` — `001_xxx.sql`, `002_xxx.sql`, etc. NEVER write SQL directly to prod again. Applied via `npm run migrate` (or Atlas), not raw `psql`.
+
+#### Atlas integration (this phase)
+
+- **`atlas.hcl`** at repo root declares the migration directory and ties Atlas to the CI's ephemeral PostGIS database via `DEV_URL` env var.
+- **New CI job `schema`** added to `.github/workflows/ci.yml`:
+  - Spins up a `postgis/postgis:14-3.4` service container.
+  - Applies `migrations/000_baseline_2026-04-28.sql` via `psql` to verify it loads cleanly into a fresh PostGIS instance.
+  - Runs `atlas migrate lint --latest 1` in informational mode for future migrations.
+  - Skips on Dependabot PRs.
+- **Atlas integrity check (atlas.sum)** is intentionally not committed in this phase — it requires a local Atlas install that Hedar doesn't have today. Will be added in Phase 9.5 once Atlas CLI is set up locally (or via a Docker-based npm script).
+- **Drift detection** (comparing prod live schema to applied-migrations schema) is the natural next step but requires either (a) committing a refreshed baseline on every prod schema change, or (b) wiring CI to read prod schema directly. Deferred to Phase 9.5.
+
+#### Files changed
+
+| Path | Change |
+|---|---|
+| `db/schema_baseline_2026-04-28.sql` | Added — fresh `pg_dump -s` of prod |
+| `migrations/000_baseline_2026-04-28.sql` | Added — copy of the baseline, becomes migration 000 |
+| `db/migrations.archive/db_migrations_old/*` | Moved from `db/migrations/` |
+| `db/migrations.archive/migrations_root_old/*` | Moved from `migrations/` (the pre-Phase-9 contents) |
+| `scripts/migrate.js` | `MIGRATIONS_DIR` repointed; header comment documents the Phase 9 split |
+| `atlas.hcl` | New — Atlas config for the `ci` env |
+| `.github/workflows/ci.yml` | New `schema` job with PostGIS service container |
+
+#### Pending — Phase 9.5 (next session)
+- **Install Atlas CLI locally** (Docker wrapper or `winget install ariga.atlas`) and generate `atlas.sum` for integrity checks.
+- **Drift detection.** Periodically refresh `db/schema_baseline_*.sql` from prod and have CI assert that applying all migrations to fresh DB equals the baseline. Catches manual-psql changes on prod going forward.
+- **Update RECOVERY.md** to reflect the new migration policy (apply via `npm run migrate`, never raw `psql`).
+- **Run `npm run migrate` on prod ONCE** to create the `schema_migrations` table and record `000_baseline_2026-04-28.sql` as already-applied (to avoid re-applying it). Practical sequence: `INSERT INTO schema_migrations (filename) VALUES ('000_baseline_2026-04-28.sql');` after the table is auto-created.
+
 ### Pending — Day 3 final cleanup
 - **Triage Knip baseline** (still informational from Phase 7).
 - **Cleanup ESLint warnings** (42 `no-unused-vars`) — trivial, mechanical.

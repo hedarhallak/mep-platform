@@ -5,7 +5,16 @@ require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
-const MIGRATIONS_DIR = path.join(__dirname, '../db/migrations');
+// As of Phase 9 (2026-04-28): the canonical migration directory is now
+// `migrations/` at repo root. The previous `db/migrations/` and the
+// pre-Phase-9 contents of `migrations/` are archived under
+// `db/migrations.archive/` for historical reference only — they are NOT
+// re-run on fresh setups. The new `migrations/000_baseline_2026-04-28.sql`
+// is a pg_dump snapshot of prod after all historical migrations had been
+// (manually) applied; running it on a fresh database brings the schema to
+// the post-Phase-6 cleanup state. New migrations are added on top with
+// numbers 001, 002, ... and are tracked via the schema_migrations table.
+const MIGRATIONS_DIR = path.join(__dirname, '../migrations');
 
 async function run() {
   const client = await pool.connect();
