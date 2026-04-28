@@ -47,6 +47,9 @@ router.get('/', async (req, res) => {
       return res.status(400).send('Invite already used');
     }
 
+    // nosemgrep: javascript.express.security.audit.xss.direct-response-write.direct-response-write
+    // The only interpolated value (token) is escaped via the local escapeHtml() helper below.
+    // Semgrep can't trace custom local escape helpers, so this rule fires false-positive here.
     res.send(`
 <!DOCTYPE html>
 <html>
@@ -69,7 +72,7 @@ router.get('/', async (req, res) => {
       <div class="card">
         <h2>Set PIN</h2>
         <form method="POST" action="/activate/set-pin">
-          <input type="hidden" name="token" value="${escapeHtml(token)}" />
+          <input type="hidden" name="token" value="${escapeHtml(token)}" /> <!-- nosemgrep: javascript.express.security.injection.raw-html-format.raw-html-format -->
           <input type="password" name="pin" placeholder="PIN" required />
           <input type="password" name="pin_confirm" placeholder="Confirm PIN" required />
           <button type="submit">Activate</button>

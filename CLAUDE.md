@@ -122,6 +122,7 @@ Multi-tenancy is enforced via `company_id` on all business tables. There are 13 
    - `لازم` not `يجب`
    - `منيح` not `جيد`
    - `بسيط` not `سهل`
+   - **Computing verbs:** for "run a command/program", use **`شغّل`** (or `نفّذ` for "execute"), NEVER `ركض` (which means "to run on foot, jog"). Examples: `شغّل npm install` not `اركض npm install`. `Knip تشغّل/تشغيل` not `Knip ركض`. `لما نفّذت الأمر` not `لما ركضت الأمر`. This was a recurring translation pitfall — the English verb "run" maps to two distinct Arabic verbs depending on context.
    - English code/commands stay in English. Mix naturally.
 3. **Never decide unilaterally** — for any architectural choice, propose options and let Hedar pick. Use `AskUserQuestion` to present 2–4 clear options.
 4. **Be honest about uncertainty** — if a tool/library/decision is unclear, say so and offer to look it up rather than guessing.

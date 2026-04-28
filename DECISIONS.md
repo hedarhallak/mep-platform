@@ -1493,6 +1493,33 @@ Three local fixes attempted, all failed: (1) JSON encoded with explicit UTF-8 no
 ### Pending — Day 4-5
 - **Atlas (atlasgo.io) — schema-as-code.** Snapshot the prod baseline (already in `db/schema_baseline_2026-04-26.sql`) into Atlas's HCL format, wire CI to fail on schema drift, and start authoring future migrations through Atlas instead of raw psql. This is the long-term fix for the "DB diverged from migrations" issue called out in Section 17 Phase 5.
 
+### Phase 8.5 — Semgrep Baseline Triage (executed)
+
+**Baseline output of CI #36 (commit `f6cd4ce`):** 5 findings, all "Blocking" severity. Manual triage:
+
+| # | File:Line | Rule | Verdict | Action |
+|---|---|---|---|---|
+| 1 | `routes/activate.js:50` | `direct-response-write` | False positive — only interpolated value (`token`) is wrapped via local `escapeHtml()` further down | `// nosemgrep` with rationale |
+| 2 | `routes/activate.js:72` | `raw-html-format` | False positive — `escapeHtml(token)` already wrapping the value; `escapeHtml` is a local helper Semgrep can't trace | inline HTML `<!-- nosemgrep -->` |
+| 3 | `routes/admin_users.js:138` | `tainted-sql-string` | False positive — the flagged template literal is a JSON `message` field in an error response, NOT a SQL query | `// nosemgrep` with rationale |
+| 4 | `routes/admin_users.js:243` | `raw-html-format` | **Real fix** — `roleLabel` falls through to raw `role` if not in mapping; defense-in-depth: escape | wrapped `roleLabel` and `activateLink` with `escapeHtml()` (imported from `lib/email`) |
+| 5 | `routes/user_management.js:247` | `raw-html-format` | **Real fix** — `target.username` is a free-form DB field; a malicious username could XSS the recipient of the activation email | wrapped `target.username` and `activateLink` with `escapeHtml()` (imported from `lib/email`) |
+
+**Result:** 3 false positives suppressed inline with explanatory comments (so future maintainers see why the rule is muted). 2 real defense-in-depth fixes applied — both email HTML templates now consistently escape every interpolated user-controlled value. The April 26 audit's H7-H9 fix had covered most templates; these two routes were the residual gaps.
+
+**Files changed in Phase 8.5:**
+- `routes/activate.js` — 2 nosemgrep comments
+- `routes/admin_users.js` — added `escapeHtml` import; 1 nosemgrep comment; wrapped `roleLabel` + `activateLink`
+- `routes/user_management.js` — added `escapeHtml` import; wrapped `target.username` + `activateLink`
+- `CLAUDE.md` — Communication Rule 2 sub-bullet for Arabic computing-verb usage (`شغّل`/`نفّذ` not `ركض`) — Hedar UX feedback April 28
+
+**Expected next CI run:** Semgrep findings = 0. Day 3 deliverable now genuinely complete.
+
+### Pending — Day 3 final cleanup
+- **Flip Semgrep to blocking** after the post-triage CI run confirms 0 findings.
+- **Triage Knip baseline** (still informational from Phase 7).
+- **Cleanup ESLint warnings** (42 `no-unused-vars`) — trivial, mechanical.
+
 ### Pending — Day 3 (next session)
 - **Semgrep CI integration:** add Semgrep to the CI workflow with security rule sets (SQL injection, missing auth, hardcoded secrets, prototype pollution). Likely informational first, then blocking after triage.
 

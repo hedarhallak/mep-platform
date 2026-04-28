@@ -13,6 +13,7 @@ const sgMail = require('@sendgrid/mail');
 const { pool } = require('../db');
 const { can, logAudit } = require('../middleware/permissions');
 const { normalizeRole } = require('../middleware/roles');
+const { escapeHtml } = require('../lib/email');
 
 const ALLOWED_ROLES = [
   'IT_ADMIN',
@@ -244,8 +245,8 @@ router.post('/:id/resend', can('settings.user_management'), async (req, res) => 
       html: `
         <div style="font-family:Arial,sans-serif;max-width:500px">
           <h2>Activate your account</h2>
-          <p>Hi <strong>${target.username}</strong>, here is your new activation link:</p>
-          <p><a href="${activateLink}">${activateLink}</a></p>
+          <p>Hi <strong>${escapeHtml(target.username)}</strong>, here is your new activation link:</p>
+          <p><a href="${escapeHtml(activateLink)}">${escapeHtml(activateLink)}</a></p>
           <p style="color:#94a3b8;font-size:13px">Expires in 48 hours.</p>
         </div>
       `,
