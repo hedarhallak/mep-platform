@@ -1,29 +1,29 @@
-const express = require("express");
-const bcrypt = require("bcryptjs");
-const crypto = require("crypto");
+const express = require('express');
+const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const router = express.Router();
-const { pool } = require("../db");
+const { pool } = require('../db');
 
 function hashToken(token) {
-  return crypto.createHash("sha256").update(token).digest("hex");
+  return crypto.createHash('sha256').update(token).digest('hex');
 }
 
 // Prevent XSS when embedding values in HTML
 function escapeHtml(str) {
   return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#x27;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 // GET /activate?token=...
 // Rule: invite is considered "used" ONLY when used_at IS NOT NULL.
 // (In your DB, status is set to ACTIVE at creation time, so status cannot be used to detect usage.)
-router.get("/", async (req, res) => {
+router.get('/', async (req, res) => {
   const { token } = req.query;
-  if (!token) return res.status(400).send("Missing activation token");
+  if (!token) return res.status(400).send('Missing activation token');
 
   const tokenHash = hashToken(token);
 
@@ -35,16 +35,16 @@ router.get("/", async (req, res) => {
       [tokenHash]
     );
 
-    if (rows.length === 0) return res.status(400).send("Invalid activation link");
+    if (rows.length === 0) return res.status(400).send('Invalid activation link');
 
     const invite = rows[0];
 
     if (invite.expires_at && new Date(invite.expires_at) < new Date()) {
-      return res.status(400).send("Activation link expired");
+      return res.status(400).send('Activation link expired');
     }
 
     if (invite.used_at) {
-      return res.status(400).send("Invite already used");
+      return res.status(400).send('Invite already used');
     }
 
     res.send(`
@@ -81,28 +81,28 @@ router.get("/", async (req, res) => {
 </html>
     `);
   } catch (e) {
-    console.error("GET /activate error:", e);
-    res.status(500).send("Server error");
+    console.error('GET /activate error:', e);
+    res.status(500).send('Server error');
   }
 });
 
 // POST /activate/set-pin
 // Consumes invite by setting used_at (status may stay ACTIVE in your DB),
 // and creates OR updates the app_users record for that email.
-router.post("/set-pin", express.urlencoded({ extended: false }), async (req, res) => {
+router.post('/set-pin', express.urlencoded({ extended: false }), async (req, res) => {
   const { token, pin, pin_confirm } = req.body || {};
   if (!token || !pin || pin !== pin_confirm) {
-    return res.status(400).send("Invalid PIN");
+    return res.status(400).send('Invalid PIN');
   }
   if (pin.length < 4 || pin.length > 8) {
-    return res.status(400).send("PIN must be 4 to 8 characters.");
+    return res.status(400).send('PIN must be 4 to 8 characters.');
   }
 
   const tokenHash = hashToken(token);
   const client = await pool.connect();
 
   try {
-    await client.query("BEGIN");
+    await client.query('BEGIN');
 
     const inviteRes = await client.query(
       `SELECT id, company_id, employee_id, email, role, used_at, expires_at
@@ -113,20 +113,20 @@ router.post("/set-pin", express.urlencoded({ extended: false }), async (req, res
     );
 
     if (inviteRes.rows.length === 0) {
-      await client.query("ROLLBACK");
-      return res.status(400).send("Invalid activation link");
+      await client.query('ROLLBACK');
+      return res.status(400).send('Invalid activation link');
     }
 
     const invite = inviteRes.rows[0];
 
     if (invite.expires_at && new Date(invite.expires_at) < new Date()) {
-      await client.query("ROLLBACK");
-      return res.status(400).send("Activation link expired");
+      await client.query('ROLLBACK');
+      return res.status(400).send('Activation link expired');
     }
 
     if (invite.used_at) {
-      await client.query("ROLLBACK");
-      return res.status(400).send("Invite already used");
+      await client.query('ROLLBACK');
+      return res.status(400).send('Invite already used');
     }
 
     const pinHash = await bcrypt.hash(pin, 12);
@@ -152,17 +152,33 @@ router.post("/set-pin", express.urlencoded({ extended: false }), async (req, res
              company_id = COALESCE(company_id, $5),
              last_invite_id = COALESCE(last_invite_id, $6)
          WHERE email = $7`,
-        [pinHash, invite.role, desiredUsername, invite.employee_id, invite.company_id, invite.id, invite.email]
+        [
+          pinHash,
+          invite.role,
+          desiredUsername,
+          invite.employee_id,
+          invite.company_id,
+          invite.id,
+          invite.email,
+        ]
       );
     } else {
       await client.query(
         `INSERT INTO app_users (username, email, role, pin_hash, is_active, activated_at, employee_id, company_id, last_invite_id)
          VALUES ($1, $2, $3, $4, TRUE, NOW(), $5, $6, $7)`,
-        [desiredUsername, invite.email, invite.role, pinHash, invite.employee_id, invite.company_id, invite.id]
+        [
+          desiredUsername,
+          invite.email,
+          invite.role,
+          pinHash,
+          invite.employee_id,
+          invite.company_id,
+          invite.id,
+        ]
       );
     }
 
-// Consume invite (single source of truth: used_at)
+    // Consume invite (single source of truth: used_at)
     await client.query(
       `UPDATE user_invites
        SET used_at = NOW()
@@ -170,12 +186,14 @@ router.post("/set-pin", express.urlencoded({ extended: false }), async (req, res
       [invite.id]
     );
 
-    await client.query("COMMIT");
-    return res.redirect("/login?activated=1");
+    await client.query('COMMIT');
+    return res.redirect('/login?activated=1');
   } catch (e) {
-    try { await client.query("ROLLBACK"); } catch (_) {}
-    console.error("POST /activate/set-pin error:", e);
-    return res.status(500).send("Server error");
+    try {
+      await client.query('ROLLBACK');
+    } catch (_) {}
+    console.error('POST /activate/set-pin error:', e);
+    return res.status(500).send('Server error');
   } finally {
     client.release();
   }

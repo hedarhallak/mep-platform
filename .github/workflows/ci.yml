@@ -45,13 +45,11 @@ jobs:
       - name: Route audit (check-routes.js)
         run: npm run audit:routes
 
-      - name: Lint (informational — Day 2 Phase 1, will tighten after cleanup)
+      - name: Lint (blocking — Day 2 Phase 2 onward)
         run: npm run lint
-        continue-on-error: true
 
-      - name: Format check (informational — Day 2 Phase 1, will tighten after cleanup)
+      - name: Format check (blocking — Day 2 Phase 2 onward)
         run: npm run format:check
-        continue-on-error: true
 
       - name: Security audit (informational)
         run: npm audit --audit-level=high

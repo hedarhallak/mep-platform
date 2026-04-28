@@ -1,7 +1,7 @@
-﻿"use strict";
+﻿'use strict';
 
-const express  = require('express');
-const router   = express.Router();
+const express = require('express');
+const router = express.Router();
 const { pool } = require('../db');
 const { can, logAudit } = require('../middleware/permissions');
 
@@ -30,8 +30,8 @@ router.get('/matrix', can('settings.permissions'), async (req, res) => {
 
     // Build matrix: { role: { module: { action: bool } } }
     // First seed every role+module+action as false
-    const roles   = [...new Set(rolePerms.rows.map(r => r.role))];
-    const matrix  = {};
+    const roles = [...new Set(rolePerms.rows.map((r) => r.role))];
+    const matrix = {};
 
     for (const role of roles) {
       matrix[role] = {};
@@ -45,7 +45,7 @@ router.get('/matrix', can('settings.permissions'), async (req, res) => {
     }
 
     // Build unique modules list from permissions table
-    const modules = [...new Set(allPerms.rows.map(r => r.grp))].sort();
+    const modules = [...new Set(allPerms.rows.map((r) => r.grp))].sort();
 
     res.json({ roles, modules, matrix });
   } catch (err) {
@@ -65,11 +65,14 @@ router.get('/my-permissions', async (req, res) => {
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
     res.set('Pragma', 'no-cache');
 
-    const result = await pool.query(`
+    const result = await pool.query(
+      `
       SELECT permission_code
       FROM public.role_permissions
       WHERE role = $1
-    `, [req.user.role]);
+    `,
+      [req.user.role]
+    );
 
     const permissions = {};
 
@@ -103,16 +106,33 @@ router.get('/my-permissions', async (req, res) => {
 router.get('/role/:role', can('settings.permissions'), async (req, res) => {
   try {
     const { role } = req.params;
-    const validRoles = ['SUPER_ADMIN','IT_ADMIN','COMPANY_ADMIN','TRADE_PROJECT_MANAGER','TRADE_ADMIN','FOREMAN','JOURNEYMAN','APPRENTICE_4','APPRENTICE_3','APPRENTICE_2','APPRENTICE_1','WORKER','DRIVER'];
+    const validRoles = [
+      'SUPER_ADMIN',
+      'IT_ADMIN',
+      'COMPANY_ADMIN',
+      'TRADE_PROJECT_MANAGER',
+      'TRADE_ADMIN',
+      'FOREMAN',
+      'JOURNEYMAN',
+      'APPRENTICE_4',
+      'APPRENTICE_3',
+      'APPRENTICE_2',
+      'APPRENTICE_1',
+      'WORKER',
+      'DRIVER',
+    ];
     if (!validRoles.includes(role)) return res.status(400).json({ error: 'Invalid role' });
 
-    const result = await pool.query(`
+    const result = await pool.query(
+      `
       SELECT rp.permission_code, p.description, p.grp
       FROM public.role_permissions rp
       JOIN public.permissions p ON p.code = rp.permission_code
       WHERE rp.role = $1
       ORDER BY p.grp, rp.permission_code
-    `, [role]);
+    `,
+      [role]
+    );
 
     res.json({ role, permissions: result.rows });
   } catch (err) {
@@ -132,16 +152,46 @@ router.put('/role/:role', can('settings.permissions'), async (req, res) => {
     const { role } = req.params;
     const { permissions } = req.body;
 
-    const validRoles = ['SUPER_ADMIN','IT_ADMIN','COMPANY_ADMIN','TRADE_PROJECT_MANAGER','TRADE_ADMIN','FOREMAN','JOURNEYMAN','APPRENTICE_4','APPRENTICE_3','APPRENTICE_2','APPRENTICE_1','WORKER','DRIVER'];
+    const validRoles = [
+      'SUPER_ADMIN',
+      'IT_ADMIN',
+      'COMPANY_ADMIN',
+      'TRADE_PROJECT_MANAGER',
+      'TRADE_ADMIN',
+      'FOREMAN',
+      'JOURNEYMAN',
+      'APPRENTICE_4',
+      'APPRENTICE_3',
+      'APPRENTICE_2',
+      'APPRENTICE_1',
+      'WORKER',
+      'DRIVER',
+    ];
     if (!validRoles.includes(role)) return res.status(400).json({ error: 'Invalid role' });
 
     if (!Array.isArray(permissions) || permissions.length === 0) {
       return res.status(400).json({ error: 'permissions array is required' });
     }
 
-    const callerRank = { SUPER_ADMIN: 0, IT_ADMIN: 1, COMPANY_ADMIN: 2, TRADE_PROJECT_MANAGER: 3, TRADE_ADMIN: 4, FOREMAN: 5, JOURNEYMAN: 6, APPRENTICE_4: 7, APPRENTICE_3: 7, APPRENTICE_2: 7, APPRENTICE_1: 7, WORKER: 8, DRIVER: 8 };
+    const callerRank = {
+      SUPER_ADMIN: 0,
+      IT_ADMIN: 1,
+      COMPANY_ADMIN: 2,
+      TRADE_PROJECT_MANAGER: 3,
+      TRADE_ADMIN: 4,
+      FOREMAN: 5,
+      JOURNEYMAN: 6,
+      APPRENTICE_4: 7,
+      APPRENTICE_3: 7,
+      APPRENTICE_2: 7,
+      APPRENTICE_1: 7,
+      WORKER: 8,
+      DRIVER: 8,
+    };
     if (callerRank[req.user.role] >= callerRank[role]) {
-      return res.status(403).json({ error: 'Cannot edit permissions for a role equal or higher than yours' });
+      return res
+        .status(403)
+        .json({ error: 'Cannot edit permissions for a role equal or higher than yours' });
     }
 
     await client.query('BEGIN');
@@ -156,11 +206,14 @@ router.put('/role/:role', can('settings.permissions'), async (req, res) => {
       const code = `${module}.${action}`;
 
       // Only insert if the code exists in the permissions master table
-      await client.query(`
+      await client.query(
+        `
         INSERT INTO public.role_permissions (role, permission_code)
         SELECT $1, $2 WHERE EXISTS (SELECT 1 FROM public.permissions WHERE code = $2)
         ON CONFLICT DO NOTHING
-      `, [role, code]);
+      `,
+        [role, code]
+      );
     }
 
     logAudit(req, 'UPDATE_PERMISSIONS', 'role_permissions', null, null, { role });
@@ -190,121 +243,231 @@ router.post('/reset/:role', can('settings.permissions'), async (req, res) => {
     }
 
     const { role } = req.params;
-    const validRoles = ['SUPER_ADMIN','IT_ADMIN','COMPANY_ADMIN','TRADE_PROJECT_MANAGER','TRADE_ADMIN','FOREMAN','JOURNEYMAN','APPRENTICE_4','APPRENTICE_3','APPRENTICE_2','APPRENTICE_1','WORKER','DRIVER'];
+    const validRoles = [
+      'SUPER_ADMIN',
+      'IT_ADMIN',
+      'COMPANY_ADMIN',
+      'TRADE_PROJECT_MANAGER',
+      'TRADE_ADMIN',
+      'FOREMAN',
+      'JOURNEYMAN',
+      'APPRENTICE_4',
+      'APPRENTICE_3',
+      'APPRENTICE_2',
+      'APPRENTICE_1',
+      'WORKER',
+      'DRIVER',
+    ];
     if (!validRoles.includes(role)) return res.status(400).json({ error: 'Invalid role' });
 
     const defaults = {
       IT_ADMIN: [
         'dashboard.view',
-        'settings.system','settings.company','settings.user_management','settings.permissions',
+        'settings.system',
+        'settings.company',
+        'settings.user_management',
+        'settings.permissions',
         'audit.view',
-        'employees.view','employees.create','employees.edit','employees.delete','employees.invite'
+        'employees.view',
+        'employees.create',
+        'employees.edit',
+        'employees.delete',
+        'employees.invite',
       ],
       COMPANY_ADMIN: [
         'dashboard.view',
-        'employees.view','employees.create','employees.edit','employees.delete','employees.invite',
-        'projects.view','projects.create','projects.edit','projects.delete',
-        'suppliers.view','suppliers.create','suppliers.edit','suppliers.delete',
-        'assignments.view','attendance.view',
-        'materials.request_view_all','materials.catalog_view','materials.surplus_view',
-        'purchase_orders.view','purchase_orders.print',
-        'bi.access_full','bi.access_own_trade','bi.workforce_planner',
-        'settings.company','settings.user_management','audit.view'
+        'employees.view',
+        'employees.create',
+        'employees.edit',
+        'employees.delete',
+        'employees.invite',
+        'projects.view',
+        'projects.create',
+        'projects.edit',
+        'projects.delete',
+        'suppliers.view',
+        'suppliers.create',
+        'suppliers.edit',
+        'suppliers.delete',
+        'assignments.view',
+        'attendance.view',
+        'materials.request_view_all',
+        'materials.catalog_view',
+        'materials.surplus_view',
+        'purchase_orders.view',
+        'purchase_orders.print',
+        'bi.access_full',
+        'bi.access_own_trade',
+        'bi.workforce_planner',
+        'settings.company',
+        'settings.user_management',
+        'audit.view',
       ],
       TRADE_PROJECT_MANAGER: [
         'dashboard.view',
-        'employees.view_own_trade','projects.view_own_trade','suppliers.view',
-        'assignments.view_own_trade','attendance.view_own_trade',
-        'materials.request_view_own_trade','materials.catalog_view','materials.surplus_view',
-        'purchase_orders.view_own_trade','purchase_orders.print',
-        'bi.access_own_trade','bi.workforce_planner'
+        'employees.view_own_trade',
+        'projects.view_own_trade',
+        'suppliers.view',
+        'assignments.view_own_trade',
+        'attendance.view_own_trade',
+        'materials.request_view_own_trade',
+        'materials.catalog_view',
+        'materials.surplus_view',
+        'purchase_orders.view_own_trade',
+        'purchase_orders.print',
+        'bi.access_own_trade',
+        'bi.workforce_planner',
       ],
       TRADE_ADMIN: [
         'dashboard.view',
-        'employees.view_own_trade','projects.view_own_trade','suppliers.view',
-        'assignments.view_own_trade','assignments.create','assignments.edit','assignments.delete','assignments.smart_assign',
-        'attendance.view_own_trade','attendance.checkin','attendance.approve','attendance.overtime_approve',
-        'hub.access','hub.materials_inbox','hub.materials_merge_send','hub.attendance_approval',
-        'materials.request_submit','materials.request_view_own','materials.request_view_own_trade',
-        'materials.catalog_view','materials.surplus_view','materials.surplus_declare',
-        'purchase_orders.view_own_trade','purchase_orders.print'
+        'employees.view_own_trade',
+        'projects.view_own_trade',
+        'suppliers.view',
+        'assignments.view_own_trade',
+        'assignments.create',
+        'assignments.edit',
+        'assignments.delete',
+        'assignments.smart_assign',
+        'attendance.view_own_trade',
+        'attendance.checkin',
+        'attendance.approve',
+        'attendance.overtime_approve',
+        'hub.access',
+        'hub.materials_inbox',
+        'hub.materials_merge_send',
+        'hub.attendance_approval',
+        'materials.request_submit',
+        'materials.request_view_own',
+        'materials.request_view_own_trade',
+        'materials.catalog_view',
+        'materials.surplus_view',
+        'materials.surplus_declare',
+        'purchase_orders.view_own_trade',
+        'purchase_orders.print',
       ],
       FOREMAN: [
         'dashboard.view',
-        'assignments.view','assignments.view_own_trade',
-        'attendance.checkin','attendance.view','attendance.view_own_trade','attendance.view_self',
-        'hub.access','hub.materials_inbox','hub.materials_merge_send','hub.receive_tasks','hub.send_tasks',
-        'materials.catalog_view','materials.request_submit','materials.request_view_own','materials.request_view_own_trade',
-        'materials.surplus_declare','materials.surplus_view',
+        'assignments.view',
+        'assignments.view_own_trade',
+        'attendance.checkin',
+        'attendance.view',
+        'attendance.view_own_trade',
+        'attendance.view_self',
+        'hub.access',
+        'hub.materials_inbox',
+        'hub.materials_merge_send',
+        'hub.receive_tasks',
+        'hub.send_tasks',
+        'materials.catalog_view',
+        'materials.request_submit',
+        'materials.request_view_own',
+        'materials.request_view_own_trade',
+        'materials.surplus_declare',
+        'materials.surplus_view',
         'projects.view_own_trade',
-        'purchase_orders.print','purchase_orders.view','purchase_orders.view_own',
-        'reports.view','reports.view_self',
-        'suppliers.view','tasks.send','tasks.view'
+        'purchase_orders.print',
+        'purchase_orders.view',
+        'purchase_orders.view_own',
+        'reports.view',
+        'reports.view_self',
+        'suppliers.view',
+        'tasks.send',
+        'tasks.view',
       ],
       JOURNEYMAN: [
         'dashboard.view',
-        'attendance.checkin','attendance.view_self',
+        'attendance.checkin',
+        'attendance.view_self',
         'hub.receive_tasks',
-        'materials.catalog_view','materials.request_submit','materials.request_view_own',
+        'materials.catalog_view',
+        'materials.request_submit',
+        'materials.request_view_own',
         'purchase_orders.view_own',
-        'reports.view','reports.view_self','tasks.view'
+        'reports.view',
+        'reports.view_self',
+        'tasks.view',
       ],
       APPRENTICE_4: [
         'dashboard.view',
-        'attendance.checkin','attendance.view_self',
+        'attendance.checkin',
+        'attendance.view_self',
         'hub.receive_tasks',
-        'materials.catalog_view','materials.request_submit','materials.request_view_own',
+        'materials.catalog_view',
+        'materials.request_submit',
+        'materials.request_view_own',
         'purchase_orders.view_own',
-        'reports.view','reports.view_self','tasks.view'
+        'reports.view',
+        'reports.view_self',
+        'tasks.view',
       ],
       APPRENTICE_3: [
         'dashboard.view',
-        'attendance.checkin','attendance.view_self',
+        'attendance.checkin',
+        'attendance.view_self',
         'hub.receive_tasks',
-        'materials.catalog_view','materials.request_submit','materials.request_view_own',
-        'reports.view','reports.view_self','tasks.view'
+        'materials.catalog_view',
+        'materials.request_submit',
+        'materials.request_view_own',
+        'reports.view',
+        'reports.view_self',
+        'tasks.view',
       ],
       APPRENTICE_2: [
         'dashboard.view',
-        'attendance.checkin','attendance.view_self',
+        'attendance.checkin',
+        'attendance.view_self',
         'hub.receive_tasks',
         'materials.catalog_view',
-        'reports.view_self','tasks.view'
+        'reports.view_self',
+        'tasks.view',
       ],
       APPRENTICE_1: [
         'dashboard.view',
-        'attendance.checkin','attendance.view_self',
+        'attendance.checkin',
+        'attendance.view_self',
         'hub.receive_tasks',
         'materials.catalog_view',
-        'reports.view_self','tasks.view'
+        'reports.view_self',
+        'tasks.view',
       ],
       WORKER: [
         'dashboard.view',
-        'attendance.checkin','attendance.view_self',
+        'attendance.checkin',
+        'attendance.view_self',
         'hub.receive_tasks',
-        'materials.catalog_view','materials.request_submit','materials.request_view_own',
+        'materials.catalog_view',
+        'materials.request_submit',
+        'materials.request_view_own',
         'purchase_orders.view_own',
-        'reports.view','reports.view_self','tasks.view'
+        'reports.view',
+        'reports.view_self',
+        'tasks.view',
       ],
       DRIVER: [
         'dashboard.view',
-        'attendance.checkin','attendance.view_self',
+        'attendance.checkin',
+        'attendance.view_self',
         'hub.receive_tasks',
-        'reports.view_self','tasks.view'
+        'reports.view_self',
+        'tasks.view',
       ],
     };
 
     await client.query('BEGIN');
     await client.query(`DELETE FROM public.role_permissions WHERE role = $1`, [role]);
 
-    const codes = role === 'SUPER_ADMIN'
-      ? (await client.query(`SELECT code FROM public.permissions`)).rows.map(r => r.code)
-      : (defaults[role] || []);
+    const codes =
+      role === 'SUPER_ADMIN'
+        ? (await client.query(`SELECT code FROM public.permissions`)).rows.map((r) => r.code)
+        : defaults[role] || [];
 
     for (const code of codes) {
-      await client.query(`
+      await client.query(
+        `
         INSERT INTO public.role_permissions (role, permission_code) VALUES ($1, $2) ON CONFLICT DO NOTHING
-      `, [role, code]);
+      `,
+        [role, code]
+      );
     }
 
     logAudit(req, 'RESET_PERMISSIONS', 'role_permissions', null, null, { role });
@@ -326,7 +489,8 @@ router.post('/reset/:role', can('settings.permissions'), async (req, res) => {
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 router.get('/audit', can('settings.permissions'), async (req, res) => {
   try {
-    const result = await pool.query(`
+    const result = await pool.query(
+      `
       SELECT
         al.id,
         al.action,
@@ -340,7 +504,9 @@ router.get('/audit', can('settings.permissions'), async (req, res) => {
         AND al.entity_type = 'role_permissions'
       ORDER BY al.created_at DESC
       LIMIT 50
-    `, [req.user.company_id]);
+    `,
+      [req.user.company_id]
+    );
 
     res.json({ audit: result.rows });
   } catch (err) {

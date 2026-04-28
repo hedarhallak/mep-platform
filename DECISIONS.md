@@ -1367,6 +1367,38 @@ All 3 had passing CI under the new policy. Pull Requests tab now shows **0 Open*
 
 **`CLAUDE.md` Rule 7 added:** Hedar's UX feedback — when giving instructions that involve SSH'ing into the server and then running commands ON the server, the `ssh root@...` line must be in its own code block, with on-server commands in a separate block below. Bundling them forces Hedar to manually delete the SSH line each time.
 
+### Phase 6 — Day 2 Phase 2: Cleanup Pass + Flip CI to Blocking (executed)
+
+**Goal:** apply Prettier across the codebase, then flip the Lint + Format CI steps from informational (`continue-on-error: true`) to blocking. After this phase, any future PR that ships unformatted code or new lint errors fails CI.
+
+**Prettier scope tightening (`.prettierignore` updated):**
+Added two ignore blocks:
+- `*.md` and `**/*.md` — Hedar's docs (DECISIONS.md, CLAUDE.md, MASTER_README.md, RECOVERY.md, all of `docs/`) contain hand-aligned tables and intentional formatting. Prettier's markdown reflow would mangle them. Excluded as a deliberate decision.
+- `data/` — runtime / seed JSON data, sometimes rewritten by scripts. Not source code.
+
+This dropped the format-check scope from **87 → 52 files** (.js source, configs, 2 `.html` files in `constrai-landing/`, and `package.json`).
+
+**Format pass executed:** `npm run format` reformatted 52 files in one commit. No semantic changes (Prettier is whitespace-only). Verified by:
+- `npm run audit:routes` → still 26/26 routes registered. Zero breakage.
+- App still parses/loads.
+
+**ESLint state unchanged:** the 42 `no-unused-vars` warnings are still present. They're warnings (not errors), so `eslint .` exits 0 and the now-blocking Lint step still passes. Cleaning the warnings up is left as a separate pass — they're cosmetic dead code, not bugs.
+
+**`ci.yml` changes:**
+- Backend job's `Lint` step: removed `continue-on-error: true` → **blocking**. Future PRs with new ESLint errors (not warnings) will fail CI.
+- Backend job's `Format check` step: removed `continue-on-error: true` → **blocking**. Future PRs with unformatted code will fail CI.
+- Step labels updated from "(informational — ... Day 2 Phase 1, will tighten after cleanup)" to "(blocking — Day 2 Phase 2 onward)".
+
+**Commit pattern note:** the format diff is large (52 files, mostly whitespace) but isolated to one commit, which makes it easy to ignore in `git blame` later via `.git-blame-ignore-revs` if Hedar wants. Filed as a low-priority follow-up.
+
+### Pending — Day 2 Phase 3 (next session)
+- Knip integration for dead-code detection (would have caught `routes/materials.js` v1 automatically before Hedar discovered it manually April 26).
+- Husky + lint-staged for portable local pre-commit hooks (replaces the manual `.git/hooks/pre-commit` Hedar installed locally — currently not checked into the repo).
+
+### Pending — Day 3-5
+- Day 3: Semgrep CI integration with security rule sets.
+- Day 4-5: Atlas (atlasgo.io) — schema-as-code, snapshot the prod baseline, wire into CI.
+
 ### Pending — Week 1 Day 3-5
 - Day 3: Semgrep CI integration with security rule sets.
 - Day 4-5: Atlas (atlasgo.io) — schema-as-code, snapshot the prod baseline, wire into CI.

@@ -24,3 +24,12 @@ db/schema_baseline_*.sql
 # Lockfiles for other tools
 *.min.js
 *.min.css
+
+# Documentation — hand-written, contains carefully aligned tables (DECISIONS.md,
+# CLAUDE.md, MASTER_README.md, RECOVERY.md, etc.). Prettier's markdown reflow
+# would mangle these. Excluded as a deliberate decision (Section 19 Phase 6).
+*.md
+**/*.md
+
+# Runtime / seed data — not source code, may be rewritten by scripts.
+data/

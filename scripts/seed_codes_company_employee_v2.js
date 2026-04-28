@@ -8,25 +8,25 @@
 // - Does not overwrite existing company_code / employee_code
 // - Works even if companies PK is company_id or another column
 
-require("dotenv").config();
-const { Pool } = require("pg");
+require('dotenv').config();
+const { Pool } = require('pg');
 
 function pad(n, w) {
-  return String(n).padStart(w, "0");
+  return String(n).padStart(w, '0');
 }
 
 async function main() {
   const url = process.env.DATABASE_URL;
   if (!url) {
-    console.error("Missing DATABASE_URL in .env");
+    console.error('Missing DATABASE_URL in .env');
     process.exit(1);
   }
 
   const pool = new Pool({ connectionString: url });
 
   try {
-    const db = await pool.query("SELECT current_database() AS db");
-    console.log("DB:", db.rows[0].db);
+    const db = await pool.query('SELECT current_database() AS db');
+    console.log('DB:', db.rows[0].db);
 
     // Detect companies PK column
     const pkRes = await pool.query(`
@@ -43,11 +43,11 @@ async function main() {
     `);
 
     if (!pkRes.rows.length) {
-      throw new Error("Could not detect PRIMARY KEY column for public.companies");
+      throw new Error('Could not detect PRIMARY KEY column for public.companies');
     }
 
     const companyPk = pkRes.rows[0].column_name;
-    console.log("companies PK:", companyPk);
+    console.log('companies PK:', companyPk);
 
     // Fetch companies
     const companies = await pool.query(
@@ -56,19 +56,19 @@ async function main() {
        ORDER BY ${companyPk} ASC`
     );
 
-    console.log("Companies:", companies.rows.length);
+    console.log('Companies:', companies.rows.length);
 
     let companySeq = 1;
     for (const c of companies.rows) {
-      const existing = (c.company_code || "").trim();
+      const existing = (c.company_code || '').trim();
       if (existing) continue;
 
       const code = `CMP-${pad(companySeq, 4)}`;
-      await pool.query(
-        `UPDATE public.companies SET company_code=$1 WHERE ${companyPk}=$2`,
-        [code, c.company_pk]
-      );
-      console.log("Set company_code:", c.company_pk, "->", code);
+      await pool.query(`UPDATE public.companies SET company_code=$1 WHERE ${companyPk}=$2`, [
+        code,
+        c.company_pk,
+      ]);
+      console.log('Set company_code:', c.company_pk, '->', code);
       companySeq++;
     }
 
@@ -81,7 +81,7 @@ async function main() {
 
     const companyCodeByPk = new Map();
     for (const r of companies2.rows) {
-      companyCodeByPk.set(String(r.company_pk), (r.company_code || "").trim());
+      companyCodeByPk.set(String(r.company_pk), (r.company_code || '').trim());
     }
 
     // Employees
@@ -91,13 +91,13 @@ async function main() {
        ORDER BY id ASC`
     );
 
-    console.log("Employees:", employees.rows.length);
+    console.log('Employees:', employees.rows.length);
 
     const perCompanyCounter = new Map();
     let globalCounter = 1;
 
     for (const e of employees.rows) {
-      const existing = (e.employee_code || "").trim();
+      const existing = (e.employee_code || '').trim();
       if (existing) continue;
 
       const companyId = e.company_id != null ? String(e.company_id) : null;
@@ -105,8 +105,8 @@ async function main() {
       let code;
       if (companyId && companyCodeByPk.get(companyId)) {
         const cCode = companyCodeByPk.get(companyId); // CMP-0001
-        const short = cCode.replace("CMP-", "C");     // C0001
-        const next = (perCompanyCounter.get(companyId) || 1);
+        const short = cCode.replace('CMP-', 'C'); // C0001
+        const next = perCompanyCounter.get(companyId) || 1;
         perCompanyCounter.set(companyId, next + 1);
         code = `EMP-${short}-${pad(next, 4)}`; // EMP-C0001-0001
       } else {
@@ -114,20 +114,17 @@ async function main() {
         globalCounter++;
       }
 
-      await pool.query(
-        `UPDATE public.employees SET employee_code=$1 WHERE id=$2`,
-        [code, e.id]
-      );
-      console.log("Set employee_code:", e.id, "->", code);
+      await pool.query(`UPDATE public.employees SET employee_code=$1 WHERE id=$2`, [code, e.id]);
+      console.log('Set employee_code:', e.id, '->', code);
     }
 
-    console.log("Done.");
+    console.log('Done.');
   } finally {
     await pool.end();
   }
 }
 
 main().catch((e) => {
-  console.error("FAILED:", e.message);
+  console.error('FAILED:', e.message);
   process.exit(1);
 });

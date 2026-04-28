@@ -1,6 +1,6 @@
-const { Pool } = require("pg");
-const path = require("path");
-require("dotenv").config({ path: path.join(__dirname, "../.env") });
+const { Pool } = require('pg');
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -20,9 +20,7 @@ async function checkDb() {
     const warnings = [];
 
     for (const { tablename } of tables) {
-      const { rows } = await client.query(
-        `SELECT COUNT(*) as count FROM "${tablename}"`
-      );
+      const { rows } = await client.query(`SELECT COUNT(*) as count FROM "${tablename}"`);
       const count = parseInt(rows[0].count, 10);
 
       if (count === 0 && !KNOWN_EMPTY_TABLES.includes(tablename)) {
@@ -37,9 +35,9 @@ async function checkDb() {
       ORDER BY sequence_name
     `);
 
-    console.log("\n========================================");
-    console.log("       CONSTRAI — DB Audit");
-    console.log("========================================");
+    console.log('\n========================================');
+    console.log('       CONSTRAI — DB Audit');
+    console.log('========================================');
     console.log(`Total tables: ${tables.length}`);
     console.log(`Total sequences: ${dupSeq.length}`);
 
@@ -47,17 +45,17 @@ async function checkDb() {
       console.log(`\n⚠️   EMPTY TABLES (${warnings.length}) — review if still needed:`);
       warnings.forEach((w) => console.log(w));
     } else {
-      console.log("\n✅  No empty tables found.");
+      console.log('\n✅  No empty tables found.');
     }
 
     if (issues.length > 0) {
       console.log(`\n🔴  ERRORS (${issues.length}):`);
       issues.forEach((i) => console.log(i));
-      console.log("");
+      console.log('');
       return false;
     }
 
-    console.log("");
+    console.log('');
     return true;
   } finally {
     client.release();
@@ -66,6 +64,6 @@ async function checkDb() {
 }
 
 checkDb().catch((err) => {
-  console.error("DB audit error:", err.message);
+  console.error('DB audit error:', err.message);
   process.exit(1);
 });

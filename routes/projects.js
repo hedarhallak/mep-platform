@@ -1,4 +1,4 @@
-"use strict";
+'use strict';
 
 /**
  * routes/projects.js
@@ -16,11 +16,11 @@
  * POST   /api/projects/clients          — create client (ADMIN only)
  */
 
-const express = require("express");
-const router  = express.Router();
-const { pool }           = require("../db");
-const { audit, ACTIONS } = require("../lib/audit");
-const { can } = require("../middleware/permissions");
+const express = require('express');
+const router = express.Router();
+const { pool } = require('../db');
+const { audit, ACTIONS } = require('../lib/audit');
+const { can } = require('../middleware/permissions');
 
 // ── Helpers ──────────────────────────────────────────────
 
@@ -28,44 +28,46 @@ function requireRoles(allowed) {
   return (req, res, next) => {
     const role = req.user?.role;
     if (!allowed.includes(role)) {
-      return res.status(403).json({ ok: false, error: "FORBIDDEN", required: allowed });
+      return res.status(403).json({ ok: false, error: 'FORBIDDEN', required: allowed });
     }
     return next();
   };
 }
 
-const ADMIN_ONLY = requireRoles(["ADMIN"]);
-const ADMIN_PM   = requireRoles(["ADMIN", "PM"]);
+const ADMIN_ONLY = requireRoles(['ADMIN']);
+const ADMIN_PM = requireRoles(['ADMIN', 'PM']);
 
 // ── GET /api/projects/meta ────────────────────────────────
 // Returns dropdown data: trade_types, project_statuses, clients
-router.get("/meta", can("projects.view"), async (req, res) => {
+router.get('/meta', can('projects.view'), async (req, res) => {
   try {
     const companyId = req.user.company_id;
 
     const [tradeTypes, statuses, clients] = await Promise.all([
-      pool.query("SELECT id, code, name FROM public.trade_types WHERE is_active = true ORDER BY name"),
-      pool.query("SELECT id, code, name, is_final FROM public.project_statuses ORDER BY id"),
       pool.query(
-        "SELECT id, client_code, client_name, phone, email FROM public.clients WHERE company_id = $1 AND is_active = true ORDER BY client_name",
+        'SELECT id, code, name FROM public.trade_types WHERE is_active = true ORDER BY name'
+      ),
+      pool.query('SELECT id, code, name, is_final FROM public.project_statuses ORDER BY id'),
+      pool.query(
+        'SELECT id, client_code, client_name, phone, email FROM public.clients WHERE company_id = $1 AND is_active = true ORDER BY client_name',
         [companyId]
       ),
     ]);
 
     return res.json({
-      ok:           true,
-      trade_types:  tradeTypes.rows,
-      statuses:     statuses.rows,
-      clients:      clients.rows,
+      ok: true,
+      trade_types: tradeTypes.rows,
+      statuses: statuses.rows,
+      clients: clients.rows,
     });
   } catch (err) {
-    console.error("GET /api/projects/meta error:", err);
-    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+    console.error('GET /api/projects/meta error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
 });
 
 // ── GET /api/projects/clients ─────────────────────────────
-router.get("/clients", can("projects.view"), async (req, res) => {
+router.get('/clients', can('projects.view'), async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT id, client_code, client_name, client_type, phone, email, address, is_active, created_at
@@ -76,27 +78,26 @@ router.get("/clients", can("projects.view"), async (req, res) => {
     );
     return res.json({ ok: true, clients: rows });
   } catch (err) {
-    console.error("GET /api/projects/clients error:", err);
-    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+    console.error('GET /api/projects/clients error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
 });
 
 // ── POST /api/projects/clients ────────────────────────────
-router.post("/clients", can("projects.create"), async (req, res) => {
+router.post('/clients', can('projects.create'), async (req, res) => {
   try {
     const companyId = req.user.company_id;
     const { client_name, client_type, phone, email, address } = req.body || {};
 
     if (!client_name || !String(client_name).trim())
-      return res.status(400).json({ ok: false, error: "CLIENT_NAME_REQUIRED" });
+      return res.status(400).json({ ok: false, error: 'CLIENT_NAME_REQUIRED' });
 
     // Generate client_code: CLI-XXXX
-    const countRes = await pool.query(
-      "SELECT COUNT(*) FROM public.clients WHERE company_id = $1",
-      [companyId]
-    );
-    const seq         = parseInt(countRes.rows[0].count) + 1;
-    const client_code = "CLI-" + String(seq).padStart(4, "0");
+    const countRes = await pool.query('SELECT COUNT(*) FROM public.clients WHERE company_id = $1', [
+      companyId,
+    ]);
+    const seq = parseInt(countRes.rows[0].count) + 1;
+    const client_code = 'CLI-' + String(seq).padStart(4, '0');
 
     const { rows } = await pool.query(
       `INSERT INTO public.clients
@@ -107,22 +108,22 @@ router.post("/clients", can("projects.create"), async (req, res) => {
         client_code,
         String(client_name).trim(),
         client_type || null,
-        phone       || null,
-        email       || null,
-        address     || null,
+        phone || null,
+        email || null,
+        address || null,
         companyId,
       ]
     );
 
     return res.status(201).json({ ok: true, client: rows[0] });
   } catch (err) {
-    console.error("POST /api/projects/clients error:", err);
-    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+    console.error('POST /api/projects/clients error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
 });
 
 // ── GET /api/projects ─────────────────────────────────────
-router.get("/", can("projects.view"), async (req, res) => {
+router.get('/', can('projects.view'), async (req, res) => {
   try {
     const { status, trade } = req.query;
     const companyId = req.user.company_id;
@@ -165,18 +166,19 @@ router.get("/", can("projects.view"), async (req, res) => {
       query += ` AND tt.code = $${params.length}`;
     }
 
-    query += " GROUP BY p.id, tt.code, tt.name, ps.code, ps.name, ps.is_final, c.client_name ORDER BY p.created_at DESC";
+    query +=
+      ' GROUP BY p.id, tt.code, tt.name, ps.code, ps.name, ps.is_final, c.client_name ORDER BY p.created_at DESC';
 
     const { rows } = await pool.query(query, params);
     return res.json({ ok: true, projects: rows });
   } catch (err) {
-    console.error("GET /api/projects error:", err);
-    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+    console.error('GET /api/projects error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
 });
 
 // ── GET /api/projects/map ─────────────────────────────────
-router.get("/map", can("projects.view"), async (req, res) => {
+router.get('/map', can('projects.view'), async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT id, project_code, project_name, site_address, site_lat, site_lng,
@@ -191,18 +193,18 @@ router.get("/map", can("projects.view"), async (req, res) => {
     );
     return res.json({ ok: true, projects: rows });
   } catch (err) {
-    console.error("GET /api/projects/map error:", err);
-    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+    console.error('GET /api/projects/map error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
 });
 
 // ── GET /api/projects/:id ─────────────────────────────────
-router.get("/:id", can("projects.view"), async (req, res) => {
+router.get('/:id', can('projects.view'), async (req, res) => {
   try {
     const projectId = Number(req.params.id);
     const companyId = req.user.company_id;
 
-    if (!projectId) return res.status(400).json({ ok: false, error: "INVALID_ID" });
+    if (!projectId) return res.status(400).json({ ok: false, error: 'INVALID_ID' });
 
     const { rows } = await pool.query(
       `SELECT
@@ -219,18 +221,17 @@ router.get("/:id", can("projects.view"), async (req, res) => {
       [projectId, companyId]
     );
 
-    if (!rows.length)
-      return res.status(404).json({ ok: false, error: "PROJECT_NOT_FOUND" });
+    if (!rows.length) return res.status(404).json({ ok: false, error: 'PROJECT_NOT_FOUND' });
 
     return res.json({ ok: true, project: rows[0] });
   } catch (err) {
-    console.error("GET /api/projects/:id error:", err);
-    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+    console.error('GET /api/projects/:id error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
 });
 
 // ── POST /api/projects ────────────────────────────────────
-router.post("/", can("projects.create"), async (req, res) => {
+router.post('/', can('projects.create'), async (req, res) => {
   try {
     const companyId = req.user.company_id;
     const {
@@ -244,36 +245,32 @@ router.post("/", can("projects.create"), async (req, res) => {
     } = req.body || {};
 
     if (!project_name || !String(project_name).trim())
-      return res.status(400).json({ ok: false, error: "PROJECT_NAME_REQUIRED" });
-    if (!trade_type_id)
-      return res.status(400).json({ ok: false, error: "TRADE_TYPE_REQUIRED" });
+      return res.status(400).json({ ok: false, error: 'PROJECT_NAME_REQUIRED' });
+    if (!trade_type_id) return res.status(400).json({ ok: false, error: 'TRADE_TYPE_REQUIRED' });
 
     // Validate trade_type belongs to platform
     const trade = await pool.query(
-      "SELECT id FROM public.trade_types WHERE id = $1 AND is_active = true LIMIT 1",
+      'SELECT id FROM public.trade_types WHERE id = $1 AND is_active = true LIMIT 1',
       [trade_type_id]
     );
-    if (!trade.rows.length)
-      return res.status(400).json({ ok: false, error: "INVALID_TRADE_TYPE" });
+    if (!trade.rows.length) return res.status(400).json({ ok: false, error: 'INVALID_TRADE_TYPE' });
 
     // Default status = PLANNED (id:1) if not provided
     const resolvedStatusId = status_id || 1;
 
     const status = await pool.query(
-      "SELECT id FROM public.project_statuses WHERE id = $1 LIMIT 1",
+      'SELECT id FROM public.project_statuses WHERE id = $1 LIMIT 1',
       [resolvedStatusId]
     );
-    if (!status.rows.length)
-      return res.status(400).json({ ok: false, error: "INVALID_STATUS" });
+    if (!status.rows.length) return res.status(400).json({ ok: false, error: 'INVALID_STATUS' });
 
     // Validate client belongs to this company
     if (client_id) {
       const client = await pool.query(
-        "SELECT id FROM public.clients WHERE id = $1 AND company_id = $2 LIMIT 1",
+        'SELECT id FROM public.clients WHERE id = $1 AND company_id = $2 LIMIT 1',
         [client_id, companyId]
       );
-      if (!client.rows.length)
-        return res.status(400).json({ ok: false, error: "INVALID_CLIENT" });
+      if (!client.rows.length) return res.status(400).json({ ok: false, error: 'INVALID_CLIENT' });
     }
 
     // Generate project_code: PRJ-XXXX
@@ -284,8 +281,8 @@ router.post("/", can("projects.create"), async (req, res) => {
        WHERE company_id = $1 AND project_code ~ '^PRJ-[0-9]+$'`,
       [companyId]
     );
-    const seq          = seqRes.rows[0].next_seq;
-    const project_code = "PRJ-" + String(seq).padStart(4, "0");
+    const seq = seqRes.rows[0].next_seq;
+    const project_code = 'PRJ-' + String(seq).padStart(4, '0');
 
     const { rows } = await pool.query(
       `INSERT INTO public.projects
@@ -299,44 +296,45 @@ router.post("/", can("projects.create"), async (req, res) => {
         trade_type_id,
         resolvedStatusId,
         site_address || null,
-        start_date   || null,
-        end_date     || null,
-        client_id    || null,
+        start_date || null,
+        end_date || null,
+        client_id || null,
         companyId,
-        ['IC','INDUSTRIAL','RESIDENTIAL'].includes(req.body.ccq_sector) ? req.body.ccq_sector : 'IC',
+        ['IC', 'INDUSTRIAL', 'RESIDENTIAL'].includes(req.body.ccq_sector)
+          ? req.body.ccq_sector
+          : 'IC',
       ]
     );
 
     await audit(pool, req, {
-      action:      ACTIONS.PROJECT_CREATED,
-      entity_type: "project",
-      entity_id:   rows[0].id,
+      action: ACTIONS.PROJECT_CREATED,
+      entity_type: 'project',
+      entity_id: rows[0].id,
       entity_name: rows[0].project_name,
-      new_values:  rows[0],
+      new_values: rows[0],
     });
 
     return res.status(201).json({ ok: true, project: rows[0] });
   } catch (err) {
-    console.error("POST /api/projects error:", err);
-    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+    console.error('POST /api/projects error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
 });
 
 // ── PATCH /api/projects/:id ───────────────────────────────
-router.patch("/:id", can("projects.edit"), async (req, res) => {
+router.patch('/:id', can('projects.edit'), async (req, res) => {
   try {
     const projectId = Number(req.params.id);
     const companyId = req.user.company_id;
 
-    if (!projectId) return res.status(400).json({ ok: false, error: "INVALID_ID" });
+    if (!projectId) return res.status(400).json({ ok: false, error: 'INVALID_ID' });
 
     // Verify ownership
     const exists = await pool.query(
-      "SELECT id FROM public.projects WHERE id = $1 AND company_id = $2 LIMIT 1",
+      'SELECT id FROM public.projects WHERE id = $1 AND company_id = $2 LIMIT 1',
       [projectId, companyId]
     );
-    if (!exists.rows.length)
-      return res.status(404).json({ ok: false, error: "PROJECT_NOT_FOUND" });
+    if (!exists.rows.length) return res.status(404).json({ ok: false, error: 'PROJECT_NOT_FOUND' });
 
     const {
       project_name,
@@ -365,87 +363,88 @@ router.patch("/:id", can("projects.edit"), async (req, res) => {
        WHERE id = $11 AND company_id = $12
        RETURNING *`,
       [
-        project_name  ? String(project_name).trim() : null,
+        project_name ? String(project_name).trim() : null,
         trade_type_id || null,
-        status_id     || null,
-        site_address  || null,
-        site_lat      ?? null,
-        site_lng      ?? null,
-        start_date    || null,
-        end_date      || null,
-        client_id     || null,
-        ['IC','INDUSTRIAL','RESIDENTIAL'].includes(req.body.ccq_sector) ? req.body.ccq_sector : null,
+        status_id || null,
+        site_address || null,
+        site_lat ?? null,
+        site_lng ?? null,
+        start_date || null,
+        end_date || null,
+        client_id || null,
+        ['IC', 'INDUSTRIAL', 'RESIDENTIAL'].includes(req.body.ccq_sector)
+          ? req.body.ccq_sector
+          : null,
         projectId,
         companyId,
       ]
     );
 
     await audit(pool, req, {
-      action:      ACTIONS.PROJECT_UPDATED,
-      entity_type: "project",
-      entity_id:   rows[0].id,
+      action: ACTIONS.PROJECT_UPDATED,
+      entity_type: 'project',
+      entity_id: rows[0].id,
       entity_name: rows[0].project_name,
-      new_values:  req.body,
+      new_values: req.body,
     });
 
     return res.json({ ok: true, project: rows[0] });
   } catch (err) {
-    console.error("PATCH /api/projects/:id error:", err);
-    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+    console.error('PATCH /api/projects/:id error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
 });
 
 // ── DELETE /api/projects/:id ──────────────────────────────
-router.delete("/:id", can("projects.delete"), async (req, res) => {
+router.delete('/:id', can('projects.delete'), async (req, res) => {
   try {
     const projectId = Number(req.params.id);
     const companyId = req.user.company_id;
 
-    if (!projectId) return res.status(400).json({ ok: false, error: "INVALID_ID" });
+    if (!projectId) return res.status(400).json({ ok: false, error: 'INVALID_ID' });
 
     // Verify ownership
     const exists = await pool.query(
-      "SELECT id FROM public.projects WHERE id = $1 AND company_id = $2 LIMIT 1",
+      'SELECT id FROM public.projects WHERE id = $1 AND company_id = $2 LIMIT 1',
       [projectId, companyId]
     );
-    if (!exists.rows.length)
-      return res.status(404).json({ ok: false, error: "PROJECT_NOT_FOUND" });
+    if (!exists.rows.length) return res.status(404).json({ ok: false, error: 'PROJECT_NOT_FOUND' });
 
     // Block delete if project has assignments
     const assigned = await pool.query(
-      "SELECT COUNT(*) FROM public.assignment_requests WHERE project_id = $1",
+      'SELECT COUNT(*) FROM public.assignment_requests WHERE project_id = $1',
       [projectId]
     );
     if (parseInt(assigned.rows[0].count) > 0)
       return res.status(409).json({
-        ok:    false,
-        error: "PROJECT_HAS_ASSIGNMENTS",
-        message: "Cannot delete a project that has assignments. Change status to CANCELLED instead.",
+        ok: false,
+        error: 'PROJECT_HAS_ASSIGNMENTS',
+        message:
+          'Cannot delete a project that has assignments. Change status to CANCELLED instead.',
       });
 
     // Fetch name before delete for audit
-    const toDelete = await pool.query(
-      "SELECT project_name FROM public.projects WHERE id = $1",
-      [projectId]
-    );
+    const toDelete = await pool.query('SELECT project_name FROM public.projects WHERE id = $1', [
+      projectId,
+    ]);
 
-    await pool.query(
-      "DELETE FROM public.projects WHERE id = $1 AND company_id = $2",
-      [projectId, companyId]
-    );
+    await pool.query('DELETE FROM public.projects WHERE id = $1 AND company_id = $2', [
+      projectId,
+      companyId,
+    ]);
 
     await audit(pool, req, {
-      action:      ACTIONS.PROJECT_DELETED,
-      entity_type: "project",
-      entity_id:   projectId,
+      action: ACTIONS.PROJECT_DELETED,
+      entity_type: 'project',
+      entity_id: projectId,
       entity_name: toDelete.rows[0]?.project_name,
-      details:     { deleted_by: req.user.username, reason: req.body?.reason || null },
+      details: { deleted_by: req.user.username, reason: req.body?.reason || null },
     });
 
-    return res.json({ ok: true, message: "Project deleted" });
+    return res.json({ ok: true, message: 'Project deleted' });
   } catch (err) {
-    console.error("DELETE /api/projects/:id error:", err);
-    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+    console.error('DELETE /api/projects/:id error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
 });
 

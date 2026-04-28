@@ -1,4 +1,4 @@
-"use strict";
+'use strict';
 
 /**
  * jobs/ccqRatesReminderJob.js
@@ -6,9 +6,9 @@
  * to update CCQ travel rates before the ACQ agreement expires (April 30, 2028)
  */
 
-const cron     = require("node-cron");
-const { pool } = require("../db");
-const sgMail   = require("@sendgrid/mail");
+const cron = require('node-cron');
+const { pool } = require('../db');
+const sgMail = require('@sendgrid/mail');
 
 if (process.env.SENDGRID_API_KEY) {
   sgMail.setApiKey(process.env.SENDGRID_API_KEY);
@@ -45,9 +45,9 @@ async function sendCCQReminder(poolInstance) {
     for (const admin of admins) {
       try {
         await sgMail.send({
-          to:      admin.username,
-          from:    process.env.SENDGRID_FROM_EMAIL || "noreply@mepplatform.com",
-          subject: "⚠️ Action Required: CCQ Travel Rates Expiring April 30, 2028",
+          to: admin.username,
+          from: process.env.SENDGRID_FROM_EMAIL || 'noreply@mepplatform.com',
+          subject: '⚠️ Action Required: CCQ Travel Rates Expiring April 30, 2028',
           html,
         });
         console.log(`[ccqRatesReminder] Reminder sent to ${admin.username}`);
@@ -56,26 +56,24 @@ async function sendCCQReminder(poolInstance) {
       }
     }
   } catch (err) {
-    console.error("[ccqRatesReminder] Error:", err);
+    console.error('[ccqRatesReminder] Error:', err);
   }
 }
 
 module.exports = function registerCCQRatesReminderJob(poolInstance) {
   // March 1, 2028 at 09:00 Quebec time (14:00 UTC)
-  cron.schedule("0 14 1 3 *", () => {
+  cron.schedule('0 14 1 3 *', () => {
     const year = new Date().getFullYear();
     if (year === 2028) sendCCQReminder(poolInstance);
   });
 
   // April 1, 2028 at 09:00 Quebec time (14:00 UTC)
-  cron.schedule("0 14 1 4 *", () => {
+  cron.schedule('0 14 1 4 *', () => {
     const year = new Date().getFullYear();
     if (year === 2028) sendCCQReminder(poolInstance);
   });
 
-  console.log("[ccqRatesReminder] Scheduled: Mar 1 + Apr 1, 2028");
+  console.log('[ccqRatesReminder] Scheduled: Mar 1 + Apr 1, 2028');
 };
 
 module.exports.sendCCQReminder = sendCCQReminder;
-
-

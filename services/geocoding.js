@@ -10,9 +10,9 @@ const MAPBOX_TOKEN = process.env.MAPBOX_ACCESS_TOKEN;
 
 function buildAddress({ street, city, province, postal_code, country }) {
   const parts = [street, city, province, postal_code, country]
-    .map((v) => (v == null ? "" : String(v).trim()))
+    .map((v) => (v == null ? '' : String(v).trim()))
     .filter(Boolean);
-  return parts.join(", ");
+  return parts.join(', ');
 }
 
 function pickLngLat(feature) {
@@ -38,44 +38,45 @@ async function geocodeHomeAddress({ street, city, province, postal_code, country
   if (!MAPBOX_TOKEN) {
     return {
       ok: false,
-      error: "GEOCODE_PROVIDER_NOT_CONFIGURED",
-      message: "MAPBOX_ACCESS_TOKEN is missing",
+      error: 'GEOCODE_PROVIDER_NOT_CONFIGURED',
+      message: 'MAPBOX_ACCESS_TOKEN is missing',
     };
   }
 
-  const q = buildAddress({ street, city, province, postal_code, country: country || "Canada" });
+  const q = buildAddress({ street, city, province, postal_code, country: country || 'Canada' });
   if (!q) {
     return {
       ok: false,
-      error: "GEOCODE_INPUT_EMPTY",
-      message: "Address is empty",
+      error: 'GEOCODE_INPUT_EMPTY',
+      message: 'Address is empty',
     };
   }
 
-  const url = new URL("https://api.mapbox.com/search/geocode/v6/forward");
-  url.searchParams.set("q", q);
-  url.searchParams.set("access_token", MAPBOX_TOKEN);
-  url.searchParams.set("limit", "1");
-  url.searchParams.set("country", "ca");
+  const url = new URL('https://api.mapbox.com/search/geocode/v6/forward');
+  url.searchParams.set('q', q);
+  url.searchParams.set('access_token', MAPBOX_TOKEN);
+  url.searchParams.set('limit', '1');
+  url.searchParams.set('country', 'ca');
   // We store results in DB ⇒ must be permanent
-  url.searchParams.set("permanent", "true");
+  url.searchParams.set('permanent', 'true');
 
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), timeoutMs);
 
   try {
     const resp = await fetch(url.toString(), {
-      method: "GET",
-      headers: { Accept: "application/json" },
+      method: 'GET',
+      headers: { Accept: 'application/json' },
       signal: ac.signal,
     });
 
     if (!resp.ok) {
-      const text = await resp.text().catch(() => "");
+      const text = await resp.text().catch(() => '');
       return {
         ok: false,
-        error: "GEOCODE_PROVIDER_ERROR",
-        message: `Mapbox geocoding failed (${resp.status}) ${text ? "- " + text.slice(0, 200) : ""}`.trim(),
+        error: 'GEOCODE_PROVIDER_ERROR',
+        message:
+          `Mapbox geocoding failed (${resp.status}) ${text ? '- ' + text.slice(0, 200) : ''}`.trim(),
       };
     }
 
@@ -84,8 +85,8 @@ async function geocodeHomeAddress({ street, city, province, postal_code, country
     if (!feature) {
       return {
         ok: false,
-        error: "GEOCODE_NO_RESULTS",
-        message: "No geocoding results",
+        error: 'GEOCODE_NO_RESULTS',
+        message: 'No geocoding results',
       };
     }
 
@@ -93,18 +94,18 @@ async function geocodeHomeAddress({ street, city, province, postal_code, country
     if (!ll) {
       return {
         ok: false,
-        error: "GEOCODE_BAD_RESPONSE",
-        message: "Geocoding response missing coordinates",
+        error: 'GEOCODE_BAD_RESPONSE',
+        message: 'Geocoding response missing coordinates',
       };
     }
 
     return { ok: true, ...ll, raw: feature };
   } catch (e) {
-    const isAbort = e && (e.name === "AbortError" || String(e).includes("AbortError"));
+    const isAbort = e && (e.name === 'AbortError' || String(e).includes('AbortError'));
     return {
       ok: false,
-      error: isAbort ? "GEOCODE_TIMEOUT" : "GEOCODE_NETWORK_ERROR",
-      message: isAbort ? "Geocoding request timed out" : (e?.message || "Geocoding failed"),
+      error: isAbort ? 'GEOCODE_TIMEOUT' : 'GEOCODE_NETWORK_ERROR',
+      message: isAbort ? 'Geocoding request timed out' : e?.message || 'Geocoding failed',
     };
   } finally {
     clearTimeout(timer);

@@ -1,4 +1,4 @@
-﻿"use strict";
+﻿'use strict';
 
 // routes/standup.js
 // Daily standup â€” foreman reviews tomorrow's plan
@@ -13,32 +13,38 @@
 // PATCH /api/standup/materials/:request_id/items/:item_id â€” edit item qty
 // DELETE /api/standup/materials/:request_id/items/:item_id â€” remove item
 
-const express  = require('express')
-const router   = express.Router()
-const { pool } = require('../db')
-const { can }  = require('../middleware/permissions')
+const express = require('express');
+const router = express.Router();
+const { pool } = require('../db');
+const { can } = require('../middleware/permissions');
 
 const tomorrow = () => {
-  const d = new Date()
-  d.setDate(d.getDate() + 1)
-  return d.toISOString().split('T')[0]
-}
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return d.toISOString().split('T')[0];
+};
 
 // â”€â”€ GET /api/standup/tomorrow â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Returns all projects where foreman has assignments tomorrow
 // with team members and existing material requests
 router.get('/tomorrow', can('standup.manage'), async (req, res) => {
   try {
-    const companyId  = req.user.company_id
-    const userId     = req.user.user_id
-    const employeeId = req.user.employee_id
-    const tmrw       = tomorrow()
+    const companyId = req.user.company_id;
+    const userId = req.user.user_id;
+    const employeeId = req.user.employee_id;
+    const tmrw = tomorrow();
 
-    const isAdmin = ['SUPER_ADMIN','COMPANY_ADMIN','TRADE_ADMIN','TRADE_PROJECT_MANAGER'].includes((req.user.role || '').toUpperCase())
+    const isAdmin = [
+      'SUPER_ADMIN',
+      'COMPANY_ADMIN',
+      'TRADE_ADMIN',
+      'TRADE_PROJECT_MANAGER',
+    ].includes((req.user.role || '').toUpperCase());
 
     // Get projects where there are workers assigned tomorrow
     // COMPANY_ADMIN sees all, TRADE_ADMIN sees only their projects
-    const projectsRes = await pool.query(`
+    const projectsRes = await pool.query(
+      `
       SELECT DISTINCT
         p.id,
         p.project_code,
@@ -71,13 +77,16 @@ router.get('/tomorrow', can('standup.manage'), async (req, res) => {
           )
         )
       ORDER BY p.project_code
-    `, [companyId, tmrw, isAdmin, employeeId])
+    `,
+      [companyId, tmrw, isAdmin, employeeId]
+    );
 
-    const projects = []
+    const projects = [];
 
     for (const proj of projectsRes.rows) {
       // Get team for tomorrow
-      const teamRes = await pool.query(`
+      const teamRes = await pool.query(
+        `
         SELECT
           e.id AS employee_id,
           e.first_name,
@@ -98,10 +107,13 @@ router.get('/tomorrow', can('standup.manage'), async (req, res) => {
           AND (ar.end_date IS NULL OR ar.end_date >= $3::date)
           AND au.role = 'WORKER'
         ORDER BY e.first_name
-      `, [proj.id, companyId, tmrw])
+      `,
+        [proj.id, companyId, tmrw]
+      );
 
       // Get or find material request for tomorrow
-      const matRes = await pool.query(`
+      const matRes = await pool.query(
+        `
         SELECT
           mr.id,
           mr.status,
@@ -125,91 +137,102 @@ router.get('/tomorrow', can('standup.manage'), async (req, res) => {
         GROUP BY mr.id
         ORDER BY mr.created_at DESC
         LIMIT 1
-      `, [proj.id, companyId, tmrw])
+      `,
+        [proj.id, companyId, tmrw]
+      );
 
       // Get standup session if exists
-      const sessionRes = await pool.query(`
+      const sessionRes = await pool.query(
+        `
         SELECT id, status, note, completed_at
         FROM public.standup_sessions
         WHERE company_id = $1 AND project_id = $2
           AND foreman_id = $3 AND standup_date = $4
         LIMIT 1
-      `, [companyId, proj.id, userId, tmrw])
+      `,
+        [companyId, proj.id, userId, tmrw]
+      );
 
       projects.push({
         ...proj,
-        standup_date:    tmrw,
-        team:            teamRes.rows,
+        standup_date: tmrw,
+        team: teamRes.rows,
         material_request: matRes.rows[0] || null,
-        session:         sessionRes.rows[0] || null,
-      })
+        session: sessionRes.rows[0] || null,
+      });
     }
 
-    res.json({ ok: true, date: tmrw, projects })
+    res.json({ ok: true, date: tmrw, projects });
   } catch (err) {
-    console.error('GET /standup/tomorrow error:', err)
-    res.status(500).json({ ok: false, error: 'SERVER_ERROR' })
+    console.error('GET /standup/tomorrow error:', err);
+    res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
-})
+});
 
 // â”€â”€ POST /api/standup/session â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Create standup session for a project
 router.post('/session', can('standup.manage'), async (req, res) => {
   try {
-    const { project_id } = req.body
-    const companyId = req.user.company_id
-    const userId    = req.user.user_id
-    const tmrw      = tomorrow()
+    const { project_id } = req.body;
+    const companyId = req.user.company_id;
+    const userId = req.user.user_id;
+    const tmrw = tomorrow();
 
-    const result = await pool.query(`
+    const result = await pool.query(
+      `
       INSERT INTO public.standup_sessions
         (company_id, project_id, foreman_id, standup_date, status)
       VALUES ($1, $2, $3, $4, 'OPEN')
       ON CONFLICT (company_id, project_id, foreman_id, standup_date)
       DO UPDATE SET updated_at = NOW()
       RETURNING *
-    `, [companyId, project_id, userId, tmrw])
+    `,
+      [companyId, project_id, userId, tmrw]
+    );
 
-    res.json({ ok: true, session: result.rows[0] })
+    res.json({ ok: true, session: result.rows[0] });
   } catch (err) {
-    console.error('POST /standup/session error:', err)
-    res.status(500).json({ ok: false, error: 'SERVER_ERROR' })
+    console.error('POST /standup/session error:', err);
+    res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
-})
+});
 
 // â”€â”€ POST /api/standup/session/:id/complete â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 router.post('/session/:id/complete', can('standup.manage'), async (req, res) => {
   try {
-    const { note } = req.body
-    const companyId = req.user.company_id
+    const { note } = req.body;
+    const companyId = req.user.company_id;
 
-    const result = await pool.query(`
+    const result = await pool.query(
+      `
       UPDATE public.standup_sessions
       SET status = 'COMPLETED', note = $1, completed_at = NOW(), updated_at = NOW()
       WHERE id = $2 AND company_id = $3
       RETURNING *
-    `, [note || null, req.params.id, companyId])
+    `,
+      [note || null, req.params.id, companyId]
+    );
 
-    if (!result.rows.length)
-      return res.status(404).json({ ok: false, error: 'SESSION_NOT_FOUND' })
+    if (!result.rows.length) return res.status(404).json({ ok: false, error: 'SESSION_NOT_FOUND' });
 
-    res.json({ ok: true, session: result.rows[0] })
+    res.json({ ok: true, session: result.rows[0] });
   } catch (err) {
-    console.error('POST /standup/session/:id/complete error:', err)
-    res.status(500).json({ ok: false, error: 'SERVER_ERROR' })
+    console.error('POST /standup/session/:id/complete error:', err);
+    res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
-})
+});
 
 // â”€â”€ GET/POST /api/standup/materials/:project_id â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Get existing or create new material request for tomorrow
 router.get('/materials/:project_id', can('standup.manage'), async (req, res) => {
   try {
-    const companyId = req.user.company_id
-    const projectId = Number(req.params.project_id)
-    const tmrw      = tomorrow()
+    const companyId = req.user.company_id;
+    const projectId = Number(req.params.project_id);
+    const tmrw = tomorrow();
 
     // Try to find existing request for tomorrow
-    const existing = await pool.query(`
+    const existing = await pool.query(
+      `
       SELECT
         mr.id, mr.status, mr.note,
         json_agg(
@@ -230,10 +253,12 @@ router.get('/materials/:project_id', can('standup.manage'), async (req, res) => 
       GROUP BY mr.id
       ORDER BY mr.created_at DESC
       LIMIT 1
-    `, [projectId, companyId, tmrw])
+    `,
+      [projectId, companyId, tmrw]
+    );
 
     if (existing.rows.length > 0) {
-      return res.json({ ok: true, request: existing.rows[0], created: false })
+      return res.json({ ok: true, request: existing.rows[0], created: false });
     }
 
     // Find foreman for this project
@@ -248,75 +273,81 @@ router.get('/materials/:project_id', can('standup.manage'), async (req, res) => 
          AND (ar.end_date IS NULL OR ar.end_date >= $3::date)
        LIMIT 1`,
       [projectId, companyId, tmrw]
-    )
-    const foremanId = foremanRes.rows[0]?.foreman_employee_id || null
+    );
+    const foremanId = foremanRes.rows[0]?.foreman_employee_id || null;
 
     // Create new request with foreman_employee_id
-    const newReq = await pool.query(`
+    const newReq = await pool.query(
+      `
       INSERT INTO public.material_requests
         (company_id, project_id, requested_by, foreman_employee_id, status, note)
       VALUES ($1, $2, $3, $4, 'PENDING', $5)
       RETURNING id, status, note
-    `, [companyId, projectId, req.user.user_id, foremanId, 'Daily standup â€” ' + tmrw])
+    `,
+      [companyId, projectId, req.user.user_id, foremanId, 'Daily standup â€” ' + tmrw]
+    );
 
-    res.json({ ok: true, request: { ...newReq.rows[0], items: [] }, created: true })
+    res.json({ ok: true, request: { ...newReq.rows[0], items: [] }, created: true });
   } catch (err) {
-    console.error('GET /standup/materials error:', err)
-    res.status(500).json({ ok: false, error: 'SERVER_ERROR' })
+    console.error('GET /standup/materials error:', err);
+    res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
-})
+});
 
 // â”€â”€ POST /api/standup/materials/:request_id/items â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Add item to material request
 router.post('/materials/:request_id/items', can('standup.manage'), async (req, res) => {
   try {
-    const { item_name, quantity, unit, note } = req.body
-    const requestId = Number(req.params.request_id)
-    const companyId = req.user.company_id
+    const { item_name, quantity, unit, note } = req.body;
+    const requestId = Number(req.params.request_id);
+    const companyId = req.user.company_id;
 
     // Verify request belongs to company
     const check = await pool.query(
       'SELECT id FROM public.material_requests WHERE id = $1 AND company_id = $2',
       [requestId, companyId]
-    )
-    if (!check.rows.length)
-      return res.status(404).json({ ok: false, error: 'REQUEST_NOT_FOUND' })
+    );
+    if (!check.rows.length) return res.status(404).json({ ok: false, error: 'REQUEST_NOT_FOUND' });
 
-    if (!item_name?.trim()) return res.status(400).json({ ok: false, error: 'ITEM_NAME_REQUIRED' })
-    if (!quantity || Number(quantity) <= 0) return res.status(400).json({ ok: false, error: 'INVALID_QUANTITY' })
-    if (!unit?.trim()) return res.status(400).json({ ok: false, error: 'UNIT_REQUIRED' })
+    if (!item_name?.trim()) return res.status(400).json({ ok: false, error: 'ITEM_NAME_REQUIRED' });
+    if (!quantity || Number(quantity) <= 0)
+      return res.status(400).json({ ok: false, error: 'INVALID_QUANTITY' });
+    if (!unit?.trim()) return res.status(400).json({ ok: false, error: 'UNIT_REQUIRED' });
 
-    const result = await pool.query(`
+    const result = await pool.query(
+      `
       INSERT INTO public.material_request_items
         (request_id, item_name, item_name_raw, quantity, unit, note)
       VALUES ($1, $2, $2, $3, $4, $5)
       RETURNING *
-    `, [requestId, item_name.trim(), Number(quantity), unit.trim(), note?.trim() || null])
+    `,
+      [requestId, item_name.trim(), Number(quantity), unit.trim(), note?.trim() || null]
+    );
 
-    res.json({ ok: true, item: result.rows[0] })
+    res.json({ ok: true, item: result.rows[0] });
   } catch (err) {
-    console.error('POST /standup/materials/:id/items error:', err)
-    res.status(500).json({ ok: false, error: 'SERVER_ERROR' })
+    console.error('POST /standup/materials/:id/items error:', err);
+    res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
-})
+});
 
 // â”€â”€ PATCH /api/standup/materials/:request_id/items/:item_id â”€â”€â”€
 // Edit item quantity/note
 router.patch('/materials/:request_id/items/:item_id', can('standup.manage'), async (req, res) => {
   try {
-    const { quantity, unit, note } = req.body
-    const companyId = req.user.company_id
-    const requestId = Number(req.params.request_id)
-    const itemId    = Number(req.params.item_id)
+    const { quantity, unit, note } = req.body;
+    const companyId = req.user.company_id;
+    const requestId = Number(req.params.request_id);
+    const itemId = Number(req.params.item_id);
 
     const check = await pool.query(
       'SELECT id FROM public.material_requests WHERE id = $1 AND company_id = $2',
       [requestId, companyId]
-    )
-    if (!check.rows.length)
-      return res.status(404).json({ ok: false, error: 'REQUEST_NOT_FOUND' })
+    );
+    if (!check.rows.length) return res.status(404).json({ ok: false, error: 'REQUEST_NOT_FOUND' });
 
-    const result = await pool.query(`
+    const result = await pool.query(
+      `
       UPDATE public.material_request_items
       SET
         quantity = COALESCE($1, quantity),
@@ -324,42 +355,48 @@ router.patch('/materials/:request_id/items/:item_id', can('standup.manage'), asy
         note     = COALESCE($3, note)
       WHERE id = $4 AND request_id = $5
       RETURNING *
-    `, [quantity ? Number(quantity) : null, unit?.trim() || null, note?.trim() || null, itemId, requestId])
+    `,
+      [
+        quantity ? Number(quantity) : null,
+        unit?.trim() || null,
+        note?.trim() || null,
+        itemId,
+        requestId,
+      ]
+    );
 
-    if (!result.rows.length)
-      return res.status(404).json({ ok: false, error: 'ITEM_NOT_FOUND' })
+    if (!result.rows.length) return res.status(404).json({ ok: false, error: 'ITEM_NOT_FOUND' });
 
-    res.json({ ok: true, item: result.rows[0] })
+    res.json({ ok: true, item: result.rows[0] });
   } catch (err) {
-    console.error('PATCH /standup/materials item error:', err)
-    res.status(500).json({ ok: false, error: 'SERVER_ERROR' })
+    console.error('PATCH /standup/materials item error:', err);
+    res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
-})
+});
 
 // â”€â”€ DELETE /api/standup/materials/:request_id/items/:item_id â”€â”€
 router.delete('/materials/:request_id/items/:item_id', can('standup.manage'), async (req, res) => {
   try {
-    const companyId = req.user.company_id
-    const requestId = Number(req.params.request_id)
-    const itemId    = Number(req.params.item_id)
+    const companyId = req.user.company_id;
+    const requestId = Number(req.params.request_id);
+    const itemId = Number(req.params.item_id);
 
     const check = await pool.query(
       'SELECT id FROM public.material_requests WHERE id = $1 AND company_id = $2',
       [requestId, companyId]
-    )
-    if (!check.rows.length)
-      return res.status(404).json({ ok: false, error: 'REQUEST_NOT_FOUND' })
+    );
+    if (!check.rows.length) return res.status(404).json({ ok: false, error: 'REQUEST_NOT_FOUND' });
 
     await pool.query(
       'DELETE FROM public.material_request_items WHERE id = $1 AND request_id = $2',
       [itemId, requestId]
-    )
+    );
 
-    res.json({ ok: true })
+    res.json({ ok: true });
   } catch (err) {
-    console.error('DELETE /standup/materials item error:', err)
-    res.status(500).json({ ok: false, error: 'SERVER_ERROR' })
+    console.error('DELETE /standup/materials item error:', err);
+    res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
-})
+});
 
-module.exports = router
+module.exports = router;

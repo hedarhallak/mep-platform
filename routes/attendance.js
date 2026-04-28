@@ -1,4 +1,4 @@
-"use strict";
+'use strict';
 
 /**
  * routes/attendance.js
@@ -18,35 +18,36 @@
  *   overtime= max(0, paid - 8h)
  */
 
-const express = require("express");
-const router  = express.Router();
-const { pool }           = require("../db");
-const { can, canAny }    = require("../middleware/permissions");
-const { audit, ACTIONS } = require("../lib/audit");
+const express = require('express');
+const router = express.Router();
+const { pool } = require('../db');
+const { can, canAny } = require('../middleware/permissions');
+const { audit, ACTIONS } = require('../lib/audit');
 
 // ── Hours calculation ─────────────────────────────────────────
 function timeToMin(t) {
   if (!t) return 0;
   const str = String(t).substring(0, 5);
-  const [h, m] = str.split(":").map(Number);
+  const [h, m] = str.split(':').map(Number);
   return h * 60 + m;
 }
 
 function calcHours(shiftStart, checkInTime, checkOutTime) {
   const shiftStartMin = timeToMin(shiftStart);
-  const checkInMin    = timeToMin(checkInTime);
-  const checkOutMin   = timeToMin(checkOutTime);
+  const checkInMin = timeToMin(checkInTime);
+  const checkOutMin = timeToMin(checkOutTime);
 
   const rawMinutes = checkOutMin - checkInMin;
-  if (rawMinutes <= 0) return { rawMinutes: 0, paidMinutes: 0, regularHours: 0, overtimeHours: 0, lateMinutes: 0 };
+  if (rawMinutes <= 0)
+    return { rawMinutes: 0, paidMinutes: 0, regularHours: 0, overtimeHours: 0, lateMinutes: 0 };
 
   let paidMinutes = rawMinutes + 15;
   if (rawMinutes >= 480) paidMinutes -= 30;
 
-  const totalHours     = paidMinutes / 60;
-  const regularHours   = parseFloat(Math.min(8, totalHours).toFixed(2));
-  const overtimeHours  = parseFloat(Math.max(0, totalHours - 8).toFixed(2));
-  const lateMinutes    = Math.max(0, checkInMin - shiftStartMin);
+  const totalHours = paidMinutes / 60;
+  const regularHours = parseFloat(Math.min(8, totalHours).toFixed(2));
+  const overtimeHours = parseFloat(Math.max(0, totalHours - 8).toFixed(2));
+  const lateMinutes = Math.max(0, checkInMin - shiftStartMin);
 
   return { rawMinutes, paidMinutes, regularHours, overtimeHours, lateMinutes };
 }
@@ -79,34 +80,36 @@ async function notifyForeman(pool, attendanceId, eventType) {
     if (!rows.length || !rows[0].foreman_email) return;
     const r = rows[0];
 
-    const sgMail = require("@sendgrid/mail");
+    const sgMail = require('@sendgrid/mail');
     sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
-    const subject = eventType === "CHECKIN"
-      ? `[MEP Platform] Check-In — ${r.employee_name} @ ${r.project_code}`
-      : `[MEP Platform] Check-Out — ${r.employee_name} @ ${r.project_code}`;
+    const subject =
+      eventType === 'CHECKIN'
+        ? `[MEP Platform] Check-In — ${r.employee_name} @ ${r.project_code}`
+        : `[MEP Platform] Check-Out — ${r.employee_name} @ ${r.project_code}`;
 
-    const timeStr = eventType === "CHECKIN"
-      ? `Checked in at: ${String(r.check_in_time).substring(0,5)}`
-      : `Checked out at: ${String(r.check_out_time).substring(0,5)}\nRegular hours: ${r.regular_hours}h\nOvertime: ${r.overtime_hours}h`;
+    const timeStr =
+      eventType === 'CHECKIN'
+        ? `Checked in at: ${String(r.check_in_time).substring(0, 5)}`
+        : `Checked out at: ${String(r.check_out_time).substring(0, 5)}\nRegular hours: ${r.regular_hours}h\nOvertime: ${r.overtime_hours}h`;
 
     await sgMail.send({
-      to:      r.foreman_email,
-      from:    process.env.SENDGRID_FROM_EMAIL,
+      to: r.foreman_email,
+      from: process.env.SENDGRID_FROM_EMAIL,
       subject,
-      text:    `Hi ${r.foreman_name},\n\n${r.employee_name} — ${r.project_code} (${r.attendance_date})\n\n${timeStr}\n\nPlease confirm hours on the MEP Platform.\n\n— MEP Platform`,
+      text: `Hi ${r.foreman_name},\n\n${r.employee_name} — ${r.project_code} (${r.attendance_date})\n\n${timeStr}\n\nPlease confirm hours on the MEP Platform.\n\n— MEP Platform`,
     });
   } catch (err) {
-    console.error("[attendance notify] error:", err.message);
+    console.error('[attendance notify] error:', err.message);
   }
 }
 
 // ── GET /api/attendance/projects ─────────────────────────────
 // Projects that have assignments on a given date (for tabs)
-router.get("/projects", can("attendance.view"), async (req, res) => {
+router.get('/projects', can('attendance.view'), async (req, res) => {
   try {
-    const companyId  = req.user.company_id;
-    const date       = req.query.date || new Date().toISOString().split("T")[0];
+    const companyId = req.user.company_id;
+    const date = req.query.date || new Date().toISOString().split('T')[0];
 
     const { rows } = await pool.query(
       `SELECT DISTINCT p.id, p.project_code, p.project_name
@@ -122,22 +125,22 @@ router.get("/projects", can("attendance.view"), async (req, res) => {
 
     return res.json({ ok: true, projects: rows });
   } catch (err) {
-    console.error("GET /attendance/projects error:", err);
-    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+    console.error('GET /attendance/projects error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
 });
 
 // ── GET /api/attendance ───────────────────────────────────────
 // List assignments + attendance records for a project/date
-router.get("/", canAny(["attendance.view", "attendance.view_self"]), async (req, res) => {
+router.get('/', canAny(['attendance.view', 'attendance.view_self']), async (req, res) => {
   try {
     const { project_id, date } = req.query;
-    const companyId   = req.user.company_id;
-    const targetDate  = date || new Date().toISOString().split("T")[0];
+    const companyId = req.user.company_id;
+    const targetDate = date || new Date().toISOString().split('T')[0];
     const currentUserId = Number(req.user.user_id);
 
     const params = [companyId, targetDate, currentUserId];
-    let extraFilters = "";
+    let extraFilters = '';
 
     if (project_id) {
       params.push(Number(project_id));
@@ -145,9 +148,9 @@ router.get("/", canAny(["attendance.view", "attendance.view_self"]), async (req,
     }
 
     // Workers see only themselves
-    const role = (req.user.role || "").toUpperCase();
-    if (role === "WORKER" || role === "JOURNEYMAN") {
-      extraFilters += " AND au.id = $3";
+    const role = (req.user.role || '').toUpperCase();
+    if (role === 'WORKER' || role === 'JOURNEYMAN') {
+      extraFilters += ' AND au.id = $3';
     }
 
     const { rows } = await pool.query(
@@ -197,10 +200,14 @@ router.get("/", canAny(["attendance.view", "attendance.view_self"]), async (req,
     );
 
     // Summary counts
-    const total     = rows.length;
-    const checkedIn = rows.filter(r => r.attendance_status === "CHECKED_IN").length;
-    const checkedOut= rows.filter(r => ["CHECKED_OUT","CONFIRMED","ADJUSTED"].includes(r.attendance_status)).length;
-    const confirmed = rows.filter(r => ["CONFIRMED","ADJUSTED"].includes(r.attendance_status)).length;
+    const total = rows.length;
+    const checkedIn = rows.filter((r) => r.attendance_status === 'CHECKED_IN').length;
+    const checkedOut = rows.filter((r) =>
+      ['CHECKED_OUT', 'CONFIRMED', 'ADJUSTED'].includes(r.attendance_status)
+    ).length;
+    const confirmed = rows.filter((r) =>
+      ['CONFIRMED', 'ADJUSTED'].includes(r.attendance_status)
+    ).length;
 
     return res.json({
       ok: true,
@@ -209,21 +216,21 @@ router.get("/", canAny(["attendance.view", "attendance.view_self"]), async (req,
       summary: { total, checked_in: checkedIn, checked_out: checkedOut, confirmed },
     });
   } catch (err) {
-    console.error("GET /attendance error:", err);
-    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+    console.error('GET /attendance error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
 });
 
 // ── POST /api/attendance/checkin ──────────────────────────────
-router.post("/checkin", can("attendance.checkin"), async (req, res) => {
+router.post('/checkin', can('attendance.checkin'), async (req, res) => {
   try {
     const { assignment_request_id } = req.body || {};
-    const companyId   = req.user.company_id;
+    const companyId = req.user.company_id;
     const currentUserId = Number(req.user.user_id);
-    const today       = new Date().toISOString().split("T")[0];
+    const today = new Date().toISOString().split('T')[0];
 
     if (!assignment_request_id)
-      return res.status(400).json({ ok: false, error: "ASSIGNMENT_REQUIRED" });
+      return res.status(400).json({ ok: false, error: 'ASSIGNMENT_REQUIRED' });
 
     // Verify assignment belongs to current user and is active today
     const asgn = await pool.query(
@@ -242,7 +249,7 @@ router.post("/checkin", can("attendance.checkin"), async (req, res) => {
     );
 
     if (!asgn.rows.length)
-      return res.status(403).json({ ok: false, error: "ASSIGNMENT_NOT_FOUND_OR_NOT_YOURS" });
+      return res.status(403).json({ ok: false, error: 'ASSIGNMENT_NOT_FOUND_OR_NOT_YOURS' });
 
     const a = asgn.rows[0];
     const checkInTime = new Date().toTimeString().substring(0, 5); // HH:MM
@@ -250,17 +257,17 @@ router.post("/checkin", can("attendance.checkin"), async (req, res) => {
     // ── Shift time validation ──────────────────────────────────
     if (a.shift_end) {
       const toMin = (t) => {
-        const [h, m] = String(t).substring(0, 5).split(":").map(Number);
+        const [h, m] = String(t).substring(0, 5).split(':').map(Number);
         return h * 60 + m;
       };
-      const nowMin      = toMin(checkInTime);
+      const nowMin = toMin(checkInTime);
       const shiftEndMin = toMin(a.shift_end);
 
       // Block check-in after shift end
       if (nowMin > shiftEndMin) {
         return res.status(409).json({
-          ok:      false,
-          error:   "SHIFT_ENDED",
+          ok: false,
+          error: 'SHIFT_ENDED',
           message: `Check-in not allowed after shift end (${String(a.shift_end).substring(0, 5)}).`,
         });
       }
@@ -268,7 +275,7 @@ router.post("/checkin", can("attendance.checkin"), async (req, res) => {
       // Warn if more than 120 minutes late (still allows check-in)
       if (a.shift_start) {
         const shiftStartMin = toMin(a.shift_start);
-        const lateMinutes   = nowMin - shiftStartMin;
+        const lateMinutes = nowMin - shiftStartMin;
         if (lateMinutes > 120) {
           // Allowed but flagged — late_minutes will be recorded automatically
         }
@@ -288,31 +295,30 @@ router.post("/checkin", can("attendance.checkin"), async (req, res) => {
          status        = 'CHECKED_IN',
          updated_at    = NOW()
        RETURNING *`,
-      [companyId, a.project_id, a.id, a.employee_id, today,
-       a.shift_start || null, checkInTime]
+      [companyId, a.project_id, a.id, a.employee_id, today, a.shift_start || null, checkInTime]
     );
 
     await audit(pool, req, {
-      action:      ACTIONS.ATTENDANCE_CHECKIN || "ATTENDANCE_CHECKIN",
-      entity_type: "attendance_record",
-      entity_id:   rows[0].id,
-      new_values:  { check_in_time: checkInTime, date: today },
+      action: ACTIONS.ATTENDANCE_CHECKIN || 'ATTENDANCE_CHECKIN',
+      entity_type: 'attendance_record',
+      entity_id: rows[0].id,
+      new_values: { check_in_time: checkInTime, date: today },
     });
 
-    notifyForeman(pool, rows[0].id, "CHECKIN");
+    notifyForeman(pool, rows[0].id, 'CHECKIN');
 
     return res.status(201).json({ ok: true, record: rows[0] });
   } catch (err) {
-    console.error("POST /attendance/checkin error:", err);
-    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+    console.error('POST /attendance/checkin error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
 });
 
 // ── PATCH /api/attendance/:id/checkout ───────────────────────
-router.patch("/:id/checkout", can("attendance.checkin"), async (req, res) => {
+router.patch('/:id/checkout', can('attendance.checkin'), async (req, res) => {
   try {
-    const recordId    = Number(req.params.id);
-    const companyId   = req.user.company_id;
+    const recordId = Number(req.params.id);
+    const companyId = req.user.company_id;
     const currentUserId = Number(req.user.user_id);
 
     // Verify record belongs to current user
@@ -326,18 +332,21 @@ router.patch("/:id/checkout", can("attendance.checkin"), async (req, res) => {
     );
 
     if (!existing.rows.length)
-      return res.status(403).json({ ok: false, error: "RECORD_NOT_FOUND_OR_NOT_YOURS" });
+      return res.status(403).json({ ok: false, error: 'RECORD_NOT_FOUND_OR_NOT_YOURS' });
 
     const rec = existing.rows[0];
 
-    if (rec.status !== "CHECKED_IN")
-      return res.status(409).json({ ok: false, error: "NOT_CHECKED_IN" });
+    if (rec.status !== 'CHECKED_IN')
+      return res.status(409).json({ ok: false, error: 'NOT_CHECKED_IN' });
 
     const checkOutTime = new Date().toTimeString().substring(0, 5);
 
     // Calculate hours
-    const { rawMinutes, paidMinutes, regularHours, overtimeHours, lateMinutes } =
-      calcHours(rec.shift_start, rec.check_in_time, checkOutTime);
+    const { rawMinutes, paidMinutes, regularHours, overtimeHours, lateMinutes } = calcHours(
+      rec.shift_start,
+      rec.check_in_time,
+      checkOutTime
+    );
 
     const { rows } = await pool.query(
       `UPDATE public.attendance_records
@@ -351,55 +360,71 @@ router.patch("/:id/checkout", can("attendance.checkin"), async (req, res) => {
            updated_at     = NOW()
        WHERE id = $7 AND company_id = $8
        RETURNING *`,
-      [checkOutTime, rawMinutes, paidMinutes, regularHours, overtimeHours,
-       lateMinutes, recordId, companyId]
+      [
+        checkOutTime,
+        rawMinutes,
+        paidMinutes,
+        regularHours,
+        overtimeHours,
+        lateMinutes,
+        recordId,
+        companyId,
+      ]
     );
 
     await audit(pool, req, {
-      action:      ACTIONS.ATTENDANCE_CHECKOUT || "ATTENDANCE_CHECKOUT",
-      entity_type: "attendance_record",
-      entity_id:   recordId,
-      new_values:  { check_out_time: checkOutTime, regular_hours: regularHours, overtime_hours: overtimeHours },
+      action: ACTIONS.ATTENDANCE_CHECKOUT || 'ATTENDANCE_CHECKOUT',
+      entity_type: 'attendance_record',
+      entity_id: recordId,
+      new_values: {
+        check_out_time: checkOutTime,
+        regular_hours: regularHours,
+        overtime_hours: overtimeHours,
+      },
     });
 
-    notifyForeman(pool, recordId, "CHECKOUT");
+    notifyForeman(pool, recordId, 'CHECKOUT');
 
     return res.json({ ok: true, record: rows[0] });
   } catch (err) {
-    console.error("PATCH /attendance/:id/checkout error:", err);
-    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+    console.error('PATCH /attendance/:id/checkout error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
 });
 
 // ── PATCH /api/attendance/:id/confirm ────────────────────────
 // Foreman confirms or adjusts hours
-router.patch("/:id/confirm", can("attendance.approve"), async (req, res) => {
+router.patch('/:id/confirm', can('attendance.approve'), async (req, res) => {
   try {
-    const recordId  = Number(req.params.id);
+    const recordId = Number(req.params.id);
     const companyId = req.user.company_id;
     const { regular_hours, overtime_hours, note } = req.body || {};
 
     const existing = await pool.query(
-      "SELECT * FROM public.attendance_records WHERE id = $1 AND company_id = $2 LIMIT 1",
+      'SELECT * FROM public.attendance_records WHERE id = $1 AND company_id = $2 LIMIT 1',
       [recordId, companyId]
     );
 
     if (!existing.rows.length)
-      return res.status(404).json({ ok: false, error: "RECORD_NOT_FOUND" });
+      return res.status(404).json({ ok: false, error: 'RECORD_NOT_FOUND' });
 
     const rec = existing.rows[0];
 
-    if (!["CHECKED_OUT", "CONFIRMED", "ADJUSTED"].includes(rec.status))
-      return res.status(409).json({ ok: false, error: "NOT_CHECKED_OUT_YET" });
+    if (!['CHECKED_OUT', 'CONFIRMED', 'ADJUSTED'].includes(rec.status))
+      return res.status(409).json({ ok: false, error: 'NOT_CHECKED_OUT_YET' });
 
     // Determine if foreman is adjusting or just confirming
     const isAdjusted =
-      (regular_hours  !== undefined && parseFloat(regular_hours)  !== parseFloat(rec.regular_hours)) ||
-      (overtime_hours !== undefined && parseFloat(overtime_hours) !== parseFloat(rec.overtime_hours));
+      (regular_hours !== undefined &&
+        parseFloat(regular_hours) !== parseFloat(rec.regular_hours)) ||
+      (overtime_hours !== undefined &&
+        parseFloat(overtime_hours) !== parseFloat(rec.overtime_hours));
 
-    const confirmedRegular  = regular_hours  !== undefined ? parseFloat(regular_hours)  : rec.regular_hours;
-    const confirmedOvertime = overtime_hours !== undefined ? parseFloat(overtime_hours) : rec.overtime_hours;
-    const newStatus = isAdjusted ? "ADJUSTED" : "CONFIRMED";
+    const confirmedRegular =
+      regular_hours !== undefined ? parseFloat(regular_hours) : rec.regular_hours;
+    const confirmedOvertime =
+      overtime_hours !== undefined ? parseFloat(overtime_hours) : rec.overtime_hours;
+    const newStatus = isAdjusted ? 'ADJUSTED' : 'CONFIRMED';
 
     const { rows } = await pool.query(
       `UPDATE public.attendance_records
@@ -412,21 +437,32 @@ router.patch("/:id/confirm", can("attendance.approve"), async (req, res) => {
            updated_at               = NOW()
        WHERE id = $6 AND company_id = $7
        RETURNING *`,
-      [req.user.user_id, confirmedRegular, confirmedOvertime,
-       note || null, newStatus, recordId, companyId]
+      [
+        req.user.user_id,
+        confirmedRegular,
+        confirmedOvertime,
+        note || null,
+        newStatus,
+        recordId,
+        companyId,
+      ]
     );
 
     await audit(pool, req, {
-      action:      ACTIONS.ATTENDANCE_CONFIRMED || "ATTENDANCE_CONFIRMED",
-      entity_type: "attendance_record",
-      entity_id:   recordId,
-      new_values:  { status: newStatus, confirmed_regular_hours: confirmedRegular, confirmed_overtime_hours: confirmedOvertime },
+      action: ACTIONS.ATTENDANCE_CONFIRMED || 'ATTENDANCE_CONFIRMED',
+      entity_type: 'attendance_record',
+      entity_id: recordId,
+      new_values: {
+        status: newStatus,
+        confirmed_regular_hours: confirmedRegular,
+        confirmed_overtime_hours: confirmedOvertime,
+      },
     });
 
     return res.json({ ok: true, record: rows[0] });
   } catch (err) {
-    console.error("PATCH /attendance/:id/confirm error:", err);
-    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+    console.error('PATCH /attendance/:id/confirm error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
 });
 

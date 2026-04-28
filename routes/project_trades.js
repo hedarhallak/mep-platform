@@ -1,4 +1,4 @@
-"use strict";
+'use strict';
 
 /**
  * routes/project_trades.js
@@ -10,16 +10,16 @@
  * DELETE /api/project-trades/:id                — remove trade from project
  */
 
-const router = require("express").Router();
-const pool   = require("../db");
-const auth   = require("../middleware/auth");
-const { can } = require("../middleware/permissions");
+const router = require('express').Router();
+const pool = require('../db');
+const auth = require('../middleware/auth');
+const { can } = require('../middleware/permissions');
 
 // All routes require authentication
 router.use(auth);
 
 // ── GET /api/project-trades/:project_id ──────────────────────
-router.get("/:project_id", async (req, res) => {
+router.get('/:project_id', async (req, res) => {
   try {
     const { project_id } = req.params;
     const companyId = req.user.company_id;
@@ -29,8 +29,7 @@ router.get("/:project_id", async (req, res) => {
       `SELECT id FROM public.projects WHERE id = $1 AND company_id = $2 LIMIT 1`,
       [project_id, companyId]
     );
-    if (!proj.rows.length)
-      return res.status(404).json({ ok: false, error: "PROJECT_NOT_FOUND" });
+    if (!proj.rows.length) return res.status(404).json({ ok: false, error: 'PROJECT_NOT_FOUND' });
 
     const result = await pool.query(
       `SELECT
@@ -60,36 +59,33 @@ router.get("/:project_id", async (req, res) => {
 
     return res.json({ ok: true, trades: result.rows });
   } catch (err) {
-    console.error("GET project-trades error:", err);
-    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+    console.error('GET project-trades error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
 });
 
 // ── POST /api/project-trades/:project_id ─────────────────────
-router.post("/:project_id", can("projects.edit"), async (req, res) => {
+router.post('/:project_id', can('projects.edit'), async (req, res) => {
   try {
     const { project_id } = req.params;
     const { trade_type_id, trade_admin_id, notes } = req.body;
     const companyId = req.user.company_id;
 
-    if (!trade_type_id)
-      return res.status(400).json({ ok: false, error: "TRADE_TYPE_REQUIRED" });
+    if (!trade_type_id) return res.status(400).json({ ok: false, error: 'TRADE_TYPE_REQUIRED' });
 
     // Verify project belongs to company
     const proj = await pool.query(
       `SELECT id FROM public.projects WHERE id = $1 AND company_id = $2 LIMIT 1`,
       [project_id, companyId]
     );
-    if (!proj.rows.length)
-      return res.status(404).json({ ok: false, error: "PROJECT_NOT_FOUND" });
+    if (!proj.rows.length) return res.status(404).json({ ok: false, error: 'PROJECT_NOT_FOUND' });
 
     // Verify trade type exists
     const trade = await pool.query(
       `SELECT id FROM public.trade_types WHERE id = $1 AND is_active = true LIMIT 1`,
       [trade_type_id]
     );
-    if (!trade.rows.length)
-      return res.status(400).json({ ok: false, error: "INVALID_TRADE_TYPE" });
+    if (!trade.rows.length) return res.status(400).json({ ok: false, error: 'INVALID_TRADE_TYPE' });
 
     // If trade_admin_id provided, verify user belongs to company
     if (trade_admin_id) {
@@ -98,7 +94,7 @@ router.post("/:project_id", can("projects.edit"), async (req, res) => {
         [trade_admin_id, companyId]
       );
       if (!admin.rows.length)
-        return res.status(400).json({ ok: false, error: "INVALID_TRADE_ADMIN" });
+        return res.status(400).json({ ok: false, error: 'INVALID_TRADE_ADMIN' });
     }
 
     const result = await pool.query(
@@ -111,15 +107,15 @@ router.post("/:project_id", can("projects.edit"), async (req, res) => {
 
     return res.status(201).json({ ok: true, trade: result.rows[0] });
   } catch (err) {
-    if (err.code === "23505")
-      return res.status(409).json({ ok: false, error: "TRADE_ALREADY_EXISTS" });
-    console.error("POST project-trades error:", err);
-    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+    if (err.code === '23505')
+      return res.status(409).json({ ok: false, error: 'TRADE_ALREADY_EXISTS' });
+    console.error('POST project-trades error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
 });
 
 // ── PATCH /api/project-trades/:id ────────────────────────────
-router.patch("/:id", can("projects.edit"), async (req, res) => {
+router.patch('/:id', can('projects.edit'), async (req, res) => {
   try {
     const { id } = req.params;
     const { trade_admin_id, status, notes } = req.body;
@@ -129,8 +125,7 @@ router.patch("/:id", can("projects.edit"), async (req, res) => {
       `SELECT * FROM public.project_trades WHERE id = $1 AND company_id = $2 LIMIT 1`,
       [id, companyId]
     );
-    if (!existing.rows.length)
-      return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    if (!existing.rows.length) return res.status(404).json({ ok: false, error: 'NOT_FOUND' });
 
     const result = await pool.query(
       `UPDATE public.project_trades SET
@@ -145,13 +140,13 @@ router.patch("/:id", can("projects.edit"), async (req, res) => {
 
     return res.json({ ok: true, trade: result.rows[0] });
   } catch (err) {
-    console.error("PATCH project-trades error:", err);
-    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+    console.error('PATCH project-trades error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
 });
 
 // ── DELETE /api/project-trades/:id ───────────────────────────
-router.delete("/:id", can("projects.delete"), async (req, res) => {
+router.delete('/:id', can('projects.delete'), async (req, res) => {
   try {
     const { id } = req.params;
     const companyId = req.user.company_id;
@@ -165,19 +160,19 @@ router.delete("/:id", can("projects.delete"), async (req, res) => {
     if (parseInt(active.rows[0].count) > 0)
       return res.status(409).json({
         ok: false,
-        error: "HAS_ACTIVE_ASSIGNMENTS",
-        message: "Cannot remove trade with active assignments",
+        error: 'HAS_ACTIVE_ASSIGNMENTS',
+        message: 'Cannot remove trade with active assignments',
       });
 
-    await pool.query(
-      `DELETE FROM public.project_trades WHERE id = $1 AND company_id = $2`,
-      [id, companyId]
-    );
+    await pool.query(`DELETE FROM public.project_trades WHERE id = $1 AND company_id = $2`, [
+      id,
+      companyId,
+    ]);
 
     return res.json({ ok: true });
   } catch (err) {
-    console.error("DELETE project-trades error:", err);
-    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+    console.error('DELETE project-trades error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
 });
 

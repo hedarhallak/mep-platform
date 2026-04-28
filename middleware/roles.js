@@ -1,4 +1,4 @@
-"use strict";
+'use strict';
 
 /**
  * middleware/roles.js
@@ -27,10 +27,10 @@
  */
 
 const ROLE_ALIASES = {
-  ADMIN:           "COMPANY_ADMIN",
-  PM:              "TRADE_PROJECT_MANAGER",
-  PROJECT_MANAGER: "TRADE_PROJECT_MANAGER",
-  PURCHASING:      "TRADE_ADMIN",
+  ADMIN: 'COMPANY_ADMIN',
+  PM: 'TRADE_PROJECT_MANAGER',
+  PROJECT_MANAGER: 'TRADE_PROJECT_MANAGER',
+  PURCHASING: 'TRADE_ADMIN',
 };
 
 /**
@@ -46,19 +46,19 @@ function normalizeRole(role) {
  * Role power levels — higher = more access
  */
 const ROLE_LEVEL = {
-  SUPER_ADMIN:           100,
-  IT_ADMIN:               90,
-  COMPANY_ADMIN:          80,
-  TRADE_PROJECT_MANAGER:  60,
-  TRADE_ADMIN:            50,
-  FOREMAN:                40,
-  JOURNEYMAN:             20,
-  APPRENTICE_4:           16,
-  APPRENTICE_3:           15,
-  APPRENTICE_2:           14,
-  APPRENTICE_1:           13,
-  WORKER:                 10,
-  DRIVER:                 10,
+  SUPER_ADMIN: 100,
+  IT_ADMIN: 90,
+  COMPANY_ADMIN: 80,
+  TRADE_PROJECT_MANAGER: 60,
+  TRADE_ADMIN: 50,
+  FOREMAN: 40,
+  JOURNEYMAN: 20,
+  APPRENTICE_4: 16,
+  APPRENTICE_3: 15,
+  APPRENTICE_2: 14,
+  APPRENTICE_1: 13,
+  WORKER: 10,
+  DRIVER: 10,
 };
 
 /**
@@ -67,21 +67,21 @@ const ROLE_LEVEL = {
  * Supports both new roles and legacy aliases via normalizeRole
  */
 function requireRoles(allowedRoles) {
-  const normalized = allowedRoles.map(r => normalizeRole(r));
+  const normalized = allowedRoles.map((r) => normalizeRole(r));
 
   return (req, res, next) => {
     if (!req.user) {
-      return res.status(401).json({ ok: false, error: "UNAUTHENTICATED" });
+      return res.status(401).json({ ok: false, error: 'UNAUTHENTICATED' });
     }
 
     const userRole = normalizeRole(req.user.role);
 
-    if (userRole === "SUPER_ADMIN") return next();
+    if (userRole === 'SUPER_ADMIN') return next();
 
     if (!normalized.includes(userRole)) {
       return res.status(403).json({
         ok: false,
-        error: "FORBIDDEN",
+        error: 'FORBIDDEN',
         required: allowedRoles,
         current: req.user.role,
       });
@@ -98,16 +98,16 @@ function requireRoles(allowedRoles) {
 function requireMinLevel(level) {
   return (req, res, next) => {
     if (!req.user) {
-      return res.status(401).json({ ok: false, error: "UNAUTHENTICATED" });
+      return res.status(401).json({ ok: false, error: 'UNAUTHENTICATED' });
     }
 
-    const userRole  = normalizeRole(req.user.role);
+    const userRole = normalizeRole(req.user.role);
     const userLevel = ROLE_LEVEL[userRole] || 0;
 
     if (userLevel < level) {
       return res.status(403).json({
         ok: false,
-        error: "FORBIDDEN",
+        error: 'FORBIDDEN',
         required_level: level,
         current_role: req.user.role,
       });
@@ -118,13 +118,13 @@ function requireMinLevel(level) {
 }
 
 // ── Prebuilt guards ───────────────────────────────────────────
-const SUPER_ADMIN_ONLY  = requireRoles(["SUPER_ADMIN"]);
-const IT_ADMIN_UP       = requireMinLevel(90);   // IT_ADMIN + SUPER_ADMIN
-const COMPANY_ADMIN_UP  = requireMinLevel(80);   // COMPANY_ADMIN + above
-const TRADE_ADMIN_UP    = requireMinLevel(50);   // TRADE_ADMIN + above
-const PM_UP             = requireMinLevel(60);   // TRADE_PROJECT_MANAGER + above
-const FOREMAN_UP        = requireMinLevel(40);   // FOREMAN + above
-const ANY_AUTHENTICATED = requireMinLevel(10);   // any logged in user
+const SUPER_ADMIN_ONLY = requireRoles(['SUPER_ADMIN']);
+const IT_ADMIN_UP = requireMinLevel(90); // IT_ADMIN + SUPER_ADMIN
+const COMPANY_ADMIN_UP = requireMinLevel(80); // COMPANY_ADMIN + above
+const TRADE_ADMIN_UP = requireMinLevel(50); // TRADE_ADMIN + above
+const PM_UP = requireMinLevel(60); // TRADE_PROJECT_MANAGER + above
+const FOREMAN_UP = requireMinLevel(40); // FOREMAN + above
+const ANY_AUTHENTICATED = requireMinLevel(10); // any logged in user
 
 module.exports = {
   normalizeRole,

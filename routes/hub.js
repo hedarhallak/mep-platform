@@ -1,5 +1,5 @@
-"use strict";
-const { sendPushNotification } = require("../lib/pushNotification");
+'use strict';
+const { sendPushNotification } = require('../lib/pushNotification');
 
 // routes/hub.js
 // Task & Blueprint messaging system with smart delivery
@@ -13,13 +13,13 @@ const { sendPushNotification } = require("../lib/pushNotification");
 // GET    /api/hub/workers               — all company workers (not just assigned)
 // GET    /api/hub/my-projects           — sender's active projects
 
-const express  = require("express");
-const router   = express.Router();
-const path     = require("path");
-const fs       = require("fs");
-const multer   = require("multer");
-const { pool } = require("../db");
-const { can, logAudit } = require("../middleware/permissions");
+const express = require('express');
+const router = express.Router();
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
+const { pool } = require('../db');
+const { can, logAudit } = require('../middleware/permissions');
 
 // ── Constants ─────────────────────────────────────────────────
 const MAX_RECIPIENTS_PER_MESSAGE = 200; // hard cap to prevent batch DoS
@@ -27,10 +27,34 @@ const ALLOWED_UPLOAD_MIMES = ['application/pdf', 'image/jpeg', 'image/png', 'ima
 
 // Magic-byte signatures for upload validation (defense vs spoofed MIME headers)
 const MAGIC_BYTES = [
-  { mime: 'application/pdf', ext: '.pdf',  match: (b) => b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46 },
-  { mime: 'image/jpeg',      ext: '.jpg',  match: (b) => b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF },
-  { mime: 'image/png',       ext: '.png',  match: (b) => b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4E && b[3] === 0x47 },
-  { mime: 'image/webp',      ext: '.webp', match: (b) => b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50 },
+  {
+    mime: 'application/pdf',
+    ext: '.pdf',
+    match: (b) => b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46,
+  },
+  {
+    mime: 'image/jpeg',
+    ext: '.jpg',
+    match: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
+  },
+  {
+    mime: 'image/png',
+    ext: '.png',
+    match: (b) => b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47,
+  },
+  {
+    mime: 'image/webp',
+    ext: '.webp',
+    match: (b) =>
+      b[0] === 0x52 &&
+      b[1] === 0x49 &&
+      b[2] === 0x46 &&
+      b[3] === 0x46 &&
+      b[8] === 0x57 &&
+      b[9] === 0x45 &&
+      b[10] === 0x42 &&
+      b[11] === 0x50,
+  },
 ];
 
 function detectFileType(buffer) {
@@ -73,12 +97,12 @@ async function validateUploadedFile(filePath) {
 }
 
 // ── File Upload Setup ─────────────────────────────────────────
-const UPLOAD_DIR = path.join(__dirname, "../uploads/hub");
+const UPLOAD_DIR = path.join(__dirname, '../uploads/hub');
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, UPLOAD_DIR),
-  filename:    (req, file, cb) => {
+  filename: (req, file, cb) => {
     // Do NOT trust client extension; we'll force it after magic-byte detection
     const name = `${Date.now()}_${Math.random().toString(36).slice(2)}.bin`;
     cb(null, name);
@@ -97,13 +121,14 @@ const upload = multer({
 
 // ── GET /api/hub/my-projects ──────────────────────────────────
 // Returns projects the sender is currently active on
-router.get("/my-projects", can("hub.send_tasks"), async (req, res) => {
+router.get('/my-projects', can('hub.send_tasks'), async (req, res) => {
   try {
-    const companyId  = req.user.company_id;
+    const companyId = req.user.company_id;
     const employeeId = req.user.employee_id;
 
     // Get projects where sender has active assignment OR is a foreman
-    const result = await pool.query(`
+    const result = await pool.query(
+      `
       SELECT DISTINCT
         p.id,
         p.project_code,
@@ -125,34 +150,40 @@ router.get("/my-projects", can("hub.send_tasks"), async (req, res) => {
           )
         )
       ORDER BY p.project_code
-    `, [companyId, employeeId]);
+    `,
+      [companyId, employeeId]
+    );
 
     // If no projects found (e.g. COMPANY_ADMIN), return all active projects
     if (result.rows.length === 0) {
-      const all = await pool.query(`
+      const all = await pool.query(
+        `
         SELECT id, project_code, project_name
         FROM public.projects
         WHERE company_id = $1
         ORDER BY project_code
-      `, [companyId]);
+      `,
+        [companyId]
+      );
       return res.json({ ok: true, projects: all.rows });
     }
 
     res.json({ ok: true, projects: result.rows });
   } catch (err) {
-    console.error("GET /hub/my-projects error:", err);
-    res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+    console.error('GET /hub/my-projects error:', err);
+    res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
 });
 
 // ── GET /api/hub/workers ──────────────────────────────────────
 // ALL workers in company — shows assignment status per project
-router.get("/workers", can("hub.send_tasks"), async (req, res) => {
+router.get('/workers', can('hub.send_tasks'), async (req, res) => {
   try {
     const companyId = req.user.company_id;
     const projectId = req.query.project_id ? Number(req.query.project_id) : null;
 
-    const result = await pool.query(`
+    const result = await pool.query(
+      `
       SELECT
         au.id,
         au.username,
@@ -177,12 +208,14 @@ router.get("/workers", can("hub.send_tasks"), async (req, res) => {
         AND au.is_active  = true
         AND au.role IN ('WORKER', 'JOURNEYMAN', 'APPRENTICE_1', 'APPRENTICE_2', 'APPRENTICE_3', 'APPRENTICE_4', 'DRIVER', 'FOREMAN')
       ORDER BY e.first_name, e.last_name
-    `, [companyId, projectId]);
+    `,
+      [companyId, projectId]
+    );
 
     res.json({ ok: true, workers: result.rows });
   } catch (err) {
-    console.error("GET /hub/workers error:", err);
-    res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+    console.error('GET /hub/workers error:', err);
+    res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
 });
 
@@ -190,7 +223,7 @@ router.get("/workers", can("hub.send_tasks"), async (req, res) => {
 // Smart delivery:
 //   - If worker is assigned to project → status = 'SENT' (deliver immediately)
 //   - If not assigned yet → status = 'PENDING' (deliver when assigned)
-router.post("/messages", can("hub.send_tasks"), upload.single("file"), async (req, res) => {
+router.post('/messages', can('hub.send_tasks'), upload.single('file'), async (req, res) => {
   const client = await pool.connect();
   // Validate uploaded file by magic bytes (defends vs spoofed MIME header)
   let validatedFile = null;
@@ -203,107 +236,139 @@ router.post("/messages", can("hub.send_tasks"), upload.single("file"), async (re
       req.file.mimetype = validatedFile.mime;
     } catch (e) {
       client.release();
-      return res.status(400).json({ ok: false, error: "UNSAFE_FILE_TYPE", message: "Uploaded file content does not match an allowed type." });
+      return res
+        .status(400)
+        .json({
+          ok: false,
+          error: 'UNSAFE_FILE_TYPE',
+          message: 'Uploaded file content does not match an allowed type.',
+        });
     }
   }
   try {
     const {
-      title, body, type = "TASK", priority = "NORMAL",
-      project_id, due_date, recipient_ids,
+      title,
+      body,
+      type = 'TASK',
+      priority = 'NORMAL',
+      project_id,
+      due_date,
+      recipient_ids,
     } = req.body;
 
     const companyId = req.user.company_id;
-    const senderId  = req.user.user_id;
+    const senderId = req.user.user_id;
 
     if (!title?.trim()) {
-      return res.status(400).json({ ok: false, error: "TITLE_REQUIRED" });
+      return res.status(400).json({ ok: false, error: 'TITLE_REQUIRED' });
     }
 
     let recipients = [];
     try {
       recipients = JSON.parse(recipient_ids);
     } catch {
-      recipients = String(recipient_ids || '').split(',').map(Number).filter(Boolean);
+      recipients = String(recipient_ids || '')
+        .split(',')
+        .map(Number)
+        .filter(Boolean);
     }
 
     if (!recipients.length) {
-      return res.status(400).json({ ok: false, error: "RECIPIENTS_REQUIRED" });
+      return res.status(400).json({ ok: false, error: 'RECIPIENTS_REQUIRED' });
     }
 
     if (recipients.length > MAX_RECIPIENTS_PER_MESSAGE) {
       return res.status(400).json({
         ok: false,
-        error: "TOO_MANY_RECIPIENTS",
+        error: 'TOO_MANY_RECIPIENTS',
         message: `Maximum ${MAX_RECIPIENTS_PER_MESSAGE} recipients per message.`,
       });
     }
 
     const projectIdNum = project_id ? Number(project_id) : null;
-    const file         = req.file;
-    const fileUrl      = file ? `/hub/${file.filename}` : null;
-    const fileName     = file ? file.originalname : null;
-    const fileType     = file ? file.mimetype : null;
+    const file = req.file;
+    const fileUrl = file ? `/hub/${file.filename}` : null;
+    const fileName = file ? file.originalname : null;
+    const fileType = file ? file.mimetype : null;
 
     // Check which recipients are currently assigned to this project
     let assignedEmployees = new Set();
     if (projectIdNum) {
-      const assigned = await pool.query(`
+      const assigned = await pool.query(
+        `
         SELECT a.requested_for_employee_id
         FROM public.assignment_requests a
         JOIN public.app_users au ON au.employee_id = a.requested_for_employee_id
         WHERE a.project_id = $1
           AND au.id = ANY($2::BIGINT[])
           AND (a.end_date IS NULL OR a.end_date >= CURRENT_DATE) AND a.status = 'APPROVED'
-      `, [projectIdNum, recipients]);
-      assignedEmployees = new Set(assigned.rows.map(r => r.employee_id));
+      `,
+        [projectIdNum, recipients]
+      );
+      assignedEmployees = new Set(assigned.rows.map((r) => r.employee_id));
     }
 
-    await client.query("BEGIN");
+    await client.query('BEGIN');
 
     // Determine overall delivery status
-    const allAssigned     = projectIdNum
-      ? recipients.every(id => {
+    const allAssigned = projectIdNum
+      ? recipients.every((id) => {
           // We need to check by app_user id -> employee_id mapping
           return true; // Will check per-recipient below
         })
       : true;
 
     // Get employee_id for each recipient (app_user id)
-    const empMap = await client.query(`
+    const empMap = await client.query(
+      `
       SELECT id AS user_id, employee_id
       FROM public.app_users
       WHERE id = ANY($1::BIGINT[])
-    `, [recipients]);
+    `,
+      [recipients]
+    );
     const userToEmployee = {};
     for (const row of empMap.rows) {
       userToEmployee[row.user_id] = row.employee_id;
     }
 
-    const hasPending = projectIdNum && recipients.some(uid => {
-      const empId = userToEmployee[uid];
-      return empId && !assignedEmployees.has(empId);
-    });
+    const hasPending =
+      projectIdNum &&
+      recipients.some((uid) => {
+        const empId = userToEmployee[uid];
+        return empId && !assignedEmployees.has(empId);
+      });
 
     const deliveryStatus = hasPending ? 'PENDING_ASSIGNMENT' : 'SENT';
 
     // Insert message
-    const msgRes = await client.query(`
+    const msgRes = await client.query(
+      `
       INSERT INTO public.task_messages
         (company_id, project_id, sender_id, type, title, body,
          file_url, file_name, file_type, priority, due_date)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING id
-    `, [
-      companyId, projectIdNum, senderId,
-      type.toUpperCase(), title.trim(), body?.trim() || null,
-      fileUrl, fileName, fileType,
-      priority.toUpperCase(), due_date || null,
-    ]);
+    `,
+      [
+        companyId,
+        projectIdNum,
+        senderId,
+        type.toUpperCase(),
+        title.trim(),
+        body?.trim() || null,
+        fileUrl,
+        fileName,
+        fileType,
+        priority.toUpperCase(),
+        due_date || null,
+      ]
+    );
 
     const messageId = msgRes.rows[0].id;
 
     // Insert recipients with smart status
-    let sentCount    = 0;
+    let sentCount = 0;
     let pendingCount = 0;
 
     for (const userId of recipients) {
@@ -312,55 +377,59 @@ router.post("/messages", can("hub.send_tasks"), upload.single("file"), async (re
       const recipientStatus = isAssigned ? 'SENT' : 'PENDING';
 
       if (isAssigned) sentCount++;
-      else            pendingCount++;
+      else pendingCount++;
 
-      await client.query(`
+      await client.query(
+        `
         INSERT INTO public.task_recipients
           (message_id, recipient_id, status, expected_project_id)
         VALUES ($1, $2, $3, $4)
         ON CONFLICT DO NOTHING
-      `, [
-        messageId,
-        userId,
-        recipientStatus,
-        isAssigned ? null : projectIdNum,
-      ]);
+      `,
+        [messageId, userId, recipientStatus, isAssigned ? null : projectIdNum]
+      );
     }
 
-    logAudit(req, "SEND_TASK", "task_messages", messageId, null, {
-      type, title, sent: sentCount, pending: pendingCount,
+    logAudit(req, 'SEND_TASK', 'task_messages', messageId, null, {
+      type,
+      title,
+      sent: sentCount,
+      pending: pendingCount,
     });
 
-    await client.query("COMMIT");
+    await client.query('COMMIT');
 
     for (const recipientId of recipients) {
-      sendPushNotification(recipientId, title, body || '', { type, message_id: messageId }).catch(() => {});
+      sendPushNotification(recipientId, title, body || '', { type, message_id: messageId }).catch(
+        () => {}
+      );
     }
 
     res.status(201).json({
-      ok:           true,
-      message_id:   messageId,
-      sent:         sentCount,
-      pending:      pendingCount,
+      ok: true,
+      message_id: messageId,
+      sent: sentCount,
+      pending: pendingCount,
       delivery_status: deliveryStatus,
     });
   } catch (err) {
-    await client.query("ROLLBACK");
+    await client.query('ROLLBACK');
     if (req.file) fs.unlink(req.file.path, () => {});
-    console.error("POST /hub/messages error:", err);
-    res.status(500).json({ ok: false, error: err.message || "SERVER_ERROR" });
+    console.error('POST /hub/messages error:', err);
+    res.status(500).json({ ok: false, error: err.message || 'SERVER_ERROR' });
   } finally {
     client.release();
   }
 });
 
 // ── GET /api/hub/messages/sent ────────────────────────────────
-router.get("/messages/sent", can("hub.send_tasks"), async (req, res) => {
+router.get('/messages/sent', can('hub.send_tasks'), async (req, res) => {
   try {
     const senderId = req.user.user_id;
-    const limit    = Math.min(Number(req.query.limit) || 50, 200);
+    const limit = Math.min(Number(req.query.limit) || 50, 200);
 
-    const result = await pool.query(`
+    const result = await pool.query(
+      `
       SELECT
         tm.id,
         tm.type,
@@ -387,12 +456,15 @@ router.get("/messages/sent", can("hub.send_tasks"), async (req, res) => {
       GROUP BY tm.id, p.project_code, p.project_name
       ORDER BY tm.created_at DESC
       LIMIT $2
-    `, [senderId, limit]);
+    `,
+      [senderId, limit]
+    );
 
     // For each message, get recipient details
     const messages = [];
     for (const msg of result.rows) {
-      const recipients = await pool.query(`
+      const recipients = await pool.query(
+        `
         SELECT
           tr.status,
           tr.read_at,
@@ -408,26 +480,29 @@ router.get("/messages/sent", can("hub.send_tasks"), async (req, res) => {
         JOIN public.app_users au ON au.id = tr.recipient_id
         LEFT JOIN public.employees e ON e.id = au.employee_id
         WHERE tr.message_id = $1
-      `, [msg.id]);
+      `,
+        [msg.id]
+      );
 
       messages.push({ ...msg, recipients: recipients.rows });
     }
 
     res.json({ ok: true, messages });
   } catch (err) {
-    console.error("GET /hub/messages/sent error:", err);
-    res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+    console.error('GET /hub/messages/sent error:', err);
+    res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
 });
 
 // ── GET /api/hub/messages/inbox ───────────────────────────────
 // Only SENT/READ/ACKNOWLEDGED — not PENDING (not yet delivered)
-router.get("/messages/inbox", can("hub.receive_tasks"), async (req, res) => {
+router.get('/messages/inbox', can('hub.receive_tasks'), async (req, res) => {
   try {
     const recipientId = req.user.user_id;
-    const limit       = Math.min(Number(req.query.limit) || 50, 200);
+    const limit = Math.min(Number(req.query.limit) || 50, 200);
 
-    const result = await pool.query(`
+    const result = await pool.query(
+      `
       SELECT
         tm.id,
         tm.type,
@@ -457,68 +532,87 @@ router.get("/messages/inbox", can("hub.receive_tasks"), async (req, res) => {
         AND tr.status != 'PENDING'
       ORDER BY tm.created_at DESC
       LIMIT $2
-    `, [recipientId, limit]);
+    `,
+      [recipientId, limit]
+    );
 
     res.json({ ok: true, messages: result.rows });
   } catch (err) {
-    console.error("GET /hub/messages/inbox error:", err);
-    res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+    console.error('GET /hub/messages/inbox error:', err);
+    res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
 });
 
 // ── GET /api/hub/messages/unread-count ───────────────────────
-router.get("/messages/unread-count", can("hub.receive_tasks"), async (req, res) => {
+router.get('/messages/unread-count', can('hub.receive_tasks'), async (req, res) => {
   try {
     const recipientId = req.user.user_id;
-    const result = await pool.query(`
+    const result = await pool.query(
+      `
       SELECT COUNT(*) AS count
       FROM public.task_recipients
       WHERE recipient_id = $1 AND status = 'SENT'
-    `, [recipientId]);
+    `,
+      [recipientId]
+    );
     res.json({ ok: true, count: Number(result.rows[0].count) });
   } catch (err) {
-    res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+    res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
 });
 
 // ── PATCH /api/hub/messages/:id/read ─────────────────────────
-router.patch("/messages/:id/read", can("hub.receive_tasks"), async (req, res) => {
+router.patch('/messages/:id/read', can('hub.receive_tasks'), async (req, res) => {
   try {
-    await pool.query(`
+    await pool.query(
+      `
       UPDATE public.task_recipients
       SET status = 'READ', read_at = NOW()
       WHERE message_id = $1 AND recipient_id = $2 AND status = 'SENT'
-    `, [Number(req.params.id), req.user.user_id]);
+    `,
+      [Number(req.params.id), req.user.user_id]
+    );
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+    res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
 });
 
 // ── PATCH /api/hub/messages/:id/ack ──────────────────────────
-router.patch("/messages/:id/ack", can("hub.receive_tasks"), async (req, res) => {
+router.patch('/messages/:id/ack', can('hub.receive_tasks'), async (req, res) => {
   try {
-    await pool.query(`
+    await pool.query(
+      `
       UPDATE public.task_recipients
       SET status = 'ACKNOWLEDGED',
           acknowledged_at = NOW(),
           read_at = COALESCE(read_at, NOW())
       WHERE message_id = $1 AND recipient_id = $2 AND status != 'ACKNOWLEDGED'
-    `, [Number(req.params.id), req.user.user_id]);
+    `,
+      [Number(req.params.id), req.user.user_id]
+    );
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+    res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
 });
 
 // PATCH /messages/:id/complete
-router.patch("/messages/:id/complete", can("hub.receive_tasks"), upload.single("completion_image"), async (req, res) => {
-  try {
-    const fileUrl = req.file ? `/hub/${req.file.filename}` : null;
-    await pool.query(`UPDATE public.task_recipients SET status = 'ACKNOWLEDGED', acknowledged_at = NOW(), completed_at = NOW(), completion_image_url = COALESCE($3, completion_image_url), completion_note = COALESCE($4, completion_note), read_at = COALESCE(read_at, NOW()) WHERE message_id = $1 AND recipient_id = $2`, [Number(req.params.id), req.user.user_id, fileUrl, req.body.completion_note||null]);
-    res.json({ ok: true });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+router.patch(
+  '/messages/:id/complete',
+  can('hub.receive_tasks'),
+  upload.single('completion_image'),
+  async (req, res) => {
+    try {
+      const fileUrl = req.file ? `/hub/${req.file.filename}` : null;
+      await pool.query(
+        `UPDATE public.task_recipients SET status = 'ACKNOWLEDGED', acknowledged_at = NOW(), completed_at = NOW(), completion_image_url = COALESCE($3, completion_image_url), completion_note = COALESCE($4, completion_note), read_at = COALESCE(read_at, NOW()) WHERE message_id = $1 AND recipient_id = $2`,
+        [Number(req.params.id), req.user.user_id, fileUrl, req.body.completion_note || null]
+      );
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
+    }
   }
-});
+);
 module.exports = router;

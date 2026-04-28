@@ -1,4 +1,4 @@
-"use strict";
+'use strict';
 
 // Admin: Create app user + send activation email invite.
 //
@@ -16,33 +16,33 @@
 //
 // Valid roles: IT_ADMIN, COMPANY_ADMIN, TRADE_PROJECT_MANAGER, TRADE_ADMIN, WORKER
 
-const express = require("express");
-const crypto  = require("crypto");
-const { hashPin }        = require("../lib/auth_utils");
-const { normalizeRole }  = require("../middleware/roles");
-const { can }            = require("../middleware/permissions");
-const sgMail = require("@sendgrid/mail");
-const { pool } = require("../db");
+const express = require('express');
+const crypto = require('crypto');
+const { hashPin } = require('../lib/auth_utils');
+const { normalizeRole } = require('../middleware/roles');
+const { can } = require('../middleware/permissions');
+const sgMail = require('@sendgrid/mail');
+const { pool } = require('../db');
 
 const router = express.Router();
 
 // ── Valid roles (new unified system only) ─────────────────────
 const ALLOWED_ROLES = new Set([
-  "IT_ADMIN",
-  "COMPANY_ADMIN",
-  "TRADE_PROJECT_MANAGER",
-  "TRADE_ADMIN",
-  "WORKER",
+  'IT_ADMIN',
+  'COMPANY_ADMIN',
+  'TRADE_PROJECT_MANAGER',
+  'TRADE_ADMIN',
+  'WORKER',
 ]);
 
 // ── Role rank — callers cannot create users with equal/higher role ──
 const ROLE_RANK = {
-  SUPER_ADMIN:           0,
-  IT_ADMIN:              1,
-  COMPANY_ADMIN:         2,
+  SUPER_ADMIN: 0,
+  IT_ADMIN: 1,
+  COMPANY_ADMIN: 2,
   TRADE_PROJECT_MANAGER: 3,
-  TRADE_ADMIN:           4,
-  WORKER:                5,
+  TRADE_ADMIN: 4,
+  WORKER: 5,
 };
 
 function mustEnv(name) {
@@ -52,7 +52,9 @@ function mustEnv(name) {
 }
 
 function normalizeEmail(email) {
-  return String(email || "").trim().toLowerCase();
+  return String(email || '')
+    .trim()
+    .toLowerCase();
 }
 
 function isValidEmail(email) {
@@ -60,15 +62,17 @@ function isValidEmail(email) {
 }
 
 function sanitizeUsername(s) {
-  const raw     = String(s || "").trim().toLowerCase();
-  const cleaned = raw.replace(/[^a-z0-9._]/g, "_");
-  return cleaned.replace(/_+/g, "_").replace(/^_+|_+$/g, "");
+  const raw = String(s || '')
+    .trim()
+    .toLowerCase();
+  const cleaned = raw.replace(/[^a-z0-9._]/g, '_');
+  return cleaned.replace(/_+/g, '_').replace(/^_+|_+$/g, '');
 }
 
 async function ensureUniqueUsername(base) {
   let candidate = base;
   if (!candidate || candidate.length < 3) {
-    candidate = `user_${crypto.randomBytes(3).toString("hex")}`;
+    candidate = `user_${crypto.randomBytes(3).toString('hex')}`;
   }
   for (let i = 0; i < 20; i++) {
     const name = i === 0 ? candidate : `${candidate}${i}`;
@@ -78,45 +82,45 @@ async function ensureUniqueUsername(base) {
     );
     if (!rows.length) return name;
   }
-  return `${candidate}_${crypto.randomBytes(3).toString("hex")}`;
+  return `${candidate}_${crypto.randomBytes(3).toString('hex')}`;
 }
 
 // POST /api/admin/users
 // Requires: settings.user_management permission
-router.post("/", can("settings.user_management"), async (req, res) => {
+router.post('/', can('settings.user_management'), async (req, res) => {
   try {
-    const SENDGRID_API_KEY    = mustEnv("SENDGRID_API_KEY");
-    const SENDGRID_FROM_EMAIL = mustEnv("SENDGRID_FROM_EMAIL");
-    const APP_BASE_URL        = mustEnv("APP_BASE_URL");
+    const SENDGRID_API_KEY = mustEnv('SENDGRID_API_KEY');
+    const SENDGRID_FROM_EMAIL = mustEnv('SENDGRID_FROM_EMAIL');
+    const APP_BASE_URL = mustEnv('APP_BASE_URL');
 
     if (!SENDGRID_API_KEY || !SENDGRID_FROM_EMAIL || !APP_BASE_URL) {
       return res.status(500).json({
         ok: false,
-        error: "EMAIL_NOT_CONFIGURED",
-        message: "Missing SENDGRID_API_KEY / SENDGRID_FROM_EMAIL / APP_BASE_URL in .env",
+        error: 'EMAIL_NOT_CONFIGURED',
+        message: 'Missing SENDGRID_API_KEY / SENDGRID_FROM_EMAIL / APP_BASE_URL in .env',
       });
     }
 
-    const email      = normalizeEmail(req.body?.email);
-    const role       = normalizeRole(req.body?.role);  // normalizes legacy aliases too
+    const email = normalizeEmail(req.body?.email);
+    const role = normalizeRole(req.body?.role); // normalizes legacy aliases too
     const employeeId = req.body?.employee_id ?? null;
-    const note       = req.body?.note ?? null;
-    const fullName   = req.body?.full_name ?? null;
+    const note = req.body?.note ?? null;
+    const fullName = req.body?.full_name ?? null;
     const usernameRaw = req.body?.username ?? null;
 
     // ── Validate inputs ───────────────────────────────────────
     if (!email || !isValidEmail(email)) {
-      return res.status(400).json({ ok: false, error: "INVALID_EMAIL" });
+      return res.status(400).json({ ok: false, error: 'INVALID_EMAIL' });
     }
 
     if (!role) {
-      return res.status(400).json({ ok: false, error: "ROLE_REQUIRED" });
+      return res.status(400).json({ ok: false, error: 'ROLE_REQUIRED' });
     }
 
     if (!ALLOWED_ROLES.has(role)) {
       return res.status(400).json({
         ok: false,
-        error: "INVALID_ROLE",
+        error: 'INVALID_ROLE',
         allowed: Array.from(ALLOWED_ROLES),
         received: role,
       });
@@ -130,18 +134,18 @@ router.post("/", can("settings.user_management"), async (req, res) => {
     if (callerRank >= targetRank) {
       return res.status(403).json({
         ok: false,
-        error: "INSUFFICIENT_PRIVILEGE",
+        error: 'INSUFFICIENT_PRIVILEGE',
         message: `Cannot create a user with role "${role}" — you need a higher role than the target`,
       });
     }
 
-    const companyId        = req.user?.company_id ?? null;
-    const createdByUserId  = req.user?.user_id ?? null;
+    const companyId = req.user?.company_id ?? null;
+    const createdByUserId = req.user?.user_id ?? null;
 
     // ── Atomic create user + invite ───────────────────────────
     const client = await pool.connect();
     try {
-      await client.query("BEGIN");
+      await client.query('BEGIN');
 
       // Duplicate check
       const exists = await client.query(
@@ -153,21 +157,21 @@ router.post("/", can("settings.user_management"), async (req, res) => {
         [companyId, email]
       );
       if (exists.rows.length) {
-        await client.query("ROLLBACK");
+        await client.query('ROLLBACK');
         return res.status(409).json({
           ok: false,
-          error: "USER_EMAIL_EXISTS",
+          error: 'USER_EMAIL_EXISTS',
           user: exists.rows[0],
         });
       }
 
       // Generate username
-      const base     = sanitizeUsername(usernameRaw || email.split("@")[0]);
+      const base = sanitizeUsername(usernameRaw || email.split('@')[0]);
       const username = await ensureUniqueUsername(base);
 
       // Random PIN — user sets real PIN during activation
-      const randomPin = crypto.randomBytes(6).toString("base64url");
-      const pinHash   = await hashPin(randomPin);
+      const randomPin = crypto.randomBytes(6).toString('base64url');
+      const pinHash = await hashPin(randomPin);
 
       const insUser = await client.query(
         `INSERT INTO public.app_users
@@ -190,14 +194,14 @@ router.post("/", can("settings.user_management"), async (req, res) => {
       );
 
       // Generate activation token
-      const rawToken  = crypto.randomBytes(32).toString("base64url");
-      const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+      const rawToken = crypto.randomBytes(32).toString('base64url');
+      const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
 
       const expiresHours = Number(process.env.USER_INVITE_EXPIRES_HOURS || 48);
-      const expiresAt    = new Date(Date.now() + Math.max(1, expiresHours) * 60 * 60 * 1000);
+      const expiresAt = new Date(Date.now() + Math.max(1, expiresHours) * 60 * 60 * 1000);
 
       const noteParts = [];
-      if (note)     noteParts.push(String(note));
+      if (note) noteParts.push(String(note));
       if (fullName) noteParts.push(`full_name=${String(fullName)}`);
       noteParts.push(`created_user_id=${newUser.id}`);
 
@@ -206,22 +210,32 @@ router.post("/", can("settings.user_management"), async (req, res) => {
           (company_id, employee_id, email, role, token_hash, status, created_by_user_id, note, expires_at)
          VALUES ($1, $2, $3, $4, $5, 'ACTIVE', $6, $7, $8)
          RETURNING id`,
-        [companyId, employeeId, email, role, tokenHash, createdByUserId, noteParts.join(" | "), expiresAt]
+        [
+          companyId,
+          employeeId,
+          email,
+          role,
+          tokenHash,
+          createdByUserId,
+          noteParts.join(' | '),
+          expiresAt,
+        ]
       );
       const inviteId = insInvite.rows?.[0]?.id;
-      if (!inviteId) throw new Error("Failed to create invite");
+      if (!inviteId) throw new Error('Failed to create invite');
 
       // Send activation email
       sgMail.setApiKey(SENDGRID_API_KEY);
-      const activateLink = `${APP_BASE_URL.replace(/\/$/, "")}/activate?token=${rawToken}`;
+      const activateLink = `${APP_BASE_URL.replace(/\/$/, '')}/activate?token=${rawToken}`;
 
-      const roleLabel = {
-        IT_ADMIN:              "IT Administrator",
-        COMPANY_ADMIN:         "Company Administrator",
-        TRADE_PROJECT_MANAGER: "Trade Project Manager",
-        TRADE_ADMIN:           "Trade Administrator",
-        WORKER:                "Worker",
-      }[role] || role;
+      const roleLabel =
+        {
+          IT_ADMIN: 'IT Administrator',
+          COMPANY_ADMIN: 'Company Administrator',
+          TRADE_PROJECT_MANAGER: 'Trade Project Manager',
+          TRADE_ADMIN: 'Trade Administrator',
+          WORKER: 'Worker',
+        }[role] || role;
 
       const html = `
         <div style="font-family: Arial, sans-serif; line-height:1.6; max-width:500px">
@@ -234,43 +248,38 @@ router.post("/", can("settings.user_management"), async (req, res) => {
       `;
 
       await sgMail.send({
-        to:      email,
-        from:    SENDGRID_FROM_EMAIL,
-        subject: "Activate your MEP Platform account",
+        to: email,
+        from: SENDGRID_FROM_EMAIL,
+        subject: 'Activate your MEP Platform account',
         html,
       });
 
-      await client.query(
-        `UPDATE public.user_invites SET sent_at=NOW() WHERE id=$1`,
-        [inviteId]
-      );
+      await client.query(`UPDATE public.user_invites SET sent_at=NOW() WHERE id=$1`, [inviteId]);
       await client.query(
         `UPDATE public.app_users SET activation_sent_at=NOW(), last_invite_id=$2 WHERE id=$1`,
         [newUser.id, inviteId]
       );
 
-      await client.query("COMMIT");
+      await client.query('COMMIT');
 
       return res.status(201).json({
-        ok:              true,
-        user:            newUser,
-        invite_id:       inviteId,
-        expires_at:      expiresAt.toISOString(),
+        ok: true,
+        user: newUser,
+        invite_id: inviteId,
+        expires_at: expiresAt.toISOString(),
         activation_link: activateLink,
       });
-
     } catch (e) {
-      await client.query("ROLLBACK");
+      await client.query('ROLLBACK');
       throw e;
     } finally {
       client.release();
     }
-
   } catch (err) {
-    console.error("POST /api/admin/users error:", err);
+    console.error('POST /api/admin/users error:', err);
     return res.status(500).json({
       ok: false,
-      error: "ADMIN_CREATE_USER_FAILED",
+      error: 'ADMIN_CREATE_USER_FAILED',
       message: err.message,
     });
   }

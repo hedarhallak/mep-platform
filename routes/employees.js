@@ -1,4 +1,4 @@
-"use strict";
+'use strict';
 
 /**
  * routes/employees.js
@@ -7,45 +7,47 @@
  * GET  /api/employees/:id   — get single employee
  */
 
-const express = require("express");
-const router  = express.Router();
-const { pool } = require("../db");
-const auth    = require("../middleware/auth");
-const { COMPANY_ADMIN_UP, TRADE_ADMIN_UP } = require("../middleware/roles");
-const { can } = require("../middleware/permissions");
+const express = require('express');
+const router = express.Router();
+const { pool } = require('../db');
+const auth = require('../middleware/auth');
+const { COMPANY_ADMIN_UP, TRADE_ADMIN_UP } = require('../middleware/roles');
+const { can } = require('../middleware/permissions');
 
 router.use(auth);
 
 // ── GET /api/employees ────────────────────────────────────────
 // Returns all employees for the current company
 // SUPER_ADMIN must pass ?company_id=X or gets all companies
-router.get("/", can("employees.view"), async (req, res) => {
+router.get('/', can('employees.view'), async (req, res) => {
   try {
-    const userRole  = req.user.role;
+    const userRole = req.user.role;
     const companyId = req.user.company_id ? Number(req.user.company_id) : null;
 
     // SUPER_ADMIN can pass ?company_id to filter, or gets all
     const filterCompanyId =
-      userRole === "SUPER_ADMIN"
-        ? (req.query.company_id ? Number(req.query.company_id) : null)
+      userRole === 'SUPER_ADMIN'
+        ? req.query.company_id
+          ? Number(req.query.company_id)
+          : null
         : companyId;
 
-    if (userRole !== "SUPER_ADMIN" && !filterCompanyId) {
-      return res.status(403).json({ ok: false, error: "COMPANY_CONTEXT_REQUIRED" });
+    if (userRole !== 'SUPER_ADMIN' && !filterCompanyId) {
+      return res.status(403).json({ ok: false, error: 'COMPANY_CONTEXT_REQUIRED' });
     }
 
     // Optional filters
-    const search    = req.query.search?.trim()   || null;
-    const roleFilter = req.query.role?.trim()    || null;
-    const tradeFilter = req.query.trade?.trim()  || null;
+    const search = req.query.search?.trim() || null;
+    const roleFilter = req.query.role?.trim() || null;
+    const tradeFilter = req.query.trade?.trim() || null;
 
     const params = [];
     const conditions = [];
 
     // Show inactive employees too unless filtered
     const activeFilter = req.query.active;
-    if (activeFilter === 'true')  conditions.push("e.is_active = true");
-    if (activeFilter === 'false') conditions.push("e.is_active = false");
+    if (activeFilter === 'true') conditions.push('e.is_active = true');
+    if (activeFilter === 'false') conditions.push('e.is_active = false');
 
     if (filterCompanyId) {
       params.push(filterCompanyId);
@@ -72,7 +74,7 @@ router.get("/", can("employees.view"), async (req, res) => {
       conditions.push(`ep.trade_code = $${params.length}`);
     }
 
-    const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
     // Detect available columns in employee_profiles to avoid missing column errors
     if (!module._epCols) {
@@ -80,17 +82,17 @@ router.get("/", can("employees.view"), async (req, res) => {
         `SELECT column_name FROM information_schema.columns
          WHERE table_schema='public' AND table_name='employee_profiles'`
       );
-      module._epCols = new Set(colRes.rows.map(r => r.column_name));
+      module._epCols = new Set(colRes.rows.map((r) => r.column_name));
     }
-    const has = col => module._epCols.has(col);
+    const has = (col) => module._epCols.has(col);
 
     const epFields = [
       'ep.trade_code',
-      has('role_code')  ? 'ep.role_code'  : "NULL AS role_code",
-      has('rank_code')  ? 'ep.rank_code'  : "NULL AS rank_code",
+      has('role_code') ? 'ep.role_code' : 'NULL AS role_code',
+      has('rank_code') ? 'ep.rank_code' : 'NULL AS rank_code',
       'ep.full_name',
-      has('phone')      ? 'ep.phone'      : "NULL AS phone",
-      has('city')       ? 'ep.city'       : "NULL AS city",
+      has('phone') ? 'ep.phone' : 'NULL AS phone',
+      has('city') ? 'ep.city' : 'NULL AS city',
     ].join(',\n         ');
 
     const result = await pool.query(
@@ -120,26 +122,25 @@ router.get("/", can("employees.view"), async (req, res) => {
     );
 
     return res.json({
-      ok:        true,
-      total:     result.rows.length,
+      ok: true,
+      total: result.rows.length,
       employees: result.rows,
     });
-
   } catch (err) {
-    console.error("GET /api/employees error:", err);
-    return res.status(500).json({ ok: false, error: "SERVER_ERROR", message: err.message });
+    console.error('GET /api/employees error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR', message: err.message });
   }
 });
 
 // ── GET /api/employees/:id ────────────────────────────────────
-router.get("/:id", can("employees.view"), async (req, res) => {
+router.get('/:id', can('employees.view'), async (req, res) => {
   try {
     const employeeId = Number(req.params.id);
-    const companyId  = req.user.company_id ? Number(req.user.company_id) : null;
-    const userRole   = req.user.role;
+    const companyId = req.user.company_id ? Number(req.user.company_id) : null;
+    const userRole = req.user.role;
 
     if (isNaN(employeeId)) {
-      return res.status(400).json({ ok: false, error: "INVALID_ID" });
+      return res.status(400).json({ ok: false, error: 'INVALID_ID' });
     }
 
     const result = await pool.query(
@@ -175,36 +176,35 @@ router.get("/:id", can("employees.view"), async (req, res) => {
        LEFT JOIN public.app_users         au ON au.employee_id = e.id
        LEFT JOIN public.trade_types       tt ON tt.code = ep.trade_code
        WHERE e.id = $1
-         ${userRole !== "SUPER_ADMIN" && companyId ? "AND e.company_id = $2" : ""}
+         ${userRole !== 'SUPER_ADMIN' && companyId ? 'AND e.company_id = $2' : ''}
        LIMIT 1`,
-      userRole !== "SUPER_ADMIN" && companyId ? [employeeId, companyId] : [employeeId]
+      userRole !== 'SUPER_ADMIN' && companyId ? [employeeId, companyId] : [employeeId]
     );
 
     if (!result.rows.length) {
-      return res.status(404).json({ ok: false, error: "EMPLOYEE_NOT_FOUND" });
+      return res.status(404).json({ ok: false, error: 'EMPLOYEE_NOT_FOUND' });
     }
 
     return res.json({ ok: true, employee: result.rows[0] });
-
   } catch (err) {
-    console.error("GET /api/employees/:id error:", err);
-    return res.status(500).json({ ok: false, error: "SERVER_ERROR", message: err.message });
+    console.error('GET /api/employees/:id error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR', message: err.message });
   }
 });
 
 // ── PATCH /api/employees/:id ─────────────────────────────────
 // Update employee info — admin can edit name, email, role, trade, etc.
-router.patch("/:id", can("employees.edit"), async (req, res) => {
+router.patch('/:id', can('employees.edit'), async (req, res) => {
   const client = await pool.connect();
   try {
-    await client.query("BEGIN");
+    await client.query('BEGIN');
 
     const employeeId = Number(req.params.id);
-    const companyId  = req.user.company_id ? Number(req.user.company_id) : null;
-    const userRole   = req.user.role;
+    const companyId = req.user.company_id ? Number(req.user.company_id) : null;
+    const userRole = req.user.role;
 
     if (isNaN(employeeId)) {
-      return res.status(400).json({ ok: false, error: "INVALID_ID" });
+      return res.status(400).json({ ok: false, error: 'INVALID_ID' });
     }
 
     // Verify employee belongs to same company
@@ -213,27 +213,38 @@ router.patch("/:id", can("employees.edit"), async (req, res) => {
               au.id AS user_id, au.role AS current_app_role
        FROM public.employees e
        LEFT JOIN public.app_users au ON au.employee_id = e.id
-       WHERE e.id = $1 ${userRole !== "SUPER_ADMIN" && companyId ? "AND e.company_id = $2" : ""}
+       WHERE e.id = $1 ${userRole !== 'SUPER_ADMIN' && companyId ? 'AND e.company_id = $2' : ''}
        LIMIT 1`,
-      userRole !== "SUPER_ADMIN" && companyId ? [employeeId, companyId] : [employeeId]
+      userRole !== 'SUPER_ADMIN' && companyId ? [employeeId, companyId] : [employeeId]
     );
 
     if (!empCheck.rows.length) {
-      return res.status(404).json({ ok: false, error: "EMPLOYEE_NOT_FOUND" });
+      return res.status(404).json({ ok: false, error: 'EMPLOYEE_NOT_FOUND' });
     }
 
     const existing = empCheck.rows[0];
     const {
-      first_name, last_name, contact_email,
-      employee_profile_type, trade_code, rank_code,
-      phone, home_address, city, postal_code,
-      emergency_contact_name, emergency_contact_phone, emergency_contact_relationship,
-      hire_date, termination_date, is_active
+      first_name,
+      last_name,
+      contact_email,
+      employee_profile_type,
+      trade_code,
+      rank_code,
+      phone,
+      home_address,
+      city,
+      postal_code,
+      emergency_contact_name,
+      emergency_contact_phone,
+      emergency_contact_relationship,
+      hire_date,
+      termination_date,
+      is_active,
     } = req.body;
 
     // ── Update employees table ──
     const empUpdates = [];
-    const empParams  = [];
+    const empParams = [];
 
     if (first_name !== undefined) {
       empParams.push(first_name.trim());
@@ -274,12 +285,12 @@ router.patch("/:id", can("employees.edit"), async (req, res) => {
 
     // ── Update employee_profiles table ──
     const profUpdates = [];
-    const profParams  = [];
+    const profParams = [];
 
     // Sync full_name if name changed
     if (first_name !== undefined || last_name !== undefined) {
       const fn = first_name?.trim() || existing.first_name;
-      const ln = last_name?.trim()  || existing.last_name;
+      const ln = last_name?.trim() || existing.last_name;
       profParams.push(`${fn} ${ln}`.trim());
       profUpdates.push(`full_name = $${profParams.length}`);
     }
@@ -336,39 +347,44 @@ router.patch("/:id", can("employees.edit"), async (req, res) => {
       } else {
         // Create profile if it doesn't exist
         const fn = first_name?.trim() || existing.first_name;
-        const ln = last_name?.trim()  || existing.last_name;
+        const ln = last_name?.trim() || existing.last_name;
         await client.query(
           `INSERT INTO public.employee_profiles (employee_id, full_name, trade_code, rank_code, phone)
            VALUES ($1, $2, $3, $4, $5)`,
-          [employeeId, `${fn} ${ln}`.trim(), trade_code || null, rank_code || null, phone?.trim() || null]
+          [
+            employeeId,
+            `${fn} ${ln}`.trim(),
+            trade_code || null,
+            rank_code || null,
+            phone?.trim() || null,
+          ]
         );
       }
     }
 
     // ── Sync role to app_users if changed ──
     if (employee_profile_type !== undefined && existing.user_id) {
-      await client.query(
-        `UPDATE public.app_users SET role = $1 WHERE id = $2`,
-        [employee_profile_type, existing.user_id]
-      );
+      await client.query(`UPDATE public.app_users SET role = $1 WHERE id = $2`, [
+        employee_profile_type,
+        existing.user_id,
+      ]);
     }
 
     // ── Sync is_active to app_users if changed ──
     if (is_active !== undefined && existing.user_id) {
-      await client.query(
-        `UPDATE public.app_users SET is_active = $1 WHERE id = $2`,
-        [is_active, existing.user_id]
-      );
+      await client.query(`UPDATE public.app_users SET is_active = $1 WHERE id = $2`, [
+        is_active,
+        existing.user_id,
+      ]);
     }
 
-    await client.query("COMMIT");
+    await client.query('COMMIT');
 
-    return res.json({ ok: true, message: "Employee updated successfully" });
-
+    return res.json({ ok: true, message: 'Employee updated successfully' });
   } catch (err) {
-    await client.query("ROLLBACK").catch(() => {});
-    console.error("PATCH /api/employees/:id error:", err);
-    return res.status(500).json({ ok: false, error: "SERVER_ERROR", message: err.message });
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('PATCH /api/employees/:id error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR', message: err.message });
   } finally {
     client.release();
   }

@@ -1,4 +1,4 @@
-"use strict";
+'use strict';
 
 /**
  * routes/onboarding.js
@@ -7,18 +7,18 @@
  * POST /api/onboarding/complete        — complete account setup
  */
 
-const router = require("express").Router();
-const crypto = require("crypto");
-const bcrypt = require("bcryptjs");
-const { pool } = require("../db");
+const router = require('express').Router();
+const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
+const { pool } = require('../db');
 
-const hashToken = t => crypto.createHash("sha256").update(t).digest("hex");
+const hashToken = (t) => crypto.createHash('sha256').update(t).digest('hex');
 
 // ── GET /api/onboarding/verify ────────────────────────────────
-router.get("/verify", async (req, res) => {
+router.get('/verify', async (req, res) => {
   try {
     const { token } = req.query;
-    if (!token) return res.status(400).json({ ok: false, error: "TOKEN_REQUIRED" });
+    if (!token) return res.status(400).json({ ok: false, error: 'TOKEN_REQUIRED' });
 
     const tokenHash = hashToken(token);
 
@@ -38,44 +38,43 @@ router.get("/verify", async (req, res) => {
       [tokenHash]
     );
 
-    if (!result.rows.length)
-      return res.status(404).json({ ok: false, error: "TOKEN_NOT_FOUND" });
+    if (!result.rows.length) return res.status(404).json({ ok: false, error: 'TOKEN_NOT_FOUND' });
 
     const invite = result.rows[0];
 
-    if (invite.status !== "ACTIVE")
-      return res.status(410).json({ ok: false, error: "TOKEN_ALREADY_USED" });
+    if (invite.status !== 'ACTIVE')
+      return res.status(410).json({ ok: false, error: 'TOKEN_ALREADY_USED' });
 
     if (new Date(invite.expires_at) < new Date())
-      return res.status(410).json({ ok: false, error: "TOKEN_EXPIRED" });
+      return res.status(410).json({ ok: false, error: 'TOKEN_EXPIRED' });
 
     return res.json({
       ok: true,
       invite: {
-        email:      invite.email,
-        role:       invite.role,
+        email: invite.email,
+        role: invite.role,
         first_name: invite.first_name,
-        last_name:  invite.last_name,
+        last_name: invite.last_name,
         trade_name: invite.trade_name,
-      }
+      },
     });
   } catch (err) {
-    console.error("GET /onboarding/verify error:", err);
-    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+    console.error('GET /onboarding/verify error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
 });
 
 // ── POST /api/onboarding/complete ─────────────────────────────
-router.post("/complete", async (req, res) => {
+router.post('/complete', async (req, res) => {
   const client = await pool.connect();
   try {
-    await client.query("BEGIN");
+    await client.query('BEGIN');
 
     const { token, username, pin, phone, home_address, home_lat, home_lng } = req.body;
 
-    if (!token)    return res.status(400).json({ ok: false, error: "TOKEN_REQUIRED" });
-    if (!username) return res.status(400).json({ ok: false, error: "USERNAME_REQUIRED" });
-    if (!pin)      return res.status(400).json({ ok: false, error: "PIN_REQUIRED" });
+    if (!token) return res.status(400).json({ ok: false, error: 'TOKEN_REQUIRED' });
+    if (!username) return res.status(400).json({ ok: false, error: 'USERNAME_REQUIRED' });
+    if (!pin) return res.status(400).json({ ok: false, error: 'PIN_REQUIRED' });
 
     const tokenHash = hashToken(token);
 
@@ -86,23 +85,22 @@ router.post("/complete", async (req, res) => {
     );
 
     if (!inviteRes.rows.length)
-      return res.status(404).json({ ok: false, error: "TOKEN_NOT_FOUND" });
+      return res.status(404).json({ ok: false, error: 'TOKEN_NOT_FOUND' });
 
     const invite = inviteRes.rows[0];
 
-    if (invite.status !== "ACTIVE")
-      return res.status(410).json({ ok: false, error: "TOKEN_ALREADY_USED" });
+    if (invite.status !== 'ACTIVE')
+      return res.status(410).json({ ok: false, error: 'TOKEN_ALREADY_USED' });
 
     if (new Date(invite.expires_at) < new Date())
-      return res.status(410).json({ ok: false, error: "TOKEN_EXPIRED" });
+      return res.status(410).json({ ok: false, error: 'TOKEN_EXPIRED' });
 
     // ── Check username not taken ──────────────────────────────
     const userExists = await client.query(
       `SELECT id FROM public.app_users WHERE username = $1 LIMIT 1`,
       [username.toLowerCase().trim()]
     );
-    if (userExists.rows.length)
-      return res.status(409).json({ ok: false, error: "USERNAME_TAKEN" });
+    if (userExists.rows.length) return res.status(409).json({ ok: false, error: 'USERNAME_TAKEN' });
 
     // ── Hash PIN ──────────────────────────────────────────────
     const pinHash = await bcrypt.hash(pin, 12);
@@ -112,20 +110,13 @@ router.post("/complete", async (req, res) => {
       `INSERT INTO public.app_users
          (username, pin_hash, employee_id, company_id, role, is_active, must_change_pin)
        VALUES ($1, $2, $3, $4, $5, true, false)`,
-      [
-        username.toLowerCase().trim(),
-        pinHash,
-        invite.employee_id,
-        invite.company_id,
-        invite.role,
-      ]
+      [username.toLowerCase().trim(), pinHash, invite.employee_id, invite.company_id, invite.role]
     );
 
     // ── Activate employee in public.employees ─────────────────
-    await client.query(
-      `UPDATE public.employees SET is_active = true WHERE id = $1`,
-      [invite.employee_id]
-    );
+    await client.query(`UPDATE public.employees SET is_active = true WHERE id = $1`, [
+      invite.employee_id,
+    ]);
 
     // ── Update employee_profiles with phone + home address ────
     // Check if profile exists first
@@ -137,7 +128,7 @@ router.post("/complete", async (req, res) => {
     if (profileExists.rows.length) {
       // Update existing profile
       const updates = [];
-      const params  = [];
+      const params = [];
 
       if (phone) {
         params.push(phone.trim());
@@ -156,7 +147,9 @@ router.post("/complete", async (req, res) => {
         try {
           params.push(home_lng);
           params.push(home_lat);
-          updates.push(`home_location = ST_SetSRID(ST_MakePoint($${params.length - 1}, $${params.length}), 4326)`);
+          updates.push(
+            `home_location = ST_SetSRID(ST_MakePoint($${params.length - 1}, $${params.length}), 4326)`
+          );
         } catch (_) {}
       }
 
@@ -175,19 +168,14 @@ router.post("/complete", async (req, res) => {
       );
       const fullName = empRow.rows[0]
         ? `${empRow.rows[0].first_name} ${empRow.rows[0].last_name}`.trim()
-        : "Unknown";
+        : 'Unknown';
 
       // Create new profile
       await client.query(
         `INSERT INTO public.employee_profiles
            (employee_id, full_name, phone, home_address)
          VALUES ($1, $2, $3, $4)`,
-        [
-          invite.employee_id,
-          fullName,
-          phone?.trim() || null,
-          home_address || null,
-        ]
+        [invite.employee_id, fullName, phone?.trim() || null, home_address || null]
       );
     }
 
@@ -197,14 +185,13 @@ router.post("/complete", async (req, res) => {
       [tokenHash]
     );
 
-    await client.query("COMMIT");
+    await client.query('COMMIT');
 
-    return res.json({ ok: true, message: "Account created successfully" });
-
+    return res.json({ ok: true, message: 'Account created successfully' });
   } catch (err) {
-    await client.query("ROLLBACK").catch(() => {});
-    console.error("POST /onboarding/complete error:", err);
-    return res.status(500).json({ ok: false, error: "SERVER_ERROR", message: err.message });
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('POST /onboarding/complete error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR', message: err.message });
   } finally {
     client.release();
   }

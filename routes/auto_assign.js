@@ -1,4 +1,4 @@
-"use strict";
+'use strict';
 
 /**
  * routes/auto_assign.js
@@ -7,29 +7,49 @@
  * POST /api/assignments/auto-confirm  → confirm suggestions, create assignments, send emails
  */
 
-const router = require("express").Router();
-const { pool } = require("../db");
-const { sendEmail } = require("../lib/email");
-const { normalizeRole } = require("../middleware/roles");
+const router = require('express').Router();
+const { pool } = require('../db');
+const { sendEmail } = require('../lib/email');
+const { normalizeRole } = require('../middleware/roles');
 
-const { can } = require("../middleware/permissions");
+const { can } = require('../middleware/permissions');
 
 // ─────────────────────────────────────────────────────────────
 // Email Templates
 // ─────────────────────────────────────────────────────────────
 
 function assignmentEmployeeEmailHtml({
-  employeeName, projectCode, projectName, siteAddress,
-  startDate, endDate, shiftStart, shiftEnd, notes, appName, companyName,
-  foremanName, foremanPhone, foremanEmail, foremanTrade,
+  employeeName,
+  projectCode,
+  projectName,
+  siteAddress,
+  startDate,
+  endDate,
+  shiftStart,
+  shiftEnd,
+  notes,
+  appName,
+  companyName,
+  foremanName,
+  foremanPhone,
+  foremanEmail,
+  foremanTrade,
 }) {
-  const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-CA", { weekday: "short", year: "numeric", month: "short", day: "numeric" }) : "—";
+  const fmtDate = (d) =>
+    d
+      ? new Date(d).toLocaleDateString('en-CA', {
+          weekday: 'short',
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+        })
+      : '—';
   const fmtTime = (t) => {
     if (!t) return t;
-    const [h, m] = t.split(":").map(Number);
-    const ap = h < 12 ? "AM" : "PM";
+    const [h, m] = t.split(':').map(Number);
+    const ap = h < 12 ? 'AM' : 'PM';
     const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
-    return `${String(h12).padStart(2,"0")}:${String(m).padStart(2,"0")} ${ap}`;
+    return `${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${ap}`;
   };
 
   return `<!DOCTYPE html>
@@ -77,13 +97,17 @@ function assignmentEmployeeEmailHtml({
       <div class="info-box">
         <div class="info-row">
           <span class="info-label">Project</span>
-          <span class="info-value">${projectCode}${projectName ? " — " + projectName : ""}</span>
+          <span class="info-value">${projectCode}${projectName ? ' — ' + projectName : ''}</span>
         </div>
-        ${siteAddress ? `
+        ${
+          siteAddress
+            ? `
         <div class="info-row">
           <span class="info-label">Site Address</span>
           <span class="info-value">${siteAddress}</span>
-        </div>` : ""}
+        </div>`
+            : ''
+        }
         <div class="info-row">
           <span class="info-label">Start Date</span>
           <span class="info-value">${fmtDate(startDate)}</span>
@@ -101,17 +125,23 @@ function assignmentEmployeeEmailHtml({
           <span class="info-value"><span class="badge">✓ Confirmed</span></span>
         </div>
       </div>
-      ${notes ? `
+      ${
+        notes
+          ? `
       <div class="notes-box">
         <div class="notes-title">📋 Notes from Manager</div>
         ${notes}
-      </div>` : ""}
+      </div>`
+          : ''
+      }
 
       <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:12px;padding:20px 24px;margin-bottom:24px;">
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#0369a1;letter-spacing:0.8px;margin-bottom:14px;">
-          👷 Your Foreman${foremanTrade ? ` — ${foremanTrade}` : ""}
+          👷 Your Foreman${foremanTrade ? ` — ${foremanTrade}` : ''}
         </div>
-        ${foremanName ? `
+        ${
+          foremanName
+            ? `
         <div style="display:flex;align-items:center;gap:14px;">
           <div style="width:44px;height:44px;background:#1e3a5f;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;font-weight:700;flex-shrink:0;">
             ${foremanName[0]}
@@ -124,10 +154,12 @@ function assignmentEmployeeEmailHtml({
         </div>
         <div style="margin-top:12px;font-size:12px;color:#64748b;">
           Please contact your foreman before arriving on site.
-        </div>` : `
+        </div>`
+            : `
         <div style="font-size:13px;color:#94a3b8;font-style:italic;">
           No foreman assigned to this trade yet. Please contact your supervisor for site coordination.
-        </div>`}
+        </div>`
+        }
       </div>
     </div>
     <div class="footer">
@@ -140,33 +172,50 @@ function assignmentEmployeeEmailHtml({
 }
 
 function assignmentAdminSummaryEmailHtml({
-  targetDate, projectCode, projectName, siteAddress,
-  assignments, appName, companyName,
+  targetDate,
+  projectCode,
+  projectName,
+  siteAddress,
+  assignments,
+  appName,
+  companyName,
 }) {
-  const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-CA", { weekday: "short", year: "numeric", month: "short", day: "numeric" }) : "—";
+  const fmtDate = (d) =>
+    d
+      ? new Date(d).toLocaleDateString('en-CA', {
+          weekday: 'short',
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+        })
+      : '—';
   const fmtTime = (t) => {
     if (!t) return t;
-    const [h, m] = t.split(":").map(Number);
-    const ap = h < 12 ? "AM" : "PM";
+    const [h, m] = t.split(':').map(Number);
+    const ap = h < 12 ? 'AM' : 'PM';
     const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
-    return `${String(h12).padStart(2,"0")}:${String(m).padStart(2,"0")} ${ap}`;
+    return `${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${ap}`;
   };
 
-  const carryOver = assignments.filter(a => a.type === "carry_over").length;
-  const newAssign = assignments.filter(a => a.type === "new").length;
+  const carryOver = assignments.filter((a) => a.type === 'carry_over').length;
+  const newAssign = assignments.filter((a) => a.type === 'new').length;
 
-  const rows = assignments.map(a => `
+  const rows = assignments
+    .map(
+      (a) => `
     <tr>
       <td style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-size:14px;color:#1e293b;font-weight:600;">${a.employee_name}</td>
-      <td style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-size:13px;color:#475569;">${a.trade_code || "—"}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-size:13px;color:#475569;">${a.trade_code || '—'}</td>
       <td style="padding:10px 12px;border-bottom:1px solid #f1f5f9;">
         <span style="display:inline-block;padding:3px 8px;border-radius:12px;font-size:11px;font-weight:700;
-          background:${a.type === "carry_over" ? "#dbeafe" : "#dcfce7"};
-          color:${a.type === "carry_over" ? "#1d4ed8" : "#15803d"};">
-          ${a.type === "carry_over" ? "↩ Carry-over" : "🆕 New"}
+          background:${a.type === 'carry_over' ? '#dbeafe' : '#dcfce7'};
+          color:${a.type === 'carry_over' ? '#1d4ed8' : '#15803d'};">
+          ${a.type === 'carry_over' ? '↩ Carry-over' : '🆕 New'}
         </span>
       </td>
-    </tr>`).join("");
+    </tr>`
+    )
+    .join('');
 
   return `<!DOCTYPE html>
 <html>
@@ -199,8 +248,8 @@ function assignmentAdminSummaryEmailHtml({
       <p>Assignment Summary — ${fmtDate(targetDate)}</p>
     </div>
     <div class="body">
-      <div class="title">📋 ${projectCode}${projectName ? " — " + projectName : ""}</div>
-      <div class="subtitle">${siteAddress || ""}</div>
+      <div class="title">📋 ${projectCode}${projectName ? ' — ' + projectName : ''}</div>
+      <div class="subtitle">${siteAddress || ''}</div>
 
       <div class="stats">
         <div class="stat">
@@ -248,13 +297,12 @@ function assignmentAdminSummaryEmailHtml({
 // Body: { target_date }
 // Returns suggested assignments per project grouped
 // ─────────────────────────────────────────────────────────────
-router.post("/auto-suggest", can("assignments.smart_assign"), async (req, res) => {
+router.post('/auto-suggest', can('assignments.smart_assign'), async (req, res) => {
   try {
-    const companyId   = req.user.company_id;
+    const companyId = req.user.company_id;
     const { target_date } = req.body || {};
 
-    if (!target_date)
-      return res.status(400).json({ ok: false, error: "TARGET_DATE_REQUIRED" });
+    if (!target_date) return res.status(400).json({ ok: false, error: 'TARGET_DATE_REQUIRED' });
 
     // 1. Get all ACTIVE projects for this company
     const projRes = await pool.query(
@@ -270,10 +318,10 @@ router.post("/auto-suggest", can("assignments.smart_assign"), async (req, res) =
     );
     const projects = projRes.rows;
     if (!projects.length)
-      return res.json({ ok: true, suggestions: [], message: "No active projects found." });
+      return res.json({ ok: true, suggestions: [], message: 'No active projects found.' });
 
     // 2. Get today's assignments (who is working today per project)
-    const today = new Date().toISOString().split("T")[0];
+    const today = new Date().toISOString().split('T')[0];
     const todayAssignRes = await pool.query(
       `SELECT ar.project_id, ar.requested_for_employee_id AS employee_id,
               ep.full_name AS employee_name, ep.trade_code,
@@ -304,7 +352,7 @@ router.post("/auto-suggest", can("assignments.smart_assign"), async (req, res) =
          AND end_date   >= $2`,
       [companyId, target_date]
     );
-    const busyOnTarget = new Set(busyRes.rows.map(r => r.requested_for_employee_id));
+    const busyOnTarget = new Set(busyRes.rows.map((r) => r.requested_for_employee_id));
 
     // 3b. Get foremen from today's assignments (assignment_role = 'FOREMAN')
     const foremenRes = await pool.query(
@@ -347,7 +395,7 @@ router.post("/auto-suggest", can("assignments.smart_assign"), async (req, res) =
     const suggestions = [];
 
     for (const project of projects) {
-      const todayTeam  = todayByProject[project.id] || [];
+      const todayTeam = todayByProject[project.id] || [];
       const projSuggestions = [];
       const usedInThisRound = new Set(); // avoid double-assigning in same run
 
@@ -360,50 +408,51 @@ router.post("/auto-suggest", can("assignments.smart_assign"), async (req, res) =
       for (const worker of todayTeam) {
         if (busyOnTarget.has(worker.employee_id)) {
           // Busy — find best available replacement with same trade
-          const replacement = allEmployees.find(e =>
-            !busyOnTarget.has(e.id) &&
-            !usedInThisRound.has(e.id) &&
-            e.trade_code === worker.trade_code
-          ) || allEmployees.find(e =>
-            !busyOnTarget.has(e.id) &&
-            !usedInThisRound.has(e.id)
-          );
+          const replacement =
+            allEmployees.find(
+              (e) =>
+                !busyOnTarget.has(e.id) &&
+                !usedInThisRound.has(e.id) &&
+                e.trade_code === worker.trade_code
+            ) || allEmployees.find((e) => !busyOnTarget.has(e.id) && !usedInThisRound.has(e.id));
 
           if (replacement) {
             usedInThisRound.add(replacement.id);
             projSuggestions.push({
-              employee_id:     replacement.id,
-              employee_name:   replacement.full_name,
-              trade_code:      replacement.trade_code,
-              contact_email:   replacement.contact_email,
+              employee_id: replacement.id,
+              employee_name: replacement.full_name,
+              trade_code: replacement.trade_code,
+              contact_email: replacement.contact_email,
               assignment_role: worker.assignment_role || 'WORKER',
-              type:            "replacement",
-              replacing:       worker.employee_name,
-              score:           scoreEmployee(replacement, project),
+              type: 'replacement',
+              replacing: worker.employee_name,
+              score: scoreEmployee(replacement, project),
             });
           } else {
             projSuggestions.push({
-              employee_id:     null,
-              employee_name:   null,
-              trade_code:      worker.trade_code,
-              contact_email:   null,
+              employee_id: null,
+              employee_name: null,
+              trade_code: worker.trade_code,
+              contact_email: null,
               assignment_role: worker.assignment_role || 'WORKER',
-              type:            "gap",
-              replacing:       worker.employee_name,
-              score:           0,
+              type: 'gap',
+              replacing: worker.employee_name,
+              score: 0,
             });
           }
         } else {
           usedInThisRound.add(worker.employee_id);
           projSuggestions.push({
-            employee_id:     worker.employee_id,
-            employee_name:   worker.employee_name,
-            trade_code:      worker.trade_code,
-            contact_email:   allEmployees.find(e => e.id === worker.employee_id)?.contact_email,
+            employee_id: worker.employee_id,
+            employee_name: worker.employee_name,
+            trade_code: worker.trade_code,
+            contact_email: allEmployees.find((e) => e.id === worker.employee_id)?.contact_email,
             assignment_role: worker.assignment_role || 'WORKER',
-            type:            "carry_over",
-            replacing:       null,
-            score:           100 + scoreEmployee(allEmployees.find(e => e.id === worker.employee_id) || {}, project),
+            type: 'carry_over',
+            replacing: null,
+            score:
+              100 +
+              scoreEmployee(allEmployees.find((e) => e.id === worker.employee_id) || {}, project),
           });
         }
       }
@@ -412,42 +461,42 @@ router.post("/auto-suggest", can("assignments.smart_assign"), async (req, res) =
       if (todayTeam.length === 0) {
         // Suggest top 3 available employees by score
         const candidates = allEmployees
-          .filter(e => !busyOnTarget.has(e.id) && !usedInThisRound.has(e.id))
-          .map(e => ({ ...e, score: scoreEmployee(e, project) }))
+          .filter((e) => !busyOnTarget.has(e.id) && !usedInThisRound.has(e.id))
+          .map((e) => ({ ...e, score: scoreEmployee(e, project) }))
           .sort((a, b) => b.score - a.score)
           .slice(0, 3);
 
         for (const c of candidates) {
           usedInThisRound.add(c.id);
           projSuggestions.push({
-            employee_id:   c.id,
+            employee_id: c.id,
             employee_name: c.full_name,
-            trade_code:    c.trade_code,
+            trade_code: c.trade_code,
             contact_email: c.contact_email,
-            type:          "new",
-            replacing:     null,
-            score:         c.score,
+            type: 'new',
+            replacing: null,
+            score: c.score,
           });
         }
       }
 
       suggestions.push({
-        project_id:    project.id,
-        project_code:  project.project_code,
-        project_name:  project.project_name,
-        site_address:  project.site_address,
-        shift_start:   project.shift_start || "06:00",
-        shift_end:     project.shift_end   || "14:30",
-        today_count:   todayTeam.length,
-        employees:     projSuggestions,
-        foremen:       foremenByProject[project.id] || {},
+        project_id: project.id,
+        project_code: project.project_code,
+        project_name: project.project_name,
+        site_address: project.site_address,
+        shift_start: project.shift_start || '06:00',
+        shift_end: project.shift_end || '14:30',
+        today_count: todayTeam.length,
+        employees: projSuggestions,
+        foremen: foremenByProject[project.id] || {},
       });
     }
 
     return res.json({ ok: true, target_date, suggestions });
   } catch (err) {
-    console.error("POST /auto-suggest error:", err);
-    return res.status(500).json({ ok: false, error: "SERVER_ERROR", message: err.message });
+    console.error('POST /auto-suggest error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR', message: err.message });
   }
 });
 
@@ -463,27 +512,29 @@ function scoreEmployee(emp, project) {
 
 function haversineKm(lat1, lng1, lat2, lng2) {
   const R = 6371;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLng = (lng2 - lng1) * Math.PI / 180;
-  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLng/2)**2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 // ─────────────────────────────────────────────────────────────
 // POST /auto-confirm
 // Body: { target_date, confirmed: [ { project_id, shift_start, shift_end, notes, employees: [{employee_id, trade_code, contact_email, employee_name, type}] } ] }
 // ─────────────────────────────────────────────────────────────
-router.post("/auto-confirm", can("assignments.smart_assign"), async (req, res) => {
+router.post('/auto-confirm', can('assignments.smart_assign'), async (req, res) => {
   const client = await pool.connect();
   try {
-    const companyId  = req.user.company_id;
+    const companyId = req.user.company_id;
     const { target_date, confirmed } = req.body || {};
 
     if (!target_date || !Array.isArray(confirmed) || !confirmed.length)
-      return res.status(400).json({ ok: false, error: "INVALID_PAYLOAD" });
+      return res.status(400).json({ ok: false, error: 'INVALID_PAYLOAD' });
 
-    const appName     = process.env.APP_NAME     || "MEP Platform";
-    const appBaseUrl  = process.env.APP_BASE_URL  || "http://localhost:3000";
+    const appName = process.env.APP_NAME || 'MEP Platform';
+    const appBaseUrl = process.env.APP_BASE_URL || 'http://localhost:3000';
 
     // Get company name + admin email
     const companyRes = await pool.query(
@@ -494,10 +545,10 @@ router.post("/auto-confirm", can("assignments.smart_assign"), async (req, res) =
        ORDER BY au.created_at ASC LIMIT 1`,
       [companyId]
     );
-    const companyName = companyRes.rows[0]?.company_name || "Your Company";
-    const adminEmail  = companyRes.rows[0]?.admin_email  || null;
+    const companyName = companyRes.rows[0]?.company_name || 'Your Company';
+    const adminEmail = companyRes.rows[0]?.admin_email || null;
 
-    await client.query("BEGIN");
+    await client.query('BEGIN');
 
     const allCreated = [];
     const emailQueue = []; // collect after commit
@@ -538,9 +589,19 @@ router.post("/auto-confirm", can("assignments.smart_assign"), async (req, res) =
            VALUES ($1,$2,$3,$4,$5,$5,$6,$7,$8,$9,'APPROVED','CREATE_ASSIGNMENT','{}',
                    $4,NOW(),NOW(),NOW())
            RETURNING id`,
-          [companyId, project_id, emp.employee_id, req.user.user_id,
-           target_date, shift_start || "06:00", shift_end || "14:30", notes || null,
-           ['WORKER','FOREMAN','JOURNEYMAN'].includes(emp.assignment_role) ? emp.assignment_role : 'WORKER']
+          [
+            companyId,
+            project_id,
+            emp.employee_id,
+            req.user.user_id,
+            target_date,
+            shift_start || '06:00',
+            shift_end || '14:30',
+            notes || null,
+            ['WORKER', 'FOREMAN', 'JOURNEYMAN'].includes(emp.assignment_role)
+              ? emp.assignment_role
+              : 'WORKER',
+          ]
         );
 
         const assignId = rows[0].id;
@@ -552,25 +613,25 @@ router.post("/auto-confirm", can("assignments.smart_assign"), async (req, res) =
           // Find foreman for this employee's trade on this project
           const foremanInfo = (proj.foremen || {})[emp.trade_code] || null;
           emailQueue.push({
-            type: "employee",
-            to:   emp.contact_email,
+            type: 'employee',
+            to: emp.contact_email,
             data: {
-              employeeName:  emp.employee_name,
-              projectCode:   project.project_code,
-              projectName:   project.project_name,
-              siteAddress:   project.site_address,
-              startDate:     target_date,
-              endDate:       target_date,
-              shiftStart:    shift_start || "06:00",
-              shiftEnd:      shift_end   || "14:30",
-              notes:         notes || null,
+              employeeName: emp.employee_name,
+              projectCode: project.project_code,
+              projectName: project.project_name,
+              siteAddress: project.site_address,
+              startDate: target_date,
+              endDate: target_date,
+              shiftStart: shift_start || '06:00',
+              shiftEnd: shift_end || '14:30',
+              notes: notes || null,
               appName,
               companyName,
-              foremanName:   foremanInfo?.foreman_name  || null,
-              foremanEmail:  foremanInfo?.foreman_email || null,
-              foremanPhone:  foremanInfo?.foreman_phone || null,
-              foremanTrade:  emp.trade_code,
-            }
+              foremanName: foremanInfo?.foreman_name || null,
+              foremanEmail: foremanInfo?.foreman_email || null,
+              foremanPhone: foremanInfo?.foreman_phone || null,
+              foremanTrade: emp.trade_code,
+            },
           });
         }
       }
@@ -586,17 +647,17 @@ router.post("/auto-confirm", can("assignments.smart_assign"), async (req, res) =
           const foremanInfo = (proj.foremen || {})[tradeCode];
           if (foremanInfo?.foreman_email) {
             emailQueue.push({
-              type: "admin",
-              to:   foremanInfo.foreman_email,
+              type: 'admin',
+              to: foremanInfo.foreman_email,
               data: {
-                targetDate:  target_date,
+                targetDate: target_date,
                 projectCode: project.project_code,
                 projectName: project.project_name,
                 siteAddress: project.site_address,
                 assignments: workers,
                 appName,
                 companyName,
-              }
+              },
             });
           }
         }
@@ -605,58 +666,57 @@ router.post("/auto-confirm", can("assignments.smart_assign"), async (req, res) =
       // Queue admin summary email per project
       if (adminEmail && projAssignments.length) {
         emailQueue.push({
-          type: "admin",
-          to:   adminEmail,
+          type: 'admin',
+          to: adminEmail,
           data: {
-            targetDate:  target_date,
+            targetDate: target_date,
             projectCode: project.project_code,
             projectName: project.project_name,
             siteAddress: project.site_address,
             assignments: projAssignments,
             appName,
             companyName,
-          }
+          },
         });
       }
     }
 
-    await client.query("COMMIT");
+    await client.query('COMMIT');
 
     // Send emails after commit (fire and forget — don't fail assignment if email fails)
     const emailResults = await Promise.allSettled(
-      emailQueue.map(e => {
-        if (e.type === "employee") {
+      emailQueue.map((e) => {
+        if (e.type === 'employee') {
           return sendEmail({
-            to:      e.to,
+            to: e.to,
             subject: `Assignment Confirmed — ${e.data.projectCode} · ${e.data.startDate}`,
-            html:    assignmentEmployeeEmailHtml(e.data),
-            text:    `Hi ${e.data.employeeName}, you have a new assignment on ${e.data.projectCode} starting ${e.data.startDate}. Shift: ${e.data.shiftStart}–${e.data.shiftEnd}.`,
+            html: assignmentEmployeeEmailHtml(e.data),
+            text: `Hi ${e.data.employeeName}, you have a new assignment on ${e.data.projectCode} starting ${e.data.startDate}. Shift: ${e.data.shiftStart}–${e.data.shiftEnd}.`,
           });
         } else {
           return sendEmail({
-            to:      e.to,
+            to: e.to,
             subject: `Auto-Assignment Summary — ${e.data.projectCode} · ${e.data.targetDate}`,
-            html:    assignmentAdminSummaryEmailHtml(e.data),
-            text:    `Assignment summary for ${e.data.projectCode} on ${e.data.targetDate}: ${e.data.assignments.length} employees assigned.`,
+            html: assignmentAdminSummaryEmailHtml(e.data),
+            text: `Assignment summary for ${e.data.projectCode} on ${e.data.targetDate}: ${e.data.assignments.length} employees assigned.`,
           });
         }
       })
     );
 
-    const emailsSent   = emailResults.filter(r => r.status === "fulfilled").length;
-    const emailsFailed = emailResults.filter(r => r.status === "rejected").length;
+    const emailsSent = emailResults.filter((r) => r.status === 'fulfilled').length;
+    const emailsFailed = emailResults.filter((r) => r.status === 'rejected').length;
 
     return res.json({
-      ok:             true,
+      ok: true,
       assignments_created: allCreated.length,
-      emails_sent:    emailsSent,
-      emails_failed:  emailsFailed,
+      emails_sent: emailsSent,
+      emails_failed: emailsFailed,
     });
-
   } catch (err) {
-    await client.query("ROLLBACK");
-    console.error("POST /auto-confirm error:", err);
-    return res.status(500).json({ ok: false, error: "SERVER_ERROR", message: err.message });
+    await client.query('ROLLBACK');
+    console.error('POST /auto-confirm error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR', message: err.message });
   } finally {
     client.release();
   }

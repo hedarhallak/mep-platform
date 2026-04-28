@@ -2,8 +2,8 @@
 // Geocode projects.site_address -> projects.site_lat/site_lng using Nominatim (OSM)
 // PowerShell friendly. Node 18+ required (fetch available).
 
-require("dotenv").config();
-const { Pool } = require("pg");
+require('dotenv').config();
+const { Pool } = require('pg');
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL, // optional
@@ -14,9 +14,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const USER_AGENT =
   process.env.NOMINATIM_USER_AGENT ||
-  `MEP-Site-Workforce-App/1.0 (${process.env.NOMINATIM_EMAIL || "no-email-set"})`;
+  `MEP-Site-Workforce-App/1.0 (${process.env.NOMINATIM_EMAIL || 'no-email-set'})`;
 
-const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
+const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search';
 
 async function fetchWithRetry(url, maxAttempts = 5) {
   let attempt = 0;
@@ -25,14 +25,14 @@ async function fetchWithRetry(url, maxAttempts = 5) {
   while (true) {
     attempt++;
     const res = await fetch(url, {
-      method: "GET",
-      headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
+      method: 'GET',
+      headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
     });
 
     if (res.ok) return res;
 
     if ([429, 500, 502, 503, 504].includes(res.status) && attempt < maxAttempts) {
-      const retryAfter = res.headers.get("retry-after");
+      const retryAfter = res.headers.get('retry-after');
       const waitMs = retryAfter ? Number(retryAfter) * 1000 : backoffMs;
       console.log(`Retry HTTP ${res.status}. Wait ${waitMs}ms (attempt ${attempt}/${maxAttempts})`);
       await sleep(waitMs);
@@ -40,16 +40,16 @@ async function fetchWithRetry(url, maxAttempts = 5) {
       continue;
     }
 
-    const body = await res.text().catch(() => "");
+    const body = await res.text().catch(() => '');
     throw new Error(`Nominatim HTTP ${res.status}: ${body.slice(0, 300)}`);
   }
 }
 
 async function geocode(address) {
   const u = new URL(NOMINATIM_URL);
-  u.searchParams.set("q", address);
-  u.searchParams.set("format", "json");
-  u.searchParams.set("limit", "1");
+  u.searchParams.set('q', address);
+  u.searchParams.set('format', 'json');
+  u.searchParams.set('limit', '1');
 
   const res = await fetchWithRetry(u.toString());
   const data = await res.json();
@@ -61,13 +61,13 @@ async function geocode(address) {
 
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
 
-  return { lat, lng, source: "nominatim" };
+  return { lat, lng, source: 'nominatim' };
 }
 
 async function main() {
   const limit = Number(process.env.GEOCODE_LIMIT || 50);
 
-  console.log("User-Agent:", USER_AGENT);
+  console.log('User-Agent:', USER_AGENT);
 
   const client = await pool.connect();
   try {
@@ -85,17 +85,19 @@ async function main() {
     );
 
     if (rows.length === 0) {
-      console.log("No projects need geocoding ✅");
+      console.log('No projects need geocoding ✅');
       return;
     }
 
     console.log(`Found ${rows.length} project(s) to geocode.`);
 
-    let ok = 0, skip = 0, fail = 0;
+    let ok = 0,
+      skip = 0,
+      fail = 0;
 
     for (const p of rows) {
-      const label = `${p.project_code || p.id} - ${p.project_name || ""}`.trim();
-      const address = String(p.site_address || "").trim();
+      const label = `${p.project_code || p.id} - ${p.project_name || ''}`.trim();
+      const address = String(p.site_address || '').trim();
 
       console.log(`\n[${label}]`);
       console.log(`Address: ${address}`);
@@ -113,7 +115,7 @@ async function main() {
       }
 
       if (!result) {
-        console.log("⚠️ No match found (skipping).");
+        console.log('⚠️ No match found (skipping).');
         skip++;
         continue;
       }
@@ -134,7 +136,7 @@ async function main() {
       ok++;
     }
 
-    console.log("\nDone:", { ok, skip, fail });
+    console.log('\nDone:', { ok, skip, fail });
   } finally {
     client.release();
     await pool.end();
@@ -142,6 +144,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error("Fatal:", err);
+  console.error('Fatal:', err);
   process.exit(1);
 });

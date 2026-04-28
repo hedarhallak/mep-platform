@@ -1,55 +1,58 @@
 // routes/daily_dispatch.js
 // E2: Prepare Daily Dispatch snapshot (DB only usage, NO emails)
-"use strict";
+'use strict';
 
-const express = require("express");
+const express = require('express');
 const router = express.Router();
 
-const db = require("../db");
+const db = require('../db');
 const pool = db && db.pool ? db.pool : db;
 
 function assertPool(p) {
-  return p && typeof p.query === "function";
+  return p && typeof p.query === 'function';
 }
 
 // POST /api/daily-dispatch/prepare?date=YYYY-MM-DD
 // Creates a STARTED run and stores per-employee snapshot in employee_daily_dispatch_state (last_sent_payload_json)
 // Does NOT approve requests and does NOT send emails.
-router.post("/prepare", async (req, res) => {
+router.post('/prepare', async (req, res) => {
   try {
     if (!assertPool(pool)) {
-      console.error("DB pool invalid in routes/daily_dispatch.js:", db);
-      return res.status(500).json({ ok: false, error: "internal_error" });
+      console.error('DB pool invalid in routes/daily_dispatch.js:', db);
+      return res.status(500).json({ ok: false, error: 'internal_error' });
     }
 
-    const qDate = String(req.query.date || "").trim();
+    const qDate = String(req.query.date || '').trim();
     const date = qDate || new Date().toISOString().slice(0, 10); // YYYY-MM-DD (server local/utc)
     const companyId = req.user && req.user.company_id ? Number(req.user.company_id) : null;
     if (companyId === null) {
-      return res.status(400).json({ ok: false, error: "company_required" });
+      return res.status(400).json({ ok: false, error: 'company_required' });
     }
 
-
-// If company_id is NULL in this baseline, enforce "one run per date" at the application layer.
-// Otherwise Postgres UNIQUE(company_id, dispatch_date) allows duplicates when company_id is NULL.
-if (companyId === null) {
-  const { rows: existingRows } = await pool.query(
-    `SELECT * FROM public.daily_dispatch_runs
+    // If company_id is NULL in this baseline, enforce "one run per date" at the application layer.
+    // Otherwise Postgres UNIQUE(company_id, dispatch_date) allows duplicates when company_id is NULL.
+    if (companyId === null) {
+      const { rows: existingRows } = await pool.query(
+        `SELECT * FROM public.daily_dispatch_runs
      WHERE company_id IS NULL AND dispatch_date = $1::date
      ORDER BY started_at DESC
      LIMIT 1`,
-    [date, companyId]
-    );
-  const existing = existingRows[0] || null;
-  if (existing && String(existing.status).toUpperCase() !== "FAILED") {
-    return res.status(409).json({
-      ok: false,
-      error: "already_prepared",
-      run: { id: existing.id, company_id: existing.company_id, dispatch_date: existing.dispatch_date, status: existing.status },
-    });
-  }
-}
-
+        [date, companyId]
+      );
+      const existing = existingRows[0] || null;
+      if (existing && String(existing.status).toUpperCase() !== 'FAILED') {
+        return res.status(409).json({
+          ok: false,
+          error: 'already_prepared',
+          run: {
+            id: existing.id,
+            company_id: existing.company_id,
+            dispatch_date: existing.dispatch_date,
+            status: existing.status,
+          },
+        });
+      }
+    }
 
     const triggeredBy = req.user && req.user.user_id ? Number(req.user.user_id) : null;
 
@@ -75,8 +78,13 @@ if (companyId === null) {
       if (existing) {
         return res.status(409).json({
           ok: false,
-          error: "already_prepared",
-          run: { id: existing.id, company_id: existing.company_id, dispatch_date: existing.dispatch_date, status: existing.status },
+          error: 'already_prepared',
+          run: {
+            id: existing.id,
+            company_id: existing.company_id,
+            dispatch_date: existing.dispatch_date,
+            status: existing.status,
+          },
         });
       }
       throw e;
@@ -170,17 +178,21 @@ FROM public.assignments a
 
     return res.json({
       ok: true,
-      run: { id: runRow.id, company_id: runRow.company_id, dispatch_date: runRow.dispatch_date, status: runRow.status },
+      run: {
+        id: runRow.id,
+        company_id: runRow.company_id,
+        dispatch_date: runRow.dispatch_date,
+        status: runRow.status,
+      },
       date,
       employees: upserted,
       assignments: rows.length,
     });
   } catch (err) {
-    console.error("POST /api/daily-dispatch/prepare error:", err);
-    return res.status(500).json({ ok: false, error: "internal_error" });
+    console.error('POST /api/daily-dispatch/prepare error:', err);
+    return res.status(500).json({ ok: false, error: 'internal_error' });
   }
 });
-
 
 function mustEnv(name) {
   const v = process.env[name];
@@ -189,7 +201,9 @@ function mustEnv(name) {
 }
 
 function normalizeEmail(email) {
-  return String(email || "").trim().toLowerCase();
+  return String(email || '')
+    .trim()
+    .toLowerCase();
 }
 
 function isValidEmail(email) {
@@ -197,26 +211,28 @@ function isValidEmail(email) {
 }
 
 function escapeHtml(s) {
-  return String(s || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
 
 function buildDigestHtml({ date, employeeName, tasks }) {
-  const safeName = escapeHtml(employeeName || "Employee");
-  const rows = (tasks || []).map((t) => {
-    const shift = escapeHtml(t.shift || "");
-    const pName = escapeHtml(t.project_name || t.project_code || "");
-    const addr = escapeHtml(t.site_address || "");
-    return `
+  const safeName = escapeHtml(employeeName || 'Employee');
+  const rows = (tasks || [])
+    .map((t) => {
+      const shift = escapeHtml(t.shift || '');
+      const pName = escapeHtml(t.project_name || t.project_code || '');
+      const addr = escapeHtml(t.site_address || '');
+      return `
       <tr>
         <td style="padding:6px 8px; border-bottom:1px solid #eee; white-space:nowrap;">${shift}</td>
         <td style="padding:6px 8px; border-bottom:1px solid #eee;">${pName}<div style="color:#666; font-size:12px;">${addr}</div></td>
       </tr>`;
-  }).join("");
+    })
+    .join('');
 
   return `
     <div style="font-family: Arial, sans-serif; line-height:1.4">
@@ -246,61 +262,61 @@ async function getEmployeesEmailColumn(pool) {
      WHERE table_schema='public' AND table_name='employees'`
   );
   const cols = new Set(rows.map((r) => String(r.column_name)));
-  if (cols.has("contact_email")) return "contact_email";
-  if (cols.has("email")) return "email";
+  if (cols.has('contact_email')) return 'contact_email';
+  if (cols.has('email')) return 'email';
   // fallback candidates
-  if (cols.has("work_email")) return "work_email";
+  if (cols.has('work_email')) return 'work_email';
   return null;
 }
 
 // POST /api/daily-dispatch/commit?date=YYYY-MM-DD
 // Sends one email per employee (daily digest) using snapshots stored in employee_daily_dispatch_state.
 // Marks run as SENT and sets last_sent_at for each employee row.
-router.post("/commit", async (req, res) => {
+router.post('/commit', async (req, res) => {
   const startedAt = Date.now();
   try {
     if (!assertPool(pool)) {
-      console.error("DB pool invalid in routes/daily_dispatch.js:", db);
-      return res.status(500).json({ ok: false, error: "internal_error" });
+      console.error('DB pool invalid in routes/daily_dispatch.js:', db);
+      return res.status(500).json({ ok: false, error: 'internal_error' });
     }
 
-    const SENDGRID_API_KEY = mustEnv("SENDGRID_API_KEY");
-    const SENDGRID_FROM_EMAIL = mustEnv("SENDGRID_FROM_EMAIL");
+    const SENDGRID_API_KEY = mustEnv('SENDGRID_API_KEY');
+    const SENDGRID_FROM_EMAIL = mustEnv('SENDGRID_FROM_EMAIL');
     if (!SENDGRID_API_KEY || !SENDGRID_FROM_EMAIL) {
       return res.status(500).json({
         ok: false,
-        error: "EMAIL_NOT_CONFIGURED",
-        message: "Missing SENDGRID_API_KEY / SENDGRID_FROM_EMAIL in .env",
+        error: 'EMAIL_NOT_CONFIGURED',
+        message: 'Missing SENDGRID_API_KEY / SENDGRID_FROM_EMAIL in .env',
       });
     }
 
-    const sgMail = require("@sendgrid/mail");
+    const sgMail = require('@sendgrid/mail');
     sgMail.setApiKey(SENDGRID_API_KEY);
 
-    const qDate = String(req.query.date || "").trim();
+    const qDate = String(req.query.date || '').trim();
     const date = qDate || new Date().toISOString().slice(0, 10);
     const companyId = req.user && req.user.company_id ? Number(req.user.company_id) : null;
     if (companyId === null) {
-      return res.status(400).json({ ok: false, error: "company_required" });
+      return res.status(400).json({ ok: false, error: 'company_required' });
     }
 
     const triggeredBy = req.user && req.user.user_id ? Number(req.user.user_id) : null;
 
     // 1) Find run
     const runSel = await pool.query(
-  `SELECT * FROM public.daily_dispatch_runs
+      `SELECT * FROM public.daily_dispatch_runs
    WHERE company_id IS NOT DISTINCT FROM $1 AND dispatch_date = $2::date
    ORDER BY (CASE WHEN UPPER(status) = 'SENT' THEN 1 ELSE 0 END), started_at DESC
    LIMIT 1`,
-  [companyId, date]
-);
-const run = runSel.rows[0] || null;
+      [companyId, date]
+    );
+    const run = runSel.rows[0] || null;
 
     if (!run) {
-      return res.status(404).json({ ok: false, error: "not_prepared" });
+      return res.status(404).json({ ok: false, error: 'not_prepared' });
     }
-    if (String(run.status).toUpperCase() === "SENT") {
-      return res.status(409).json({ ok: false, error: "already_sent", run_id: run.id });
+    if (String(run.status).toUpperCase() === 'SENT') {
+      return res.status(409).json({ ok: false, error: 'already_sent', run_id: run.id });
     }
 
     // 2) Load snapshots for this date
@@ -313,13 +329,13 @@ const run = runSel.rows[0] || null;
     );
     const snaps = snapSel.rows || [];
     if (!snaps.length) {
-      return res.status(400).json({ ok: false, error: "no_snapshots" });
+      return res.status(400).json({ ok: false, error: 'no_snapshots' });
     }
 
     // 3) Load employee emails
     const emailCol = await getEmployeesEmailColumn(pool);
     if (!emailCol) {
-      return res.status(500).json({ ok: false, error: "employees_email_column_missing" });
+      return res.status(500).json({ ok: false, error: 'employees_email_column_missing' });
     }
 
     const empIds = snaps.map((s) => Number(s.employee_id));
@@ -355,12 +371,16 @@ const run = runSel.rows[0] || null;
 
       let tasks = [];
       try {
-        tasks = Array.isArray(s.last_sent_payload_json) ? s.last_sent_payload_json : JSON.parse(String(s.last_sent_payload_json || "[]"));
+        tasks = Array.isArray(s.last_sent_payload_json)
+          ? s.last_sent_payload_json
+          : JSON.parse(String(s.last_sent_payload_json || '[]'));
       } catch (_) {
         tasks = [];
       }
 
-      const employeeName = emp ? `${(emp.first_name || "").trim()} ${(emp.last_name || "").trim()}`.trim() : `Employee ${s.employee_id}`;
+      const employeeName = emp
+        ? `${(emp.first_name || '').trim()} ${(emp.last_name || '').trim()}`.trim()
+        : `Employee ${s.employee_id}`;
       const html = buildDigestHtml({ date, employeeName, tasks });
       const subject = `Daily Assignments - ${date}`;
 
@@ -403,24 +423,28 @@ const run = runSel.rows[0] || null;
 
     return res.json({
       ok: true,
-      run: { id: run.id, company_id: run.company_id, dispatch_date: run.dispatch_date, status: "SENT" },
+      run: {
+        id: run.id,
+        company_id: run.company_id,
+        dispatch_date: run.dispatch_date,
+        status: 'SENT',
+      },
       date,
       sent_emails: sent,
       missing_email: missingEmail,
       ms: Date.now() - startedAt,
     });
   } catch (err) {
-    console.error("POST /api/daily-dispatch/commit error:", err);
+    console.error('POST /api/daily-dispatch/commit error:', err);
 
     // Best-effort: mark run FAILED if possible
     try {
-      const qDate = String(req.query.date || "").trim();
+      const qDate = String(req.query.date || '').trim();
       const date = qDate || new Date().toISOString().slice(0, 10);
       const companyId = req.user && req.user.company_id ? Number(req.user.company_id) : null;
-    if (companyId === null) {
-      return res.status(400).json({ ok: false, error: "company_required" });
-    }
-
+      if (companyId === null) {
+        return res.status(400).json({ ok: false, error: 'company_required' });
+      }
 
       await pool.query(
         `
@@ -436,37 +460,41 @@ const run = runSel.rows[0] || null;
       // ignore
     }
 
-    return res.status(500).json({ ok: false, error: "internal_error" });
+    return res.status(500).json({ ok: false, error: 'internal_error' });
   }
 });
 
-
-
 // GET /api/daily-dispatch/preview?date=YYYY-MM-DD&view=summary|exceptions|projects|employee
 // F1: Preview the digest content BEFORE commit (no emails, no status changes).
-router.get("/preview", async (req, res) => {
+router.get('/preview', async (req, res) => {
   try {
     if (!assertPool(pool)) {
-      console.error("DB pool invalid in routes/daily_dispatch.js:", db);
-      return res.status(500).json({ ok: false, error: "internal_error" });
+      console.error('DB pool invalid in routes/daily_dispatch.js:', db);
+      return res.status(500).json({ ok: false, error: 'internal_error' });
     }
 
-    const qDate = String(req.query.date || "").trim();
+    const qDate = String(req.query.date || '').trim();
     const date = qDate || new Date().toISOString().slice(0, 10);
-    const view = String(req.query.view || "summary").trim().toLowerCase();
+    const view = String(req.query.view || 'summary')
+      .trim()
+      .toLowerCase();
 
-    const page = Math.max(1, parseInt(String(req.query.page || "1"), 10) || 1);
-    const pageSize = Math.min(100, Math.max(1, parseInt(String(req.query.page_size || "20"), 10) || 20));
-    const q = String(req.query.q || "").trim().toLowerCase();
+    const page = Math.max(1, parseInt(String(req.query.page || '1'), 10) || 1);
+    const pageSize = Math.min(
+      100,
+      Math.max(1, parseInt(String(req.query.page_size || '20'), 10) || 20)
+    );
+    const q = String(req.query.q || '')
+      .trim()
+      .toLowerCase();
 
     const projectId = req.query.project_id ? Number(req.query.project_id) : null;
     const employeeId = req.query.employee_id ? Number(req.query.employee_id) : null;
 
     const companyId = req.user && req.user.company_id ? Number(req.user.company_id) : null;
     if (companyId === null) {
-      return res.status(400).json({ ok: false, error: "company_required" });
+      return res.status(400).json({ ok: false, error: 'company_required' });
     }
-
 
     // Load run status (latest, prefer non-SENT first; otherwise most recent)
     const runSel = await pool.query(
@@ -477,7 +505,7 @@ router.get("/preview", async (req, res) => {
       [companyId, date]
     );
     const run = runSel.rows[0] || null;
-    const runStatus = run ? String(run.status).toUpperCase() : "NOT_PREPARED";
+    const runStatus = run ? String(run.status).toUpperCase() : 'NOT_PREPARED';
 
     // Helpers to detect schema columns safely
     async function getEmployeesEmailColumn() {
@@ -487,9 +515,9 @@ router.get("/preview", async (req, res) => {
          WHERE table_schema='public' AND table_name='employees'`
       );
       const cols = new Set(rows.map((r) => String(r.column_name)));
-      if (cols.has("contact_email")) return "contact_email";
-      if (cols.has("email")) return "email";
-      if (cols.has("work_email")) return "work_email";
+      if (cols.has('contact_email')) return 'contact_email';
+      if (cols.has('email')) return 'email';
+      if (cols.has('work_email')) return 'work_email';
       return null;
     }
 
@@ -504,7 +532,9 @@ router.get("/preview", async (req, res) => {
     }
 
     function normalizeEmail(email) {
-      return String(email || "").trim().toLowerCase();
+      return String(email || '')
+        .trim()
+        .toLowerCase();
     }
     function isValidEmail(email) {
       return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -546,19 +576,23 @@ router.get("/preview", async (req, res) => {
     const employees = [];
     for (const s of snaps) {
       const emp = empMap.get(Number(s.employee_id));
-      const name = emp ? `${(emp.first_name || "").trim()} ${(emp.last_name || "").trim()}`.trim() : `Employee ${s.employee_id}`;
+      const name = emp
+        ? `${(emp.first_name || '').trim()} ${(emp.last_name || '').trim()}`.trim()
+        : `Employee ${s.employee_id}`;
       const code = emp ? emp.employee_code : null;
-      const email = emp ? normalizeEmail(emp.email) : "";
+      const email = emp ? normalizeEmail(emp.email) : '';
       let tasks = [];
       try {
-        tasks = Array.isArray(s.last_sent_payload_json) ? s.last_sent_payload_json : JSON.parse(String(s.last_sent_payload_json || "[]"));
+        tasks = Array.isArray(s.last_sent_payload_json)
+          ? s.last_sent_payload_json
+          : JSON.parse(String(s.last_sent_payload_json || '[]'));
       } catch (_) {
         tasks = [];
       }
 
       // Optional search filter by employee name/code
       if (q) {
-        const hay = `${String(code || "").toLowerCase()} ${String(name || "").toLowerCase()}`;
+        const hay = `${String(code || '').toLowerCase()} ${String(name || '').toLowerCase()}`;
         if (!hay.includes(q)) continue;
       }
 
@@ -566,8 +600,8 @@ router.get("/preview", async (req, res) => {
         employee_id: Number(s.employee_id),
         employee_code: code,
         employee_name: name,
-        contact_email: emailCol === "contact_email" ? email : null,
-        email: emailCol && emailCol !== "contact_email" ? email : null,
+        contact_email: emailCol === 'contact_email' ? email : null,
+        email: emailCol && emailCol !== 'contact_email' ? email : null,
         email_valid: !!email && isValidEmail(email),
         tasks,
         tasks_count: Array.isArray(tasks) ? tasks.length : 0,
@@ -588,7 +622,7 @@ router.get("/preview", async (req, res) => {
            FROM public.employees
            WHERE is_active = true`
         );
-        const totalActive = (rows[0] && rows[0].n) ? Number(rows[0].n) : 0;
+        const totalActive = rows[0] && rows[0].n ? Number(rows[0].n) : 0;
         const assignedIds = new Set(employees.map((e) => e.employee_id));
         unassignedCount = Math.max(0, totalActive - assignedIds.size);
       }
@@ -599,11 +633,12 @@ router.get("/preview", async (req, res) => {
     // Build by-project grouping (from tasks)
     const projectMap = new Map(); // project_id -> {project_id, project_code, project_name, site_address, employee_ids:Set, exceptions:int}
     for (const e of employees) {
-      for (const t of (e.tasks || [])) {
+      for (const t of e.tasks || []) {
         const pid = t.project_id != null ? Number(t.project_id) : null;
         if (projectId !== null && pid !== projectId) continue;
 
-        const key = pid != null ? String(pid) : `null:${t.project_code || ""}:${t.project_name || ""}`;
+        const key =
+          pid != null ? String(pid) : `null:${t.project_code || ''}:${t.project_name || ''}`;
         if (!projectMap.has(key)) {
           projectMap.set(key, {
             project_id: pid,
@@ -637,7 +672,7 @@ router.get("/preview", async (req, res) => {
     }
 
     // Summary (default)
-    if (view === "summary") {
+    if (view === 'summary') {
       const willSend = employees.filter((e) => e.email_valid).length;
       const summary = {
         date,
@@ -650,11 +685,11 @@ router.get("/preview", async (req, res) => {
         projects_count: projectMap.size,
         email_column: emailCol,
       };
-      return res.json({ ok: true, view: "summary", summary });
+      return res.json({ ok: true, view: 'summary', summary });
     }
 
     // Exceptions view
-    if (view === "exceptions") {
+    if (view === 'exceptions') {
       const list = employees
         .filter((e) => !e.email_valid || e.tasks_count > 1)
         .map((e) => ({
@@ -662,14 +697,14 @@ router.get("/preview", async (req, res) => {
           employee_code: e.employee_code,
           employee_name: e.employee_name,
           issues: [
-            !e.email_valid ? "MISSING_EMAIL" : null,
-            e.tasks_count > 1 ? "MULTI_ASSIGNMENT" : null,
+            !e.email_valid ? 'MISSING_EMAIL' : null,
+            e.tasks_count > 1 ? 'MULTI_ASSIGNMENT' : null,
           ].filter(Boolean),
           tasks_count: e.tasks_count,
         }));
       return res.json({
         ok: true,
-        view: "exceptions",
+        view: 'exceptions',
         date,
         run_status: runStatus,
         run_id: run ? run.id : null,
@@ -678,7 +713,7 @@ router.get("/preview", async (req, res) => {
     }
 
     // Projects view
-    if (view === "projects") {
+    if (view === 'projects') {
       let projects = Array.from(projectMap.values()).map((p) => ({
         project_id: p.project_id,
         project_code: p.project_code,
@@ -691,16 +726,18 @@ router.get("/preview", async (req, res) => {
       // Optional search filter by project code/name/address
       if (q) {
         projects = projects.filter((p) => {
-          const hay = `${String(p.project_code || "").toLowerCase()} ${String(p.project_name || "").toLowerCase()} ${String(p.site_address || "").toLowerCase()}`;
+          const hay = `${String(p.project_code || '').toLowerCase()} ${String(p.project_name || '').toLowerCase()} ${String(p.site_address || '').toLowerCase()}`;
           return hay.includes(q);
         });
       }
 
       // Sort: most exceptions first, then most employees
-      projects.sort((a, b) => (b.exceptions_count - a.exceptions_count) || (b.employees_count - a.employees_count));
+      projects.sort(
+        (a, b) => b.exceptions_count - a.exceptions_count || b.employees_count - a.employees_count
+      );
       return res.json({
         ok: true,
-        view: "projects",
+        view: 'projects',
         date,
         run_status: runStatus,
         run_id: run ? run.id : null,
@@ -709,13 +746,13 @@ router.get("/preview", async (req, res) => {
     }
 
     // Employee preview view
-    if (view === "employee") {
+    if (view === 'employee') {
       if (!employeeId) {
-        return res.status(400).json({ ok: false, error: "employee_id_required" });
+        return res.status(400).json({ ok: false, error: 'employee_id_required' });
       }
       const e = employees.find((x) => x.employee_id === employeeId);
       if (!e) {
-        return res.status(404).json({ ok: false, error: "employee_not_found_in_snapshots" });
+        return res.status(404).json({ ok: false, error: 'employee_not_found_in_snapshots' });
       }
       // Optional filter by project_id within tasks
       let tasks = Array.isArray(e.tasks) ? e.tasks : [];
@@ -723,15 +760,15 @@ router.get("/preview", async (req, res) => {
 
       // Sort tasks by shift (string sort is fine for HH:MM-HH:MM) then project
       tasks = tasks.slice().sort((a, b) => {
-        const s1 = String(a.shift || "");
-        const s2 = String(b.shift || "");
+        const s1 = String(a.shift || '');
+        const s2 = String(b.shift || '');
         if (s1 !== s2) return s1.localeCompare(s2);
-        return String(a.project_code || "").localeCompare(String(b.project_code || ""));
+        return String(a.project_code || '').localeCompare(String(b.project_code || ''));
       });
 
       return res.json({
         ok: true,
-        view: "employee",
+        view: 'employee',
         date,
         run_status: runStatus,
         run_id: run ? run.id : null,
@@ -740,7 +777,7 @@ router.get("/preview", async (req, res) => {
           employee_code: e.employee_code,
           employee_name: e.employee_name,
           email_column: emailCol,
-          email: emailCol ? (emailCol === "contact_email" ? e.contact_email : e.email) : null,
+          email: emailCol ? (emailCol === 'contact_email' ? e.contact_email : e.email) : null,
           email_valid: e.email_valid,
         },
         tasks,
@@ -748,10 +785,10 @@ router.get("/preview", async (req, res) => {
     }
 
     // Unknown view
-    return res.status(400).json({ ok: false, error: "invalid_view" });
+    return res.status(400).json({ ok: false, error: 'invalid_view' });
   } catch (err) {
-    console.error("GET /api/daily-dispatch/preview error:", err);
-    return res.status(500).json({ ok: false, error: "internal_error" });
+    console.error('GET /api/daily-dispatch/preview error:', err);
+    return res.status(500).json({ ok: false, error: 'internal_error' });
   }
 });
 

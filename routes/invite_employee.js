@@ -1,4 +1,4 @@
-"use strict";
+'use strict';
 
 /**
  * routes/invite_employee.js
@@ -10,24 +10,32 @@
  *   first_name, last_name, email, trade_type_id, level_code, role, emp_code (optional)
  */
 
-const router  = require("express").Router();
-const crypto  = require("crypto");
-const { pool } = require("../db");
-const auth    = require("../middleware/auth");
-const { can } = require("../middleware/permissions");
-const { sendEmail } = require("../lib/email");
+const router = require('express').Router();
+const crypto = require('crypto');
+const { pool } = require('../db');
+const auth = require('../middleware/auth');
+const { can } = require('../middleware/permissions');
+const { sendEmail } = require('../lib/email');
 
 router.use(auth);
 
 // ── helpers ───────────────────────────────────────────────────
-const hashToken = t => crypto.createHash("sha256").update(t).digest("hex");
+const hashToken = (t) => crypto.createHash('sha256').update(t).digest('hex');
 
 function generateEmployeeCode(companyId) {
   const rand = Math.floor(1000 + Math.random() * 9000);
   return `EMP-${companyId}-${rand}`;
 }
 
-function inviteEmailHtml({ firstName, lastName, role, tradeName, inviteUrl, appName, expiresHours }) {
+function inviteEmailHtml({
+  firstName,
+  lastName,
+  role,
+  tradeName,
+  inviteUrl,
+  appName,
+  expiresHours,
+}) {
   return `
 <!DOCTYPE html>
 <html>
@@ -88,11 +96,15 @@ function inviteEmailHtml({ firstName, lastName, role, tradeName, inviteUrl, appN
           <span class="info-label">Role</span>
           <span class="info-value">${role.replace(/_/g, ' ')}</span>
         </div>
-        ${tradeName ? `
+        ${
+          tradeName
+            ? `
         <div class="info-row">
           <span class="info-label">Trade</span>
           <span class="info-value">${tradeName}</span>
-        </div>` : ''}
+        </div>`
+            : ''
+        }
       </div>
 
       <div class="steps">
@@ -120,28 +132,27 @@ function inviteEmailHtml({ firstName, lastName, role, tradeName, inviteUrl, appN
 }
 
 // ── POST /api/invite-employee ─────────────────────────────────
-router.post("/", can("employees.invite"), async (req, res) => {
+router.post('/', can('employees.invite'), async (req, res) => {
   const client = await pool.connect();
   try {
-    await client.query("BEGIN");
+    await client.query('BEGIN');
 
-    const {
-      first_name, last_name, email,
-      trade_type_id, level_code, role, emp_code
-    } = req.body;
+    const { first_name, last_name, email, trade_type_id, level_code, role, emp_code } = req.body;
 
-    const companyId       = req.user.company_id;
+    const companyId = req.user.company_id;
     const createdByUserId = req.user.user_id;
-    const appName         = process.env.APP_NAME     || "MEP Platform";
-    const appBaseUrl      = process.env.APP_BASE_URL  || "http://localhost:3000";
-    const expiresHours    = Number(process.env.USER_INVITE_EXPIRES_HOURS || 48);
+    const appName = process.env.APP_NAME || 'MEP Platform';
+    const appBaseUrl = process.env.APP_BASE_URL || 'http://localhost:3000';
+    const expiresHours = Number(process.env.USER_INVITE_EXPIRES_HOURS || 48);
 
     // ── Validate ──────────────────────────────────────────────
-    if (!first_name?.trim()) return res.status(400).json({ ok: false, error: "FIRST_NAME_REQUIRED" });
-    if (!last_name?.trim())  return res.status(400).json({ ok: false, error: "LAST_NAME_REQUIRED" });
-    if (!email?.trim())      return res.status(400).json({ ok: false, error: "EMAIL_REQUIRED" });
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ ok: false, error: "INVALID_EMAIL" });
-    if (!role)               return res.status(400).json({ ok: false, error: "ROLE_REQUIRED" });
+    if (!first_name?.trim())
+      return res.status(400).json({ ok: false, error: 'FIRST_NAME_REQUIRED' });
+    if (!last_name?.trim()) return res.status(400).json({ ok: false, error: 'LAST_NAME_REQUIRED' });
+    if (!email?.trim()) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+      return res.status(400).json({ ok: false, error: 'INVALID_EMAIL' });
+    if (!role) return res.status(400).json({ ok: false, error: 'ROLE_REQUIRED' });
 
     // ── Check email not already used in this company ──────────
     const emailExists = await client.query(
@@ -152,15 +163,14 @@ router.post("/", can("employees.invite"), async (req, res) => {
       [email.toLowerCase().trim(), companyId]
     );
     if (emailExists.rows.length)
-      return res.status(409).json({ ok: false, error: "EMAIL_ALREADY_REGISTERED" });
+      return res.status(409).json({ ok: false, error: 'EMAIL_ALREADY_REGISTERED' });
 
     // ── Get trade name for email ──────────────────────────────
     let tradeName = null;
     if (trade_type_id) {
-      const t = await client.query(
-        `SELECT name FROM public.trade_types WHERE id = $1 LIMIT 1`,
-        [trade_type_id]
-      );
+      const t = await client.query(`SELECT name FROM public.trade_types WHERE id = $1 LIMIT 1`, [
+        trade_type_id,
+      ]);
       tradeName = t.rows[0]?.name || null;
     }
 
@@ -185,7 +195,7 @@ router.post("/", can("employees.invite"), async (req, res) => {
     const employeeId = empResult.rows[0].id;
 
     // ── Generate invite token ─────────────────────────────────
-    const rawToken  = crypto.randomBytes(32).toString("base64url");
+    const rawToken = crypto.randomBytes(32).toString('base64url');
     const tokenHash = hashToken(rawToken);
     const expiresAt = new Date(Date.now() + expiresHours * 3600 * 1000);
 
@@ -204,16 +214,16 @@ router.post("/", can("employees.invite"), async (req, res) => {
       ]
     );
 
-    await client.query("COMMIT");
+    await client.query('COMMIT');
 
     // ── Send email (outside transaction) ─────────────────────
     const inviteUrl = `${appBaseUrl}/onboarding?token=${rawToken}`;
     const emailSent = await sendEmail({
-      to:      email,
+      to: email,
       subject: `You're invited to join ${appName}`,
-      html:    inviteEmailHtml({
-        firstName:   first_name.trim(),
-        lastName:    last_name.trim(),
+      html: inviteEmailHtml({
+        firstName: first_name.trim(),
+        lastName: last_name.trim(),
         role,
         tradeName,
         inviteUrl,
@@ -224,16 +234,15 @@ router.post("/", can("employees.invite"), async (req, res) => {
     });
 
     return res.status(201).json({
-      ok:          true,
+      ok: true,
       employee_id: employeeId,
-      email_sent:  emailSent,
-      invite_url:  inviteUrl, // useful for dev/testing
+      email_sent: emailSent,
+      invite_url: inviteUrl, // useful for dev/testing
     });
-
   } catch (err) {
-    await client.query("ROLLBACK").catch(() => {});
-    console.error("POST /api/invite-employee error:", err);
-    return res.status(500).json({ ok: false, error: "SERVER_ERROR", message: err.message });
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('POST /api/invite-employee error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR', message: err.message });
   } finally {
     client.release();
   }

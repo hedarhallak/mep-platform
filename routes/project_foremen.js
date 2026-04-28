@@ -1,4 +1,4 @@
-"use strict";
+'use strict';
 
 /**
  * routes/project_foremen.js
@@ -8,14 +8,14 @@
  * DELETE /api/project-foremen/:project_id/:trade   → remove foreman from trade
  */
 
-const router  = require("express").Router();
-const { pool } = require("../db");
-const { normalizeRole } = require("../middleware/roles");
+const router = require('express').Router();
+const { pool } = require('../db');
+const { normalizeRole } = require('../middleware/roles');
 
-const { can } = require("../middleware/permissions");
+const { can } = require('../middleware/permissions');
 
 // ── GET /api/project-foremen/:project_id ─────────────────────
-router.get("/:project_id", async (req, res) => {
+router.get('/:project_id', async (req, res) => {
   try {
     const companyId = req.user.company_id;
     const projectId = Number(req.params.project_id);
@@ -40,29 +40,28 @@ router.get("/:project_id", async (req, res) => {
 
     return res.json({ ok: true, foremen: rows });
   } catch (err) {
-    console.error("GET /project-foremen error:", err);
-    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+    console.error('GET /project-foremen error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
 });
 
 // ── POST /api/project-foremen/:project_id ────────────────────
 // Body: { employee_id, trade_code }
-router.post("/:project_id", can("projects.edit"), async (req, res) => {
+router.post('/:project_id', can('projects.edit'), async (req, res) => {
   try {
     const companyId = req.user.company_id;
     const projectId = Number(req.params.project_id);
     const { employee_id, trade_code } = req.body || {};
 
-    if (!employee_id) return res.status(400).json({ ok: false, error: "EMPLOYEE_REQUIRED" });
-    if (!trade_code)  return res.status(400).json({ ok: false, error: "TRADE_REQUIRED" });
+    if (!employee_id) return res.status(400).json({ ok: false, error: 'EMPLOYEE_REQUIRED' });
+    if (!trade_code) return res.status(400).json({ ok: false, error: 'TRADE_REQUIRED' });
 
     // Verify project belongs to company
     const proj = await pool.query(
       `SELECT id FROM public.projects WHERE id = $1 AND company_id = $2 LIMIT 1`,
       [projectId, companyId]
     );
-    if (!proj.rows.length)
-      return res.status(404).json({ ok: false, error: "PROJECT_NOT_FOUND" });
+    if (!proj.rows.length) return res.status(404).json({ ok: false, error: 'PROJECT_NOT_FOUND' });
 
     // Verify employee belongs to company
     const emp = await pool.query(
@@ -72,8 +71,7 @@ router.post("/:project_id", can("projects.edit"), async (req, res) => {
        WHERE ep.employee_id = $1 AND au.company_id = $2 LIMIT 1`,
       [employee_id, companyId]
     );
-    if (!emp.rows.length)
-      return res.status(404).json({ ok: false, error: "EMPLOYEE_NOT_FOUND" });
+    if (!emp.rows.length) return res.status(404).json({ ok: false, error: 'EMPLOYEE_NOT_FOUND' });
 
     // Upsert — replace existing foreman for this trade on this project
     const { rows } = await pool.query(
@@ -93,17 +91,17 @@ router.post("/:project_id", can("projects.edit"), async (req, res) => {
 
     return res.status(201).json({ ok: true, foreman: rows[0] });
   } catch (err) {
-    console.error("POST /project-foremen error:", err);
-    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+    console.error('POST /project-foremen error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
 });
 
 // ── DELETE /api/project-foremen/:project_id/:trade ───────────
-router.delete("/:project_id/:trade", can("projects.edit"), async (req, res) => {
+router.delete('/:project_id/:trade', can('projects.edit'), async (req, res) => {
   try {
     const companyId = req.user.company_id;
     const projectId = Number(req.params.project_id);
-    const trade     = req.params.trade.toUpperCase();
+    const trade = req.params.trade.toUpperCase();
 
     const { rowCount } = await pool.query(
       `DELETE FROM public.project_foremen
@@ -111,13 +109,12 @@ router.delete("/:project_id/:trade", can("projects.edit"), async (req, res) => {
       [projectId, trade, companyId]
     );
 
-    if (!rowCount)
-      return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    if (!rowCount) return res.status(404).json({ ok: false, error: 'NOT_FOUND' });
 
     return res.json({ ok: true });
   } catch (err) {
-    console.error("DELETE /project-foremen error:", err);
-    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+    console.error('DELETE /project-foremen error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
 });
 

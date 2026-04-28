@@ -1,7 +1,7 @@
 // db.js
-"use strict";
+'use strict';
 
-const { Pool } = require("pg");
+const { Pool } = require('pg');
 
 // Uses DATABASE_URL if exists, otherwise uses PG* env vars.
 // Examples:
@@ -12,17 +12,17 @@ const pool = new Pool(
   connectionString
     ? { connectionString }
     : {
-        host: process.env.PGHOST || "localhost",
+        host: process.env.PGHOST || 'localhost',
         port: process.env.PGPORT ? Number(process.env.PGPORT) : 5432,
-        database: process.env.PGDATABASE || "erp",
-        user: process.env.PGUSER || "postgres",
-        password: process.env.PGPASSWORD || "",
+        database: process.env.PGDATABASE || 'erp',
+        user: process.env.PGUSER || 'postgres',
+        password: process.env.PGPASSWORD || '',
       }
 );
 
 // Quick sanity log once (optional)
-pool.on("error", (err) => {
-  console.error("Unexpected PG pool error:", err);
+pool.on('error', (err) => {
+  console.error('Unexpected PG pool error:', err);
 });
 
 module.exports = { pool };

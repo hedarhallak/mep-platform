@@ -1,8 +1,8 @@
 // middleware/auth.js
-"use strict";
+'use strict';
 
-const jwt = require("jsonwebtoken");
-const { JWT_SECRET } = require("../lib/auth_utils");
+const jwt = require('jsonwebtoken');
+const { JWT_SECRET } = require('../lib/auth_utils');
 
 /**
  * Auth middleware:
@@ -11,11 +11,11 @@ const { JWT_SECRET } = require("../lib/auth_utils");
  * - Sets req.user = { user_id, employee_id, username, role, company_id }
  */
 module.exports = function auth(req, res, next) {
-  const authHeader = req.headers.authorization || "";
-  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
 
   if (!token) {
-    return res.status(401).json({ ok: false, error: "MISSING_TOKEN" });
+    return res.status(401).json({ ok: false, error: 'MISSING_TOKEN' });
   }
 
   try {
@@ -36,6 +36,6 @@ module.exports = function auth(req, res, next) {
 
     return next();
   } catch (e) {
-    return res.status(401).json({ ok: false, error: "INVALID_TOKEN" });
+    return res.status(401).json({ ok: false, error: 'INVALID_TOKEN' });
   }
 };

@@ -1,4 +1,4 @@
-"use strict";
+'use strict';
 
 /**
  * routes/bi.js
@@ -9,31 +9,31 @@
  * and suggests optimal reassignments to minimize travel distance.
  */
 
-const router = require("express").Router();
-const { pool } = require("../db");
-const { normalizeRole } = require("../middleware/roles");
-const { can } = require("../middleware/permissions");
+const router = require('express').Router();
+const { pool } = require('../db');
+const { normalizeRole } = require('../middleware/roles');
+const { can } = require('../middleware/permissions');
 
 function requireRoles(allowed) {
-  const normalized = allowed.map(r => normalizeRole(r));
+  const normalized = allowed.map((r) => normalizeRole(r));
   return (req, res, next) => {
-    if (!req.user) return res.status(401).json({ ok: false, error: "UNAUTHENTICATED" });
+    if (!req.user) return res.status(401).json({ ok: false, error: 'UNAUTHENTICATED' });
     const userRole = normalizeRole(req.user.role);
-    if (userRole === "SUPER_ADMIN") return next();
+    if (userRole === 'SUPER_ADMIN') return next();
     if (!normalized.includes(userRole))
-      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+      return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
     return next();
   };
 }
-const ADMIN_ONLY = requireRoles(["COMPANY_ADMIN", "ADMIN", "TRADE_ADMIN"]);
+const ADMIN_ONLY = requireRoles(['COMPANY_ADMIN', 'ADMIN', 'TRADE_ADMIN']);
 
 const FAR_THRESHOLD_KM = 65; // flag assignments beyond this distance
 
 // ── GET /api/bi/workforce-suggestions ────────────────────────
-router.get("/workforce-suggestions", can("bi.access_full"), async (req, res) => {
+router.get('/workforce-suggestions', can('bi.access_full'), async (req, res) => {
   try {
     const companyId = req.user.company_id;
-    const today = new Date().toISOString().split("T")[0];
+    const today = new Date().toISOString().split('T')[0];
 
     // 1. Get all active projects with coordinates
     const { rows: projects } = await pool.query(
@@ -48,7 +48,12 @@ router.get("/workforce-suggestions", can("bi.access_full"), async (req, res) => 
       [companyId]
     );
     if (!projects.length)
-      return res.json({ ok: true, current_assignments: [], suggestions: [], summary: { total_assignments: 0, far_assignments: 0, optimizable: 0 } });
+      return res.json({
+        ok: true,
+        current_assignments: [],
+        suggestions: [],
+        summary: { total_assignments: 0, far_assignments: 0, optimizable: 0 },
+      });
 
     // 2. Get current active assignments with employee home coords + distances
     const { rows: current } = await pool.query(
@@ -89,38 +94,40 @@ router.get("/workforce-suggestions", can("bi.access_full"), async (req, res) => 
 
     for (const a of current) {
       // Calculate distance to all projects
-      const distances = projects.map(p => {
-        const dist = haversineKm(a.home_lat, a.home_lng, p.site_lat, p.site_lng);
-        return { ...p, distance_km: Math.round(dist * 10) / 10 };
-      }).sort((a, b) => a.distance_km - b.distance_km);
+      const distances = projects
+        .map((p) => {
+          const dist = haversineKm(a.home_lat, a.home_lng, p.site_lat, p.site_lng);
+          return { ...p, distance_km: Math.round(dist * 10) / 10 };
+        })
+        .sort((a, b) => a.distance_km - b.distance_km);
 
       const closest = distances[0];
-      const saving  = Math.round((a.current_distance_km - closest.distance_km) * 10) / 10;
-      const isFar   = a.current_distance_km >= FAR_THRESHOLD_KM;
+      const saving = Math.round((a.current_distance_km - closest.distance_km) * 10) / 10;
+      const isFar = a.current_distance_km >= FAR_THRESHOLD_KM;
       const canOptimize = closest.id !== a.project_id && saving > 5;
 
       suggestions.push({
-        assignment_id:       a.assignment_id,
-        employee_id:         a.employee_id,
-        employee_name:       a.employee_name,
-        trade_code:          a.trade_code,
-        assignment_role:     a.assignment_role,
-        current_project_id:  a.project_id,
-        current_project:     a.project_code,
+        assignment_id: a.assignment_id,
+        employee_id: a.employee_id,
+        employee_name: a.employee_name,
+        trade_code: a.trade_code,
+        assignment_role: a.assignment_role,
+        current_project_id: a.project_id,
+        current_project: a.project_code,
         current_project_name: a.project_name,
         current_distance_km: a.current_distance_km,
-        is_far:              isFar,
-        can_optimize:        canOptimize,
-        suggested_project_id:   canOptimize ? closest.id        : null,
-        suggested_project:      canOptimize ? closest.project_code : null,
+        is_far: isFar,
+        can_optimize: canOptimize,
+        suggested_project_id: canOptimize ? closest.id : null,
+        suggested_project: canOptimize ? closest.project_code : null,
         suggested_project_name: canOptimize ? closest.project_name : null,
-        suggested_distance_km:  canOptimize ? closest.distance_km  : null,
-        saving_km:              canOptimize ? saving               : null,
+        suggested_distance_km: canOptimize ? closest.distance_km : null,
+        saving_km: canOptimize ? saving : null,
         reason: buildReason(a, closest, isFar, canOptimize, saving),
-        all_distances: distances.map(d => ({
-          project_id:   d.id,
+        all_distances: distances.map((d) => ({
+          project_id: d.id,
           project_code: d.project_code,
-          distance_km:  d.distance_km,
+          distance_km: d.distance_km,
         })),
       });
     }
@@ -133,26 +140,27 @@ router.get("/workforce-suggestions", can("bi.access_full"), async (req, res) => 
 
     const summary = {
       total_assignments: current.length,
-      far_assignments:   suggestions.filter(s => s.is_far).length,
-      optimizable:       suggestions.filter(s => s.can_optimize).length,
-      total_saving_km:   Math.round(suggestions.reduce((n, s) => n + (s.saving_km || 0), 0) * 10) / 10,
+      far_assignments: suggestions.filter((s) => s.is_far).length,
+      optimizable: suggestions.filter((s) => s.can_optimize).length,
+      total_saving_km:
+        Math.round(suggestions.reduce((n, s) => n + (s.saving_km || 0), 0) * 10) / 10,
     };
 
     return res.json({ ok: true, suggestions, summary, threshold_km: FAR_THRESHOLD_KM });
   } catch (err) {
-    console.error("GET /bi/workforce-suggestions error:", err);
-    return res.status(500).json({ ok: false, error: "SERVER_ERROR", message: err.message });
+    console.error('GET /bi/workforce-suggestions error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR', message: err.message });
   }
 });
 
 // ── Haversine distance helper ────────────────────────────────
 function haversineKm(lat1, lng1, lat2, lng2) {
   const R = 6371;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLng = (lng2 - lng1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) ** 2
-    + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180)
-    * Math.sin(dLng / 2) ** 2;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
