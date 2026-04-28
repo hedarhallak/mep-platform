@@ -935,23 +935,19 @@ router.patch('/requests/:id/move', can('assignments.edit'), async (req, res) => 
     const r = orig.rows[0];
     if (r.status !== 'APPROVED') {
       await client.query('ROLLBACK');
-      return res
-        .status(409)
-        .json({
-          ok: false,
-          error: 'CANNOT_MOVE',
-          message: 'Only APPROVED assignments can be moved.',
-        });
+      return res.status(409).json({
+        ok: false,
+        error: 'CANNOT_MOVE',
+        message: 'Only APPROVED assignments can be moved.',
+      });
     }
     if (r.project_id === Number(new_project_id)) {
       await client.query('ROLLBACK');
-      return res
-        .status(400)
-        .json({
-          ok: false,
-          error: 'SAME_PROJECT',
-          message: 'Employee is already assigned to this project.',
-        });
+      return res.status(400).json({
+        ok: false,
+        error: 'SAME_PROJECT',
+        message: 'Employee is already assigned to this project.',
+      });
     }
 
     // Verify new project belongs to company and is ACTIVE

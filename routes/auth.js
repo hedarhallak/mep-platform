@@ -102,13 +102,11 @@ router.post('/login', async (req, res) => {
         [user.company_id]
       );
       if (company.rows.length && company.rows[0].status === 'SUSPENDED') {
-        return res
-          .status(403)
-          .json({
-            ok: false,
-            error: 'COMPANY_SUSPENDED',
-            message: 'Company account is suspended, contact support',
-          });
+        return res.status(403).json({
+          ok: false,
+          error: 'COMPANY_SUSPENDED',
+          message: 'Company account is suspended, contact support',
+        });
       }
     }
 
@@ -288,23 +286,18 @@ router.post('/logout-all', async (req, res) => {
 //   2. Employee completes via POST /api/onboarding/complete (creates app_user)
 // This ensures only invited employees can create accounts.
 router.post('/signup', (req, res) => {
-  return res
-    .status(410)
-    .json({
-      ok: false,
-      error: 'SIGNUP_DISABLED',
-      message: 'Direct signup is disabled. Please use the invitation link sent to your email.',
-    });
+  return res.status(410).json({
+    ok: false,
+    error: 'SIGNUP_DISABLED',
+    message: 'Direct signup is disabled. Please use the invitation link sent to your email.',
+  });
 });
 router.post('/signup-invite', (req, res) => {
-  return res
-    .status(410)
-    .json({
-      ok: false,
-      error: 'SIGNUP_DISABLED',
-      message:
-        'This signup method is deprecated. Please use the invitation link sent to your email.',
-    });
+  return res.status(410).json({
+    ok: false,
+    error: 'SIGNUP_DISABLED',
+    message: 'This signup method is deprecated. Please use the invitation link sent to your email.',
+  });
 });
 
 // ===================
@@ -373,13 +366,11 @@ router.post('/change-pin', async (req, res) => {
         .status(400)
         .json({ ok: false, error: 'INVALID_PIN_FORMAT', message: 'PIN must be 4-8 characters' });
     if (String(current_pin) === newPinStr)
-      return res
-        .status(400)
-        .json({
-          ok: false,
-          error: 'SAME_PIN',
-          message: 'New PIN must be different from current PIN',
-        });
+      return res.status(400).json({
+        ok: false,
+        error: 'SAME_PIN',
+        message: 'New PIN must be different from current PIN',
+      });
 
     const { rows } = await pool.query(
       'SELECT id, pin_hash, must_change_pin FROM public.app_users WHERE id = $1 LIMIT 1',

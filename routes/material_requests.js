@@ -243,13 +243,11 @@ router.patch('/requests/:id/cancel', can('materials.request_view_own'), async (r
     );
     if (!existing) return res.status(404).json({ ok: false, error: 'NOT_FOUND' });
     if (existing.status !== 'PENDING')
-      return res
-        .status(409)
-        .json({
-          ok: false,
-          error: 'CANNOT_CANCEL',
-          message: 'Only PENDING requests can be cancelled.',
-        });
+      return res.status(409).json({
+        ok: false,
+        error: 'CANNOT_CANCEL',
+        message: 'Only PENDING requests can be cancelled.',
+      });
     // Only requester or foreman can cancel
     const userRole = normalizeRole(req.user.role);
     const isManager = ['COMPANY_ADMIN', 'TRADE_ADMIN', 'PROJECT_MANAGER'].includes(userRole);

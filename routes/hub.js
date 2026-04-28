@@ -236,13 +236,11 @@ router.post('/messages', can('hub.send_tasks'), upload.single('file'), async (re
       req.file.mimetype = validatedFile.mime;
     } catch (e) {
       client.release();
-      return res
-        .status(400)
-        .json({
-          ok: false,
-          error: 'UNSAFE_FILE_TYPE',
-          message: 'Uploaded file content does not match an allowed type.',
-        });
+      return res.status(400).json({
+        ok: false,
+        error: 'UNSAFE_FILE_TYPE',
+        message: 'Uploaded file content does not match an allowed type.',
+      });
     }
   }
   try {

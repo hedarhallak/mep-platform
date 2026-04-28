@@ -97,13 +97,11 @@ router.post('/', can('suppliers.create'), async (req, res) => {
     return res.status(201).json({ ok: true, supplier });
   } catch (err) {
     if (err.code === '23505')
-      return res
-        .status(409)
-        .json({
-          ok: false,
-          error: 'SUPPLIER_EXISTS',
-          message: 'A supplier with this name already exists.',
-        });
+      return res.status(409).json({
+        ok: false,
+        error: 'SUPPLIER_EXISTS',
+        message: 'A supplier with this name already exists.',
+      });
     console.error('POST /suppliers error:', err);
     return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
@@ -154,13 +152,11 @@ router.patch('/:id', can('suppliers.edit'), async (req, res) => {
     return res.json({ ok: true, supplier: updated });
   } catch (err) {
     if (err.code === '23505')
-      return res
-        .status(409)
-        .json({
-          ok: false,
-          error: 'SUPPLIER_EXISTS',
-          message: 'A supplier with this name already exists.',
-        });
+      return res.status(409).json({
+        ok: false,
+        error: 'SUPPLIER_EXISTS',
+        message: 'A supplier with this name already exists.',
+      });
     console.error('PATCH /suppliers error:', err);
     return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
