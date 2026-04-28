@@ -1515,8 +1515,13 @@ Three local fixes attempted, all failed: (1) JSON encoded with explicit UTF-8 no
 
 **Expected next CI run:** Semgrep findings = 0. Day 3 deliverable now genuinely complete.
 
+### Phase 8.6 — Semgrep Flipped to Blocking (executed)
+
+CI #38 confirmed 0 Semgrep findings on main after the Phase 8.5 triage. Removed `continue-on-error: true` from the Security job in `ci.yml` and added `--error` flag explicitly. Future PRs that introduce a security pattern Semgrep recognizes (SQL injection, XSS, missing auth, hardcoded secrets, OWASP top 10) will now fail CI automatically.
+
+This completes the Day 3 deliverable. Section 18's Week 1 is **fully complete**: Day 1 (CI + Dependabot), Day 2 (ESLint + Prettier + Knip + Husky), Day 3 (Semgrep). All blocking enforcement live except Knip + frontend lint + npm audit which remain informational.
+
 ### Pending — Day 3 final cleanup
-- **Flip Semgrep to blocking** after the post-triage CI run confirms 0 findings.
 - **Triage Knip baseline** (still informational from Phase 7).
 - **Cleanup ESLint warnings** (42 `no-unused-vars`) — trivial, mechanical.
 

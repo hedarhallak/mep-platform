@@ -144,7 +144,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Semgrep scan
+      - name: Semgrep scan (blocking — Day 3 Phase 8.6 onward)
+        # Baseline triaged in Phase 8.5; CI #38 confirmed 0 findings.
+        # Any new security issue introduced by a PR will now fail this job.
         run: |
           semgrep scan \
             --config "p/javascript" \
@@ -160,5 +162,5 @@ jobs:
             --exclude "uploads/" \
             --exclude "data/" \
             --exclude "constrai-landing/" \
+            --error \
             --metrics=off
-        continue-on-error: true
