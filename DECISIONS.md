@@ -1391,6 +1391,20 @@ This dropped the format-check scope from **87 → 52 files** (.js source, config
 
 **Commit pattern note:** the format diff is large (52 files, mostly whitespace) but isolated to one commit, which makes it easy to ignore in `git blame` later via `.git-blame-ignore-revs` if Hedar wants. Filed as a low-priority follow-up.
 
+#### Phase 6.5 — Line Ending Normalization (CI #30 → #31 → #32)
+
+**Symptom:** First push of Phase 6 (commit `11b7b87`, CI #30) failed. The `Format check` blocking step reported 5 route files as needing format: `routes/{assignments, auth, hub, material_requests, suppliers}.js`. Locally those files had been formatted moments earlier and `audit:routes` passed.
+
+**Root cause:** these 5 files had **mixed line endings inside a single file** (some lines `\r\n`, others `\n`) — likely a residue of git's Windows autocrlf interacting with prior edits / merges. Prettier was configured with `endOfLine: 'lf'` and refused them on CI's Linux runner. Switching to `endOfLine: 'auto'` did NOT fix it on its own (CI #31, commit `ee664fb`) because `auto` still requires consistency *within* each file.
+
+**Fix:** running `prettier --write` on the 5 files normalized each one to a single line-ending style. Commit `ea56d66` shipped the normalized files. CI #32 passed in 30 s with both `Lint` and `Format check` blocking and green.
+
+**Verified end state:**
+- `Lint (blocking)` ✅ — 42 `no-unused-vars` warnings remain (warnings don't fail; cleanup deferred)
+- `Format check (blocking)` ✅ — all 52 source files clean
+- Backend job, Frontend job, Mobile job all ✅
+- main is at `ea56d66`. Day 2 Phase 2 verified complete.
+
 ### Pending — Day 2 Phase 3 (next session)
 - Knip integration for dead-code detection (would have caught `routes/materials.js` v1 automatically before Hedar discovered it manually April 26).
 - Husky + lint-staged for portable local pre-commit hooks (replaces the manual `.git/hooks/pre-commit` Hedar installed locally — currently not checked into the repo).
