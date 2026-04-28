@@ -1,0 +1,31 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": ["index.js", "scripts/*.js", "jobs/*.js", "seed.js"],
+  "project": [
+    "index.js",
+    "db.js",
+    "seed.js",
+    "routes/**/*.js",
+    "lib/**/*.js",
+    "middleware/**/*.js",
+    "services/**/*.js",
+    "scripts/**/*.js",
+    "jobs/**/*.js"
+  ],
+  "ignore": [
+    "node_modules/**",
+    "mep-frontend/**",
+    "mep-mobile/**",
+    "public/**",
+    "dist/**",
+    "build/**",
+    "uploads/**",
+    "data/**",
+    "coverage/**",
+    "constrai-landing/**",
+    "db/**",
+    "docs/**",
+    "tools/**",
+    ".expo/**"
+  ]
+}

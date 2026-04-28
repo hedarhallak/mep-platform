@@ -1,0 +1,6 @@
+echo "Running Constrai pre-commit checks..."
+node scripts/check-routes.js || exit 1
+
+echo ""
+echo "Running lint-staged (Prettier + ESLint on staged files)..."
+npx lint-staged
