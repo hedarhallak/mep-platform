@@ -114,6 +114,18 @@ async function ensureSeedData() {
      ON CONFLICT (role_key) DO NOTHING`
   );
 
+  // Minimum permission catalogue for Phase 12+ tests. role_permissions
+  // FKs into this table, so the codes must exist here first. Production
+  // has 58 permissions; tests only define the few exercised by route
+  // handlers currently under test.
+  await pool.query(
+    `INSERT INTO public.permissions (code, description, grp) VALUES
+       ('employees.view', 'View employees', 'employees'),
+       ('projects.view',  'View projects',  'projects'),
+       ('suppliers.view', 'View suppliers', 'suppliers')
+     ON CONFLICT (code) DO NOTHING`
+  );
+
   // Minimum role_permission grants for Phase 12 tenant-isolation tests
   // and beyond. Production has 284 mappings; tests only need the few
   // permissions exercised by route handlers under test. Add new ones here
