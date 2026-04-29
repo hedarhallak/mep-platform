@@ -1,7 +1,10 @@
 const fs = require('fs');
 const path = require('path');
 
-const INDEX_FILE = path.join(__dirname, '../index.js');
+// Phase 11b refactor: route mounts moved from index.js to app.js so tests
+// can drive the Express app via Supertest without binding a port. The
+// route audit follows.
+const INDEX_FILE = path.join(__dirname, '../app.js');
 const ROUTES_DIR = path.join(__dirname, '../routes');
 
 const INTENTIONAL_DOUBLE_MOUNTS = ['/api/assignments', '/api/profile', '/api/materials'];
@@ -33,7 +36,7 @@ function checkRoutes() {
     const filePath = path.join(ROUTES_DIR, `${registered}.js`);
     if (!fs.existsSync(filePath)) {
       issues.push(
-        `  MISSING FILE: routes/${registered}.js is registered in index.js but file does not exist`
+        `  MISSING FILE: routes/${registered}.js is registered in app.js but file does not exist`
       );
     }
   }
@@ -56,7 +59,7 @@ function checkRoutes() {
   console.log('       CONSTRAI - Route Audit');
   console.log('========================================');
   console.log(`Route files found:    ${routeFiles.length}`);
-  console.log(`Routes in index.js:   ${registeredInIndex.size}`);
+  console.log(`Routes in app.js:     ${registeredInIndex.size}`);
 
   if (issues.length === 0 && warnings.length === 0) {
     console.log('\n  All routes are clean and registered.\n');
