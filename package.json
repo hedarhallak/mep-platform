@@ -16,6 +16,9 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "knip": "knip",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
     "prepare": "husky"
   },
   "dependencies": {
@@ -40,9 +43,11 @@
     "eslint": "^9.39.4",
     "globals": "^15.15.0",
     "husky": "^9.1.7",
+    "jest": "^30.3.0",
     "knip": "^5.88.1",
     "lint-staged": "^16.4.0",
-    "prettier": "^3.8.3"
+    "prettier": "^3.8.3",
+    "supertest": "^7.2.2"
   },
   "lint-staged": {
     "*.js": [

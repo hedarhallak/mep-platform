@@ -36,6 +36,17 @@ module.exports = [
     },
   },
 
+  // Tests have access to Jest globals (describe, test, expect, beforeEach, ...).
+  {
+    files: ['tests/**/*.js'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+        ...globals.jest,
+      },
+    },
+  },
+
   {
     ignores: [
       'node_modules/**',
@@ -46,6 +57,7 @@ module.exports = [
       'build/**',
       'uploads/**',
       'coverage/**',
+      'db/migrations.archive/**',
       // Generated / vendor.
       '*.min.js',
       'package-lock.json',

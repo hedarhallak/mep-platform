@@ -1,6 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
-  "entry": ["index.js", "scripts/*.js", "jobs/*.js", "seed.js"],
+  "entry": ["index.js", "scripts/*.js", "jobs/*.js", "seed.js", "tests/**/*.test.js"],
   "project": [
     "index.js",
     "db.js",
@@ -10,7 +10,8 @@
     "middleware/**/*.js",
     "services/**/*.js",
     "scripts/**/*.js",
-    "jobs/**/*.js"
+    "jobs/**/*.js",
+    "tests/**/*.js"
   ],
   "ignore": [
     "node_modules/**",

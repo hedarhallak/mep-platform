@@ -51,6 +51,11 @@ jobs:
       - name: Format check (blocking — Day 2 Phase 2 onward)
         run: npm run format:check
 
+      - name: Tests (Jest, blocking — Phase 10 onward)
+        # Smoke + unit tests today; DB-backed integration tests land in
+        # Phase 11+ alongside their service container.
+        run: npm test
+
       - name: Knip — dead code detection (informational, CI only — Day 2 Phase 3)
         # NOTE: knip 5.x uses fast-glob + oxc-resolver which crash with null
         # bytes on Hedar's Windows setup. CI runs on fresh Ubuntu — works.

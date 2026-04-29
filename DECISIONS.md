@@ -1573,6 +1573,49 @@ We do **not** attempt to reconstruct history. Instead:
 - **Update RECOVERY.md** to reflect the new migration policy (apply via `npm run migrate`, never raw `psql`).
 - **Run `npm run migrate` on prod ONCE** to create the `schema_migrations` table and record `000_baseline_2026-04-28.sql` as already-applied (to avoid re-applying it). Practical sequence: `INSERT INTO schema_migrations (filename) VALUES ('000_baseline_2026-04-28.sql');` after the table is auto-created.
 
+### Phase 10 — Test Infrastructure (executed)
+
+**Goal:** stand up Jest + Supertest so Section 18 Week 2-3 (the ~50-80 test suite) has a home. Today's scope is the runner, the directory layout, one smoke test, and CI integration. The actual feature tests (auth, tenant isolation, RBAC, workflows, security regressions) are Phases 11-15 in future sessions.
+
+**Files added:**
+
+| Path | Purpose |
+|---|---|
+| `jest.config.js` | Node test environment, `tests/**/*.test.js` discovery, coverage targeting backend source. `modulePathIgnorePatterns` for `uploads/` (avoids haste collision with a stray `uploads/package.json` left from older sample uploads) and for `db/migrations.archive/`. |
+| `tests/smoke/escapeHtml.test.js` | 10 cases covering the `escapeHtml` helper from `lib/email.js`: nulls, plain text, ampersand, angle brackets, double / single quote, full XSS payload, non-string coercion, all-special-chars-at-once. |
+| `tests/README.md` | Directory layout for the 5 future categories (auth/, tenant/, rbac/, workflows/, security/), running instructions, conventions for DB-backed tests when Phase 11 lands. |
+
+**Files modified:**
+
+| Path | Change |
+|---|---|
+| `package.json` | Added scripts `test`, `test:watch`, `test:coverage`. Installed `jest` and `supertest` as devDependencies (376 transitive packages — Jest is heavy). |
+| `package-lock.json` | Updated. |
+| `eslint.config.js` | New override block for `tests/**/*.js` adding Jest globals (`describe`, `test`, `expect`, etc.). Also added `db/migrations.archive/**` to ignores. |
+| `knip.json` | Added `tests/**/*.test.js` to entries and `tests/**/*.js` to project so Knip doesn't flag test files as unused. |
+| `.github/workflows/ci.yml` | New `Tests (Jest, blocking)` step in the backend job, between Format check and Knip. Smoke test runs in <1s on CI. |
+
+**Verification (local):**
+```
+npm test
+> jest
+PASS  tests/smoke/escapeHtml.test.js
+Test Suites: 1 passed, 1 total
+Tests:       10 passed, 10 total
+Time:        0.745 s
+```
+
+**Why blocking from day 1:** the smoke test only depends on a pure helper (`escapeHtml`). Zero flakiness, zero infrastructure dependencies. Future DB-backed tests will need their own service container (probably reusing the Atlas Postgres) and may start informational while we work out fixtures + transaction isolation.
+
+### Pending — Phases 11-15 (Section 18 Week 2-3 buildout)
+- **Phase 11 — Auth flow tests (~15 cases):** login, refresh, change-pin, logout, invite, activate. First DB-backed tests; will establish the fixture + rollback pattern.
+- **Phase 12 — Tenant isolation tests (~20 cases):** Company A cannot read/write Company B data through any endpoint. Highest security value.
+- **Phase 13 — RBAC matrix (~15 cases):** the 13-role × 58-permission matrix verified end-to-end. Ensures the permission table changes can't silently break access control.
+- **Phase 14 — Core workflow tests (~15 cases):** assignment lifecycle, attendance, materials, hub message delivery.
+- **Phase 15 — Security regression tests (~10 cases):** SQL injection attempts via templated strings, XSS payloads in email templates, rate-limit hits, file-upload magic-byte bypass attempts.
+
+After Phase 15: enforce coverage thresholds (Section 18 Week 4) — start at ≥70% on `routes/`, ratchet up over time.
+
 ### Pending — Day 3 final cleanup
 - **Triage Knip baseline** (still informational from Phase 7).
 - **Cleanup ESLint warnings** (42 `no-unused-vars`) — trivial, mechanical.
