@@ -48,5 +48,12 @@ module.exports = {
   // Reasonable defaults for an Express + pg app.
   testTimeout: 10000, // 10s — plenty for unit tests; integration tests can override
   verbose: false,
-  // No global setup/teardown yet — wire up when DB-backed tests arrive (Phase 11+).
+
+  // Serial execution — Phase 11e fix.
+  // DB-backed tests share the test database and the test_* cleanup
+  // strategy. Running files in parallel races: file A's afterAll(cleanup)
+  // can delete rows file B's tests just inserted, causing FK violations
+  // and unexpected 200/401/403 status flips. maxWorkers: 1 forces one
+  // test file at a time.
+  maxWorkers: 1,
 };
