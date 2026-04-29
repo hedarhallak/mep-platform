@@ -28,6 +28,32 @@ jobs:
     strategy:
       matrix:
         node: ['20']
+    # ─── Phase 11c — PostGIS service container for DB-backed tests ───
+    # Tests that hit DB-touching routes connect via the DATABASE_URL env
+    # var below. Tests that don't need DB (smoke, pure helpers, /api/health)
+    # ignore it; the lazy pg.Pool in db.js never opens a connection unless
+    # a query runs.
+    services:
+      postgres:
+        image: postgis/postgis:14-3.4
+        env:
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      # tests/setup.js promotes TEST_DATABASE_URL to DATABASE_URL for the
+      # test process, so the app's pg.Pool connects to the service container
+      # above. Locally without TEST_DATABASE_URL, tests fall through to a
+      # sentinel and DB-backed tests skip — protects Hedar's dev DB from
+      # accidental writes.
+      TEST_DATABASE_URL: postgres://postgres:testpass@localhost:5432/testdb?sslmode=disable
+      JWT_SECRET: ci-test-secret-do-not-deploy-this-value-32-chars
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -42,6 +68,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Pre-create roles + apply baseline schema (for DB-backed tests)
+        env:
+          PGPASSWORD: testpass
+        run: |
+          psql -h localhost -U postgres -d testdb -c "CREATE ROLE mepuser WITH LOGIN PASSWORD 'testpass';"
+          psql -h localhost -U postgres -d testdb -v ON_ERROR_STOP=1 -f migrations/000_baseline_2026-04-28.sql
+
       - name: Route audit (check-routes.js)
         run: npm run audit:routes
 
@@ -52,8 +85,8 @@ jobs:
         run: npm run format:check
 
       - name: Tests (Jest, blocking — Phase 10 onward)
-        # Smoke + unit tests today; DB-backed integration tests land in
-        # Phase 11+ alongside their service container.
+        # All test categories run against the PostGIS service container above.
+        # Tests that don't need DB (smoke, pure helpers) ignore DATABASE_URL.
         run: npm test
 
       - name: Knip — dead code detection (informational, CI only — Day 2 Phase 3)

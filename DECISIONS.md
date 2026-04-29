@@ -1694,12 +1694,53 @@ npm test  → 45 / 45 pass in 3.16s
   10 escapeHtml + 17 roles + 12 auth_utils + 6 health/config/404 integration
 ```
 
-### Pending — Phase 11c (DB-backed auth flow tests)
-- **Add a Postgres service container to the backend CI job** (likely `postgis/postgis:14-3.4`, identical to the schema job's image). Tests connect via `DATABASE_URL` injected by CI.
-- **`tests/helpers/db.js`** — opens a `pg.Pool` against `DATABASE_URL`, applies `migrations/000_baseline_2026-04-28.sql` once per test run, exposes `seedCompany()`, `seedUser()`, `cleanup()` helpers.
-- **Transaction-rollback pattern** — each integration test wraps in `BEGIN` / `ROLLBACK` so tests don't pollute each other's data.
-- **Auth flow tests** — POST /api/auth/login (valid + invalid + nonexistent + deactivated), POST /api/auth/refresh (valid + revoked), POST /api/auth/change-pin (correct + wrong current PIN), POST /api/auth/logout. ~10 cases.
-- **Local dev story** — either skip these tests when `DATABASE_URL` isn't set, or run them with the dev DB. To decide in Phase 11c.
+### Phase 11c — DB-backed Test Infrastructure (executed)
+
+**Goal:** wire the backend CI job to a real Postgres so future auth/tenant/RBAC tests can drive the actual application against a real database, and protect Hedar's local dev DB from accidental writes.
+
+**CI workflow change (`.github/workflows/ci.yml`):**
+- Backend job gains a `services.postgres` block running `postgis/postgis:14-3.4` (same image as the schema job, so PostGIS is available).
+- Two env vars set on the backend job: `TEST_DATABASE_URL` (the service container) and `JWT_SECRET` (CI-only test value).
+- New step before the existing route audit: `Pre-create roles + apply baseline schema (for DB-backed tests)`. Creates `mepuser` role (the baseline dump references it via `OWNER TO mepuser`) and applies `migrations/000_baseline_2026-04-28.sql` with `-v ON_ERROR_STOP=1`. The result is a fresh PostGIS DB with the same schema as production at the time of the Phase 9 snapshot.
+
+**Local-dev safety (`tests/setup.js`):**
+The setup file deliberately **does not** reuse the real `DATABASE_URL` from `.env`. It promotes `TEST_DATABASE_URL` to `DATABASE_URL` if set (CI does this), otherwise sets a sentinel value (`postgres://noop:noop@127.0.0.1:1/no_real_db_in_tests`). DB-backed tests detect the sentinel and skip themselves. So:
+- CI sets `TEST_DATABASE_URL` → tests run against the service container.
+- Local default → tests skip the DB suites; pure-function and `/api/health` smoke tests still run.
+- Local opt-in → developers can `set TEST_DATABASE_URL=postgres://localhost:5432/throwaway_db` to run DB suites against a sandbox of their choosing.
+
+This means `npm test` is **never** going to mutate Hedar's `mepdb` dev database, regardless of the `.env` settings.
+
+**Helpers (`tests/helpers/db.js`):**
+- `dbAvailable()` — returns true when DATABASE_URL is non-sentinel.
+- `getPool()` — lazily creates a separate `pg.Pool` for tests (independent of the app's pool, so test queries can be cleaned up without touching app state). Throws if called when sentinel is set, with a hint to use `describeIfDb`.
+- `closePool()` — for `afterAll()` so Jest exits cleanly.
+- `describeIfDb` — drop-in replacement for `describe` that becomes `describe.skip` when no DB is available. Used at the top of DB-backed test files.
+
+**First DB-backed tests (`tests/integration/db.test.js`):**
+5 sanity tests verifying the infrastructure actually works:
+- `SELECT 1` returns the expected row.
+- `pg_extension` lists `postgis`.
+- `app_users` table exists from baseline.
+- `companies` table exists from baseline.
+- `role_permissions` has > 0 rows (the April-26 baseline included the 284-row seed).
+
+**Local verification:**
+```
+npm test
+Test Suites: 1 skipped, 4 passed, 4 of 5 total
+Tests:       5 skipped, 45 passed, 50 total
+Time:        3.01 s
+```
+
+The 5 skipped tests light up green in CI because the service container has the baseline applied. Foundation for Phase 11d (actual auth flow tests with seeded users) is now solid.
+
+### Pending — Phase 11d (auth flow tests)
+- POST /api/auth/login: valid + invalid PIN + nonexistent user + deactivated user
+- POST /api/auth/refresh: valid + revoked
+- POST /api/auth/change-pin: correct current PIN + wrong current PIN
+- POST /api/auth/logout: revokes refresh token
+- Helpers: `seedCompany()`, `seedUser(role, pin)`, transaction-rollback fixture pattern
 - **Phase 12 — Tenant isolation tests (~20 cases):** Company A cannot read/write Company B data through any endpoint. Highest security value.
 - **Phase 13 — RBAC matrix (~15 cases):** the 13-role × 58-permission matrix verified end-to-end via `can()` middleware. Ensures permission table changes can't silently break access control.
 - **Phase 14 — Core workflow tests (~15 cases):** assignment lifecycle, attendance, materials, hub message delivery.
