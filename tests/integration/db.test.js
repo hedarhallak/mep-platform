@@ -48,11 +48,18 @@ describeIfDb('Test DB connectivity', () => {
     expect(rows).toHaveLength(1);
   });
 
-  test('baseline includes the role_permissions seed data', async () => {
-    // The April-26 baseline includes 284 role_permission mappings.
-    // Sanity check that some rows came over.
+  test('role_permissions table structure is in place from baseline', async () => {
+    // pg_dump -s is schema-only, so the table is empty here. We verify
+    // the table + key columns exist so any future test that seeds data
+    // into it has a known target. (The 284-row seed data lives on prod;
+    // tests will create their own minimal fixtures.)
     const pool = getPool();
-    const { rows } = await pool.query(`SELECT COUNT(*)::int AS n FROM role_permissions`);
-    expect(rows[0].n).toBeGreaterThan(0);
+    const { rows } = await pool.query(
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'role_permissions'
+         AND column_name IN ('role', 'permission_code')`
+    );
+    expect(rows).toHaveLength(2);
   });
 });
