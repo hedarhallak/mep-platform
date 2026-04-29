@@ -1674,8 +1674,32 @@ npm run audit:routes -> 26/26 routes mounted
 
 The cleanup confirmed how much dead code had accumulated from earlier refactor passes that left orphan helpers behind. The route audit script + ESLint together now actively prevent this kind of accumulation going forward — adding a new `requireRoles` constant and not using it would surface immediately.
 
-### Pending — Phases 11b-15 (Section 18 Week 2-3 buildout)
-- **Phase 11b — Auth flow tests (~10 cases, DB-backed):** login, refresh, change-pin, logout, invite, activate. Requires extracting `app.js` from `index.js` so Supertest can drive the Express app, plus a Postgres service container in CI for tests, plus a `beforeEach` transaction-rollback fixture pattern.
+### Phase 11b — Foundation: app.js Refactor + Supertest Pipeline (executed)
+
+Originally planned as the "DB-backed auth tests" phase. In execution it split cleanly into a foundation phase (this Phase 11b) and a follow-up DB-fixture phase (Phase 11c, deferred). The foundation work landed today.
+
+**Refactor — app.js extracted:**
+- `app.js` (new) — every middleware, rate limiter, and route mount lives here. Exports the configured Express app via `module.exports = app`.
+- `index.js` (now 22 lines) — `require('./app')`, `app.listen(...)`, schedule cron jobs (`weeklyReportJob`, `ccqRatesReminderJob`). Production behavior is identical; pm2 still boots via `node index.js`.
+- `scripts/check-routes.js` — `INDEX_FILE` repointed to `app.js`; output label updated.
+
+**Supertest plumbing established:**
+- `tests/integration/health.test.js` — drives the Express app via Supertest with no port binding, no cron jobs. Covers `/api/health`, `/api/config`, and a 404 sanity check (6 tests). Doesn't touch the database, so it stays green on environments with no Postgres.
+
+The `pg` Pool defined in `db.js` is created lazily — it doesn't actually connect until a query runs. Loading `app.js` from a test process therefore imposes no DB requirement; only DB-touching routes would. This is what makes Phase 11b's foundation testable without spinning up a service container.
+
+**Verification (local):**
+```
+npm test  → 45 / 45 pass in 3.16s
+  10 escapeHtml + 17 roles + 12 auth_utils + 6 health/config/404 integration
+```
+
+### Pending — Phase 11c (DB-backed auth flow tests)
+- **Add a Postgres service container to the backend CI job** (likely `postgis/postgis:14-3.4`, identical to the schema job's image). Tests connect via `DATABASE_URL` injected by CI.
+- **`tests/helpers/db.js`** — opens a `pg.Pool` against `DATABASE_URL`, applies `migrations/000_baseline_2026-04-28.sql` once per test run, exposes `seedCompany()`, `seedUser()`, `cleanup()` helpers.
+- **Transaction-rollback pattern** — each integration test wraps in `BEGIN` / `ROLLBACK` so tests don't pollute each other's data.
+- **Auth flow tests** — POST /api/auth/login (valid + invalid + nonexistent + deactivated), POST /api/auth/refresh (valid + revoked), POST /api/auth/change-pin (correct + wrong current PIN), POST /api/auth/logout. ~10 cases.
+- **Local dev story** — either skip these tests when `DATABASE_URL` isn't set, or run them with the dev DB. To decide in Phase 11c.
 - **Phase 12 — Tenant isolation tests (~20 cases):** Company A cannot read/write Company B data through any endpoint. Highest security value.
 - **Phase 13 — RBAC matrix (~15 cases):** the 13-role × 58-permission matrix verified end-to-end via `can()` middleware. Ensures permission table changes can't silently break access control.
 - **Phase 14 — Core workflow tests (~15 cases):** assignment lifecycle, attendance, materials, hub message delivery.
