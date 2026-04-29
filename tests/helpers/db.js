@@ -67,7 +67,48 @@ function uniqueTag() {
   return `${Date.now()}_${_seq}`;
 }
 
+// The baseline is a `pg_dump -s` (schema-only) of prod. Two reference
+// tables — `plans` and `roles` — have rows on prod that satisfy FKs
+// from `companies.plan` and `app_users.role`, but those rows don't ship
+// in the baseline. ensureSeedData() inserts the minimum set so test
+// fixtures can succeed. Idempotent via ON CONFLICT DO NOTHING.
+let _seeded = false;
+async function ensureSeedData() {
+  if (_seeded) return;
+  const pool = getPool();
+
+  await pool.query(
+    `INSERT INTO public.plans (code, label) VALUES
+       ('BASIC', 'Basic'),
+       ('PRO', 'Pro'),
+       ('ENTERPRISE', 'Enterprise')
+     ON CONFLICT (code) DO NOTHING`
+  );
+
+  // The 13 canonical roles from the app_users_role_check CHECK constraint.
+  await pool.query(
+    `INSERT INTO public.roles (role_key, label) VALUES
+       ('SUPER_ADMIN',           'Super Admin'),
+       ('IT_ADMIN',              'IT Admin'),
+       ('COMPANY_ADMIN',         'Company Admin'),
+       ('TRADE_PROJECT_MANAGER', 'Trade Project Manager'),
+       ('TRADE_ADMIN',           'Trade Admin'),
+       ('FOREMAN',               'Foreman'),
+       ('JOURNEYMAN',            'Journeyman'),
+       ('APPRENTICE_1',          'Apprentice Lvl 1'),
+       ('APPRENTICE_2',          'Apprentice Lvl 2'),
+       ('APPRENTICE_3',          'Apprentice Lvl 3'),
+       ('APPRENTICE_4',          'Apprentice Lvl 4'),
+       ('WORKER',                'Worker'),
+       ('DRIVER',                'Driver')
+     ON CONFLICT (role_key) DO NOTHING`
+  );
+
+  _seeded = true;
+}
+
 async function seedCompany(overrides = {}) {
+  await ensureSeedData();
   const pool = getPool();
   const name = overrides.name || `${TEST_PREFIX}co_${uniqueTag()}`;
   const status = overrides.status || 'ACTIVE';
@@ -81,6 +122,7 @@ async function seedCompany(overrides = {}) {
 }
 
 async function seedUser(overrides = {}) {
+  await ensureSeedData();
   const pool = getPool();
   const { hashPin } = require('../../lib/auth_utils');
   const username = overrides.username || `${TEST_PREFIX}u_${uniqueTag()}`;
