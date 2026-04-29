@@ -1789,8 +1789,31 @@ First real end-to-end auth test pass. 9 login cases drive the actual Express app
 - All 13 canonical roles + 5 company statuses + 3 plans pre-seeded for tests
 - FK constraints from the schema baseline exercised
 
-### Pending — Phase 12 (Tenant Isolation tests)
-The next big-impact category: prove that Company A cannot read or write Company B data through any endpoint. Builds directly on the Phase 11d/e fixture pattern — seed two companies, two users (one per company), then exercise GET/POST endpoints across the boundary. ~20 cases. The highest-value security regression suite for a multi-tenant SaaS.
+### Phase 12 — First Tenant Isolation Tests (executed)
+
+The multi-tenant boundary that the entire product depends on now has CI regression coverage. 3 tests on `GET /api/employees` validate that a Company A admin sees only A's employees, a Company B admin sees only B's, and an orphaned (no-company) non-SUPER_ADMIN user is rejected with 403.
+
+**Files:**
+- `tests/integration/tenant_isolation.test.js` (3 cases) — A→only A, B→only B (symmetry), orphan→403.
+
+**Helpers added (`tests/helpers/db.js`):**
+- `seedEmployee(overrides?)` — inserts `test_emp_<tag>` rows with a `company_id` to isolate-test.
+- `cleanupTestRows()` extended to also wipe employees by `employee_code LIKE 'test_%'`.
+- `ensureSeedData()` now also seeds `permissions` (3 codes: employees/projects/suppliers .view) and grants them to COMPANY_ADMIN via `role_permissions`. Both `permissions` and `role_permissions` are FK-coupled (role_permissions → permissions(code)), and the schema-only baseline doesn't ship the 58 prod permissions, so the seed had to chain.
+
+**Iteration history (2 CI runs to green):**
+- CI #55 — 20 fails: `role_permissions_permission_code_fkey` violation. The `INSERT INTO role_permissions ('COMPANY_ADMIN', 'employees.view', …)` referenced permission codes that didn't exist in the empty `permissions` table. → Pre-seeded `permissions` first.
+- CI #56 — 81/81 ✅ in 1m 27s.
+
+**Why this is the most-important security suite:**
+The April-26 audit's #1 unanswered worry was tenant data leakage — there was zero automated verification that Company A couldn't read Company B's records through any endpoint. The 3 tests landing today close that gap on `/api/employees` specifically; the same fixture pattern (two companies + per-company admin + per-company resources + login-and-cross) extends mechanically to every other tenant-scoped endpoint in Phase 12's continuation.
+
+### Pending — Phase 12 expansion (next sessions)
+- Same A/B pattern on `/api/projects`, `/api/suppliers`, `/api/assignments`, `/api/material-requests`, `/api/attendance`, `/api/hub`.
+- Per-resource-by-id coverage: `GET /api/employees/:id` where `:id` belongs to the OTHER company → expect 404 (not 200, not 403).
+- Cross-tenant write attempts: `PATCH` / `DELETE` of B's resources by A's admin.
+
+After Phase 12 is comprehensive, Phase 13 (RBAC matrix) revisits the same endpoints from the angle of role × permission rather than company × company.
 - **Phase 12 — Tenant isolation tests (~20 cases):** Company A cannot read/write Company B data through any endpoint. Highest security value.
 - **Phase 13 — RBAC matrix (~15 cases):** the 13-role × 58-permission matrix verified end-to-end via `can()` middleware. Ensures permission table changes can't silently break access control.
 - **Phase 14 — Core workflow tests (~15 cases):** assignment lifecycle, attendance, materials, hub message delivery.
