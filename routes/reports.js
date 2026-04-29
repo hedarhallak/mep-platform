@@ -119,26 +119,9 @@ async function ccqZoneFromDB(pool, km, tradeCode, sector, dateStr) {
   }
 }
 
-// Sync wrapper used in map() — pre-fetch rates then apply
-// Use ccqZoneFromDB directly in async contexts
-function ccqZone(km, tradeCode, sector, dateStr) {
-  // Kept for backward compatibility — returns basic zone without DB
-  const distKm = parseFloat(km || 0);
-  if (distKm < 41) return { zone: null, rate: 0, label: 'Not eligible (<41 km)', tax_form: null };
-  if (distKm < 65)
-    return {
-      zone: 'T2200/TP-64.3',
-      rate: 0,
-      label: `${distKm.toFixed(1)} km — T2200 + TP-64.3 (tax declaration)`,
-      tax_form: 'T2200 + TP-64.3',
-    };
-  return {
-    zone: `${distKm.toFixed(1)}km`,
-    rate: 0,
-    label: 'Use ccqZoneFromDB for rates',
-    tax_form: null,
-  };
-}
+// NOTE: a sync `ccqZone(km, tradeCode, sector, dateStr)` wrapper used to
+// live here but was never called — only ccqZoneFromDB above is used.
+// Removed in Phase 11a cleanup.
 
 // ─────────────────────────────────────────────────────────────
 // GET /api/reports/hours

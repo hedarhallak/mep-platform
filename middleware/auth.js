@@ -35,7 +35,7 @@ module.exports = function auth(req, res, next) {
     };
 
     return next();
-  } catch (e) {
+  } catch (_e) {
     return res.status(401).json({ ok: false, error: 'INVALID_TOKEN' });
   }
 };

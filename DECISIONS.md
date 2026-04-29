@@ -1646,6 +1646,34 @@ Time:        2.982 s
 
 The legacy SHA-256 PIN compatibility path is now covered by tests — important because deleting it requires confidence that all production users have migrated to bcrypt, and we now have a regression test that the legacy path keeps working until they do.
 
+### Phase 11a-followup — ESLint Warnings to Zero (executed)
+
+After Phase 11a's pure-function tests landed, did a focused cleanup pass over the 42 `no-unused-vars` warnings carried since Day 2 Phase 1. Final state: **0 warnings** across the entire backend (~26 route files + lib + middleware + scripts + seed + tests).
+
+**Categories cleaned:**
+
+| Category | Count | Action |
+|---|---|---|
+| Orphan `requireRoles` functions + their constants (`ANY`, `ADMIN_ONLY`, `ADMIN_PM`, `FOREMAN`) | 5 files | Removed entirely. They were defined locally in routes but never wired to any route — leftovers from earlier permission-system refactors. Replacement is `can('permission_code')` from `middleware/permissions.js`. |
+| Unused imports (`normalizeRole`, `COMPANY_ADMIN_UP`, `TRADE_ADMIN_UP`) | 4 files | Removed import lines. |
+| Unused destructured values (`level_code` in invite_employee, `tradeCode/sector/dateStr` in reports) | 2 files | Removed from destructure. |
+| Unused functions (`fmtTime` helper in auto_assign, `rand` in seed, `ccqZone` sync wrapper in reports) | 3 files | Removed. None had any caller. |
+| Unused locals (`alreadyOnProject`, `appBaseUrl`, `daysAbsent`, `isConfirmed`, `allAssigned`, `defaultPool`, `empRes`) | 7 lines across 4 files | Removed. None of the values were ever read. The `allAssigned` block in `routes/hub.js` was a no-op `recipients.every(() => true)` — confirmed by re-reading the comment trail. |
+| Unused catch error variables (`e`, `err`) | 6 catch blocks across 3 files | Renamed to `_e` / `_err` to match the new ESLint `caughtErrorsIgnorePattern: '^_'` rule. |
+| Unused test-helper local | 1 line in `tests/auth/roles.test.js` | Removed. |
+
+**ESLint config tightened:** `caughtErrorsIgnorePattern: '^_'` added to the `no-unused-vars` rule so future catch blocks can opt out by prefixing with `_`.
+
+**Verification:**
+```
+npm test           -> 39/39 pass in 3.0s
+npm run lint       -> 0 warnings
+npm run format:check -> clean
+npm run audit:routes -> 26/26 routes mounted
+```
+
+The cleanup confirmed how much dead code had accumulated from earlier refactor passes that left orphan helpers behind. The route audit script + ESLint together now actively prevent this kind of accumulation going forward — adding a new `requireRoles` constant and not using it would surface immediately.
+
 ### Pending — Phases 11b-15 (Section 18 Week 2-3 buildout)
 - **Phase 11b — Auth flow tests (~10 cases, DB-backed):** login, refresh, change-pin, logout, invite, activate. Requires extracting `app.js` from `index.js` so Supertest can drive the Express app, plus a Postgres service container in CI for tests, plus a `beforeEach` transaction-rollback fixture pattern.
 - **Phase 12 — Tenant isolation tests (~20 cases):** Company A cannot read/write Company B data through any endpoint. Highest security value.

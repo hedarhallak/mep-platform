@@ -16,7 +16,7 @@ function canRequireJWT() {
   try {
     require('jsonwebtoken');
     return true;
-  } catch (e) {
+  } catch (_e) {
     return false;
   }
 }

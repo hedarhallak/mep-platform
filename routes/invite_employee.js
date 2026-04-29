@@ -137,7 +137,7 @@ router.post('/', can('employees.invite'), async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    const { first_name, last_name, email, trade_type_id, level_code, role, emp_code } = req.body;
+    const { first_name, last_name, email, trade_type_id, role, emp_code } = req.body;
 
     const companyId = req.user.company_id;
     const createdByUserId = req.user.user_id;

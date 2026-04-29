@@ -24,19 +24,10 @@ const { can } = require('../middleware/permissions');
 
 // ── Helpers ──────────────────────────────────────────────
 
-function requireRoles(allowed) {
-  return (req, res, next) => {
-    const role = req.user?.role;
-    if (!allowed.includes(role)) {
-      return res.status(403).json({ ok: false, error: 'FORBIDDEN', required: allowed });
-    }
-    return next();
-  };
-}
-
-// NOTE: ADMIN_ONLY + ADMIN_PM guards previously defined here were
-// unused — removed in Phase 11a cleanup. Use can('permission_code')
-// for new routes.
+// NOTE: a local requireRoles + ADMIN_ONLY + ADMIN_PM guards were
+// previously defined here but never wired into any route — orphan from
+// earlier permission-system refactors. Removed in Phase 11a cleanup.
+// Use can('permission_code') from middleware/permissions.js for new routes.
 
 // ── GET /api/projects/meta ────────────────────────────────
 // Returns dropdown data: trade_types, project_statuses, clients

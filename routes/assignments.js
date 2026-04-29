@@ -154,20 +154,10 @@ async function notifyAssignment(pool, assignmentRequestId, companyId) {
 // â”€â”€ Role helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const { normalizeRole } = require('../middleware/roles');
 
-function requireRoles(allowed) {
-  const normalized = allowed.map((r) => normalizeRole(r));
-  return (req, res, next) => {
-    if (!req.user) return res.status(401).json({ ok: false, error: 'UNAUTHENTICATED' });
-    const userRole = normalizeRole(req.user.role);
-    if (userRole === 'SUPER_ADMIN') return next();
-    if (!normalized.includes(userRole))
-      return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
-    return next();
-  };
-}
-// NOTE: previously defined ADMIN_ONLY + ADMIN_PM guards were unused.
-// Removed in Phase 11a cleanup. Use can('permission_code') from
-// middleware/permissions when adding new authenticated routes.
+// NOTE: a local requireRoles + ADMIN_ONLY + ADMIN_PM guards were
+// previously defined here but never wired into any route — orphan from
+// earlier permission-system refactors. Removed in Phase 11a cleanup.
+// Use can('permission_code') from middleware/permissions.js for new routes.
 
 // â”€â”€ Time slots helper (every 30 min) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function generateTimeSlots() {

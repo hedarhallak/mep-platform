@@ -11,22 +11,12 @@
 
 const router = require('express').Router();
 const { pool } = require('../db');
-const { normalizeRole } = require('../middleware/roles');
 const { can } = require('../middleware/permissions');
 
-function requireRoles(allowed) {
-  const normalized = allowed.map((r) => normalizeRole(r));
-  return (req, res, next) => {
-    if (!req.user) return res.status(401).json({ ok: false, error: 'UNAUTHENTICATED' });
-    const userRole = normalizeRole(req.user.role);
-    if (userRole === 'SUPER_ADMIN') return next();
-    if (!normalized.includes(userRole))
-      return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
-    return next();
-  };
-}
-// NOTE: ANY + ADMIN_ONLY guards previously defined here were unused —
-// removed in Phase 11a cleanup. Use can('permission_code') for new routes.
+// NOTE: a local requireRoles + ANY + ADMIN_ONLY guards were previously
+// defined here but never wired into any route — orphan from earlier
+// permission-system refactors. Removed in Phase 11a cleanup. Use
+// can('permission_code') from middleware/permissions.js for new routes.
 
 const VALID_TRADES = ['PLUMBING', 'ELECTRICAL', 'HVAC', 'CARPENTRY', 'GENERAL', 'ALL'];
 

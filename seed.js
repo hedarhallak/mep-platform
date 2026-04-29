@@ -92,9 +92,6 @@ const LAST_NAMES = [
   'Bernard',
 ];
 
-function rand(arr) {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
 function randInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
@@ -159,7 +156,7 @@ async function seed() {
       ]);
 
       // Create employee profile
-      const empRes = await client.query(
+      await client.query(
         `
         INSERT INTO public.employee_profiles
           (employee_id, full_name, trade_code, home_address, home_location, created_at, updated_at)

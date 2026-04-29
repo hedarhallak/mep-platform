@@ -188,14 +188,6 @@ function assignmentAdminSummaryEmailHtml({
           day: 'numeric',
         })
       : '—';
-  const fmtTime = (t) => {
-    if (!t) return t;
-    const [h, m] = t.split(':').map(Number);
-    const ap = h < 12 ? 'AM' : 'PM';
-    const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
-    return `${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${ap}`;
-  };
-
   const carryOver = assignments.filter((a) => a.type === 'carry_over').length;
   const newAssign = assignments.filter((a) => a.type === 'new').length;
 
@@ -398,11 +390,6 @@ router.post('/auto-suggest', can('assignments.smart_assign'), async (req, res) =
       const projSuggestions = [];
       const usedInThisRound = new Set(); // avoid double-assigning in same run
 
-      // Already assigned on target_date for THIS project (skip them)
-      const alreadyOnProject = new Set(
-        busyOnTarget // we'll refine per employee below
-      );
-
       // --- Step A: Try to carry over today's team ---
       for (const worker of todayTeam) {
         if (busyOnTarget.has(worker.employee_id)) {
@@ -533,7 +520,6 @@ router.post('/auto-confirm', can('assignments.smart_assign'), async (req, res) =
       return res.status(400).json({ ok: false, error: 'INVALID_PAYLOAD' });
 
     const appName = process.env.APP_NAME || 'MEP Platform';
-    const appBaseUrl = process.env.APP_BASE_URL || 'http://localhost:3000';
 
     // Get company name + admin email
     const companyRes = await pool.query(

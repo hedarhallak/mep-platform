@@ -19,20 +19,10 @@ const { pool } = require('../db');
 const { normalizeRole } = require('../middleware/roles');
 const { can } = require('../middleware/permissions');
 
-function requireRoles(allowed) {
-  const normalized = allowed.map((r) => normalizeRole(r));
-  return (req, res, next) => {
-    if (!req.user) return res.status(401).json({ ok: false, error: 'UNAUTHENTICATED' });
-    const userRole = normalizeRole(req.user.role);
-    if (userRole === 'SUPER_ADMIN') return next();
-    if (!normalized.includes(userRole))
-      return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
-    return next();
-  };
-}
-// NOTE: previously defined ANY + FOREMAN guards via requireRoles(...) here
-// were never wired into any route. Removed as dead code in Phase 11a cleanup.
-// Use can('permission_code') from middleware/permissions when auth is needed.
+// NOTE: a local requireRoles + ANY + FOREMAN guards were previously
+// defined here but never wired into any route — orphan from earlier
+// permission-system refactors. Removed in Phase 11a cleanup. Use
+// can('permission_code') from middleware/permissions.js for new routes.
 
 // ── Helper: resolve employee_id from token ───────────────────
 async function resolveEmployeeId(req) {

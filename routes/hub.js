@@ -234,7 +234,7 @@ router.post('/messages', can('hub.send_tasks'), upload.single('file'), async (re
       req.file.path = validatedFile.path;
       req.file.filename = validatedFile.filename;
       req.file.mimetype = validatedFile.mime;
-    } catch (e) {
+    } catch (_e) {
       client.release();
       return res.status(400).json({
         ok: false,
@@ -308,13 +308,9 @@ router.post('/messages', can('hub.send_tasks'), upload.single('file'), async (re
 
     await client.query('BEGIN');
 
-    // Determine overall delivery status
-    const allAssigned = projectIdNum
-      ? recipients.every((id) => {
-          // We need to check by app_user id -> employee_id mapping
-          return true; // Will check per-recipient below
-        })
-      : true;
+    // NOTE: an `allAssigned` precheck used to exist here as `recipients.every(...)`,
+    // but the inner callback always returned true and the result was never read.
+    // Removed in Phase 11a cleanup. Per-recipient assignment is verified below.
 
     // Get employee_id for each recipient (app_user id)
     const empMap = await client.query(
@@ -554,7 +550,7 @@ router.get('/messages/unread-count', can('hub.receive_tasks'), async (req, res) 
       [recipientId]
     );
     res.json({ ok: true, count: Number(result.rows[0].count) });
-  } catch (err) {
+  } catch (_err) {
     res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
 });
@@ -571,7 +567,7 @@ router.patch('/messages/:id/read', can('hub.receive_tasks'), async (req, res) =>
       [Number(req.params.id), req.user.user_id]
     );
     res.json({ ok: true });
-  } catch (err) {
+  } catch (_err) {
     res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
 });
@@ -590,7 +586,7 @@ router.patch('/messages/:id/ack', can('hub.receive_tasks'), async (req, res) => 
       [Number(req.params.id), req.user.user_id]
     );
     res.json({ ok: true });
-  } catch (err) {
+  } catch (_err) {
     res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
 });
@@ -608,7 +604,7 @@ router.patch(
         [Number(req.params.id), req.user.user_id, fileUrl, req.body.completion_note || null]
       );
       res.json({ ok: true });
-    } catch (err) {
+    } catch (_err) {
       res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
     }
   }
