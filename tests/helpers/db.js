@@ -85,6 +85,16 @@ async function ensureSeedData() {
      ON CONFLICT (code) DO NOTHING`
   );
 
+  await pool.query(
+    `INSERT INTO public.company_statuses (code, label) VALUES
+       ('TRIAL',     'Trial'),
+       ('ACTIVE',    'Active'),
+       ('PAST_DUE',  'Past Due'),
+       ('SUSPENDED', 'Suspended'),
+       ('CANCELLED', 'Cancelled')
+     ON CONFLICT (code) DO NOTHING`
+  );
+
   // The 13 canonical roles from the app_users_role_check CHECK constraint.
   await pool.query(
     `INSERT INTO public.roles (role_key, label) VALUES
