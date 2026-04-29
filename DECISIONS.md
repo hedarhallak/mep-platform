@@ -1735,12 +1735,42 @@ Time:        3.01 s
 
 The 5 skipped tests light up green in CI because the service container has the baseline applied. Foundation for Phase 11d (actual auth flow tests with seeded users) is now solid.
 
-### Pending — Phase 11d (auth flow tests)
-- POST /api/auth/login: valid + invalid PIN + nonexistent user + deactivated user
-- POST /api/auth/refresh: valid + revoked
-- POST /api/auth/change-pin: correct current PIN + wrong current PIN
-- POST /api/auth/logout: revokes refresh token
-- Helpers: `seedCompany()`, `seedUser(role, pin)`, transaction-rollback fixture pattern
+### Phase 11d — DB-backed Login Flow Tests (executed)
+
+First real end-to-end auth test pass. 9 login cases drive the actual Express app via Supertest, hitting the PostGIS service container with seeded company + user fixtures, exercising bcrypt PIN verification, JWT signing, and refresh-token persistence.
+
+**Helpers added (`tests/helpers/db.js`):**
+- `ensureSeedData()` — idempotent, populates the 3 reference tables that prod has but the schema-only baseline doesn't ship: `plans` (3 codes), `roles` (13 canonical role_keys), `company_statuses` (5 codes). Calls `ON CONFLICT DO NOTHING` everywhere so it's safe to invoke from every test.
+- `seedCompany(overrides?)` — inserts a `test_co_<tag>` company; defaults to `ACTIVE` status, `BASIC` plan.
+- `seedUser(overrides?)` — inserts a `test_u_<tag>` app_user with a real bcrypt-hashed PIN (default `1234`); accepts role / company_id / is_active overrides.
+- `cleanupTestRows()` — final-sweep DELETE on rows starting with `test_` across `refresh_tokens`, `audit_logs`, `app_users`, `companies`. Targeted by prefix so real data is untouched.
+
+**Tests (`tests/auth/login.test.js`, 9 cases):**
+
+| Test | Asserts |
+|---|---|
+| valid creds | 200 + `ok` + `token` + `refresh_token` + user.role + username |
+| missing username | 400 `MISSING_FIELDS` |
+| missing pin | 400 `MISSING_FIELDS` |
+| PIN < 4 chars | 400 `INVALID_PIN_FORMAT` |
+| wrong PIN against existing user | 401 `INVALID_CREDENTIALS` |
+| nonexistent username | 401 `INVALID_CREDENTIALS` |
+| disabled user | 403 `USER_DISABLED` |
+| suspended company | 403 `COMPANY_SUSPENDED` |
+| login persists refresh_token | a row exists, not revoked, expires in the future |
+
+**Iteration history (3 CI runs to green):**
+- CI #49 — 6 fails: FK violations on `fk_companies_plan` and `fk_app_users_role`. The schema-only baseline doesn't ship the seed rows that prod's `plans`/`roles` tables have. → Added `ensureSeedData()` for both.
+- CI #50 — 2 fails: same pattern, this time `fk_companies_status` (companies.status → company_statuses.code). Same root cause, missed in the first hotfix. → Added the 5 status codes.
+- CI #51 — 9/9 ✅ in 1m 8s.
+
+**Total tests on CI: 59** (10 escapeHtml + 17 roles + 12 auth_utils + 6 health + 5 db sanity + 9 login). Every one is blocking; Backend job is now an actual end-to-end gate against auth regressions.
+
+### Pending — Phase 11e (next session)
+- Refresh flow tests (~5 cases): valid token rotates, revoked token rejected, expired token rejected, missing token returns 400, wrong-IP token still works (we don't bind to IP).
+- Change-PIN flow tests (~3 cases): correct current PIN, wrong current PIN, weak new PIN.
+- Logout / logout-all (~2 cases): revokes the active token, revokes all tokens for the user.
+- Optional: an "extension" PR that lifts a few prod seed rows out of the baseline into a proper `seeds/` directory so test envs and dev envs stay in sync without ad-hoc inserts.
 - **Phase 12 — Tenant isolation tests (~20 cases):** Company A cannot read/write Company B data through any endpoint. Highest security value.
 - **Phase 13 — RBAC matrix (~15 cases):** the 13-role × 58-permission matrix verified end-to-end via `can()` middleware. Ensures permission table changes can't silently break access control.
 - **Phase 14 — Core workflow tests (~15 cases):** assignment lifecycle, attendance, materials, hub message delivery.
