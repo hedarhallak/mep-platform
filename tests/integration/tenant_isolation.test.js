@@ -1,0 +1,98 @@
+// Tenant isolation tests — Phase 12.
+//
+// Proves that a logged-in user from Company A cannot see or fetch
+// resources belonging to Company B. The first regression suite that
+// directly validates the multi-tenant boundary the entire product
+// depends on.
+//
+// Pattern:
+//   1. Seed Company A + Company B
+//   2. Seed a COMPANY_ADMIN user in each
+//   3. Seed employees scoped to each company
+//   4. Login as A's admin, hit GET /api/employees, assert only A's
+//      employees come back (B's must NOT appear)
+//   5. Repeat from B's side for symmetry
+
+const request = require('supertest');
+const app = require('../../app');
+const {
+  describeIfDb,
+  closePool,
+  seedCompany,
+  seedUser,
+  seedEmployee,
+  cleanupTestRows,
+} = require('../helpers/db');
+
+async function loginUser(user, pin = '1234') {
+  const res = await request(app).post('/api/auth/login').send({ username: user.username, pin });
+  if (res.statusCode !== 200) {
+    throw new Error(`Login failed in test setup: ${res.statusCode} ${JSON.stringify(res.body)}`);
+  }
+  return res.body;
+}
+
+describeIfDb('Tenant isolation — GET /api/employees', () => {
+  afterAll(async () => {
+    await cleanupTestRows();
+    await closePool();
+  });
+
+  test("Company A admin sees only Company A's employees", async () => {
+    const companyA = await seedCompany();
+    const companyB = await seedCompany();
+
+    const adminA = await seedUser({ company_id: companyA.company_id, role: 'COMPANY_ADMIN' });
+    const empA1 = await seedEmployee({ company_id: companyA.company_id, first_name: 'Alice' });
+    const empA2 = await seedEmployee({ company_id: companyA.company_id, first_name: 'Andre' });
+    const empB1 = await seedEmployee({ company_id: companyB.company_id, first_name: 'Bob' });
+    const empB2 = await seedEmployee({ company_id: companyB.company_id, first_name: 'Beatrice' });
+
+    const { token } = await loginUser(adminA);
+
+    const res = await request(app).get('/api/employees').set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(Array.isArray(res.body.employees)).toBe(true);
+
+    const returnedIds = res.body.employees.map((e) => Number(e.id));
+
+    // Must include both of A's employees.
+    expect(returnedIds).toEqual(expect.arrayContaining([empA1.id, empA2.id]));
+
+    // Must NOT include any of B's employees.
+    expect(returnedIds).not.toContain(empB1.id);
+    expect(returnedIds).not.toContain(empB2.id);
+  });
+
+  test("Company B admin sees only Company B's employees (symmetry)", async () => {
+    const companyA = await seedCompany();
+    const companyB = await seedCompany();
+
+    const adminB = await seedUser({ company_id: companyB.company_id, role: 'COMPANY_ADMIN' });
+    const empA = await seedEmployee({ company_id: companyA.company_id, first_name: 'Alice' });
+    const empB = await seedEmployee({ company_id: companyB.company_id, first_name: 'Bob' });
+
+    const { token } = await loginUser(adminB);
+
+    const res = await request(app).get('/api/employees').set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(200);
+    const returnedIds = res.body.employees.map((e) => Number(e.id));
+    expect(returnedIds).toContain(empB.id);
+    expect(returnedIds).not.toContain(empA.id);
+  });
+
+  test('user without a company_id (e.g. orphaned account) is rejected with 403', async () => {
+    // Insert a user with no company_id. The route returns 403
+    // COMPANY_CONTEXT_REQUIRED when a non-SUPER_ADMIN has no company_id.
+    const orphan = await seedUser({ company_id: null, role: 'COMPANY_ADMIN' });
+    const { token } = await loginUser(orphan);
+
+    const res = await request(app).get('/api/employees').set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body).toMatchObject({ ok: false, error: 'COMPANY_CONTEXT_REQUIRED' });
+  });
+});

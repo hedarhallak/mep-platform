@@ -114,6 +114,18 @@ async function ensureSeedData() {
      ON CONFLICT (role_key) DO NOTHING`
   );
 
+  // Minimum role_permission grants for Phase 12 tenant-isolation tests
+  // and beyond. Production has 284 mappings; tests only need the few
+  // permissions exercised by route handlers under test. Add new ones here
+  // as new test categories land.
+  await pool.query(
+    `INSERT INTO public.role_permissions (role, permission_code) VALUES
+       ('COMPANY_ADMIN', 'employees.view'),
+       ('COMPANY_ADMIN', 'projects.view'),
+       ('COMPANY_ADMIN', 'suppliers.view')
+     ON CONFLICT (role, permission_code) DO NOTHING`
+  );
+
   _seeded = true;
 }
 
@@ -150,9 +162,32 @@ async function seedUser(overrides = {}) {
   return { id: Number(rows[0].id), username, role, pin, company_id: companyId };
 }
 
+async function seedEmployee(overrides = {}) {
+  await ensureSeedData();
+  const pool = getPool();
+  const code = overrides.employee_code || `${TEST_PREFIX}emp_${uniqueTag()}`;
+  const firstName = overrides.first_name || 'Test';
+  const lastName = overrides.last_name || 'Employee';
+  const companyId = overrides.company_id || null;
+  const { rows } = await pool.query(
+    `INSERT INTO public.employees (employee_code, first_name, last_name, company_id, is_active)
+     VALUES ($1, $2, $3, $4, true)
+     RETURNING id`,
+    [code, firstName, lastName, companyId]
+  );
+  return {
+    id: Number(rows[0].id),
+    employee_code: code,
+    first_name: firstName,
+    last_name: lastName,
+    company_id: companyId,
+  };
+}
+
 async function cleanupTestRows() {
   const pool = getPool();
-  // Order matters — refresh_tokens FK to app_users; app_users FK to companies.
+  // Order matters — refresh_tokens FK to app_users; app_users FK to companies;
+  // employees FK to companies.
   await pool.query(
     `DELETE FROM public.refresh_tokens
      WHERE user_id IN (SELECT id FROM public.app_users WHERE username LIKE $1)`,
@@ -160,6 +195,7 @@ async function cleanupTestRows() {
   );
   await pool.query(`DELETE FROM public.audit_logs WHERE username LIKE $1`, [`${TEST_PREFIX}%`]);
   await pool.query(`DELETE FROM public.app_users WHERE username LIKE $1`, [`${TEST_PREFIX}%`]);
+  await pool.query(`DELETE FROM public.employees WHERE employee_code LIKE $1`, [`${TEST_PREFIX}%`]);
   await pool.query(`DELETE FROM public.companies WHERE name LIKE $1`, [`${TEST_PREFIX}%`]);
 }
 
@@ -170,5 +206,6 @@ module.exports = {
   describeIfDb,
   seedCompany,
   seedUser,
+  seedEmployee,
   cleanupTestRows,
 };

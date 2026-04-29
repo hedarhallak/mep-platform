@@ -1766,11 +1766,31 @@ First real end-to-end auth test pass. 9 login cases drive the actual Express app
 
 **Total tests on CI: 59** (10 escapeHtml + 17 roles + 12 auth_utils + 6 health + 5 db sanity + 9 login). Every one is blocking; Backend job is now an actual end-to-end gate against auth regressions.
 
-### Pending — Phase 11e (next session)
-- Refresh flow tests (~5 cases): valid token rotates, revoked token rejected, expired token rejected, missing token returns 400, wrong-IP token still works (we don't bind to IP).
-- Change-PIN flow tests (~3 cases): correct current PIN, wrong current PIN, weak new PIN.
-- Logout / logout-all (~2 cases): revokes the active token, revokes all tokens for the user.
-- Optional: an "extension" PR that lifts a few prod seed rows out of the baseline into a proper `seeds/` directory so test envs and dev envs stay in sync without ad-hoc inserts.
+### Phase 11e — Refresh + Logout + Change-PIN DB-backed Tests (executed)
+
+19 new integration tests across 3 files complete the auth-flow coverage. Combined with Phase 11d's login suite, every public endpoint in `routes/auth.js` now has end-to-end CI coverage exercising bcrypt, JWT, refresh-token rotation, theft detection, and FK constraints.
+
+**Files:**
+- `tests/auth/refresh.test.js` (6 cases) — valid rotation + old token revoked, missing/unknown/revoked-replay/expired/disabled-user paths. Replay path verifies the theft-detection fan-out: a revoked token replay revokes ALL of the user's tokens, not just the replayed one.
+- `tests/auth/logout.test.js` (6 cases) — `/logout` returns 200 regardless of token validity (no info leak); `/logout-all` requires Bearer + revokes every refresh_token row for the user_id from the JWT.
+- `tests/auth/change_pin.test.js` (7 cases) — auth gating, payload validation, SAME_PIN guard, WRONG_CURRENT_PIN, happy path that rotates the bcrypt hash and confirms the new PIN logs in while the old one no longer does.
+
+**Iteration history (3 CI runs to green):**
+- CI #52 — 4 fails: `refresh_tokens_user_id_fkey` violations + 200/403 flip on the suspended-company login test. Root cause was Jest's default parallel-file execution: each test file shares the same `test_*` cleanup namespace, so file A's `afterAll(cleanupTestRows)` could delete rows file B's still-running tests had just inserted.
+- CI #54 — 78/78 ✅ in 1m 15s. (Note: `maxWorkers: 1` in `jest.config.js` forces serial execution. Tests within a file already ran serially; this only sequences cross-file ordering. Pure-function suites stay fast either way since they're in the same process.)
+
+**Total tests on CI: 78 / 78** — 33 pure-function + 6 health/config + 5 DB sanity + 9 login + 6 refresh + 6 logout + 7 change-pin + 6 (the integration health.test.js).
+
+**Auth surface validated end-to-end:**
+- bcrypt PIN hash verified on login + on change-pin
+- JWT signing + Bearer-token auth flow
+- Refresh-token rotation + theft detection (replay revokes all)
+- Token revocation via /logout and /logout-all
+- All 13 canonical roles + 5 company statuses + 3 plans pre-seeded for tests
+- FK constraints from the schema baseline exercised
+
+### Pending — Phase 12 (Tenant Isolation tests)
+The next big-impact category: prove that Company A cannot read or write Company B data through any endpoint. Builds directly on the Phase 11d/e fixture pattern — seed two companies, two users (one per company), then exercise GET/POST endpoints across the boundary. ~20 cases. The highest-value security regression suite for a multi-tenant SaaS.
 - **Phase 12 — Tenant isolation tests (~20 cases):** Company A cannot read/write Company B data through any endpoint. Highest security value.
 - **Phase 13 — RBAC matrix (~15 cases):** the 13-role × 58-permission matrix verified end-to-end via `can()` middleware. Ensures permission table changes can't silently break access control.
 - **Phase 14 — Core workflow tests (~15 cases):** assignment lifecycle, attendance, materials, hub message delivery.
