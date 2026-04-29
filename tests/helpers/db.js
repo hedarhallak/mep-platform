@@ -52,4 +52,71 @@ async function closePool() {
 //
 const describeIfDb = dbAvailable() ? describe : describe.skip;
 
-module.exports = { dbAvailable, getPool, closePool, describeIfDb };
+// ─── Fixture helpers — Phase 11d ──────────────────────────────
+//
+// Tests insert minimal company + user rows, run their assertions, then
+// `cleanupTestRows()` removes anything created with the test prefix.
+// All test rows have usernames / company names starting with `test_`
+// so the cleanup query is targeted and never touches real data.
+
+const TEST_PREFIX = 'test_';
+
+let _seq = 0;
+function uniqueTag() {
+  _seq += 1;
+  return `${Date.now()}_${_seq}`;
+}
+
+async function seedCompany(overrides = {}) {
+  const pool = getPool();
+  const name = overrides.name || `${TEST_PREFIX}co_${uniqueTag()}`;
+  const status = overrides.status || 'ACTIVE';
+  const { rows } = await pool.query(
+    `INSERT INTO public.companies (name, status, plan)
+     VALUES ($1, $2, 'BASIC')
+     RETURNING company_id`,
+    [name, status]
+  );
+  return { company_id: Number(rows[0].company_id), name, status };
+}
+
+async function seedUser(overrides = {}) {
+  const pool = getPool();
+  const { hashPin } = require('../../lib/auth_utils');
+  const username = overrides.username || `${TEST_PREFIX}u_${uniqueTag()}`;
+  const role = overrides.role || 'WORKER';
+  const pin = overrides.pin || '1234';
+  const isActive = overrides.is_active !== undefined ? overrides.is_active : true;
+  const companyId = overrides.company_id || null;
+  const pinHash = await hashPin(pin);
+  const { rows } = await pool.query(
+    `INSERT INTO public.app_users (username, pin_hash, role, is_active, company_id)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING id`,
+    [username, pinHash, role, isActive, companyId]
+  );
+  return { id: Number(rows[0].id), username, role, pin, company_id: companyId };
+}
+
+async function cleanupTestRows() {
+  const pool = getPool();
+  // Order matters — refresh_tokens FK to app_users; app_users FK to companies.
+  await pool.query(
+    `DELETE FROM public.refresh_tokens
+     WHERE user_id IN (SELECT id FROM public.app_users WHERE username LIKE $1)`,
+    [`${TEST_PREFIX}%`]
+  );
+  await pool.query(`DELETE FROM public.audit_logs WHERE username LIKE $1`, [`${TEST_PREFIX}%`]);
+  await pool.query(`DELETE FROM public.app_users WHERE username LIKE $1`, [`${TEST_PREFIX}%`]);
+  await pool.query(`DELETE FROM public.companies WHERE name LIKE $1`, [`${TEST_PREFIX}%`]);
+}
+
+module.exports = {
+  dbAvailable,
+  getPool,
+  closePool,
+  describeIfDb,
+  seedCompany,
+  seedUser,
+  cleanupTestRows,
+};
