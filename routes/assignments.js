@@ -165,8 +165,9 @@ function requireRoles(allowed) {
     return next();
   };
 }
-const ADMIN_ONLY = requireRoles(['COMPANY_ADMIN']);
-const ADMIN_PM = requireRoles(['COMPANY_ADMIN', 'TRADE_ADMIN', 'TRADE_PROJECT_MANAGER']);
+// NOTE: previously defined ADMIN_ONLY + ADMIN_PM guards were unused.
+// Removed in Phase 11a cleanup. Use can('permission_code') from
+// middleware/permissions when adding new authenticated routes.
 
 // â”€â”€ Time slots helper (every 30 min) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function generateTimeSlots() {

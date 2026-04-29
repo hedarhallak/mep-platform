@@ -30,22 +30,9 @@ function requireRoles(allowed) {
     return next();
   };
 }
-const ANY = requireRoles([
-  'COMPANY_ADMIN',
-  'ADMIN',
-  'TRADE_ADMIN',
-  'PROJECT_MANAGER',
-  'PM',
-  'WORKER',
-]);
-const FOREMAN = requireRoles([
-  'COMPANY_ADMIN',
-  'ADMIN',
-  'TRADE_ADMIN',
-  'PROJECT_MANAGER',
-  'PM',
-  'WORKER',
-]);
+// NOTE: previously defined ANY + FOREMAN guards via requireRoles(...) here
+// were never wired into any route. Removed as dead code in Phase 11a cleanup.
+// Use can('permission_code') from middleware/permissions when auth is needed.
 
 // ── Helper: resolve employee_id from token ───────────────────
 async function resolveEmployeeId(req) {

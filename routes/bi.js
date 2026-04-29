@@ -25,7 +25,8 @@ function requireRoles(allowed) {
     return next();
   };
 }
-const ADMIN_ONLY = requireRoles(['COMPANY_ADMIN', 'ADMIN', 'TRADE_ADMIN']);
+// NOTE: ADMIN_ONLY guard previously defined here was unused — removed
+// in Phase 11a cleanup. Use can('permission_code') for new routes.
 
 const FAR_THRESHOLD_KM = 65; // flag assignments beyond this distance
 

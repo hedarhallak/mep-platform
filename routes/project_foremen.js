@@ -10,7 +10,6 @@
 
 const router = require('express').Router();
 const { pool } = require('../db');
-const { normalizeRole } = require('../middleware/roles');
 
 const { can } = require('../middleware/permissions');
 

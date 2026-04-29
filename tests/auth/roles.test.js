@@ -66,7 +66,6 @@ describe('Role hierarchy invariants', () => {
 
   function mockReqResNext(userRole) {
     const req = userRole == null ? {} : { user: { role: userRole } };
-    const status = jest.fn();
     const json = jest.fn();
     const res = {
       status: jest.fn().mockReturnValue({ json }),

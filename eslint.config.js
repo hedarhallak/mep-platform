@@ -21,8 +21,16 @@ module.exports = [
       },
     },
     rules: {
-      // Allow `_arg` style unused parameters (common for Express middleware).
-      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      // Allow `_arg` style unused parameters (common for Express middleware)
+      // and `_e`/`_err` for caught errors we don't use.
+      'no-unused-vars': [
+        'warn',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
       // We use console.log/error throughout — production logging.
       'no-console': 'off',
       // Catch typos in variable names — the highest-value rule.

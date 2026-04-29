@@ -34,8 +34,9 @@ function requireRoles(allowed) {
   };
 }
 
-const ADMIN_ONLY = requireRoles(['ADMIN']);
-const ADMIN_PM = requireRoles(['ADMIN', 'PM']);
+// NOTE: ADMIN_ONLY + ADMIN_PM guards previously defined here were
+// unused — removed in Phase 11a cleanup. Use can('permission_code')
+// for new routes.
 
 // ── GET /api/projects/meta ────────────────────────────────
 // Returns dropdown data: trade_types, project_statuses, clients

@@ -25,15 +25,8 @@ function requireRoles(allowed) {
     return next();
   };
 }
-const ANY = requireRoles([
-  'COMPANY_ADMIN',
-  'ADMIN',
-  'TRADE_ADMIN',
-  'PROJECT_MANAGER',
-  'PM',
-  'WORKER',
-]);
-const ADMIN_ONLY = requireRoles(['COMPANY_ADMIN', 'ADMIN']);
+// NOTE: ANY + ADMIN_ONLY guards previously defined here were unused —
+// removed in Phase 11a cleanup. Use can('permission_code') for new routes.
 
 const VALID_TRADES = ['PLUMBING', 'ELECTRICAL', 'HVAC', 'CARPENTRY', 'GENERAL', 'ALL'];
 
