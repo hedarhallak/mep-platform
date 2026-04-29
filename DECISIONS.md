@@ -1607,10 +1607,49 @@ Time:        0.745 s
 
 **Why blocking from day 1:** the smoke test only depends on a pure helper (`escapeHtml`). Zero flakiness, zero infrastructure dependencies. Future DB-backed tests will need their own service container (probably reusing the Atlas Postgres) and may start informational while we work out fixtures + transaction isolation.
 
-### Pending — Phases 11-15 (Section 18 Week 2-3 buildout)
-- **Phase 11 — Auth flow tests (~15 cases):** login, refresh, change-pin, logout, invite, activate. First DB-backed tests; will establish the fixture + rollback pattern.
+### Phase 11a — Pure-Function Security Tests (executed)
+
+**Goal:** test the security-critical helpers that gate every authenticated request, without standing up a test database. DB-backed flow tests (login/refresh/PIN, tenant isolation, RBAC matrix end-to-end) are deferred to Phase 11b+ since they need an Express app refactor (`app.js` extraction), service container wiring, and fixture/rollback patterns.
+
+**Audit of helpers (testable today vs deferred):**
+
+| File | Pure (today) | DB-backed (Phase 11b) |
+|---|---|---|
+| `middleware/roles.js` | `normalizeRole`, `requireMinLevel` middleware (with mock req/res) | — |
+| `middleware/permissions.js` | — | `can`, `canAny`, `userHasPermission`, `logAudit` |
+| `lib/auth_utils.js` | `hashPin`, `verifyPin` | (JWT_SECRET module-level guard handled via `tests/setup.js`) |
+
+**Files added:**
+
+| Path | Coverage |
+|---|---|
+| `tests/setup.js` | Sets `JWT_SECRET` + a sentinel `DATABASE_URL` before any test imports modules — lets `lib/auth_utils.js` load without throwing its env-guard check. |
+| `tests/auth/roles.test.js` | 17 cases. `normalizeRole`: nulls, lowercase upcase, canonical pass-through, all 4 legacy aliases (`ADMIN`, `PM`, `PROJECT_MANAGER`, `PURCHASING`), unknown roles, non-string coercion. `requireMinLevel`: SUPER_ADMIN bypass, FOREMAN passes 40 / blocked at 50, WORKER at minimum, unauthenticated 401, legacy ADMIN normalized through to COMPANY_ADMIN level. |
+| `tests/auth/auth_utils.test.js` | 12 cases. `hashPin`: bcrypt `$2b$` prefix, salt makes consecutive hashes differ, non-string coercion, empty string. `verifyPin`: bcrypt roundtrip + wrong PIN, null/undefined/empty storedHash returns false, legacy SHA-256 roundtrip + wrong PIN, non-string raw PIN coerced for both bcrypt and legacy paths. |
+
+**Files modified:**
+
+| Path | Change |
+|---|---|
+| `jest.config.js` | Added `setupFiles: ['<rootDir>/tests/setup.js']` so env vars are set before any test module loads. |
+
+**Verification (local):**
+```
+npm test
+PASS  tests/auth/roles.test.js
+PASS  tests/auth/auth_utils.test.js
+PASS  tests/smoke/escapeHtml.test.js
+Test Suites: 3 passed, 3 total
+Tests:       39 passed, 39 total
+Time:        2.982 s
+```
+
+The legacy SHA-256 PIN compatibility path is now covered by tests — important because deleting it requires confidence that all production users have migrated to bcrypt, and we now have a regression test that the legacy path keeps working until they do.
+
+### Pending — Phases 11b-15 (Section 18 Week 2-3 buildout)
+- **Phase 11b — Auth flow tests (~10 cases, DB-backed):** login, refresh, change-pin, logout, invite, activate. Requires extracting `app.js` from `index.js` so Supertest can drive the Express app, plus a Postgres service container in CI for tests, plus a `beforeEach` transaction-rollback fixture pattern.
 - **Phase 12 — Tenant isolation tests (~20 cases):** Company A cannot read/write Company B data through any endpoint. Highest security value.
-- **Phase 13 — RBAC matrix (~15 cases):** the 13-role × 58-permission matrix verified end-to-end. Ensures the permission table changes can't silently break access control.
+- **Phase 13 — RBAC matrix (~15 cases):** the 13-role × 58-permission matrix verified end-to-end via `can()` middleware. Ensures permission table changes can't silently break access control.
 - **Phase 14 — Core workflow tests (~15 cases):** assignment lifecycle, attendance, materials, hub message delivery.
 - **Phase 15 — Security regression tests (~10 cases):** SQL injection attempts via templated strings, XSS payloads in email templates, rate-limit hits, file-upload magic-byte bypass attempts.
 

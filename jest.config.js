@@ -8,6 +8,11 @@ module.exports = {
   testEnvironment: 'node',
   testMatch: ['**/tests/**/*.test.js'],
 
+  // setupFiles runs BEFORE any test module is loaded. Sets JWT_SECRET so
+  // lib/auth_utils.js can be required without throwing the "JWT_SECRET
+  // missing" guard at module load time.
+  setupFiles: ['<rootDir>/tests/setup.js'],
+
   // Don't try to index uploads/ (user-uploaded files) or archived migrations.
   // The uploads/ directory contains a stray package.json from one of the
   // sample uploads, which collides with the root package.json in Jest's
