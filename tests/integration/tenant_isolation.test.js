@@ -96,3 +96,64 @@ describeIfDb('Tenant isolation — GET /api/employees', () => {
     expect(res.body).toMatchObject({ ok: false, error: 'COMPANY_CONTEXT_REQUIRED' });
   });
 });
+
+describeIfDb('Tenant isolation — GET /api/employees/:id', () => {
+  afterAll(async () => {
+    await cleanupTestRows();
+    await closePool();
+  });
+
+  test("Company A admin GETting B's employee by ID returns 404 EMPLOYEE_NOT_FOUND", async () => {
+    const companyA = await seedCompany();
+    const companyB = await seedCompany();
+
+    const adminA = await seedUser({ company_id: companyA.company_id, role: 'COMPANY_ADMIN' });
+    const empB = await seedEmployee({ company_id: companyB.company_id });
+
+    const { token } = await loginUser(adminA);
+
+    const res = await request(app)
+      .get(`/api/employees/${empB.id}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    // Must NOT return 200 with B's data, must NOT return 403 (which would
+    // confirm B's employee exists). 404 with EMPLOYEE_NOT_FOUND is the
+    // canonical "this row is invisible to you" response.
+    expect(res.statusCode).toBe(404);
+    expect(res.body).toMatchObject({ ok: false, error: 'EMPLOYEE_NOT_FOUND' });
+  });
+
+  test('Company A admin GETting their OWN employee by ID returns 200 with the row', async () => {
+    const companyA = await seedCompany();
+    const adminA = await seedUser({ company_id: companyA.company_id, role: 'COMPANY_ADMIN' });
+    const empA = await seedEmployee({
+      company_id: companyA.company_id,
+      first_name: 'Sasha',
+      last_name: 'Same-Company',
+    });
+
+    const { token } = await loginUser(adminA);
+
+    const res = await request(app)
+      .get(`/api/employees/${empA.id}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(Number(res.body.employee.id)).toBe(empA.id);
+    expect(res.body.employee.first_name).toBe('Sasha');
+  });
+
+  test('GET /api/employees/:id with non-numeric id returns 400 INVALID_ID', async () => {
+    const companyA = await seedCompany();
+    const adminA = await seedUser({ company_id: companyA.company_id, role: 'COMPANY_ADMIN' });
+    const { token } = await loginUser(adminA);
+
+    const res = await request(app)
+      .get('/api/employees/not-a-number')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toMatchObject({ ok: false, error: 'INVALID_ID' });
+  });
+});
