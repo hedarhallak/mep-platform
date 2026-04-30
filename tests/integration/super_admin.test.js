@@ -62,4 +62,35 @@ describeIfDb('Super admin — /api/super', () => {
     expect(res.statusCode).toBe(403);
     expect(res.body).toMatchObject({ ok: false, error: 'SUPER_ADMIN_REQUIRED' });
   });
+
+  test('GET /api/super/companies as SUPER_ADMIN returns the companies list with counts', async () => {
+    const company = await seedCompany();
+    const sa = await seedUser({ role: 'SUPER_ADMIN', pin: 'sa-pin-1234' });
+    const { token } = await loginUser(sa);
+
+    const res = await request(app)
+      .get('/api/super/companies')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(Array.isArray(res.body.companies)).toBe(true);
+    const ids = res.body.companies.map((c) => Number(c.id));
+    expect(ids).toContain(company.company_id);
+  });
+
+  test('GET /api/super/companies/:id as SUPER_ADMIN returns the single company shape', async () => {
+    const company = await seedCompany();
+    const sa = await seedUser({ role: 'SUPER_ADMIN', pin: 'sa-pin-1234' });
+    const { token } = await loginUser(sa);
+
+    const res = await request(app)
+      .get(`/api/super/companies/${company.company_id}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(Number(res.body.company.id)).toBe(company.company_id);
+    expect(res.body.company.name).toBe(company.name);
+  });
 });
