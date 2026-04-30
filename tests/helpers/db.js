@@ -45,19 +45,7 @@ async function closePool() {
   }
 }
 
-// Convenience: a describe-or-skip helper for DB-dependent suites.
-//
-//   const { describeIfDb } = require('../helpers/db');
-//   describeIfDb('POST /api/auth/login', () => { ... });
-//
 const describeIfDb = dbAvailable() ? describe : describe.skip;
-
-// ─── Fixture helpers — Phase 11d ──────────────────────────────
-//
-// Tests insert minimal company + user rows, run their assertions, then
-// `cleanupTestRows()` removes anything created with the test prefix.
-// All test rows have usernames / company names starting with `test_`
-// so the cleanup query is targeted and never touches real data.
 
 const TEST_PREFIX = 'test_';
 
@@ -67,11 +55,6 @@ function uniqueTag() {
   return `${Date.now()}_${_seq}`;
 }
 
-// The baseline is a `pg_dump -s` (schema-only) of prod. Two reference
-// tables — `plans` and `roles` — have rows on prod that satisfy FKs
-// from `companies.plan` and `app_users.role`, but those rows don't ship
-// in the baseline. ensureSeedData() inserts the minimum set so test
-// fixtures can succeed. Idempotent via ON CONFLICT DO NOTHING.
 let _seeded = false;
 async function ensureSeedData() {
   if (_seeded) return;
@@ -95,7 +78,6 @@ async function ensureSeedData() {
      ON CONFLICT (code) DO NOTHING`
   );
 
-  // The 13 canonical roles from the app_users_role_check CHECK constraint.
   await pool.query(
     `INSERT INTO public.roles (role_key, label) VALUES
        ('SUPER_ADMIN',           'Super Admin'),
@@ -114,33 +96,24 @@ async function ensureSeedData() {
      ON CONFLICT (role_key) DO NOTHING`
   );
 
-  // Minimum permission catalogue for Phase 12+ tests. role_permissions
-  // FKs into this table, so the codes must exist here first. Production
-  // has 58 permissions; tests only define the few exercised by route
-  // handlers currently under test.
   await pool.query(
     `INSERT INTO public.permissions (code, description, grp) VALUES
-       ('employees.view', 'View employees', 'employees'),
-       ('projects.view',  'View projects',  'projects'),
-       ('suppliers.view', 'View suppliers', 'suppliers')
+       ('employees.view',   'View employees',   'employees'),
+       ('projects.view',    'View projects',    'projects'),
+       ('suppliers.view',   'View suppliers',   'suppliers'),
+       ('assignments.view', 'View assignments', 'assignments')
      ON CONFLICT (code) DO NOTHING`
   );
 
-  // Minimum role_permission grants for Phase 12 tenant-isolation tests
-  // and beyond. Production has 284 mappings; tests only need the few
-  // permissions exercised by route handlers under test. Add new ones here
-  // as new test categories land.
   await pool.query(
     `INSERT INTO public.role_permissions (role, permission_code) VALUES
        ('COMPANY_ADMIN', 'employees.view'),
        ('COMPANY_ADMIN', 'projects.view'),
-       ('COMPANY_ADMIN', 'suppliers.view')
+       ('COMPANY_ADMIN', 'suppliers.view'),
+       ('COMPANY_ADMIN', 'assignments.view')
      ON CONFLICT (role, permission_code) DO NOTHING`
   );
 
-  // FK targets for projects: trade_types + project_statuses. Like plans
-  // and roles above, the schema-only baseline ships empty tables; tests
-  // need at least one row in each so seedProject can succeed.
   await pool.query(
     `INSERT INTO public.trade_types (code, name) VALUES
        ('GENERAL', 'General')
@@ -210,6 +183,47 @@ async function seedEmployee(overrides = {}) {
   };
 }
 
+async function seedEmployeeProfile(overrides = {}) {
+  await ensureSeedData();
+  const pool = getPool();
+  const employeeId = overrides.employee_id;
+  if (!employeeId) throw new Error('seedEmployeeProfile requires { employee_id }');
+  const fullName = overrides.full_name || `Test Profile ${employeeId}`;
+  const tradeCode = overrides.trade_code || 'GENERAL';
+  await pool.query(
+    `INSERT INTO public.employee_profiles (employee_id, full_name, trade_code)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (employee_id) DO NOTHING`,
+    [employeeId, fullName, tradeCode]
+  );
+  return { employee_id: employeeId, full_name: fullName, trade_code: tradeCode };
+}
+
+async function seedProject(overrides = {}) {
+  await ensureSeedData();
+  const pool = getPool();
+  const code = overrides.project_code || `${TEST_PREFIX}prj_${uniqueTag()}`.slice(0, 50);
+  const name = overrides.project_name || 'Test Project';
+  const companyId = overrides.company_id;
+  if (!companyId) throw new Error('seedProject requires { company_id }');
+
+  const { rows: tt } = await pool.query(
+    `SELECT id FROM public.trade_types WHERE code = 'GENERAL' LIMIT 1`
+  );
+  const { rows: ps } = await pool.query(
+    `SELECT id FROM public.project_statuses WHERE code = 'ACTIVE' LIMIT 1`
+  );
+
+  const { rows } = await pool.query(
+    `INSERT INTO public.projects
+       (project_code, project_name, trade_type_id, status_id, company_id, ccq_sector)
+     VALUES ($1, $2, $3, $4, $5, 'IC')
+     RETURNING id`,
+    [code, name, tt[0].id, ps[0].id, companyId]
+  );
+  return { id: Number(rows[0].id), project_code: code, project_name: name, company_id: companyId };
+}
+
 async function seedSupplier(overrides = {}) {
   await ensureSeedData();
   const pool = getPool();
@@ -239,43 +253,82 @@ async function seedSupplier(overrides = {}) {
   };
 }
 
-async function seedProject(overrides = {}) {
+async function seedAssignment(overrides = {}) {
   await ensureSeedData();
   const pool = getPool();
-  const code = overrides.project_code || `${TEST_PREFIX}prj_${uniqueTag()}`.slice(0, 50);
-  const name = overrides.project_name || 'Test Project';
   const companyId = overrides.company_id;
-  if (!companyId) throw new Error('seedProject requires { company_id }');
+  if (!companyId) throw new Error('seedAssignment requires { company_id }');
 
-  // Look up the seed trade_type + project_status by their canonical codes.
-  const { rows: tt } = await pool.query(
-    `SELECT id FROM public.trade_types WHERE code = 'GENERAL' LIMIT 1`
-  );
-  const { rows: ps } = await pool.query(
-    `SELECT id FROM public.project_statuses WHERE code = 'ACTIVE' LIMIT 1`
-  );
+  const project = overrides.project_id
+    ? { id: overrides.project_id }
+    : await seedProject({ company_id: companyId });
+
+  let employeeId = overrides.employee_id;
+  if (!employeeId) {
+    const emp = await seedEmployee({ company_id: companyId });
+    employeeId = emp.id;
+  }
+  await seedEmployeeProfile({ employee_id: employeeId });
+
+  let requesterId = overrides.requested_by_user_id;
+  if (!requesterId) {
+    const u = await seedUser({ company_id: companyId, role: 'COMPANY_ADMIN' });
+    requesterId = u.id;
+  }
+
+  const status = overrides.status || 'APPROVED';
+  const startDate = overrides.start_date || '2026-01-01';
+  const endDate = overrides.end_date || '2026-12-31';
+  const shiftStart = overrides.shift_start || '06:00';
+  const shiftEnd = overrides.shift_end || '14:30';
+  const assignmentRole = overrides.assignment_role || 'WORKER';
 
   const { rows } = await pool.query(
-    `INSERT INTO public.projects
-       (project_code, project_name, trade_type_id, status_id, company_id, ccq_sector)
-     VALUES ($1, $2, $3, $4, $5, 'IC')
+    `INSERT INTO public.assignment_requests
+       (company_id, project_id, requested_for_employee_id, requested_by_user_id,
+        start_date, end_date, shift_start, shift_end, assignment_role,
+        status, request_type, payload_json,
+        decision_by_user_id, decision_at, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
+             $10, 'CREATE_ASSIGNMENT', '{}',
+             $4, NOW(), NOW(), NOW())
      RETURNING id`,
-    [code, name, tt[0].id, ps[0].id, companyId]
+    [
+      companyId,
+      project.id,
+      employeeId,
+      requesterId,
+      startDate,
+      endDate,
+      shiftStart,
+      shiftEnd,
+      assignmentRole,
+      status,
+    ]
   );
-  return { id: Number(rows[0].id), project_code: code, project_name: name, company_id: companyId };
+  return {
+    id: Number(rows[0].id),
+    company_id: companyId,
+    project_id: project.id,
+    employee_id: employeeId,
+    requested_by_user_id: requesterId,
+    status,
+  };
 }
 
 async function cleanupTestRows() {
   const pool = getPool();
-  // Order matters — refresh_tokens FK to app_users; app_users FK to companies;
-  // employees FK to companies; projects FK to companies (ON DELETE RESTRICT,
-  // so projects must be wiped before companies).
   await pool.query(
     `DELETE FROM public.refresh_tokens
      WHERE user_id IN (SELECT id FROM public.app_users WHERE username LIKE $1)`,
     [`${TEST_PREFIX}%`]
   );
   await pool.query(`DELETE FROM public.audit_logs WHERE username LIKE $1`, [`${TEST_PREFIX}%`]);
+  await pool.query(
+    `DELETE FROM public.assignment_requests
+     WHERE company_id IN (SELECT company_id FROM public.companies WHERE name LIKE $1)`,
+    [`${TEST_PREFIX}%`]
+  );
   await pool.query(`DELETE FROM public.app_users WHERE username LIKE $1`, [`${TEST_PREFIX}%`]);
   await pool.query(`DELETE FROM public.employees WHERE employee_code LIKE $1`, [`${TEST_PREFIX}%`]);
   await pool.query(`DELETE FROM public.projects WHERE project_code LIKE $1`, [`${TEST_PREFIX}%`]);
@@ -291,7 +344,9 @@ module.exports = {
   seedCompany,
   seedUser,
   seedEmployee,
+  seedEmployeeProfile,
   seedProject,
   seedSupplier,
+  seedAssignment,
   cleanupTestRows,
 };

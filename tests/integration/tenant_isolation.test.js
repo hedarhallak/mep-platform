@@ -1,18 +1,3 @@
-// Tenant isolation tests — Phase 12.
-//
-// Proves that a logged-in user from Company A cannot see or fetch
-// resources belonging to Company B. The first regression suite that
-// directly validates the multi-tenant boundary the entire product
-// depends on.
-//
-// Pattern:
-//   1. Seed Company A + Company B
-//   2. Seed a COMPANY_ADMIN user in each
-//   3. Seed employees scoped to each company
-//   4. Login as A's admin, hit GET /api/employees, assert only A's
-//      employees come back (B's must NOT appear)
-//   5. Repeat from B's side for symmetry
-
 const request = require('supertest');
 const app = require('../../app');
 const {
@@ -21,6 +6,9 @@ const {
   seedCompany,
   seedUser,
   seedEmployee,
+  seedProject,
+  seedSupplier,
+  seedAssignment,
   cleanupTestRows,
 } = require('../helpers/db');
 
@@ -41,7 +29,6 @@ describeIfDb('Tenant isolation — GET /api/employees', () => {
   test("Company A admin sees only Company A's employees", async () => {
     const companyA = await seedCompany();
     const companyB = await seedCompany();
-
     const adminA = await seedUser({ company_id: companyA.company_id, role: 'COMPANY_ADMIN' });
     const empA1 = await seedEmployee({ company_id: companyA.company_id, first_name: 'Alice' });
     const empA2 = await seedEmployee({ company_id: companyA.company_id, first_name: 'Andre' });
@@ -57,11 +44,7 @@ describeIfDb('Tenant isolation — GET /api/employees', () => {
     expect(Array.isArray(res.body.employees)).toBe(true);
 
     const returnedIds = res.body.employees.map((e) => Number(e.id));
-
-    // Must include both of A's employees.
     expect(returnedIds).toEqual(expect.arrayContaining([empA1.id, empA2.id]));
-
-    // Must NOT include any of B's employees.
     expect(returnedIds).not.toContain(empB1.id);
     expect(returnedIds).not.toContain(empB2.id);
   });
@@ -69,7 +52,6 @@ describeIfDb('Tenant isolation — GET /api/employees', () => {
   test("Company B admin sees only Company B's employees (symmetry)", async () => {
     const companyA = await seedCompany();
     const companyB = await seedCompany();
-
     const adminB = await seedUser({ company_id: companyB.company_id, role: 'COMPANY_ADMIN' });
     const empA = await seedEmployee({ company_id: companyA.company_id, first_name: 'Alice' });
     const empB = await seedEmployee({ company_id: companyB.company_id, first_name: 'Bob' });
@@ -85,8 +67,6 @@ describeIfDb('Tenant isolation — GET /api/employees', () => {
   });
 
   test('user without a company_id (e.g. orphaned account) is rejected with 403', async () => {
-    // Insert a user with no company_id. The route returns 403
-    // COMPANY_CONTEXT_REQUIRED when a non-SUPER_ADMIN has no company_id.
     const orphan = await seedUser({ company_id: null, role: 'COMPANY_ADMIN' });
     const { token } = await loginUser(orphan);
 
@@ -106,7 +86,6 @@ describeIfDb('Tenant isolation — GET /api/employees/:id', () => {
   test("Company A admin GETting B's employee by ID returns 404 EMPLOYEE_NOT_FOUND", async () => {
     const companyA = await seedCompany();
     const companyB = await seedCompany();
-
     const adminA = await seedUser({ company_id: companyA.company_id, role: 'COMPANY_ADMIN' });
     const empB = await seedEmployee({ company_id: companyB.company_id });
 
@@ -116,9 +95,6 @@ describeIfDb('Tenant isolation — GET /api/employees/:id', () => {
       .get(`/api/employees/${empB.id}`)
       .set('Authorization', `Bearer ${token}`);
 
-    // Must NOT return 200 with B's data, must NOT return 403 (which would
-    // confirm B's employee exists). 404 with EMPLOYEE_NOT_FOUND is the
-    // canonical "this row is invisible to you" response.
     expect(res.statusCode).toBe(404);
     expect(res.body).toMatchObject({ ok: false, error: 'EMPLOYEE_NOT_FOUND' });
   });
@@ -158,10 +134,6 @@ describeIfDb('Tenant isolation — GET /api/employees/:id', () => {
   });
 });
 
-// ─── Phase 12.2 — same A/B pattern on /api/projects ────────────────
-// ─── Phase 12.3 — same A/B pattern on /api/suppliers ───────────────
-const { seedProject, seedSupplier } = require('../helpers/db');
-
 describeIfDb('Tenant isolation — GET /api/projects', () => {
   afterAll(async () => {
     await cleanupTestRows();
@@ -171,7 +143,6 @@ describeIfDb('Tenant isolation — GET /api/projects', () => {
   test("Company A admin sees only A's projects", async () => {
     const companyA = await seedCompany();
     const companyB = await seedCompany();
-
     const adminA = await seedUser({ company_id: companyA.company_id, role: 'COMPANY_ADMIN' });
     const projA1 = await seedProject({ company_id: companyA.company_id, project_name: 'Alpha' });
     const projA2 = await seedProject({ company_id: companyA.company_id, project_name: 'Atrium' });
@@ -187,7 +158,6 @@ describeIfDb('Tenant isolation — GET /api/projects', () => {
     expect(Array.isArray(res.body.projects)).toBe(true);
 
     const returnedIds = res.body.projects.map((p) => Number(p.id));
-
     expect(returnedIds).toEqual(expect.arrayContaining([projA1.id, projA2.id]));
     expect(returnedIds).not.toContain(projB1.id);
     expect(returnedIds).not.toContain(projB2.id);
@@ -229,9 +199,6 @@ describeIfDb('Tenant isolation — GET /api/projects/:id', () => {
       .get(`/api/projects/${projB.id}`)
       .set('Authorization', `Bearer ${token}`);
 
-    // Cross-tenant must NOT return 200 with B's data and must NOT 403
-    // (which would confirm the row exists). 404 is the canonical
-    // "this row is invisible to you" response.
     expect(res.statusCode).toBe(404);
   });
 
@@ -252,10 +219,6 @@ describeIfDb('Tenant isolation — GET /api/projects/:id', () => {
   });
 });
 
-// ─── Phase 12.3 — same A/B pattern on /api/suppliers ───────────────
-// /api/suppliers exposes only a list endpoint (no GET /:id), so the
-// regression surface here is the list filter — confirm the WHERE
-// company_id = $1 clause holds end-to-end through middleware + handler.
 describeIfDb('Tenant isolation — GET /api/suppliers', () => {
   afterAll(async () => {
     await cleanupTestRows();
@@ -265,7 +228,6 @@ describeIfDb('Tenant isolation — GET /api/suppliers', () => {
   test("Company A admin sees only A's suppliers", async () => {
     const companyA = await seedCompany();
     const companyB = await seedCompany();
-
     const adminA = await seedUser({ company_id: companyA.company_id, role: 'COMPANY_ADMIN' });
     const supA1 = await seedSupplier({ company_id: companyA.company_id });
     const supA2 = await seedSupplier({ company_id: companyA.company_id });
@@ -281,7 +243,6 @@ describeIfDb('Tenant isolation — GET /api/suppliers', () => {
     expect(Array.isArray(res.body.suppliers)).toBe(true);
 
     const returnedIds = res.body.suppliers.map((s) => Number(s.id));
-
     expect(returnedIds).toEqual(expect.arrayContaining([supA1.id, supA2.id]));
     expect(returnedIds).not.toContain(supB1.id);
     expect(returnedIds).not.toContain(supB2.id);
@@ -290,7 +251,6 @@ describeIfDb('Tenant isolation — GET /api/suppliers', () => {
   test("Company B admin sees only B's suppliers (symmetry)", async () => {
     const companyA = await seedCompany();
     const companyB = await seedCompany();
-
     const adminB = await seedUser({ company_id: companyB.company_id, role: 'COMPANY_ADMIN' });
     const supA = await seedSupplier({ company_id: companyA.company_id });
     const supB = await seedSupplier({ company_id: companyB.company_id });
@@ -306,11 +266,8 @@ describeIfDb('Tenant isolation — GET /api/suppliers', () => {
   });
 
   test('trade_code filter still respects tenant boundary', async () => {
-    // Defense-in-depth: even with a query param that hits the conditional
-    // branch in the handler, the WHERE company_id clause must hold.
     const companyA = await seedCompany();
     const companyB = await seedCompany();
-
     const adminA = await seedUser({ company_id: companyA.company_id, role: 'COMPANY_ADMIN' });
     const supA = await seedSupplier({ company_id: companyA.company_id, trade_code: 'PLUMBING' });
     const supB = await seedSupplier({ company_id: companyB.company_id, trade_code: 'PLUMBING' });
@@ -325,5 +282,115 @@ describeIfDb('Tenant isolation — GET /api/suppliers', () => {
     const returnedIds = res.body.suppliers.map((s) => Number(s.id));
     expect(returnedIds).toContain(supA.id);
     expect(returnedIds).not.toContain(supB.id);
+  });
+});
+
+describeIfDb('Tenant isolation — GET /api/assignments', () => {
+  afterAll(async () => {
+    await cleanupTestRows();
+    await closePool();
+  });
+
+  test("Company A admin sees only A's APPROVED assignments", async () => {
+    const companyA = await seedCompany();
+    const companyB = await seedCompany();
+    const adminA = await seedUser({ company_id: companyA.company_id, role: 'COMPANY_ADMIN' });
+    const adminB = await seedUser({ company_id: companyB.company_id, role: 'COMPANY_ADMIN' });
+
+    const asgA = await seedAssignment({
+      company_id: companyA.company_id,
+      requested_by_user_id: adminA.id,
+    });
+    const asgB = await seedAssignment({
+      company_id: companyB.company_id,
+      requested_by_user_id: adminB.id,
+    });
+
+    const { token } = await loginUser(adminA);
+
+    const res = await request(app).get('/api/assignments').set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(Array.isArray(res.body.assignments)).toBe(true);
+
+    const returnedIds = res.body.assignments.map((a) => Number(a.id));
+    expect(returnedIds).toContain(asgA.id);
+    expect(returnedIds).not.toContain(asgB.id);
+  });
+
+  test("Company B admin sees only B's APPROVED assignments (symmetry)", async () => {
+    const companyA = await seedCompany();
+    const companyB = await seedCompany();
+    const adminA = await seedUser({ company_id: companyA.company_id, role: 'COMPANY_ADMIN' });
+    const adminB = await seedUser({ company_id: companyB.company_id, role: 'COMPANY_ADMIN' });
+
+    const asgA = await seedAssignment({
+      company_id: companyA.company_id,
+      requested_by_user_id: adminA.id,
+    });
+    const asgB = await seedAssignment({
+      company_id: companyB.company_id,
+      requested_by_user_id: adminB.id,
+    });
+
+    const { token } = await loginUser(adminB);
+
+    const res = await request(app).get('/api/assignments').set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(200);
+    const returnedIds = res.body.assignments.map((a) => Number(a.id));
+    expect(returnedIds).toContain(asgB.id);
+    expect(returnedIds).not.toContain(asgA.id);
+  });
+});
+
+describeIfDb('Tenant isolation — GET /api/assignments/requests', () => {
+  afterAll(async () => {
+    await cleanupTestRows();
+    await closePool();
+  });
+
+  test("Company A admin sees only A's assignment requests", async () => {
+    const companyA = await seedCompany();
+    const companyB = await seedCompany();
+    const adminA = await seedUser({ company_id: companyA.company_id, role: 'COMPANY_ADMIN' });
+    const adminB = await seedUser({ company_id: companyB.company_id, role: 'COMPANY_ADMIN' });
+
+    const asgA1 = await seedAssignment({
+      company_id: companyA.company_id,
+      requested_by_user_id: adminA.id,
+      status: 'APPROVED',
+    });
+    const asgA2 = await seedAssignment({
+      company_id: companyA.company_id,
+      requested_by_user_id: adminA.id,
+      status: 'PENDING',
+    });
+    const asgB1 = await seedAssignment({
+      company_id: companyB.company_id,
+      requested_by_user_id: adminB.id,
+      status: 'APPROVED',
+    });
+    const asgB2 = await seedAssignment({
+      company_id: companyB.company_id,
+      requested_by_user_id: adminB.id,
+      status: 'PENDING',
+    });
+
+    const { token } = await loginUser(adminA);
+
+    const res = await request(app)
+      .get('/api/assignments/requests')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(Array.isArray(res.body.requests)).toBe(true);
+
+    const returnedIds = res.body.requests.map((r) => Number(r.id));
+    expect(returnedIds).toEqual(expect.arrayContaining([asgA1.id, asgA2.id]));
+    expect(returnedIds).not.toContain(asgB1.id);
+    expect(returnedIds).not.toContain(asgB2.id);
   });
 });

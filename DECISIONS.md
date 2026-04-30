@@ -1849,8 +1849,22 @@ CI #61 — 86/86 ✅.
 - B's admin sees only B's suppliers (symmetry).
 - `?trade_code=PLUMBING` filter still respects tenant boundary — defense-in-depth against the conditional branch in the handler that appends `AND (trade_code = $N OR trade_code = 'ALL')`. Both companies have a PLUMBING supplier; A's admin must only see A's.
 
+### Phase 12.4 — Tenant Isolation on `/api/assignments` (executed)
+
+3 new cases on the assignments surface — by far the heaviest fixture setup so far. `assignment_requests` is the join hub of the application: rows reference companies + projects + employee profiles + the requesting user. Getting one to show up in `GET /api/assignments` requires all four upstream rows to exist with matching IDs.
+
+**Helpers added (`tests/helpers/db.js`):**
+- `seedEmployeeProfile({ employee_id })` — inserts a `public.employee_profiles` row keyed on the employee. The route's SELECT INNER JOINs on profile, so an assignment without a profile is silently invisible.
+- `seedAssignment({ company_id, ... })` — inserts an assignment_request row + auto-creates project + employee + employee_profile + requester user if any are not provided as overrides. Defaults to `status='APPROVED'`, `request_type='CREATE_ASSIGNMENT'`, dates spanning 2026, shift 06:00–14:30, role WORKER.
+- `ensureSeedData()` extended with `('assignments.view', ...)` permission + the `('COMPANY_ADMIN', 'assignments.view')` role-permission grant. Without this, every test in this block would 403 on the `can('assignments.view')` middleware.
+- `cleanupTestRows()` extended to wipe `assignment_requests` for any company starting with `test_`. Must run before companies/employees/projects so subsequent runs don't see orphaned rows.
+
+**Tests (3 cases across 2 describe blocks):**
+- `GET /api/assignments` — A's admin sees only A's APPROVED assignments; B's admin sees only B's (symmetry). Each company seeds 1 APPROVED row.
+- `GET /api/assignments/requests` — A's admin sees only A's requests when the result set spans both APPROVED and PENDING. Each company seeds 2 requests (APPROVED + PENDING) to exercise more of the result set without a status filter.
+
 ### Pending — Phase 12 expansion (next sessions)
-- Same A/B pattern on `/api/assignments`, `/api/material-requests`, `/api/attendance`, `/api/hub`.
+- Same A/B pattern on `/api/material-requests`, `/api/attendance`, `/api/hub`.
 - Cross-tenant **write** attempts: `PATCH` / `DELETE` of B's resources by A's admin (currently only reads are validated; writes go through the same `WHERE company_id` guard but should be pinned with explicit tests).
 - Per-resource-by-id coverage on the remaining endpoints once each list endpoint has its A/B baseline.
 
