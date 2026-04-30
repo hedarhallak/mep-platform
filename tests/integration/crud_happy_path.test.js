@@ -18,6 +18,7 @@ const {
   seedCompany,
   seedUser,
   seedEmployee,
+  seedProject,
   seedSupplier,
   cleanupTestRows,
 } = require('../helpers/db');
@@ -164,5 +165,46 @@ describeIfDb('CRUD happy paths — own-tenant create / update / delete', () => {
     ]);
     expect(rows).toHaveLength(1);
     expect(rows[0].is_active).toBe(false);
+  });
+
+  test('PATCH /api/projects/:id updates own-tenant fields (200)', async () => {
+    const company = await seedCompany();
+    const admin = await seedUser({ company_id: company.company_id, role: 'COMPANY_ADMIN' });
+    const proj = await seedProject({
+      company_id: company.company_id,
+      project_name: 'Original Name',
+    });
+
+    const { token } = await loginUser(admin);
+
+    const res = await request(app)
+      .patch(`/api/projects/${proj.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ project_name: 'Renamed Project', site_address: '500 New Site Ave' });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.project.project_name).toBe('Renamed Project');
+    expect(res.body.project.site_address).toBe('500 New Site Ave');
+  });
+
+  test('DELETE /api/projects/:id removes a project with no assignments (200)', async () => {
+    const company = await seedCompany();
+    const admin = await seedUser({ company_id: company.company_id, role: 'COMPANY_ADMIN' });
+    const proj = await seedProject({ company_id: company.company_id });
+
+    const { token } = await loginUser(admin);
+
+    const delRes = await request(app)
+      .delete(`/api/projects/${proj.id}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(delRes.statusCode).toBe(200);
+    expect(delRes.body.ok).toBe(true);
+
+    const { rows } = await getPool().query('SELECT id FROM public.projects WHERE id = $1', [
+      proj.id,
+    ]);
+    expect(rows).toHaveLength(0);
   });
 });
