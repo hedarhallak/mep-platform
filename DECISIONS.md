@@ -1905,75 +1905,48 @@ The route's by-id surface is via `PATCH /:id/checkout` and `PATCH /:id/confirm` 
 - `GET /api/hub/workers` — A's admin sees only A's worker users (matched by app_users.company_id), B's admin sees only B's (symmetry). Each company seeds an employee + linked WORKER user; the test verifies cross-company workers don't leak.
 - `GET /api/hub/my-projects` — exercises the route's COMPANY_ADMIN fallback path: when the admin has no own assignments / foreman rows, the route falls through from "projects I'm assigned to" to "all active projects in my company" — the latter is the `WHERE company_id = $1` surface this test pins.
 
-### Pending — Phase 12 expansion (next sessions)
-- Cross-tenant **write** attempts: `PATCH` / `DELETE` of B's resources by A's admin (currently only reads are validated; writes go through the same `WHERE company_id` guard but should be pinned with explicit tests).
-- Hub message-delivery (sender_id / recipient_id) tenant isolation — adjacent to current tests but on the message tables themselves.
+### Phase 12.8 — Cross-tenant WRITE attempts (executed)
 
-After Phase 12 is comprehensive, Phase 13 (RBAC matrix) revisits the same endpoints from the angle of role × permission rather than company × company.
+Phase 12 closer. Reads were validated in 12.0–12.7 (25 tests). 12.8 pins the symmetric write surface: A's admin trying to PATCH or DELETE B's resources must NOT succeed. All routes return 404 (not 403) for the same existence-leak reason as the read tests — a 403 would let an attacker enumerate which IDs exist in B's tenant by status code alone.
 
-### Phase 13 — Coverage Visibility + Branch Protection Plan (executed)
+**Tests (6 cases in one describe block):**
 
-Section 18 Week 4 has two halves: (a) coverage thresholds enforced in CI, (b) GitHub branch-protection rules forcing every push to land via passing CI. Half (a) needs a baseline reading first. Half (b) is a one-time GitHub UI step.
+| Endpoint | Expected on cross-tenant |
+|---|---|
+| `PATCH /api/employees/:id` | 404 EMPLOYEE_NOT_FOUND |
+| `PATCH /api/projects/:id` | 404 PROJECT_NOT_FOUND |
+| `DELETE /api/projects/:id` | 404 PROJECT_NOT_FOUND |
+| `PATCH /api/suppliers/:id` | 404 NOT_FOUND |
+| `DELETE /api/suppliers/:id` | 404 NOT_FOUND |
+| Independent DB readback after cross-tenant PATCH on B's employee | row.first_name unchanged (sentinel value 'Untouched') |
 
-**(a) Coverage visibility — landed today:**
-- `.github/workflows/ci.yml` Tests step now runs `npm test -- --coverage --coverageReporters=text-summary`. Each CI run prints a one-line-per-folder coverage summary to the log:
-  ```
-  =================== Coverage summary ===================
-  Statements   : XX.XX% ( N/M )
-  Branches     : XX.XX% ( N/M )
-  Functions    : XX.XX% ( N/M )
-  Lines        : XX.XX% ( N/M )
-  ========================================================
-  ```
-- `jest.config.js` already had `collectCoverageFrom` targeting backend source. Added a comment noting where thresholds will eventually go.
-- **No threshold enforced yet.** The plan: read the next CI run's summary, set the initial floor at ~10 percentage points below current values for each metric so trivial drift doesn't break CI, then ratchet up by ~5 pp per month as Phase 14/15 land.
+The last case is the strongest: even if a future regression made the route return a misleading 404 while still firing the UPDATE, this test would catch it. Reads B's employee directly via the test pool (bypassing the API entirely) and asserts the row's first_name + last_name are still the originally-seeded sentinel values.
 
-**(b) Branch protection — one-time GitHub UI step (deferred to Hedar):**
-GitHub branch-protection rules can't be code — they live in repo settings. Once Hedar has time:
-1. https://github.com/hedarhallak/mep-platform/settings/branches → Add branch ruleset (or classic rule on `main`)
-2. Enable "Require status checks to pass before merging"
-3. Add as required: `Backend (Node 20)`, `Frontend (Node 20)`, `Mobile (Node 20)`, `Security (Semgrep)`, `Schema (Atlas)`
-4. (Optional) "Require a pull request before merging" — locks down direct pushes; more rigour, more friction. Solo dev can skip this.
-5. (Optional) "Do not allow bypassing the above settings" applied to admins — same trade-off.
+**Helpers extension (`tests/helpers/db.js`):**
+- `ensureSeedData()` now seeds 5 new permissions + COMPANY_ADMIN grants: `employees.edit`, `projects.edit`, `projects.delete`, `suppliers.edit`, `suppliers.delete`. Without these the writes would 403 on the permissions check and never reach the company_id guard we want to test.
 
-**Why this matters:** today Hedar can push directly to `main` and ship even if CI is failing — the entire CI pipeline is advisory in that sense. Branch protection makes CI *enforcing*. Auth regressions, lint errors, Semgrep findings all become hard blockers. That's the point of Day 1's discipline; protection turns it from a habit into a guarantee.
+### Phase 12 — Complete (CI #70: 109/109 ✅)
+
+The multi-tenant boundary that the entire product depends on now has end-to-end CI regression coverage across reads + writes:
+
+| Sub-phase | Endpoint(s) | Tests |
+|---|---|---|
+| 12.0 | `GET /api/employees` (list + orphan-403) | 3 |
+| 12.1 | `GET /api/employees/:id` (cross-tenant 404, own 200, INVALID_ID 400) | 3 |
+| 12.2 | `GET /api/projects` (list + by-id) | 4 |
+| 12.3 | `GET /api/suppliers` (list + trade_code filter) | 3 |
+| 12.4 | `GET /api/assignments` + `/requests` | 3 |
+| 12.5 | `GET /api/materials/requests` (list + by-id) | 4 |
+| 12.6 | `GET /api/attendance` | 2 |
+| 12.7 | `GET /api/hub/workers` + `/my-projects` | 3 |
+| 12.8 | Cross-tenant writes (PATCH / DELETE) | 6 |
+| **Total** | | **31 tenant isolation tests** |
+
+Two infrastructure fixes landed alongside Phase 12:
+- **Rate-limit skip in tests** (`app.js` + `tests/setup.js`): each test calls `loginUser` once; with 100+ tests the auth limit (20/15min from same IP) was triggering 429s. Each `rateLimit({...})` now has `skip: () => process.env.NODE_ENV === 'test'`, and `tests/setup.js` forces `NODE_ENV=test` (the CI workflow sets `NODE_ENV=development` at the job level for native-dep installs, which would otherwise leak through). Production / staging / dev keep their limits intact.
+- **Jest hook timeout** (`jest.config.js`): bumped from 10s → 30s. With 9 describe blocks each running cleanupTestRows() across 8 cleanup queries, total cleanup time on CI Postgres exceeded the default 10s hook timeout.
 
 ### Pending — next sessions
-- Read CI's coverage summary, set initial Jest `coverageThreshold`, push.
-- Hedar applies the branch protection ruleset on GitHub.
-- Phase 14 — core-workflow integration tests (assignment lifecycle / attendance / materials → PO).
-- Phase 15 — security regression suite.
-- Phase 9.5 — Atlas drift detection + atlas.sum.
-- **Phase 12 — Tenant isolation tests (~20 cases):** Company A cannot read/write Company B data through any endpoint. Highest security value.
-- **Phase 13 — RBAC matrix (~15 cases):** the 13-role × 58-permission matrix verified end-to-end via `can()` middleware. Ensures permission table changes can't silently break access control.
-- **Phase 14 — Core workflow tests (~15 cases):** assignment lifecycle, attendance, materials, hub message delivery.
-- **Phase 15 — Security regression tests (~10 cases):** SQL injection attempts via templated strings, XSS payloads in email templates, rate-limit hits, file-upload magic-byte bypass attempts.
-
-After Phase 15: enforce coverage thresholds (Section 18 Week 4) — start at ≥70% on `routes/`, ratchet up over time.
-
-### Pending — Day 3 final cleanup
-- **Triage Knip baseline** (still informational from Phase 7).
-- **Cleanup ESLint warnings** (42 `no-unused-vars`) — trivial, mechanical.
-
-### Pending — Day 3 (next session)
-- **Semgrep CI integration:** add Semgrep to the CI workflow with security rule sets (SQL injection, missing auth, hardcoded secrets, prototype pollution). Likely informational first, then blocking after triage.
-
-### Pending — Day 4-5
-- **Atlas (atlasgo.io) — schema-as-code.** Snapshot the prod baseline (already in `db/schema_baseline_2026-04-26.sql`) into Atlas's HCL format, wire CI to fail on schema drift, and start authoring future migrations through Atlas instead of raw psql. This is the long-term fix for the "DB diverged from migrations" issue called out in Section 17 Phase 5.
-
-### Pending — Day 2 Phase 3 (next session)
-- Knip integration for dead-code detection (would have caught `routes/materials.js` v1 automatically before Hedar discovered it manually April 26).
-- Husky + lint-staged for portable local pre-commit hooks (replaces the manual `.git/hooks/pre-commit` Hedar installed locally — currently not checked into the repo).
-
-### Pending — Day 3-5
-- Day 3: Semgrep CI integration with security rule sets.
-- Day 4-5: Atlas (atlasgo.io) — schema-as-code, snapshot the prod baseline, wire into CI.
-
-### Pending — Week 1 Day 3-5
-- Day 3: Semgrep CI integration with security rule sets.
-- Day 4-5: Atlas (atlasgo.io) — schema-as-code, snapshot the prod baseline, wire into CI.
-
-### Decisions explicitly deferred (NOT for Day 1)
-- **Branch protection rules** on `main` requiring CI to pass: deferred to Week 4. Rationale: with no test suite yet, blocking merges on a "minimal" CI is symbolic. Better to add real tests first, then turn protection on.
-- **CodeQL / GitHub Advanced Security:** deferred. Semgrep covers the same security-pattern surface for free.
-- **Required CI on every push (not just PR):** kept. PR-only would let direct pushes to main skip CI.
+- **Phase 13 — RBAC matrix tests:** the 13-role × ~12-permission matrix verified end-to-end via the `can()` middleware. Ensures permission-table changes can't silently break access control.
+- **Branch protection on GitHub:** one-time UI step at https://github.com/hedarhallak/mep-platform/settings/branches — locks `main` behind required CI status checks. Now meaningful: with 109 enforcing tests, a passing CI is genuine signal, not symbolic.
+- **Coverage ratchet:** thresholds are at the Phase 13 baseline (10/5/5/10). Current measured: ~17% statements, ~9% branches, ~12% functions, ~17% lines. Next ratchet target: floor each metric at "current minus 2pp" once Phase 13/14 land more tests.
