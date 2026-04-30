@@ -90,7 +90,9 @@ describeIfDb('Super admin — /api/super', () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.body.ok).toBe(true);
-    expect(Number(res.body.company.id)).toBe(company.company_id);
+    // Single-company endpoint returns the raw row — the column is
+    // company_id, not id (the list endpoint aliases it via SELECT AS id).
+    expect(Number(res.body.company.company_id)).toBe(company.company_id);
     expect(res.body.company.name).toBe(company.name);
   });
 });
