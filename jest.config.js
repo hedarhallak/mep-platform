@@ -45,17 +45,17 @@ module.exports = {
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'text-summary', 'lcov'],
 
-  // Initial coverage thresholds — Phase 13 baseline (CI #59):
-  //   Statements 13.35% / Branches 7.04% / Functions 7.86% / Lines 13.96%
-  // Floors set ~5pp below current values to catch genuine regressions
-  // without flapping on small drift. Ratchet up as Phase 14/15 land.
+  // Coverage thresholds — ratcheted after Phase 15 (CI #80):
+  //   Measured: Statements 18.14% / Branches 10.01% / Functions 14.00% / Lines 18.79%
+  // Floors set ~2pp below current values to catch genuine regressions
+  // without flapping on small drift. Ratchet up again as more tests land.
   // Goal from Section 18 Week 4: ≥70% line coverage on routes/ eventually.
   coverageThreshold: {
     global: {
-      statements: 10,
-      branches: 5,
-      functions: 5,
-      lines: 10,
+      statements: 16,
+      branches: 8,
+      functions: 12,
+      lines: 16,
     },
   },
 
