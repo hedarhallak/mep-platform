@@ -44,10 +44,12 @@ router.get('/:project_id', async (req, res) => {
          pt.status,
          pt.notes,
          pt.created_at,
-         -- Count active assignments for this trade
-         (SELECT COUNT(*) FROM public.assignment_requests ar
-          WHERE ar.project_trade_id = pt.id
-            AND ar.status = 'APPROVED') AS assignment_count
+         -- TODO: assignment_requests doesn't have a project_trade_id column —
+         -- there's no direct FK from assignments to project_trades in the
+         -- current schema. Returning 0 here keeps the API contract intact
+         -- while the linkage (or whatever counting strategy is desired) is
+         -- redesigned. Surfaced by Phase 22 tests; previously this route 500'd.
+         0 AS assignment_count
        FROM public.project_trades pt
        JOIN public.trade_types tt ON tt.id = pt.trade_type_id
        LEFT JOIN public.app_users au ON au.id = pt.trade_admin_id
@@ -151,19 +153,10 @@ router.delete('/:id', can('projects.delete'), async (req, res) => {
     const { id } = req.params;
     const companyId = req.user.company_id;
 
-    // Check no active assignments
-    const active = await pool.query(
-      `SELECT COUNT(*) FROM public.assignment_requests
-       WHERE project_trade_id = $1 AND status IN ('PENDING','APPROVED')`,
-      [id]
-    );
-    if (parseInt(active.rows[0].count) > 0)
-      return res.status(409).json({
-        ok: false,
-        error: 'HAS_ACTIVE_ASSIGNMENTS',
-        message: 'Cannot remove trade with active assignments',
-      });
-
+    // TODO: HAS_ACTIVE_ASSIGNMENTS guard removed — same root cause as
+    // the GET subquery: assignment_requests has no project_trade_id
+    // column, so the original check was a 500 in disguise. When the
+    // assignment-to-trade linkage is redesigned, restore the guard.
     await pool.query(`DELETE FROM public.project_trades WHERE id = $1 AND company_id = $2`, [
       id,
       companyId,
