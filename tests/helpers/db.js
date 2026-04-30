@@ -87,8 +87,13 @@ async function ensureSeedData() {
   await pool.query(
     `INSERT INTO public.permissions (code, description, grp) VALUES
        ('employees.view',             'View employees',          'employees'),
+       ('employees.edit',             'Edit employees',          'employees'),
        ('projects.view',              'View projects',           'projects'),
+       ('projects.edit',              'Edit projects',           'projects'),
+       ('projects.delete',            'Delete projects',         'projects'),
        ('suppliers.view',             'View suppliers',          'suppliers'),
+       ('suppliers.edit',             'Edit suppliers',          'suppliers'),
+       ('suppliers.delete',           'Delete suppliers',        'suppliers'),
        ('assignments.view',           'View assignments',        'assignments'),
        ('materials.request_view_own', 'View own material reqs',  'materials'),
        ('attendance.view',            'View attendance',         'attendance'),
@@ -99,8 +104,13 @@ async function ensureSeedData() {
   await pool.query(
     `INSERT INTO public.role_permissions (role, permission_code) VALUES
        ('COMPANY_ADMIN', 'employees.view'),
+       ('COMPANY_ADMIN', 'employees.edit'),
        ('COMPANY_ADMIN', 'projects.view'),
+       ('COMPANY_ADMIN', 'projects.edit'),
+       ('COMPANY_ADMIN', 'projects.delete'),
        ('COMPANY_ADMIN', 'suppliers.view'),
+       ('COMPANY_ADMIN', 'suppliers.edit'),
+       ('COMPANY_ADMIN', 'suppliers.delete'),
        ('COMPANY_ADMIN', 'assignments.view'),
        ('COMPANY_ADMIN', 'materials.request_view_own'),
        ('COMPANY_ADMIN', 'attendance.view'),

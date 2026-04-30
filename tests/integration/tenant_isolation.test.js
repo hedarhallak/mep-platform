@@ -606,3 +606,120 @@ describeIfDb('Tenant isolation — GET /api/hub/my-projects', () => {
     expect(returnedIds).not.toContain(projB.id);
   });
 });
+
+// ─── Phase 12.8 — cross-tenant WRITE attempts ──────────────────────
+// Reads were validated in Phase 12.0–12.7. This block pins the symmetric
+// surface: A's admin trying to PATCH or DELETE B's resources must NOT
+// succeed. All routes return 404 (not 403) for the same existence-leak
+// reason as the read tests.
+describeIfDb('Tenant isolation — cross-tenant writes', () => {
+  afterAll(async () => {
+    await cleanupTestRows();
+    await closePool();
+  });
+
+  test("PATCH /api/employees/:id on B's employee returns 404 EMPLOYEE_NOT_FOUND", async () => {
+    const companyA = await seedCompany();
+    const companyB = await seedCompany();
+    const adminA = await seedUser({ company_id: companyA.company_id, role: 'COMPANY_ADMIN' });
+    const empB = await seedEmployee({ company_id: companyB.company_id, first_name: 'Original' });
+
+    const { token } = await loginUser(adminA);
+    const res = await request(app)
+      .patch(`/api/employees/${empB.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ first_name: 'Hacked' });
+
+    expect(res.statusCode).toBe(404);
+    expect(res.body).toMatchObject({ ok: false, error: 'EMPLOYEE_NOT_FOUND' });
+  });
+
+  test("PATCH /api/projects/:id on B's project returns 404 PROJECT_NOT_FOUND", async () => {
+    const companyA = await seedCompany();
+    const companyB = await seedCompany();
+    const adminA = await seedUser({ company_id: companyA.company_id, role: 'COMPANY_ADMIN' });
+    const projB = await seedProject({ company_id: companyB.company_id, project_name: 'Original' });
+
+    const { token } = await loginUser(adminA);
+    const res = await request(app)
+      .patch(`/api/projects/${projB.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ project_name: 'Hacked' });
+
+    expect(res.statusCode).toBe(404);
+    expect(res.body).toMatchObject({ ok: false, error: 'PROJECT_NOT_FOUND' });
+  });
+
+  test("DELETE /api/projects/:id on B's project returns 404 PROJECT_NOT_FOUND", async () => {
+    const companyA = await seedCompany();
+    const companyB = await seedCompany();
+    const adminA = await seedUser({ company_id: companyA.company_id, role: 'COMPANY_ADMIN' });
+    const projB = await seedProject({ company_id: companyB.company_id });
+
+    const { token } = await loginUser(adminA);
+    const res = await request(app)
+      .delete(`/api/projects/${projB.id}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(404);
+    expect(res.body).toMatchObject({ ok: false, error: 'PROJECT_NOT_FOUND' });
+  });
+
+  test("PATCH /api/suppliers/:id on B's supplier returns 404 NOT_FOUND", async () => {
+    const companyA = await seedCompany();
+    const companyB = await seedCompany();
+    const adminA = await seedUser({ company_id: companyA.company_id, role: 'COMPANY_ADMIN' });
+    const supB = await seedSupplier({ company_id: companyB.company_id });
+
+    const { token } = await loginUser(adminA);
+    const res = await request(app)
+      .patch(`/api/suppliers/${supB.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Hacked' });
+
+    expect(res.statusCode).toBe(404);
+    expect(res.body).toMatchObject({ ok: false, error: 'NOT_FOUND' });
+  });
+
+  test("DELETE /api/suppliers/:id on B's supplier returns 404 NOT_FOUND", async () => {
+    const companyA = await seedCompany();
+    const companyB = await seedCompany();
+    const adminA = await seedUser({ company_id: companyA.company_id, role: 'COMPANY_ADMIN' });
+    const supB = await seedSupplier({ company_id: companyB.company_id });
+
+    const { token } = await loginUser(adminA);
+    const res = await request(app)
+      .delete(`/api/suppliers/${supB.id}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(404);
+    expect(res.body).toMatchObject({ ok: false, error: 'NOT_FOUND' });
+  });
+
+  test("Verify the WRITE actually no-op'd: B's employee row is untouched after cross-tenant PATCH", async () => {
+    const companyA = await seedCompany();
+    const companyB = await seedCompany();
+    const adminA = await seedUser({ company_id: companyA.company_id, role: 'COMPANY_ADMIN' });
+    const empB = await seedEmployee({
+      company_id: companyB.company_id,
+      first_name: 'Untouched',
+      last_name: 'Sentinel',
+    });
+
+    const { token } = await loginUser(adminA);
+    await request(app)
+      .patch(`/api/employees/${empB.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ first_name: 'WAS_HACKED' });
+
+    // Use the test pool directly to read back the row independently of the API.
+    const { getPool } = require('../helpers/db');
+    const { rows } = await getPool().query(
+      'SELECT first_name, last_name FROM public.employees WHERE id = $1',
+      [empB.id]
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].first_name).toBe('Untouched');
+    expect(rows[0].last_name).toBe('Sentinel');
+  });
+});
