@@ -461,7 +461,7 @@ router.post('/requests', can('assignments.create'), async (req, res) => {
     const { rows } = await pool.query(
       `INSERT INTO public.assignment_requests
          (company_id, project_id, requested_for_employee_id, requested_by_user_id,
-          start_date, end_date, shift_start, shift_end, notes, assignment_role,
+          start_date, end_date, shift_start, shift_end, decision_note, assignment_role,
           status, request_type, payload_json,
           decision_by_user_id, decision_at, created_at, updated_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'CREATE_ASSIGNMENT','{}',
@@ -864,7 +864,7 @@ router.patch('/requests/:id/reassign', can('assignments.edit'), async (req, res)
     const { rows } = await client.query(
       `INSERT INTO public.assignment_requests
          (company_id, project_id, requested_for_employee_id, requested_by_user_id,
-          start_date, end_date, shift_start, shift_end, notes,
+          start_date, end_date, shift_start, shift_end, decision_note,
           status, request_type, payload_json,
           decision_by_user_id, decision_at, created_at, updated_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'APPROVED','CREATE_ASSIGNMENT','{}',
@@ -1125,7 +1125,7 @@ router.post('/repeat-confirm', can('assignments.create'), async (req, res) => {
       const { rows } = await client.query(
         `INSERT INTO public.assignment_requests
            (company_id, project_id, requested_for_employee_id, requested_by_user_id,
-            start_date, end_date, shift_start, shift_end, notes, assignment_role,
+            start_date, end_date, shift_start, shift_end, decision_note, assignment_role,
             status, request_type, payload_json,
             decision_by_user_id, decision_at, created_at, updated_at)
          VALUES ($1,$2,$3,$4,$5,$5,$6,$7,$8,$9,'APPROVED','CREATE_ASSIGNMENT','{}',

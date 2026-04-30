@@ -47,13 +47,7 @@ describeIfDb('Workflow — assignment lifecycle', () => {
     await closePool();
   });
 
-  // SKIPPED — surfaces a real product bug discovered by Phase 14:
-  // routes/assignments.js POST /requests INSERTs into a "notes" column
-  // on assignment_requests, but the baseline schema (pg_dump of prod
-  // 2026-04-28) doesn't have that column. Either prod has drifted away
-  // from the dump, or this code path has never run in prod. Separate
-  // tracking issue — re-enable once the schema/route mismatch is fixed.
-  test.skip('COMPANY_ADMIN POST /api/assignments/requests is auto-approved', async () => {
+  test('COMPANY_ADMIN POST /api/assignments/requests is auto-approved', async () => {
     const company = await seedCompany();
     const admin = await seedUser({ company_id: company.company_id, role: 'COMPANY_ADMIN' });
     const project = await seedProject({ company_id: company.company_id });
