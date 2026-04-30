@@ -105,7 +105,8 @@ async function ensureSeedData() {
        ('attendance.checkin',         'Check in/out attendance', 'attendance'),
        ('hub.send_tasks',             'Send hub tasks',          'hub'),
        ('settings.user_management',   'Manage app users',        'settings'),
-       ('bi.access_full',             'Access BI insights',      'bi')
+       ('bi.access_full',             'Access BI insights',      'bi'),
+       ('settings.permissions',       'Manage RBAC matrix',      'settings')
      ON CONFLICT (code) DO NOTHING`
   );
 
@@ -130,7 +131,8 @@ async function ensureSeedData() {
        ('COMPANY_ADMIN', 'attendance.checkin'),
        ('COMPANY_ADMIN', 'hub.send_tasks'),
        ('COMPANY_ADMIN', 'settings.user_management'),
-       ('COMPANY_ADMIN', 'bi.access_full')
+       ('COMPANY_ADMIN', 'bi.access_full'),
+       ('COMPANY_ADMIN', 'settings.permissions')
      ON CONFLICT (role, permission_code) DO NOTHING`
   );
 
