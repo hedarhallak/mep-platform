@@ -40,7 +40,7 @@ router.get('/:project_id', async (req, res) => {
          tt.code  AS trade_code,
          pt.trade_admin_id,
          au.username AS trade_admin_username,
-         ep.first_name || ' ' || ep.last_name AS trade_admin_name,
+         ep.full_name AS trade_admin_name,
          pt.status,
          pt.notes,
          pt.created_at,
@@ -51,7 +51,7 @@ router.get('/:project_id', async (req, res) => {
        FROM public.project_trades pt
        JOIN public.trade_types tt ON tt.id = pt.trade_type_id
        LEFT JOIN public.app_users au ON au.id = pt.trade_admin_id
-       LEFT JOIN public.employee_profiles ep ON ep.id = au.employee_id
+       LEFT JOIN public.employee_profiles ep ON ep.employee_id = au.employee_id
        WHERE pt.project_id = $1 AND pt.company_id = $2
        ORDER BY tt.name`,
       [project_id, companyId]
