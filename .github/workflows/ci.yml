@@ -87,7 +87,10 @@ jobs:
       - name: Tests (Jest, blocking — Phase 10 onward)
         # All test categories run against the PostGIS service container above.
         # Tests that don't need DB (smoke, pure helpers) ignore DATABASE_URL.
-        run: npm test
+        # `--coverage` adds the line/statement/branch coverage summary to the
+        # CI log so we can watch coverage drift over time without enforcing a
+        # threshold yet (Section 18 Week 4 — coverage + branch protection).
+        run: npm test -- --coverage --coverageReporters=text-summary
 
       - name: Knip — dead code detection (informational, CI only — Day 2 Phase 3)
         # NOTE: knip 5.x uses fast-glob + oxc-resolver which crash with null

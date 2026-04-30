@@ -1814,6 +1814,40 @@ The April-26 audit's #1 unanswered worry was tenant data leakage — there was z
 - Cross-tenant write attempts: `PATCH` / `DELETE` of B's resources by A's admin.
 
 After Phase 12 is comprehensive, Phase 13 (RBAC matrix) revisits the same endpoints from the angle of role × permission rather than company × company.
+
+### Phase 13 — Coverage Visibility + Branch Protection Plan (executed)
+
+Section 18 Week 4 has two halves: (a) coverage thresholds enforced in CI, (b) GitHub branch-protection rules forcing every push to land via passing CI. Half (a) needs a baseline reading first. Half (b) is a one-time GitHub UI step.
+
+**(a) Coverage visibility — landed today:**
+- `.github/workflows/ci.yml` Tests step now runs `npm test -- --coverage --coverageReporters=text-summary`. Each CI run prints a one-line-per-folder coverage summary to the log:
+  ```
+  =================== Coverage summary ===================
+  Statements   : XX.XX% ( N/M )
+  Branches     : XX.XX% ( N/M )
+  Functions    : XX.XX% ( N/M )
+  Lines        : XX.XX% ( N/M )
+  ========================================================
+  ```
+- `jest.config.js` already had `collectCoverageFrom` targeting backend source. Added a comment noting where thresholds will eventually go.
+- **No threshold enforced yet.** The plan: read the next CI run's summary, set the initial floor at ~10 percentage points below current values for each metric so trivial drift doesn't break CI, then ratchet up by ~5 pp per month as Phase 14/15 land.
+
+**(b) Branch protection — one-time GitHub UI step (deferred to Hedar):**
+GitHub branch-protection rules can't be code — they live in repo settings. Once Hedar has time:
+1. https://github.com/hedarhallak/mep-platform/settings/branches → Add branch ruleset (or classic rule on `main`)
+2. Enable "Require status checks to pass before merging"
+3. Add as required: `Backend (Node 20)`, `Frontend (Node 20)`, `Mobile (Node 20)`, `Security (Semgrep)`, `Schema (Atlas)`
+4. (Optional) "Require a pull request before merging" — locks down direct pushes; more rigour, more friction. Solo dev can skip this.
+5. (Optional) "Do not allow bypassing the above settings" applied to admins — same trade-off.
+
+**Why this matters:** today Hedar can push directly to `main` and ship even if CI is failing — the entire CI pipeline is advisory in that sense. Branch protection makes CI *enforcing*. Auth regressions, lint errors, Semgrep findings all become hard blockers. That's the point of Day 1's discipline; protection turns it from a habit into a guarantee.
+
+### Pending — next sessions
+- Read CI's coverage summary, set initial Jest `coverageThreshold`, push.
+- Hedar applies the branch protection ruleset on GitHub.
+- Phase 14 — core-workflow integration tests (assignment lifecycle / attendance / materials → PO).
+- Phase 15 — security regression suite.
+- Phase 9.5 — Atlas drift detection + atlas.sum.
 - **Phase 12 — Tenant isolation tests (~20 cases):** Company A cannot read/write Company B data through any endpoint. Highest security value.
 - **Phase 13 — RBAC matrix (~15 cases):** the 13-role × 58-permission matrix verified end-to-end via `can()` middleware. Ensures permission table changes can't silently break access control.
 - **Phase 14 — Core workflow tests (~15 cases):** assignment lifecycle, attendance, materials, hub message delivery.

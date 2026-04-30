@@ -45,6 +45,11 @@ module.exports = {
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'text-summary', 'lcov'],
 
+  // No thresholds yet — Phase 13 will baseline current coverage and set
+  // initial floors. Goal from Section 18 Week 4: ≥70% line coverage on
+  // routes/ once Phase 14/15 (workflows + security regressions) land.
+  // For now, CI prints a summary so we can watch coverage drift over time.
+
   // Reasonable defaults for an Express + pg app.
   testTimeout: 10000, // 10s — plenty for unit tests; integration tests can override
   verbose: false,
