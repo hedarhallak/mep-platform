@@ -1,16 +1,4 @@
 // tests/helpers/db.js — DB connectivity helper for Phase 11c+.
-//
-// Tests that need to talk to a real database import this module. It:
-//   - Exposes `dbAvailable()` — returns true when a non-sentinel
-//     DATABASE_URL is set (i.e. CI's postgres service container or a
-//     local dev opt-in via TEST_DATABASE_URL).
-//   - Exposes `getPool()` — lazily creates a pg.Pool against the test DB
-//     (separate from the app's pool to keep test queries isolated).
-//   - Exposes `closePool()` — call from afterAll() to let Jest exit cleanly.
-//
-// DB-backed test files skip themselves with `describe.skip` when
-// dbAvailable() is false, so smoke + pure-function suites keep working
-// in environments without a Postgres service.
 
 'use strict';
 
@@ -164,9 +152,14 @@ async function seedUser(overrides = {}) {
 async function seedEmployee(overrides = {}) {
   await ensureSeedData();
   const pool = getPool();
-  const code = overrides.employee_code || `${TEST_PREFIX}emp_${uniqueTag()}`;
-  const firstName = overrides.first_name || 'Test';
-  const lastName = overrides.last_name || 'Employee';
+  // Schema has a unique index ux_employees_company_name_ci on
+  // (company_id, lower(trim(first_name)), lower(trim(last_name))). Default
+  // names must be unique-per-call so seedAssignment + other helpers that
+  // auto-create employees in the same company don't collide.
+  const tag = uniqueTag();
+  const code = overrides.employee_code || `${TEST_PREFIX}emp_${tag}`;
+  const firstName = overrides.first_name || `Test${tag}`;
+  const lastName = overrides.last_name || `Employee${tag}`;
   const companyId = overrides.company_id || null;
   const { rows } = await pool.query(
     `INSERT INTO public.employees (employee_code, first_name, last_name, company_id, is_active)
