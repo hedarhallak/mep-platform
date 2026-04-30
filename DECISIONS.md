@@ -1988,3 +1988,44 @@ A regression in either layer would show up as a red CI run before it could ever 
 - **Phase 14 — Core workflow integration tests:** assignment lifecycle, attendance, materials → PO, hub message delivery. Tests the *flow* between layers, not just the boundary at each one.
 - **Phase 15 — Security regression tests:** SQL injection attempts, XSS payloads in templates, file-upload magic-byte bypass.
 - **Coverage ratchet:** thresholds at floor (10/5/5/10). Current measured: ~17/9/13/17. Bump each metric to `current - 2pp` once Phase 14/15 land.
+
+### Phase 14 — Core Workflow Integration Tests (executed)
+
+7 tests on the assignment lifecycle state machine (1 skipped due to a real product bug surfaced by the test). Phase 12+13 validated *boundaries*; Phase 14 walks the *flows*.
+
+**Tests (`tests/integration/workflows.test.js`):**
+
+| Test | Asserts |
+|---|---|
+| ⏭️ POST /api/assignments/requests as COMPANY_ADMIN | 201 + auto_approved=true (SKIPPED — see bug below) |
+| PATCH /requests/:id/approve on PENDING | 200, status=APPROVED, decision_by + decision_at populated |
+| PATCH /requests/:id/reject on PENDING with reason | 200, status=REJECTED, decision_note=reason |
+| PATCH /requests/:id/approve on already-APPROVED | 409 REQUEST_NOT_PENDING |
+| PATCH /requests/:id/reject on already-APPROVED | 409 REQUEST_NOT_PENDING |
+| PATCH /requests/:id/cancel on PENDING | 200, status=CANCELLED |
+| PATCH /requests/:id/cancel on already-CANCELLED | 409 CANNOT_CANCEL |
+
+**Bug discovered (POST test skipped):**
+`routes/assignments.js` POST `/requests` INSERTs into a `notes` column on `assignment_requests`, but the baseline schema (pg_dump of prod 2026-04-28) doesn't have that column. Two possibilities:
+- **Schema drift**: prod has `notes` from a migration not yet captured in the baseline (Phase 9.5 — drift detection — would have caught this).
+- **Dead code path**: the POST route has been broken in prod since `notes` was renamed (perhaps to `decision_note`); no one noticed because the auto-approve UI path may use a different code path or the route isn't actually called from the frontend.
+
+Either way, this is a real product bug. The test is marked `test.skip` with a comment pointing at the issue. Re-enable once the route↔schema mismatch is fixed.
+
+**Helpers extension (`tests/helpers/db.js`):**
+- `ensureSeedData()` extended with `assignments.create` + `assignments.edit` permissions and COMPANY_ADMIN grants. Without `assignments.edit` the PATCH approve/reject/cancel routes 403 before reaching their logic.
+- `cleanupTestRows()` — two new pieces of nuance discovered while wiring Phase 14:
+  - **`audit_logs` is immutable**: a DB trigger blocks DELETE/UPDATE on audit_logs (`audit_logs is immutable — updates and deletes are not allowed`). The `audit()` calls in approve/reject/cancel routes write rows to audit_logs that we can't clean up. Removed the `DELETE audit_logs` from cleanup; the rows leak harmlessly.
+  - **`audit_logs.company_id` FK**: with `ON DELETE NO ACTION`, deleting test_ companies fails (`23503` FK violation) once audit rows reference them. Wrapped the company DELETE in try/catch that swallows error code 23503; test_ companies leak harmlessly. `uniqueTag()` ensures subsequent test runs don't collide on company names.
+
+**Iteration history:**
+- CI #74 — Test 1 (POST) returned 500 from missing `notes` column. Tests 2-7 returned 403 from missing `assignments.edit` grant.
+- CI #76 — Tests run, but cleanup fails on immutable audit_logs DELETE.
+- CI #77 — Cleanup gets past audit_logs but fails on FK violation deleting companies.
+- CI #78 — 123/124 ✅ (+ 1 skipped). Cleanup robust, all 6 active workflow tests pass.
+
+### Pending — next sessions
+- **Fix the assignment_requests `notes` column mismatch** (separate bug fix track, then re-enable the POST test).
+- **Phase 15** — Security regression tests (SQL injection attempts, XSS payloads in templates, file-upload bypass).
+- **Branch protection on GitHub** — UI step at https://github.com/hedarhallak/mep-platform/settings/branches.
+- **Coverage ratchet** — bump thresholds from floor (10/5/5/10) toward current measured (~18/10/14/19).
