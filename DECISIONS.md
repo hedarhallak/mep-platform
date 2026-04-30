@@ -1808,10 +1808,51 @@ The multi-tenant boundary that the entire product depends on now has CI regressi
 **Why this is the most-important security suite:**
 The April-26 audit's #1 unanswered worry was tenant data leakage — there was zero automated verification that Company A couldn't read Company B's records through any endpoint. The 3 tests landing today close that gap on `/api/employees` specifically; the same fixture pattern (two companies + per-company admin + per-company resources + login-and-cross) extends mechanically to every other tenant-scoped endpoint in Phase 12's continuation.
 
+### Phase 12.1 — Tenant Isolation on `GET /api/employees/:id` (executed)
+
+3 new cases extending the same A/B fixture pattern to the per-resource-by-id surface. The most important assertion of the three is the **404 vs 403 distinction** on cross-tenant access.
+
+**Files:**
+- `tests/integration/tenant_isolation.test.js` — new `describe('Tenant isolation — GET /api/employees/:id')` block, 3 cases:
+  - Company A admin GETs B's employee by ID → **404 `EMPLOYEE_NOT_FOUND`** (NOT 200, NOT 403). 403 would confirm the row exists; 404 is the canonical "this row is invisible to you" response and prevents cross-tenant existence probing.
+  - Company A admin GETs their OWN employee by ID → 200 with the row.
+  - Non-numeric `:id` → 400 `INVALID_ID`.
+
+**Why the 404 matters as a security property:**
+A 403 on B's employee row would let A's admin enumerate which IDs exist by status code alone (404 = doesn't exist anywhere; 403 = exists but not yours). The route's `WHERE id = $1 AND company_id = $2` query collapses both cases into "no rows" → 404, deliberately leaking nothing. This test pins that behavior so a well-meaning future refactor (e.g. "let's add a clearer error message") can't regress to a 403 by accident.
+
+### Phase 12.2 — Tenant Isolation on `/api/projects` (executed)
+
+4 new cases on `/api/projects` (list + by-id), same A/B pattern. Covers the second-most-touched tenant-scoped resource after employees.
+
+**Helpers added (`tests/helpers/db.js`):**
+- `seedProject({ company_id, ... })` — inserts a `test_prj_<tag>` row. Looks up `trade_types('GENERAL')` and `project_statuses('ACTIVE')` by canonical code (both seeded by `ensureSeedData()`), since `projects` FKs into both tables.
+- `ensureSeedData()` extended with idempotent inserts of `trade_types('GENERAL')` and `project_statuses('ACTIVE', is_final=false)`. Schema-only baseline ships these tables empty.
+- `cleanupTestRows()` extended to wipe `projects` by `project_code LIKE 'test_%'`. Order matters: projects → companies (the FK has ON DELETE RESTRICT).
+
+**Tests (4 cases across 2 describe blocks):**
+- `GET /api/projects` — A's admin sees only A's projects; B's admin sees only B's (symmetry).
+- `GET /api/projects/:id` — A's admin GETting B's project → 404; A's admin GETting their own project → 200.
+
+CI #61 — 86/86 ✅.
+
+### Phase 12.3 — Tenant Isolation on `/api/suppliers` (executed)
+
+3 new cases on `/api/suppliers`. The route exposes only a list endpoint (no `GET /:id`), so the regression surface here is the list filter — confirms the `WHERE company_id = $1` clause holds end-to-end through middleware + handler, including under the optional `trade_code` query-param branch.
+
+**Helpers added (`tests/helpers/db.js`):**
+- `seedSupplier({ company_id, ... })` — inserts a `test_sup_<tag>` row with name/email/phone derived from the unique tag. Defaults `trade_code='GENERAL'` and `is_active=true` (the route filters `is_active = TRUE`, so inactive seeds would be silently invisible).
+- `cleanupTestRows()` extended to wipe `suppliers` by `name LIKE 'test_%'`. Order matters: suppliers → companies (FK to `companies.company_id`).
+
+**Tests (3 cases):**
+- A's admin sees only A's suppliers (with 2 seeded per company to detect partial filter bugs).
+- B's admin sees only B's suppliers (symmetry).
+- `?trade_code=PLUMBING` filter still respects tenant boundary — defense-in-depth against the conditional branch in the handler that appends `AND (trade_code = $N OR trade_code = 'ALL')`. Both companies have a PLUMBING supplier; A's admin must only see A's.
+
 ### Pending — Phase 12 expansion (next sessions)
-- Same A/B pattern on `/api/projects`, `/api/suppliers`, `/api/assignments`, `/api/material-requests`, `/api/attendance`, `/api/hub`.
-- Per-resource-by-id coverage: `GET /api/employees/:id` where `:id` belongs to the OTHER company → expect 404 (not 200, not 403).
-- Cross-tenant write attempts: `PATCH` / `DELETE` of B's resources by A's admin.
+- Same A/B pattern on `/api/assignments`, `/api/material-requests`, `/api/attendance`, `/api/hub`.
+- Cross-tenant **write** attempts: `PATCH` / `DELETE` of B's resources by A's admin (currently only reads are validated; writes go through the same `WHERE company_id` guard but should be pinned with explicit tests).
+- Per-resource-by-id coverage on the remaining endpoints once each list endpoint has its A/B baseline.
 
 After Phase 12 is comprehensive, Phase 13 (RBAC matrix) revisits the same endpoints from the angle of role × permission rather than company × company.
 

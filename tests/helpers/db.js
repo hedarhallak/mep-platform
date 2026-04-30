@@ -210,6 +210,35 @@ async function seedEmployee(overrides = {}) {
   };
 }
 
+async function seedSupplier(overrides = {}) {
+  await ensureSeedData();
+  const pool = getPool();
+  const tag = uniqueTag();
+  const name = overrides.name || `${TEST_PREFIX}sup_${tag}`;
+  const email = overrides.email || `${TEST_PREFIX}sup_${tag}@example.test`;
+  const phone = overrides.phone || `555-${String(tag).slice(-7)}`;
+  const tradeCode = overrides.trade_code || 'GENERAL';
+  const companyId = overrides.company_id;
+  if (!companyId) throw new Error('seedSupplier requires { company_id }');
+  const isActive = overrides.is_active !== undefined ? overrides.is_active : true;
+
+  const { rows } = await pool.query(
+    `INSERT INTO public.suppliers
+       (company_id, name, email, phone, trade_code, is_active)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING id`,
+    [companyId, name, email, phone, tradeCode, isActive]
+  );
+  return {
+    id: Number(rows[0].id),
+    name,
+    email,
+    phone,
+    trade_code: tradeCode,
+    company_id: companyId,
+  };
+}
+
 async function seedProject(overrides = {}) {
   await ensureSeedData();
   const pool = getPool();
@@ -250,6 +279,7 @@ async function cleanupTestRows() {
   await pool.query(`DELETE FROM public.app_users WHERE username LIKE $1`, [`${TEST_PREFIX}%`]);
   await pool.query(`DELETE FROM public.employees WHERE employee_code LIKE $1`, [`${TEST_PREFIX}%`]);
   await pool.query(`DELETE FROM public.projects WHERE project_code LIKE $1`, [`${TEST_PREFIX}%`]);
+  await pool.query(`DELETE FROM public.suppliers WHERE name LIKE $1`, [`${TEST_PREFIX}%`]);
   await pool.query(`DELETE FROM public.companies WHERE name LIKE $1`, [`${TEST_PREFIX}%`]);
 }
 
@@ -262,5 +292,6 @@ module.exports = {
   seedUser,
   seedEmployee,
   seedProject,
+  seedSupplier,
   cleanupTestRows,
 };

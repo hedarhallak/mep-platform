@@ -159,7 +159,8 @@ describeIfDb('Tenant isolation — GET /api/employees/:id', () => {
 });
 
 // ─── Phase 12.2 — same A/B pattern on /api/projects ────────────────
-const { seedProject } = require('../helpers/db');
+// ─── Phase 12.3 — same A/B pattern on /api/suppliers ───────────────
+const { seedProject, seedSupplier } = require('../helpers/db');
 
 describeIfDb('Tenant isolation — GET /api/projects', () => {
   afterAll(async () => {
@@ -248,5 +249,81 @@ describeIfDb('Tenant isolation — GET /api/projects/:id', () => {
     expect(res.statusCode).toBe(200);
     expect(res.body.ok).toBe(true);
     expect(Number(res.body.project.id)).toBe(projA.id);
+  });
+});
+
+// ─── Phase 12.3 — same A/B pattern on /api/suppliers ───────────────
+// /api/suppliers exposes only a list endpoint (no GET /:id), so the
+// regression surface here is the list filter — confirm the WHERE
+// company_id = $1 clause holds end-to-end through middleware + handler.
+describeIfDb('Tenant isolation — GET /api/suppliers', () => {
+  afterAll(async () => {
+    await cleanupTestRows();
+    await closePool();
+  });
+
+  test("Company A admin sees only A's suppliers", async () => {
+    const companyA = await seedCompany();
+    const companyB = await seedCompany();
+
+    const adminA = await seedUser({ company_id: companyA.company_id, role: 'COMPANY_ADMIN' });
+    const supA1 = await seedSupplier({ company_id: companyA.company_id });
+    const supA2 = await seedSupplier({ company_id: companyA.company_id });
+    const supB1 = await seedSupplier({ company_id: companyB.company_id });
+    const supB2 = await seedSupplier({ company_id: companyB.company_id });
+
+    const { token } = await loginUser(adminA);
+
+    const res = await request(app).get('/api/suppliers').set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(Array.isArray(res.body.suppliers)).toBe(true);
+
+    const returnedIds = res.body.suppliers.map((s) => Number(s.id));
+
+    expect(returnedIds).toEqual(expect.arrayContaining([supA1.id, supA2.id]));
+    expect(returnedIds).not.toContain(supB1.id);
+    expect(returnedIds).not.toContain(supB2.id);
+  });
+
+  test("Company B admin sees only B's suppliers (symmetry)", async () => {
+    const companyA = await seedCompany();
+    const companyB = await seedCompany();
+
+    const adminB = await seedUser({ company_id: companyB.company_id, role: 'COMPANY_ADMIN' });
+    const supA = await seedSupplier({ company_id: companyA.company_id });
+    const supB = await seedSupplier({ company_id: companyB.company_id });
+
+    const { token } = await loginUser(adminB);
+
+    const res = await request(app).get('/api/suppliers').set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(200);
+    const returnedIds = res.body.suppliers.map((s) => Number(s.id));
+    expect(returnedIds).toContain(supB.id);
+    expect(returnedIds).not.toContain(supA.id);
+  });
+
+  test('trade_code filter still respects tenant boundary', async () => {
+    // Defense-in-depth: even with a query param that hits the conditional
+    // branch in the handler, the WHERE company_id clause must hold.
+    const companyA = await seedCompany();
+    const companyB = await seedCompany();
+
+    const adminA = await seedUser({ company_id: companyA.company_id, role: 'COMPANY_ADMIN' });
+    const supA = await seedSupplier({ company_id: companyA.company_id, trade_code: 'PLUMBING' });
+    const supB = await seedSupplier({ company_id: companyB.company_id, trade_code: 'PLUMBING' });
+
+    const { token } = await loginUser(adminA);
+
+    const res = await request(app)
+      .get('/api/suppliers?trade_code=PLUMBING')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(200);
+    const returnedIds = res.body.suppliers.map((s) => Number(s.id));
+    expect(returnedIds).toContain(supA.id);
+    expect(returnedIds).not.toContain(supB.id);
   });
 });
