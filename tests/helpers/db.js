@@ -103,7 +103,8 @@ async function ensureSeedData() {
        ('materials.request_submit',   'Submit material request', 'materials'),
        ('attendance.view',            'View attendance',         'attendance'),
        ('attendance.checkin',         'Check in/out attendance', 'attendance'),
-       ('hub.send_tasks',             'Send hub tasks',          'hub')
+       ('hub.send_tasks',             'Send hub tasks',          'hub'),
+       ('settings.user_management',   'Manage app users',        'settings')
      ON CONFLICT (code) DO NOTHING`
   );
 
@@ -126,7 +127,8 @@ async function ensureSeedData() {
        ('COMPANY_ADMIN', 'materials.request_submit'),
        ('COMPANY_ADMIN', 'attendance.view'),
        ('COMPANY_ADMIN', 'attendance.checkin'),
-       ('COMPANY_ADMIN', 'hub.send_tasks')
+       ('COMPANY_ADMIN', 'hub.send_tasks'),
+       ('COMPANY_ADMIN', 'settings.user_management')
      ON CONFLICT (role, permission_code) DO NOTHING`
   );
 
