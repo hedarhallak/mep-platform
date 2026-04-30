@@ -54,11 +54,18 @@ app.use(
 app.use(express.json());
 
 // --- Rate limiting ---
+// Skip rate limiting under Jest (NODE_ENV=test). Tests issue many auth
+// requests in a tight loop from the same supertest IP; the production
+// auth limit of 20/15min would cause 429s and false-positive failures.
+// All other environments (dev, staging, prod) keep the limits intact.
+const skipInTests = () => process.env.NODE_ENV === 'test';
+
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: skipInTests,
   message: {
     ok: false,
     error: 'TOO_MANY_REQUESTS',
@@ -72,6 +79,7 @@ const refreshLimiter = rateLimit({
   max: 60,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: skipInTests,
   message: { ok: false, error: 'TOO_MANY_REQUESTS' },
 });
 
@@ -81,6 +89,7 @@ const changePinLimiter = rateLimit({
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: skipInTests,
   message: { ok: false, error: 'TOO_MANY_REQUESTS' },
 });
 
@@ -90,6 +99,7 @@ const onboardingLimiter = rateLimit({
   max: 30,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: skipInTests,
   message: { ok: false, error: 'TOO_MANY_REQUESTS' },
 });
 
@@ -99,6 +109,7 @@ const superAdminLimiter = rateLimit({
   max: 200,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: skipInTests,
   message: { ok: false, error: 'TOO_MANY_REQUESTS' },
 });
 
