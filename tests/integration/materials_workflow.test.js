@@ -73,8 +73,8 @@ describeIfDb('Workflow — material requests', () => {
     expect(res.body.ok).toBe(true);
     expect(res.body.request.status).toBe('PENDING');
     expect(Number(res.body.request.company_id)).toBe(company.company_id);
-    expect(res.body.items).toHaveLength(2);
-    expect(res.body.items.map((i) => i.item_name)).toEqual(
+    expect(res.body.request.items).toHaveLength(2);
+    expect(res.body.request.items.map((i) => i.item_name)).toEqual(
       expect.arrayContaining(['3/4" copper pipe', 'PEX fittings'])
     );
 
