@@ -488,3 +488,51 @@ describeIfDb('Tenant isolation — GET /api/materials/requests/:id', () => {
     expect(Number(res.body.request.id)).toBe(mrA.id);
   });
 });
+
+const { seedAttendanceFixture } = require('../helpers/db');
+
+describeIfDb('Tenant isolation — GET /api/attendance', () => {
+  afterAll(async () => {
+    await cleanupTestRows();
+    await closePool();
+  });
+
+  test("Company A admin sees only A's attendance records", async () => {
+    const companyA = await seedCompany();
+    const companyB = await seedCompany();
+    const adminA = await seedUser({ company_id: companyA.company_id, role: 'COMPANY_ADMIN' });
+
+    const fxA = await seedAttendanceFixture({ company_id: companyA.company_id });
+    const fxB = await seedAttendanceFixture({ company_id: companyB.company_id });
+
+    const { token } = await loginUser(adminA);
+
+    const res = await request(app).get('/api/attendance').set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(Array.isArray(res.body.records)).toBe(true);
+
+    const returnedAsgIds = res.body.records.map((r) => Number(r.assignment_request_id));
+    expect(returnedAsgIds).toContain(fxA.assignment.id);
+    expect(returnedAsgIds).not.toContain(fxB.assignment.id);
+  });
+
+  test("Company B admin sees only B's attendance records (symmetry)", async () => {
+    const companyA = await seedCompany();
+    const companyB = await seedCompany();
+    const adminB = await seedUser({ company_id: companyB.company_id, role: 'COMPANY_ADMIN' });
+
+    const fxA = await seedAttendanceFixture({ company_id: companyA.company_id });
+    const fxB = await seedAttendanceFixture({ company_id: companyB.company_id });
+
+    const { token } = await loginUser(adminB);
+
+    const res = await request(app).get('/api/attendance').set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(200);
+    const returnedAsgIds = res.body.records.map((r) => Number(r.assignment_request_id));
+    expect(returnedAsgIds).toContain(fxB.assignment.id);
+    expect(returnedAsgIds).not.toContain(fxA.assignment.id);
+  });
+});

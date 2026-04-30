@@ -1876,8 +1876,24 @@ CI #61 — 86/86 ✅.
 - `GET /api/materials/requests` — A's admin sees only A's; B's admin sees only B's (symmetry).
 - `GET /api/materials/requests/:id` — A's admin GETting B's request → 404 NOT_FOUND; A's admin GETting their own → 200.
 
+### Phase 12.6 — Tenant Isolation on `/api/attendance` (executed)
+
+2 new cases on the attendance surface — heaviest fixture in the suite. The route's SELECT INNER JOINs four tables: `assignment_requests` → `employee_profiles` → `app_users` (on `employee_id`) → `projects`, then LEFT JOINs `attendance_records`. So for an attendance row to surface, the chain must be: company has a project, employee with profile, app_user linked to that employee via `app_users.employee_id`, and an APPROVED assignment whose date range includes today.
+
+**Helpers added (`tests/helpers/db.js`):**
+- `seedUser` extended to accept an `employee_id` override. Previously the helper hardcoded `NULL`; the attendance route's `JOIN app_users au ON au.employee_id = ep.employee_id` made every attendance fixture invisible.
+- `seedAttendanceFixture({ company_id })` — convenience wrapper that chains `seedEmployee` + `seedEmployeeProfile` + `seedUser({ employee_id })` + `seedAssignment({ start_date, end_date })` with a date window of ±1 year so today is always covered.
+- `ensureSeedData()` extended with `'attendance.view'` permission + COMPANY_ADMIN grant.
+- `cleanupTestRows()` extended to wipe `attendance_records` for test companies (FK to assignment_requests is `ON DELETE SET NULL`, so it won't auto-cascade).
+
+**Tests (2 cases):**
+- A's admin sees only A's attendance records (assignment_request_id contained in records, B's not contained).
+- B's admin sees only B's records (symmetry).
+
+The route's by-id surface is via `PATCH /:id/checkout` and `PATCH /:id/confirm` (mutations, not reads), so by-id read coverage doesn't apply here.
+
 ### Pending — Phase 12 expansion (next sessions)
-- Same A/B pattern on `/api/attendance`, `/api/hub`.
+- Same A/B pattern on `/api/hub`.
 - Cross-tenant **write** attempts: `PATCH` / `DELETE` of B's resources by A's admin (currently only reads are validated; writes go through the same `WHERE company_id` guard but should be pinned with explicit tests).
 
 After Phase 12 is comprehensive, Phase 13 (RBAC matrix) revisits the same endpoints from the angle of role × permission rather than company × company.

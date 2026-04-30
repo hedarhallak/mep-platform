@@ -90,7 +90,8 @@ async function ensureSeedData() {
        ('projects.view',              'View projects',           'projects'),
        ('suppliers.view',             'View suppliers',          'suppliers'),
        ('assignments.view',           'View assignments',        'assignments'),
-       ('materials.request_view_own', 'View own material reqs',  'materials')
+       ('materials.request_view_own', 'View own material reqs',  'materials'),
+       ('attendance.view',            'View attendance',         'attendance')
      ON CONFLICT (code) DO NOTHING`
   );
 
@@ -100,7 +101,8 @@ async function ensureSeedData() {
        ('COMPANY_ADMIN', 'projects.view'),
        ('COMPANY_ADMIN', 'suppliers.view'),
        ('COMPANY_ADMIN', 'assignments.view'),
-       ('COMPANY_ADMIN', 'materials.request_view_own')
+       ('COMPANY_ADMIN', 'materials.request_view_own'),
+       ('COMPANY_ADMIN', 'attendance.view')
      ON CONFLICT (role, permission_code) DO NOTHING`
   );
 
@@ -141,23 +143,27 @@ async function seedUser(overrides = {}) {
   const pin = overrides.pin || '1234';
   const isActive = overrides.is_active !== undefined ? overrides.is_active : true;
   const companyId = overrides.company_id || null;
+  const employeeId = overrides.employee_id || null;
   const pinHash = await hashPin(pin);
   const { rows } = await pool.query(
-    `INSERT INTO public.app_users (username, pin_hash, role, is_active, company_id)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO public.app_users (username, pin_hash, role, is_active, company_id, employee_id)
+     VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING id`,
-    [username, pinHash, role, isActive, companyId]
+    [username, pinHash, role, isActive, companyId, employeeId]
   );
-  return { id: Number(rows[0].id), username, role, pin, company_id: companyId };
+  return {
+    id: Number(rows[0].id),
+    username,
+    role,
+    pin,
+    company_id: companyId,
+    employee_id: employeeId,
+  };
 }
 
 async function seedEmployee(overrides = {}) {
   await ensureSeedData();
   const pool = getPool();
-  // Schema has unique index ux_employees_company_name_ci on
-  // (company_id, lower(trim(first_name)), lower(trim(last_name))). Defaults
-  // must be unique-per-call so seedAssignment + other helpers can be invoked
-  // multiple times for the same company.
   const tag = uniqueTag();
   const code = overrides.employee_code || `${TEST_PREFIX}emp_${tag}`;
   const firstName = overrides.first_name || `Test${tag}`;
@@ -345,6 +351,37 @@ async function seedMaterialRequest(overrides = {}) {
   };
 }
 
+// seedAttendanceFixture — sets up the full chain GET /api/attendance needs:
+// employee + employee_profile + app_user (with employee_id) + APPROVED
+// assignment whose date range includes today. Returns { assignment, employee }.
+async function seedAttendanceFixture(overrides = {}) {
+  await ensureSeedData();
+  const companyId = overrides.company_id;
+  if (!companyId) throw new Error('seedAttendanceFixture requires { company_id }');
+
+  const emp = await seedEmployee({ company_id: companyId });
+  await seedEmployeeProfile({ employee_id: emp.id });
+  await seedUser({ company_id: companyId, employee_id: emp.id, role: 'WORKER' });
+
+  // Date window must encompass today; use ±2 years to be safe.
+  const today = new Date();
+  const start = new Date(today.getFullYear() - 1, 0, 1).toISOString().slice(0, 10);
+  const end = new Date(today.getFullYear() + 1, 11, 31).toISOString().slice(0, 10);
+
+  const requester =
+    overrides.requested_by_user_id ||
+    (await seedUser({ company_id: companyId, role: 'COMPANY_ADMIN' })).id;
+
+  const assignment = await seedAssignment({
+    company_id: companyId,
+    employee_id: emp.id,
+    requested_by_user_id: requester,
+    start_date: start,
+    end_date: end,
+  });
+  return { assignment, employee: emp };
+}
+
 async function cleanupTestRows() {
   const pool = getPool();
   await pool.query(
@@ -353,6 +390,11 @@ async function cleanupTestRows() {
     [`${TEST_PREFIX}%`]
   );
   await pool.query(`DELETE FROM public.audit_logs WHERE username LIKE $1`, [`${TEST_PREFIX}%`]);
+  await pool.query(
+    `DELETE FROM public.attendance_records
+     WHERE company_id IN (SELECT company_id FROM public.companies WHERE name LIKE $1)`,
+    [`${TEST_PREFIX}%`]
+  );
   await pool.query(
     `DELETE FROM public.material_request_items
      WHERE request_id IN (
@@ -391,5 +433,6 @@ module.exports = {
   seedSupplier,
   seedAssignment,
   seedMaterialRequest,
+  seedAttendanceFixture,
   cleanupTestRows,
 };
