@@ -45,10 +45,19 @@ module.exports = {
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'text-summary', 'lcov'],
 
-  // No thresholds yet — Phase 13 will baseline current coverage and set
-  // initial floors. Goal from Section 18 Week 4: ≥70% line coverage on
-  // routes/ once Phase 14/15 (workflows + security regressions) land.
-  // For now, CI prints a summary so we can watch coverage drift over time.
+  // Initial coverage thresholds — Phase 13 baseline (CI #59):
+  //   Statements 13.35% / Branches 7.04% / Functions 7.86% / Lines 13.96%
+  // Floors set ~5pp below current values to catch genuine regressions
+  // without flapping on small drift. Ratchet up as Phase 14/15 land.
+  // Goal from Section 18 Week 4: ≥70% line coverage on routes/ eventually.
+  coverageThreshold: {
+    global: {
+      statements: 10,
+      branches: 5,
+      functions: 5,
+      lines: 10,
+    },
+  },
 
   // Reasonable defaults for an Express + pg app.
   testTimeout: 10000, // 10s — plenty for unit tests; integration tests can override
