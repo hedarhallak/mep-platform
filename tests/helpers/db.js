@@ -96,6 +96,7 @@ async function ensureSeedData() {
        ('suppliers.delete',           'Delete suppliers',        'suppliers'),
        ('assignments.view',           'View assignments',        'assignments'),
        ('assignments.create',         'Create assignments',      'assignments'),
+       ('assignments.edit',           'Edit assignments',        'assignments'),
        ('materials.request_view_own', 'View own material reqs',  'materials'),
        ('attendance.view',            'View attendance',         'attendance'),
        ('hub.send_tasks',             'Send hub tasks',          'hub')
@@ -114,6 +115,7 @@ async function ensureSeedData() {
        ('COMPANY_ADMIN', 'suppliers.delete'),
        ('COMPANY_ADMIN', 'assignments.view'),
        ('COMPANY_ADMIN', 'assignments.create'),
+       ('COMPANY_ADMIN', 'assignments.edit'),
        ('COMPANY_ADMIN', 'materials.request_view_own'),
        ('COMPANY_ADMIN', 'attendance.view'),
        ('COMPANY_ADMIN', 'hub.send_tasks')
