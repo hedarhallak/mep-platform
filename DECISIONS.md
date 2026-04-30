@@ -1892,9 +1892,22 @@ CI #61 — 86/86 ✅.
 
 The route's by-id surface is via `PATCH /:id/checkout` and `PATCH /:id/confirm` (mutations, not reads), so by-id read coverage doesn't apply here.
 
+### Phase 12.7 — Tenant Isolation on `/api/hub` (executed)
+
+3 new cases on the hub surface — the messaging layer that delivers tasks/blueprints from PMs to workers. Two endpoints exercised:
+- `GET /api/hub/workers` — lists workers in the company (used by send-task UI to pick recipients).
+- `GET /api/hub/my-projects` — lists projects the caller can target.
+
+**Helpers added (`tests/helpers/db.js`):**
+- `ensureSeedData()` extended with `'hub.send_tasks'` permission + COMPANY_ADMIN grant.
+
+**Tests (3 cases):**
+- `GET /api/hub/workers` — A's admin sees only A's worker users (matched by app_users.company_id), B's admin sees only B's (symmetry). Each company seeds an employee + linked WORKER user; the test verifies cross-company workers don't leak.
+- `GET /api/hub/my-projects` — exercises the route's COMPANY_ADMIN fallback path: when the admin has no own assignments / foreman rows, the route falls through from "projects I'm assigned to" to "all active projects in my company" — the latter is the `WHERE company_id = $1` surface this test pins.
+
 ### Pending — Phase 12 expansion (next sessions)
-- Same A/B pattern on `/api/hub`.
 - Cross-tenant **write** attempts: `PATCH` / `DELETE` of B's resources by A's admin (currently only reads are validated; writes go through the same `WHERE company_id` guard but should be pinned with explicit tests).
+- Hub message-delivery (sender_id / recipient_id) tenant isolation — adjacent to current tests but on the message tables themselves.
 
 After Phase 12 is comprehensive, Phase 13 (RBAC matrix) revisits the same endpoints from the angle of role × permission rather than company × company.
 

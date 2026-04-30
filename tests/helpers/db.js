@@ -91,7 +91,8 @@ async function ensureSeedData() {
        ('suppliers.view',             'View suppliers',          'suppliers'),
        ('assignments.view',           'View assignments',        'assignments'),
        ('materials.request_view_own', 'View own material reqs',  'materials'),
-       ('attendance.view',            'View attendance',         'attendance')
+       ('attendance.view',            'View attendance',         'attendance'),
+       ('hub.send_tasks',             'Send hub tasks',          'hub')
      ON CONFLICT (code) DO NOTHING`
   );
 
@@ -102,7 +103,8 @@ async function ensureSeedData() {
        ('COMPANY_ADMIN', 'suppliers.view'),
        ('COMPANY_ADMIN', 'assignments.view'),
        ('COMPANY_ADMIN', 'materials.request_view_own'),
-       ('COMPANY_ADMIN', 'attendance.view')
+       ('COMPANY_ADMIN', 'attendance.view'),
+       ('COMPANY_ADMIN', 'hub.send_tasks')
      ON CONFLICT (role, permission_code) DO NOTHING`
   );
 
@@ -351,9 +353,6 @@ async function seedMaterialRequest(overrides = {}) {
   };
 }
 
-// seedAttendanceFixture — sets up the full chain GET /api/attendance needs:
-// employee + employee_profile + app_user (with employee_id) + APPROVED
-// assignment whose date range includes today. Returns { assignment, employee }.
 async function seedAttendanceFixture(overrides = {}) {
   await ensureSeedData();
   const companyId = overrides.company_id;
@@ -363,7 +362,6 @@ async function seedAttendanceFixture(overrides = {}) {
   await seedEmployeeProfile({ employee_id: emp.id });
   await seedUser({ company_id: companyId, employee_id: emp.id, role: 'WORKER' });
 
-  // Date window must encompass today; use ±2 years to be safe.
   const today = new Date();
   const start = new Date(today.getFullYear() - 1, 0, 1).toISOString().slice(0, 10);
   const end = new Date(today.getFullYear() + 1, 11, 31).toISOString().slice(0, 10);

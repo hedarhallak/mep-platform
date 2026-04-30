@@ -9,6 +9,8 @@ const {
   seedProject,
   seedSupplier,
   seedAssignment,
+  seedMaterialRequest,
+  seedAttendanceFixture,
   cleanupTestRows,
 } = require('../helpers/db');
 
@@ -36,7 +38,6 @@ describeIfDb('Tenant isolation — GET /api/employees', () => {
     const empB2 = await seedEmployee({ company_id: companyB.company_id, first_name: 'Beatrice' });
 
     const { token } = await loginUser(adminA);
-
     const res = await request(app).get('/api/employees').set('Authorization', `Bearer ${token}`);
 
     expect(res.statusCode).toBe(200);
@@ -57,7 +58,6 @@ describeIfDb('Tenant isolation — GET /api/employees', () => {
     const empB = await seedEmployee({ company_id: companyB.company_id, first_name: 'Bob' });
 
     const { token } = await loginUser(adminB);
-
     const res = await request(app).get('/api/employees').set('Authorization', `Bearer ${token}`);
 
     expect(res.statusCode).toBe(200);
@@ -69,7 +69,6 @@ describeIfDb('Tenant isolation — GET /api/employees', () => {
   test('user without a company_id (e.g. orphaned account) is rejected with 403', async () => {
     const orphan = await seedUser({ company_id: null, role: 'COMPANY_ADMIN' });
     const { token } = await loginUser(orphan);
-
     const res = await request(app).get('/api/employees').set('Authorization', `Bearer ${token}`);
 
     expect(res.statusCode).toBe(403);
@@ -90,7 +89,6 @@ describeIfDb('Tenant isolation — GET /api/employees/:id', () => {
     const empB = await seedEmployee({ company_id: companyB.company_id });
 
     const { token } = await loginUser(adminA);
-
     const res = await request(app)
       .get(`/api/employees/${empB.id}`)
       .set('Authorization', `Bearer ${token}`);
@@ -109,7 +107,6 @@ describeIfDb('Tenant isolation — GET /api/employees/:id', () => {
     });
 
     const { token } = await loginUser(adminA);
-
     const res = await request(app)
       .get(`/api/employees/${empA.id}`)
       .set('Authorization', `Bearer ${token}`);
@@ -150,7 +147,6 @@ describeIfDb('Tenant isolation — GET /api/projects', () => {
     const projB2 = await seedProject({ company_id: companyB.company_id, project_name: 'Bravo' });
 
     const { token } = await loginUser(adminA);
-
     const res = await request(app).get('/api/projects').set('Authorization', `Bearer ${token}`);
 
     expect(res.statusCode).toBe(200);
@@ -171,7 +167,6 @@ describeIfDb('Tenant isolation — GET /api/projects', () => {
     const projB = await seedProject({ company_id: companyB.company_id });
 
     const { token } = await loginUser(adminB);
-
     const res = await request(app).get('/api/projects').set('Authorization', `Bearer ${token}`);
 
     expect(res.statusCode).toBe(200);
@@ -194,7 +189,6 @@ describeIfDb('Tenant isolation — GET /api/projects/:id', () => {
     const projB = await seedProject({ company_id: companyB.company_id });
 
     const { token } = await loginUser(adminA);
-
     const res = await request(app)
       .get(`/api/projects/${projB.id}`)
       .set('Authorization', `Bearer ${token}`);
@@ -208,7 +202,6 @@ describeIfDb('Tenant isolation — GET /api/projects/:id', () => {
     const projA = await seedProject({ company_id: companyA.company_id, project_name: 'Same-Co' });
 
     const { token } = await loginUser(adminA);
-
     const res = await request(app)
       .get(`/api/projects/${projA.id}`)
       .set('Authorization', `Bearer ${token}`);
@@ -235,7 +228,6 @@ describeIfDb('Tenant isolation — GET /api/suppliers', () => {
     const supB2 = await seedSupplier({ company_id: companyB.company_id });
 
     const { token } = await loginUser(adminA);
-
     const res = await request(app).get('/api/suppliers').set('Authorization', `Bearer ${token}`);
 
     expect(res.statusCode).toBe(200);
@@ -256,7 +248,6 @@ describeIfDb('Tenant isolation — GET /api/suppliers', () => {
     const supB = await seedSupplier({ company_id: companyB.company_id });
 
     const { token } = await loginUser(adminB);
-
     const res = await request(app).get('/api/suppliers').set('Authorization', `Bearer ${token}`);
 
     expect(res.statusCode).toBe(200);
@@ -273,7 +264,6 @@ describeIfDb('Tenant isolation — GET /api/suppliers', () => {
     const supB = await seedSupplier({ company_id: companyB.company_id, trade_code: 'PLUMBING' });
 
     const { token } = await loginUser(adminA);
-
     const res = await request(app)
       .get('/api/suppliers?trade_code=PLUMBING')
       .set('Authorization', `Bearer ${token}`);
@@ -307,7 +297,6 @@ describeIfDb('Tenant isolation — GET /api/assignments', () => {
     });
 
     const { token } = await loginUser(adminA);
-
     const res = await request(app).get('/api/assignments').set('Authorization', `Bearer ${token}`);
 
     expect(res.statusCode).toBe(200);
@@ -335,7 +324,6 @@ describeIfDb('Tenant isolation — GET /api/assignments', () => {
     });
 
     const { token } = await loginUser(adminB);
-
     const res = await request(app).get('/api/assignments').set('Authorization', `Bearer ${token}`);
 
     expect(res.statusCode).toBe(200);
@@ -379,7 +367,6 @@ describeIfDb('Tenant isolation — GET /api/assignments/requests', () => {
     });
 
     const { token } = await loginUser(adminA);
-
     const res = await request(app)
       .get('/api/assignments/requests')
       .set('Authorization', `Bearer ${token}`);
@@ -394,8 +381,6 @@ describeIfDb('Tenant isolation — GET /api/assignments/requests', () => {
     expect(returnedIds).not.toContain(asgB2.id);
   });
 });
-
-const { seedMaterialRequest } = require('../helpers/db');
 
 describeIfDb('Tenant isolation — GET /api/materials/requests', () => {
   afterAll(async () => {
@@ -414,7 +399,6 @@ describeIfDb('Tenant isolation — GET /api/materials/requests', () => {
     const mrB2 = await seedMaterialRequest({ company_id: companyB.company_id });
 
     const { token } = await loginUser(adminA);
-
     const res = await request(app)
       .get('/api/materials/requests')
       .set('Authorization', `Bearer ${token}`);
@@ -438,7 +422,6 @@ describeIfDb('Tenant isolation — GET /api/materials/requests', () => {
     const mrB = await seedMaterialRequest({ company_id: companyB.company_id });
 
     const { token } = await loginUser(adminB);
-
     const res = await request(app)
       .get('/api/materials/requests')
       .set('Authorization', `Bearer ${token}`);
@@ -463,7 +446,6 @@ describeIfDb('Tenant isolation — GET /api/materials/requests/:id', () => {
     const mrB = await seedMaterialRequest({ company_id: companyB.company_id });
 
     const { token } = await loginUser(adminA);
-
     const res = await request(app)
       .get(`/api/materials/requests/${mrB.id}`)
       .set('Authorization', `Bearer ${token}`);
@@ -478,7 +460,6 @@ describeIfDb('Tenant isolation — GET /api/materials/requests/:id', () => {
     const mrA = await seedMaterialRequest({ company_id: companyA.company_id });
 
     const { token } = await loginUser(adminA);
-
     const res = await request(app)
       .get(`/api/materials/requests/${mrA.id}`)
       .set('Authorization', `Bearer ${token}`);
@@ -488,8 +469,6 @@ describeIfDb('Tenant isolation — GET /api/materials/requests/:id', () => {
     expect(Number(res.body.request.id)).toBe(mrA.id);
   });
 });
-
-const { seedAttendanceFixture } = require('../helpers/db');
 
 describeIfDb('Tenant isolation — GET /api/attendance', () => {
   afterAll(async () => {
@@ -506,7 +485,6 @@ describeIfDb('Tenant isolation — GET /api/attendance', () => {
     const fxB = await seedAttendanceFixture({ company_id: companyB.company_id });
 
     const { token } = await loginUser(adminA);
-
     const res = await request(app).get('/api/attendance').set('Authorization', `Bearer ${token}`);
 
     expect(res.statusCode).toBe(200);
@@ -527,12 +505,104 @@ describeIfDb('Tenant isolation — GET /api/attendance', () => {
     const fxB = await seedAttendanceFixture({ company_id: companyB.company_id });
 
     const { token } = await loginUser(adminB);
-
     const res = await request(app).get('/api/attendance').set('Authorization', `Bearer ${token}`);
 
     expect(res.statusCode).toBe(200);
     const returnedAsgIds = res.body.records.map((r) => Number(r.assignment_request_id));
     expect(returnedAsgIds).toContain(fxB.assignment.id);
     expect(returnedAsgIds).not.toContain(fxA.assignment.id);
+  });
+});
+
+describeIfDb('Tenant isolation — GET /api/hub/workers', () => {
+  afterAll(async () => {
+    await cleanupTestRows();
+    await closePool();
+  });
+
+  test("Company A admin sees only A's workers", async () => {
+    const companyA = await seedCompany();
+    const companyB = await seedCompany();
+    const adminA = await seedUser({ company_id: companyA.company_id, role: 'COMPANY_ADMIN' });
+
+    const empA = await seedEmployee({ company_id: companyA.company_id });
+    const workerA = await seedUser({
+      company_id: companyA.company_id,
+      employee_id: empA.id,
+      role: 'WORKER',
+    });
+    const empB = await seedEmployee({ company_id: companyB.company_id });
+    const workerB = await seedUser({
+      company_id: companyB.company_id,
+      employee_id: empB.id,
+      role: 'WORKER',
+    });
+
+    const { token } = await loginUser(adminA);
+    const res = await request(app).get('/api/hub/workers').set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(Array.isArray(res.body.workers)).toBe(true);
+
+    const returnedUserIds = res.body.workers.map((w) => Number(w.id));
+    expect(returnedUserIds).toContain(workerA.id);
+    expect(returnedUserIds).not.toContain(workerB.id);
+  });
+
+  test("Company B admin sees only B's workers (symmetry)", async () => {
+    const companyA = await seedCompany();
+    const companyB = await seedCompany();
+    const adminB = await seedUser({ company_id: companyB.company_id, role: 'COMPANY_ADMIN' });
+
+    const empA = await seedEmployee({ company_id: companyA.company_id });
+    const workerA = await seedUser({
+      company_id: companyA.company_id,
+      employee_id: empA.id,
+      role: 'WORKER',
+    });
+    const empB = await seedEmployee({ company_id: companyB.company_id });
+    const workerB = await seedUser({
+      company_id: companyB.company_id,
+      employee_id: empB.id,
+      role: 'WORKER',
+    });
+
+    const { token } = await loginUser(adminB);
+    const res = await request(app).get('/api/hub/workers').set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(200);
+    const returnedUserIds = res.body.workers.map((w) => Number(w.id));
+    expect(returnedUserIds).toContain(workerB.id);
+    expect(returnedUserIds).not.toContain(workerA.id);
+  });
+});
+
+describeIfDb('Tenant isolation — GET /api/hub/my-projects', () => {
+  afterAll(async () => {
+    await cleanupTestRows();
+    await closePool();
+  });
+
+  test("Company A admin sees only A's projects (admin fallback path)", async () => {
+    const companyA = await seedCompany();
+    const companyB = await seedCompany();
+    const adminA = await seedUser({ company_id: companyA.company_id, role: 'COMPANY_ADMIN' });
+
+    const projA = await seedProject({ company_id: companyA.company_id });
+    const projB = await seedProject({ company_id: companyB.company_id });
+
+    const { token } = await loginUser(adminA);
+    const res = await request(app)
+      .get('/api/hub/my-projects')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(Array.isArray(res.body.projects)).toBe(true);
+
+    const returnedIds = res.body.projects.map((p) => Number(p.id));
+    expect(returnedIds).toContain(projA.id);
+    expect(returnedIds).not.toContain(projB.id);
   });
 });
