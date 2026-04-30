@@ -422,7 +422,9 @@ async function cleanupTestRows() {
      WHERE user_id IN (SELECT id FROM public.app_users WHERE username LIKE $1)`,
     [`${TEST_PREFIX}%`]
   );
-  await pool.query(`DELETE FROM public.audit_logs WHERE username LIKE $1`, [`${TEST_PREFIX}%`]);
+  // NOTE: audit_logs is append-only by design — a DB trigger blocks
+  // DELETE/UPDATE ("audit_logs is immutable"). Test rows accumulate
+  // there indefinitely; that's intentional and matches prod behavior.
   await pool.query(
     `DELETE FROM public.attendance_records
      WHERE company_id IN (SELECT company_id FROM public.companies WHERE name LIKE $1)`,
