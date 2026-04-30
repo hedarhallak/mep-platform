@@ -86,10 +86,11 @@ async function ensureSeedData() {
 
   await pool.query(
     `INSERT INTO public.permissions (code, description, grp) VALUES
-       ('employees.view',   'View employees',   'employees'),
-       ('projects.view',    'View projects',    'projects'),
-       ('suppliers.view',   'View suppliers',   'suppliers'),
-       ('assignments.view', 'View assignments', 'assignments')
+       ('employees.view',             'View employees',          'employees'),
+       ('projects.view',              'View projects',           'projects'),
+       ('suppliers.view',             'View suppliers',          'suppliers'),
+       ('assignments.view',           'View assignments',        'assignments'),
+       ('materials.request_view_own', 'View own material reqs',  'materials')
      ON CONFLICT (code) DO NOTHING`
   );
 
@@ -98,7 +99,8 @@ async function ensureSeedData() {
        ('COMPANY_ADMIN', 'employees.view'),
        ('COMPANY_ADMIN', 'projects.view'),
        ('COMPANY_ADMIN', 'suppliers.view'),
-       ('COMPANY_ADMIN', 'assignments.view')
+       ('COMPANY_ADMIN', 'assignments.view'),
+       ('COMPANY_ADMIN', 'materials.request_view_own')
      ON CONFLICT (role, permission_code) DO NOTHING`
   );
 
@@ -152,10 +154,10 @@ async function seedUser(overrides = {}) {
 async function seedEmployee(overrides = {}) {
   await ensureSeedData();
   const pool = getPool();
-  // Schema has a unique index ux_employees_company_name_ci on
-  // (company_id, lower(trim(first_name)), lower(trim(last_name))). Default
-  // names must be unique-per-call so seedAssignment + other helpers that
-  // auto-create employees in the same company don't collide.
+  // Schema has unique index ux_employees_company_name_ci on
+  // (company_id, lower(trim(first_name)), lower(trim(last_name))). Defaults
+  // must be unique-per-call so seedAssignment + other helpers can be invoked
+  // multiple times for the same company.
   const tag = uniqueTag();
   const code = overrides.employee_code || `${TEST_PREFIX}emp_${tag}`;
   const firstName = overrides.first_name || `Test${tag}`;
@@ -309,6 +311,40 @@ async function seedAssignment(overrides = {}) {
   };
 }
 
+async function seedMaterialRequest(overrides = {}) {
+  await ensureSeedData();
+  const pool = getPool();
+  const companyId = overrides.company_id;
+  if (!companyId) throw new Error('seedMaterialRequest requires { company_id }');
+
+  const projectId = overrides.project_id || (await seedProject({ company_id: companyId })).id;
+
+  let employeeId = overrides.requested_by;
+  if (!employeeId) {
+    const emp = await seedEmployee({ company_id: companyId });
+    employeeId = emp.id;
+  }
+  await seedEmployeeProfile({ employee_id: employeeId });
+
+  const status = overrides.status || 'PENDING';
+  const note = overrides.note || null;
+
+  const { rows } = await pool.query(
+    `INSERT INTO public.material_requests
+       (company_id, project_id, requested_by, status, note)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING id`,
+    [companyId, projectId, employeeId, status, note]
+  );
+  return {
+    id: Number(rows[0].id),
+    company_id: companyId,
+    project_id: projectId,
+    requested_by: employeeId,
+    status,
+  };
+}
+
 async function cleanupTestRows() {
   const pool = getPool();
   await pool.query(
@@ -317,6 +353,19 @@ async function cleanupTestRows() {
     [`${TEST_PREFIX}%`]
   );
   await pool.query(`DELETE FROM public.audit_logs WHERE username LIKE $1`, [`${TEST_PREFIX}%`]);
+  await pool.query(
+    `DELETE FROM public.material_request_items
+     WHERE request_id IN (
+       SELECT id FROM public.material_requests
+       WHERE company_id IN (SELECT company_id FROM public.companies WHERE name LIKE $1)
+     )`,
+    [`${TEST_PREFIX}%`]
+  );
+  await pool.query(
+    `DELETE FROM public.material_requests
+     WHERE company_id IN (SELECT company_id FROM public.companies WHERE name LIKE $1)`,
+    [`${TEST_PREFIX}%`]
+  );
   await pool.query(
     `DELETE FROM public.assignment_requests
      WHERE company_id IN (SELECT company_id FROM public.companies WHERE name LIKE $1)`,
@@ -341,5 +390,6 @@ module.exports = {
   seedProject,
   seedSupplier,
   seedAssignment,
+  seedMaterialRequest,
   cleanupTestRows,
 };

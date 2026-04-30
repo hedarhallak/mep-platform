@@ -1863,10 +1863,22 @@ CI #61 — 86/86 ✅.
 - `GET /api/assignments` — A's admin sees only A's APPROVED assignments; B's admin sees only B's (symmetry). Each company seeds 1 APPROVED row.
 - `GET /api/assignments/requests` — A's admin sees only A's requests when the result set spans both APPROVED and PENDING. Each company seeds 2 requests (APPROVED + PENDING) to exercise more of the result set without a status filter.
 
+### Phase 12.5 — Tenant Isolation on `/api/materials/requests` (executed)
+
+4 new cases on the materials surface (list + by-id). Mounted at `/api/materials` (note: not `/api/material-requests`). The route's INNER JOIN to `employee_profiles` means a request with no profile on its `requested_by` employee silently disappears — `seedMaterialRequest` chains the profile too.
+
+**Helpers added (`tests/helpers/db.js`):**
+- `seedMaterialRequest({ company_id })` — auto-chains project + employee + employee_profile when not provided as overrides. Defaults to `status='PENDING'`.
+- `ensureSeedData()` extended with `'materials.request_view_own'` permission + COMPANY_ADMIN grant.
+- `cleanupTestRows()` extended to wipe `material_request_items` (FK to material_requests) then `material_requests` for test companies. Order matters: items → requests → projects/companies.
+
+**Tests (4 cases across 2 describe blocks):**
+- `GET /api/materials/requests` — A's admin sees only A's; B's admin sees only B's (symmetry).
+- `GET /api/materials/requests/:id` — A's admin GETting B's request → 404 NOT_FOUND; A's admin GETting their own → 200.
+
 ### Pending — Phase 12 expansion (next sessions)
-- Same A/B pattern on `/api/material-requests`, `/api/attendance`, `/api/hub`.
+- Same A/B pattern on `/api/attendance`, `/api/hub`.
 - Cross-tenant **write** attempts: `PATCH` / `DELETE` of B's resources by A's admin (currently only reads are validated; writes go through the same `WHERE company_id` guard but should be pinned with explicit tests).
-- Per-resource-by-id coverage on the remaining endpoints once each list endpoint has its A/B baseline.
 
 After Phase 12 is comprehensive, Phase 13 (RBAC matrix) revisits the same endpoints from the angle of role × permission rather than company × company.
 

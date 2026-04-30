@@ -394,3 +394,97 @@ describeIfDb('Tenant isolation — GET /api/assignments/requests', () => {
     expect(returnedIds).not.toContain(asgB2.id);
   });
 });
+
+const { seedMaterialRequest } = require('../helpers/db');
+
+describeIfDb('Tenant isolation — GET /api/materials/requests', () => {
+  afterAll(async () => {
+    await cleanupTestRows();
+    await closePool();
+  });
+
+  test("Company A admin sees only A's material requests", async () => {
+    const companyA = await seedCompany();
+    const companyB = await seedCompany();
+    const adminA = await seedUser({ company_id: companyA.company_id, role: 'COMPANY_ADMIN' });
+
+    const mrA1 = await seedMaterialRequest({ company_id: companyA.company_id });
+    const mrA2 = await seedMaterialRequest({ company_id: companyA.company_id });
+    const mrB1 = await seedMaterialRequest({ company_id: companyB.company_id });
+    const mrB2 = await seedMaterialRequest({ company_id: companyB.company_id });
+
+    const { token } = await loginUser(adminA);
+
+    const res = await request(app)
+      .get('/api/materials/requests')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(Array.isArray(res.body.requests)).toBe(true);
+
+    const returnedIds = res.body.requests.map((r) => Number(r.id));
+    expect(returnedIds).toEqual(expect.arrayContaining([mrA1.id, mrA2.id]));
+    expect(returnedIds).not.toContain(mrB1.id);
+    expect(returnedIds).not.toContain(mrB2.id);
+  });
+
+  test("Company B admin sees only B's material requests (symmetry)", async () => {
+    const companyA = await seedCompany();
+    const companyB = await seedCompany();
+    const adminB = await seedUser({ company_id: companyB.company_id, role: 'COMPANY_ADMIN' });
+
+    const mrA = await seedMaterialRequest({ company_id: companyA.company_id });
+    const mrB = await seedMaterialRequest({ company_id: companyB.company_id });
+
+    const { token } = await loginUser(adminB);
+
+    const res = await request(app)
+      .get('/api/materials/requests')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(200);
+    const returnedIds = res.body.requests.map((r) => Number(r.id));
+    expect(returnedIds).toContain(mrB.id);
+    expect(returnedIds).not.toContain(mrA.id);
+  });
+});
+
+describeIfDb('Tenant isolation — GET /api/materials/requests/:id', () => {
+  afterAll(async () => {
+    await cleanupTestRows();
+    await closePool();
+  });
+
+  test("Company A admin GETting B's material request by ID returns 404", async () => {
+    const companyA = await seedCompany();
+    const companyB = await seedCompany();
+    const adminA = await seedUser({ company_id: companyA.company_id, role: 'COMPANY_ADMIN' });
+    const mrB = await seedMaterialRequest({ company_id: companyB.company_id });
+
+    const { token } = await loginUser(adminA);
+
+    const res = await request(app)
+      .get(`/api/materials/requests/${mrB.id}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(404);
+    expect(res.body).toMatchObject({ ok: false, error: 'NOT_FOUND' });
+  });
+
+  test('Company A admin GETting their OWN material request returns 200', async () => {
+    const companyA = await seedCompany();
+    const adminA = await seedUser({ company_id: companyA.company_id, role: 'COMPANY_ADMIN' });
+    const mrA = await seedMaterialRequest({ company_id: companyA.company_id });
+
+    const { token } = await loginUser(adminA);
+
+    const res = await request(app)
+      .get(`/api/materials/requests/${mrA.id}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(Number(res.body.request.id)).toBe(mrA.id);
+  });
+});
