@@ -138,6 +138,20 @@ async function ensureSeedData() {
      ON CONFLICT (role, permission_code) DO NOTHING`
   );
 
+  // FK targets for projects: trade_types + project_statuses. Like plans
+  // and roles above, the schema-only baseline ships empty tables; tests
+  // need at least one row in each so seedProject can succeed.
+  await pool.query(
+    `INSERT INTO public.trade_types (code, name) VALUES
+       ('GENERAL', 'General')
+     ON CONFLICT DO NOTHING`
+  );
+  await pool.query(
+    `INSERT INTO public.project_statuses (code, name, is_final) VALUES
+       ('ACTIVE', 'Active', false)
+     ON CONFLICT DO NOTHING`
+  );
+
   _seeded = true;
 }
 
@@ -196,10 +210,37 @@ async function seedEmployee(overrides = {}) {
   };
 }
 
+async function seedProject(overrides = {}) {
+  await ensureSeedData();
+  const pool = getPool();
+  const code = overrides.project_code || `${TEST_PREFIX}prj_${uniqueTag()}`.slice(0, 50);
+  const name = overrides.project_name || 'Test Project';
+  const companyId = overrides.company_id;
+  if (!companyId) throw new Error('seedProject requires { company_id }');
+
+  // Look up the seed trade_type + project_status by their canonical codes.
+  const { rows: tt } = await pool.query(
+    `SELECT id FROM public.trade_types WHERE code = 'GENERAL' LIMIT 1`
+  );
+  const { rows: ps } = await pool.query(
+    `SELECT id FROM public.project_statuses WHERE code = 'ACTIVE' LIMIT 1`
+  );
+
+  const { rows } = await pool.query(
+    `INSERT INTO public.projects
+       (project_code, project_name, trade_type_id, status_id, company_id, ccq_sector)
+     VALUES ($1, $2, $3, $4, $5, 'IC')
+     RETURNING id`,
+    [code, name, tt[0].id, ps[0].id, companyId]
+  );
+  return { id: Number(rows[0].id), project_code: code, project_name: name, company_id: companyId };
+}
+
 async function cleanupTestRows() {
   const pool = getPool();
   // Order matters — refresh_tokens FK to app_users; app_users FK to companies;
-  // employees FK to companies.
+  // employees FK to companies; projects FK to companies (ON DELETE RESTRICT,
+  // so projects must be wiped before companies).
   await pool.query(
     `DELETE FROM public.refresh_tokens
      WHERE user_id IN (SELECT id FROM public.app_users WHERE username LIKE $1)`,
@@ -208,6 +249,7 @@ async function cleanupTestRows() {
   await pool.query(`DELETE FROM public.audit_logs WHERE username LIKE $1`, [`${TEST_PREFIX}%`]);
   await pool.query(`DELETE FROM public.app_users WHERE username LIKE $1`, [`${TEST_PREFIX}%`]);
   await pool.query(`DELETE FROM public.employees WHERE employee_code LIKE $1`, [`${TEST_PREFIX}%`]);
+  await pool.query(`DELETE FROM public.projects WHERE project_code LIKE $1`, [`${TEST_PREFIX}%`]);
   await pool.query(`DELETE FROM public.companies WHERE name LIKE $1`, [`${TEST_PREFIX}%`]);
 }
 
@@ -219,5 +261,6 @@ module.exports = {
   seedCompany,
   seedUser,
   seedEmployee,
+  seedProject,
   cleanupTestRows,
 };

@@ -157,3 +157,96 @@ describeIfDb('Tenant isolation — GET /api/employees/:id', () => {
     expect(res.body).toMatchObject({ ok: false, error: 'INVALID_ID' });
   });
 });
+
+// ─── Phase 12.2 — same A/B pattern on /api/projects ────────────────
+const { seedProject } = require('../helpers/db');
+
+describeIfDb('Tenant isolation — GET /api/projects', () => {
+  afterAll(async () => {
+    await cleanupTestRows();
+    await closePool();
+  });
+
+  test("Company A admin sees only A's projects", async () => {
+    const companyA = await seedCompany();
+    const companyB = await seedCompany();
+
+    const adminA = await seedUser({ company_id: companyA.company_id, role: 'COMPANY_ADMIN' });
+    const projA1 = await seedProject({ company_id: companyA.company_id, project_name: 'Alpha' });
+    const projA2 = await seedProject({ company_id: companyA.company_id, project_name: 'Atrium' });
+    const projB1 = await seedProject({ company_id: companyB.company_id, project_name: 'Beta' });
+    const projB2 = await seedProject({ company_id: companyB.company_id, project_name: 'Bravo' });
+
+    const { token } = await loginUser(adminA);
+
+    const res = await request(app).get('/api/projects').set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(Array.isArray(res.body.projects)).toBe(true);
+
+    const returnedIds = res.body.projects.map((p) => Number(p.id));
+
+    expect(returnedIds).toEqual(expect.arrayContaining([projA1.id, projA2.id]));
+    expect(returnedIds).not.toContain(projB1.id);
+    expect(returnedIds).not.toContain(projB2.id);
+  });
+
+  test("Company B admin sees only B's projects (symmetry)", async () => {
+    const companyA = await seedCompany();
+    const companyB = await seedCompany();
+    const adminB = await seedUser({ company_id: companyB.company_id, role: 'COMPANY_ADMIN' });
+    const projA = await seedProject({ company_id: companyA.company_id });
+    const projB = await seedProject({ company_id: companyB.company_id });
+
+    const { token } = await loginUser(adminB);
+
+    const res = await request(app).get('/api/projects').set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(200);
+    const returnedIds = res.body.projects.map((p) => Number(p.id));
+    expect(returnedIds).toContain(projB.id);
+    expect(returnedIds).not.toContain(projA.id);
+  });
+});
+
+describeIfDb('Tenant isolation — GET /api/projects/:id', () => {
+  afterAll(async () => {
+    await cleanupTestRows();
+    await closePool();
+  });
+
+  test("Company A admin GETting B's project by ID returns 404", async () => {
+    const companyA = await seedCompany();
+    const companyB = await seedCompany();
+    const adminA = await seedUser({ company_id: companyA.company_id, role: 'COMPANY_ADMIN' });
+    const projB = await seedProject({ company_id: companyB.company_id });
+
+    const { token } = await loginUser(adminA);
+
+    const res = await request(app)
+      .get(`/api/projects/${projB.id}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    // Cross-tenant must NOT return 200 with B's data and must NOT 403
+    // (which would confirm the row exists). 404 is the canonical
+    // "this row is invisible to you" response.
+    expect(res.statusCode).toBe(404);
+  });
+
+  test('Company A admin GETting their OWN project returns 200', async () => {
+    const companyA = await seedCompany();
+    const adminA = await seedUser({ company_id: companyA.company_id, role: 'COMPANY_ADMIN' });
+    const projA = await seedProject({ company_id: companyA.company_id, project_name: 'Same-Co' });
+
+    const { token } = await loginUser(adminA);
+
+    const res = await request(app)
+      .get(`/api/projects/${projA.id}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(Number(res.body.project.id)).toBe(projA.id);
+  });
+});
