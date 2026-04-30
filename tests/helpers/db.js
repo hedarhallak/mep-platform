@@ -452,7 +452,17 @@ async function cleanupTestRows() {
   await pool.query(`DELETE FROM public.employees WHERE employee_code LIKE $1`, [`${TEST_PREFIX}%`]);
   await pool.query(`DELETE FROM public.projects WHERE project_code LIKE $1`, [`${TEST_PREFIX}%`]);
   await pool.query(`DELETE FROM public.suppliers WHERE name LIKE $1`, [`${TEST_PREFIX}%`]);
-  await pool.query(`DELETE FROM public.companies WHERE name LIKE $1`, [`${TEST_PREFIX}%`]);
+  // companies has an audit_logs FK with no ON DELETE clause. Once the
+  // workflow tests insert audit rows referencing test_ companies, we
+  // can't delete those companies (and can't delete audit_logs either,
+  // since it's immutable by trigger). Swallow the FK violation — the
+  // test_ companies leak harmlessly and don't break anything; uniqueTag
+  // keeps subsequent runs from colliding on names.
+  try {
+    await pool.query(`DELETE FROM public.companies WHERE name LIKE $1`, [`${TEST_PREFIX}%`]);
+  } catch (err) {
+    if (err.code !== '23503') throw err;
+  }
 }
 
 module.exports = {
