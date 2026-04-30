@@ -60,7 +60,10 @@ module.exports = {
   },
 
   // Reasonable defaults for an Express + pg app.
-  testTimeout: 10000, // 10s — plenty for unit tests; integration tests can override
+  // Bumped to 30s in Phase 12.8 — tenant_isolation.test.js's afterAll
+  // cleanupTestRows() now takes >10s on CI as the suite grew past 100
+  // tests and 8 cleanup queries fan out over thousands of test_* rows.
+  testTimeout: 30000,
   verbose: false,
 
   // Serial execution — Phase 11e fix.
