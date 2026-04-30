@@ -2071,3 +2071,18 @@ This closes the testing roadmap from Section 18 Week 3. Final tally:
 - **Branch protection** on `main` (UI step at https://github.com/hedarhallak/mep-platform/settings/branches). With 130 enforcing tests + lint + format + Semgrep + Atlas, a passing CI is now genuine signal — flipping the switch makes CI *enforcing*, not advisory.
 - **Coverage ratchet** — bump thresholds from floor (10/5/5/10) toward current measured (~18/10/14/19). Floor at "current minus 2pp" so trivial drift doesn't break CI but a real regression does.
 - **Fix the assignment_requests `notes` column mismatch** (separate bug-fix track), then re-enable the skipped POST test from Phase 14.
+
+### Fix — assignment_requests `notes` column mismatch (executed)
+
+The skipped Phase 14 POST test surfaced a real bug: three INSERT statements in `routes/assignments.js` referenced a `notes` column that doesn't exist in the schema. The schema has `decision_note`. The mismatch likely came from a column rename where the INSERT clauses weren't updated, while the SELECT clauses were — those use `ar.decision_note AS notes` to keep the response shape stable.
+
+**Fix:** rename `notes` to `decision_note` in three INSERT statements:
+- `POST /api/assignments/requests` (the create flow)
+- `PATCH /api/assignments/requests/:id/reassign`
+- `POST /api/assignments/repeat-confirm`
+
+The variable name `notes` in JS code (request body field, function args) is preserved — only the SQL column reference changes. Response shape unchanged: SELECT clauses still alias `decision_note AS notes` so any frontend reading `request.notes` keeps working.
+
+**Re-enabled the Phase 14 POST test** that was skipped pending this fix. CI #83: 131/131 ✅, no skipped tests.
+
+This bug had probably been silently broken in any code path that calls these three INSERTs. The COMPANY_ADMIN auto-approve flow definitely 500'd on production for any assignment created via API. Now caught regression-wise.
