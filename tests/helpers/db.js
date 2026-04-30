@@ -390,10 +390,31 @@ async function seedAttendanceFixture(overrides = {}) {
   return { assignment, employee: emp };
 }
 
+async function seedUserPermission(overrides = {}) {
+  await ensureSeedData();
+  const pool = getPool();
+  const userId = overrides.user_id;
+  const permissionCode = overrides.permission_code;
+  if (!userId) throw new Error('seedUserPermission requires { user_id }');
+  if (!permissionCode) throw new Error('seedUserPermission requires { permission_code }');
+  const granted = overrides.granted !== undefined ? overrides.granted : true;
+  await pool.query(
+    `INSERT INTO public.user_permissions (user_id, permission_code, granted)
+     VALUES ($1, $2, $3)`,
+    [userId, permissionCode, granted]
+  );
+  return { user_id: userId, permission_code: permissionCode, granted };
+}
+
 async function cleanupTestRows() {
   const pool = getPool();
   await pool.query(
     `DELETE FROM public.refresh_tokens
+     WHERE user_id IN (SELECT id FROM public.app_users WHERE username LIKE $1)`,
+    [`${TEST_PREFIX}%`]
+  );
+  await pool.query(
+    `DELETE FROM public.user_permissions
      WHERE user_id IN (SELECT id FROM public.app_users WHERE username LIKE $1)`,
     [`${TEST_PREFIX}%`]
   );
@@ -442,5 +463,6 @@ module.exports = {
   seedAssignment,
   seedMaterialRequest,
   seedAttendanceFixture,
+  seedUserPermission,
   cleanupTestRows,
 };
