@@ -100,6 +100,7 @@ async function ensureSeedData() {
        ('assignments.create',         'Create assignments',      'assignments'),
        ('assignments.edit',           'Edit assignments',        'assignments'),
        ('materials.request_view_own', 'View own material reqs',  'materials'),
+       ('materials.request_submit',   'Submit material request', 'materials'),
        ('attendance.view',            'View attendance',         'attendance'),
        ('hub.send_tasks',             'Send hub tasks',          'hub')
      ON CONFLICT (code) DO NOTHING`
@@ -121,6 +122,7 @@ async function ensureSeedData() {
        ('COMPANY_ADMIN', 'assignments.create'),
        ('COMPANY_ADMIN', 'assignments.edit'),
        ('COMPANY_ADMIN', 'materials.request_view_own'),
+       ('COMPANY_ADMIN', 'materials.request_submit'),
        ('COMPANY_ADMIN', 'attendance.view'),
        ('COMPANY_ADMIN', 'hub.send_tasks')
      ON CONFLICT (role, permission_code) DO NOTHING`
