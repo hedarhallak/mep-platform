@@ -62,3 +62,43 @@ describeIfDb('User management — GET /api/users', () => {
     expect(res.body.permission).toBe('settings.user_management');
   });
 });
+
+describeIfDb('User management — PATCH /:id/role + /:id/status', () => {
+  afterAll(async () => {
+    await cleanupTestRows();
+    await closePool();
+  });
+
+  test('PATCH /api/users/:id/status flips is_active (200)', async () => {
+    const company = await seedCompany();
+    const admin = await seedUser({ company_id: company.company_id, role: 'COMPANY_ADMIN' });
+    const target = await seedUser({
+      company_id: company.company_id,
+      role: 'WORKER',
+      is_active: true,
+    });
+    const { token } = await loginUser(admin);
+
+    const res = await request(app)
+      .patch(`/api/users/${target.id}/status`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ is_active: false });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+  });
+
+  test('PATCH /api/users/:id/status without settings.user_management returns 403', async () => {
+    const company = await seedCompany();
+    const worker = await seedUser({ company_id: company.company_id, role: 'WORKER' });
+    const { token } = await loginUser(worker);
+
+    const res = await request(app)
+      .patch(`/api/users/${worker.id}/status`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ is_active: false });
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body.permission).toBe('settings.user_management');
+  });
+});

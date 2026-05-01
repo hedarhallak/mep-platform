@@ -76,3 +76,70 @@ describeIfDb('Reports — /api/reports', () => {
     expect(res.statusCode).toBe(403);
   });
 });
+
+describeIfDb('Reports — additional endpoints', () => {
+  const request = require('supertest');
+  const app2 = require('../../app');
+  let _company;
+  let _admin;
+  let _token;
+
+  beforeAll(async () => {
+    _company = await seedCompany();
+    _admin = await seedUser({ company_id: _company.company_id, role: 'COMPANY_ADMIN' });
+    const res = await request(app2)
+      .post('/api/auth/login')
+      .send({ username: _admin.username, pin: '1234' });
+    _token = res.body.token;
+  });
+
+  afterAll(async () => {
+    await cleanupTestRows();
+    await closePool();
+  });
+
+  test('GET /api/reports/attendance with valid range returns 200', async () => {
+    const res = await request(app2)
+      .get('/api/reports/attendance')
+      .query({ from: '2026-01-01', to: '2026-01-31' })
+      .set('Authorization', `Bearer ${_token}`);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+  });
+
+  test('GET /api/reports/travel with valid range returns 200', async () => {
+    const res = await request(app2)
+      .get('/api/reports/travel')
+      .query({ from: '2026-01-01', to: '2026-01-31' })
+      .set('Authorization', `Bearer ${_token}`);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+  });
+
+  test('GET /api/reports/assignments with valid range returns 200', async () => {
+    const res = await request(app2)
+      .get('/api/reports/assignments')
+      .query({ from: '2026-01-01', to: '2026-01-31' })
+      .set('Authorization', `Bearer ${_token}`);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+  });
+
+  test('GET /api/reports/distance with valid range returns 200', async () => {
+    const res = await request(app2)
+      .get('/api/reports/distance')
+      .query({ from: '2026-01-01', to: '2026-01-31' })
+      .set('Authorization', `Bearer ${_token}`);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+  });
+
+  test('GET /api/reports/my-daily with valid date returns 200', async () => {
+    const res = await request(app2)
+      .get('/api/reports/my-daily')
+      .query({ date: '2026-01-15' })
+      .set('Authorization', `Bearer ${_token}`);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+  });
+});

@@ -2161,3 +2161,87 @@ These routes are blocked on real product issues, not test infra:
 - **Branch protection** on GitHub `main` — UI step at https://github.com/hedarhallak/people-platform/settings/branches. With 181 enforcing tests + lint + format + Semgrep + Atlas, a passing CI is enforcing-grade signal.
 - **Schema redesigns** for the discovered linkage bugs (`assignment_requests.project_trade_id`, `user_invites` table) — separate engineering tracks.
 - **Coverage ratchet again** once Phase 35+ adds more tests; current floor 16/8/12/16, current measured ~27/21/23/28.
+
+---
+
+## Section 19 — Test Coverage Completeness Program (NEW — May 1, 2026)
+
+The April 30 marathon (Phases 12-48) closed Section 18 Week 3 and pushed coverage from 14% to 31% lines. This section sets the rules for finishing the job — every route file in the codebase gets a **minimum smoke coverage** so any future regression shows up in CI immediately.
+
+### Coverage rule per route file
+
+**Every file in `routes/` must have at least:**
+1. **One happy-path test** — a 200 response on a fresh tenant (or specific endpoint behavior pinned).
+2. **One RBAC denial test** — a 403 from a user without the required permission, IF the route uses `can()`.
+3. **One cross-tenant test** — a 404 when the resource belongs to a different company, IF the route is tenant-scoped.
+
+A route file passes the bar when it has 1, 2, and 3 (where applicable). Doesn't have to cover every endpoint — just enough that no route is *completely untested*.
+
+### Inventory at start of Section 19 (May 1, 2026, after Phase 48)
+
+| Route | Endpoints | Status |
+|---|---:|---|
+| `auth.js` | 8 | ✅ Comprehensive (Phase 11d/e + 33) |
+| `employees.js` | 3 | ✅ Comprehensive (Phase 12, 16, 48) |
+| `projects.js` | 9 | ✅ Comprehensive (Phase 12.2, 16, 20) |
+| `suppliers.js` | 4 | ✅ Comprehensive (Phase 12.3, 16, 20) |
+| `assignments.js` | 16 | ✅ Very comprehensive (Phase 12.4, 14, 38, 41, 45) |
+| `material_requests.js` | 15 | ✅ Multiple suites (Phase 12.5, 17, 42, 43) |
+| `attendance.js` | 5 | ✅ (Phase 12.6, 18) |
+| `hub.js` | 9 | ✅ (Phase 12.7, 39, 44) |
+| `profile.js` | 3 | ✅ (Phase 19) |
+| `permissions.js` | 5 | ✅ (Phase 21, 31, 35, 46) |
+| `user_management.js` | 4 | 🟡 Only GET tested (Phase 24) — missing PATCH role/status |
+| `super_admin.js` | 7 | ✅ (Phase 26, 30, 36, 37, 40) |
+| `ccq_rates.js` | 5 | ✅ (Phase 28) |
+| `daily_dispatch.js` | 3 | 🟡 Only /preview (Phase 27) — POST endpoints not tested |
+| `bi.js` | 1 | ✅ (Phase 29) |
+| `standup.js` | 7 | 🟡 Only /tomorrow (Phase 34) — POST /session etc not tested |
+| `project_trades.js` | 4 | ✅ (Phase 22) |
+| `push_tokens_route.js` | 1 | ✅ (Phase 25) |
+| `onboarding.js` | 2 | 🟡 1 test + 1 skipped (Phase 23, schema bug 6) |
+| `reports.js` | 6 | 🟡 Only /hours (Phase 32) — 5 other endpoints not tested |
+| `auto_assign.js` | 2 | 🟡 Only /auto-suggest (Phase 38) — /auto-confirm not tested |
+| `admin_users.js` | 1 | ❌ BLOCKED — needs SENDGRID env mock |
+| `invite_employee.js` | 1 | ❌ BLOCKED — needs SENDGRID env mock |
+| `user_invites.js` | 1 | ❌ BLOCKED — `user_invites` table missing (bug 6) |
+| `project_foremen.js` | 3 | ❌ BLOCKED — schema mismatch (no `pf.id`) |
+| `activate.js` | 2 | 🟡 Untested public endpoint |
+
+### Phase 49 — Activate route minimum smoke
+
+Adds 1 test on `routes/activate.js` to reach minimum-coverage bar.
+
+### Phase 50 — Reports remaining endpoints
+
+Extends `tests/integration/reports.test.js` to cover `/attendance`, `/travel`, `/assignments`, `/distance`, `/my-daily`. Each gets a 200-on-empty assertion.
+
+### Phase 51 — User management mutations (PATCH /:id/role + PATCH /:id/status)
+
+Extends `tests/integration/user_management.test.js`. Verifies role-rank check (caller can't promote target above caller's rank).
+
+### Phase 52 — Daily dispatch + auto-assign mutation surfaces
+
+POST endpoints on these routes — light coverage, validation-only assertions where business logic is heavy.
+
+### Phase 53 — Standup additional endpoints
+
+POST /session + POST /session/:id/complete + GET /materials/:project_id.
+
+### Phase 54 — Onboarding /complete (the second public endpoint)
+
+Validation paths only — happy path blocked on user_invites bug.
+
+### Phase 55 — Schema fix: add `notes` column? Actually `decision_note` rename WAS the fix (April 30). Confirm no remaining drift.
+
+### Phase 56 — Document the BLOCKED routes formally
+
+`admin_users`, `invite_employee`, `user_invites`, `project_foremen` get a paragraph each in DECISIONS.md explaining why they're untested + the unblock plan.
+
+### Phase 57 — Branch protection on GitHub (the closeout)
+
+Final UI step. Closes Section 18 + Section 19 together.
+
+### Goal: every non-blocked route has at least ONE test by end of Section 19.
+
+After Section 19 closes, the only untested code is the 4 routes blocked on real product issues — which are themselves documented bugs/dependencies tracked separately.
