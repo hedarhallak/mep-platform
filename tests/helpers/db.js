@@ -110,7 +110,9 @@ async function ensureSeedData() {
        ('reports.view',               'View company reports',    'reports'),
        ('standup.manage',             'Manage daily standup',    'standup'),
        ('assignments.smart_assign',   'Smart auto-assign',       'assignments'),
-       ('hub.receive_tasks',          'Receive hub tasks',       'hub')
+       ('hub.receive_tasks',          'Receive hub tasks',       'hub'),
+       ('materials.catalog_view',     'View materials catalog',  'materials'),
+       ('materials.surplus_view',     'View materials surplus',  'materials')
      ON CONFLICT (code) DO NOTHING`
   );
 
@@ -140,7 +142,9 @@ async function ensureSeedData() {
        ('COMPANY_ADMIN', 'reports.view'),
        ('COMPANY_ADMIN', 'standup.manage'),
        ('COMPANY_ADMIN', 'assignments.smart_assign'),
-       ('COMPANY_ADMIN', 'hub.receive_tasks')
+       ('COMPANY_ADMIN', 'hub.receive_tasks'),
+       ('COMPANY_ADMIN', 'materials.catalog_view'),
+       ('COMPANY_ADMIN', 'materials.surplus_view')
      ON CONFLICT (role, permission_code) DO NOTHING`
   );
 
