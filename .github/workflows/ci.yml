@@ -75,6 +75,23 @@ jobs:
           psql -h localhost -U postgres -d testdb -c "CREATE ROLE mepuser WITH LOGIN PASSWORD 'testpass';"
           psql -h localhost -U postgres -d testdb -v ON_ERROR_STOP=1 -f migrations/000_baseline_2026-04-28.sql
 
+      - name: Apply pending migrations on top of baseline (Phase 59 onwards)
+        env:
+          PGPASSWORD: testpass
+        run: |
+          # Baseline already applied above. Now apply every migration after
+          # it (001_, 002_, ...) in lexicographic order. We skip 000_* so we
+          # don't replay the baseline (which would fail on duplicate tables).
+          shopt -s nullglob
+          for f in migrations/*.sql; do
+            base=$(basename "$f")
+            if [[ "$base" == 000_* ]]; then
+              continue
+            fi
+            echo "Applying: $base"
+            psql -h localhost -U postgres -d testdb -v ON_ERROR_STOP=1 -f "$f"
+          done
+
       - name: Route audit (check-routes.js)
         run: npm run audit:routes
 
@@ -254,6 +271,17 @@ jobs:
           # it contains CREATE EXTENSION + a 5000+ line schema, simpler than
           # piping through atlas for the first apply.
           psql -h localhost -U postgres -d drifttest -v ON_ERROR_STOP=1 -f migrations/000_baseline_2026-04-28.sql
+
+          # Phase 59 onwards — apply every migration after the baseline.
+          shopt -s nullglob
+          for f in migrations/*.sql; do
+            base=$(basename "$f")
+            if [[ "$base" == 000_* ]]; then
+              continue
+            fi
+            echo "Applying: $base"
+            psql -h localhost -U postgres -d drifttest -v ON_ERROR_STOP=1 -f "$f"
+          done
 
           # Verify: the schema should now have core tables (sanity check).
           psql -h localhost -U postgres -d drifttest -c "\dt" | head -20
