@@ -2198,7 +2198,7 @@ A route file passes the bar when it has 1, 2, and 3 (where applicable). Doesn't 
 | `ccq_rates.js` | 5 | ✅ (Phase 28) |
 | `daily_dispatch.js` | 3 | ✅ /preview + /prepare + /commit (Phase 27, 52) |
 | `bi.js` | 1 | ✅ (Phase 29) |
-| `standup.js` | 7 | 🟡 Only /tomorrow (Phase 34) — POST /session etc not tested |
+| `standup.js` | 7 | ✅ /tomorrow + /session + /session/:id/complete + /materials/:project_id RBAC (Phase 34, 53) |
 | `project_trades.js` | 4 | ✅ (Phase 22) |
 | `push_tokens_route.js` | 1 | ✅ (Phase 25) |
 | `onboarding.js` | 2 | 🟡 1 test + 1 skipped (Phase 23, schema bug 6) |
@@ -2243,9 +2243,19 @@ POST endpoints on these routes — light coverage, validation-only assertions wh
   - WORKER without `assignments.smart_assign` → 403 with `permission: 'assignments.smart_assign'` (RBAC gate runs before payload validation)
   - Happy path NOT covered: business logic is heavy (transaction over `assignment_requests`, overlap checks, SendGrid email queue) and depends on a fully seeded company + email env. Documented as e2e/manual.
 
-### Phase 53 — Standup additional endpoints
+### Phase 53 — Standup additional endpoints ✅
 
 POST /session + POST /session/:id/complete + GET /materials/:project_id.
+
+**Done (May 1, 2026):**
+
+- `tests/integration/standup.test.js` extended with three new `describeIfDb` blocks:
+  - `POST /api/standup/session`: WORKER (no `standup.manage`) → 403 with `permission: 'standup.manage'`.
+  - `POST /api/standup/session/:id/complete`:
+    - COMPANY_ADMIN, non-existent `id=9999999` → 404 `SESSION_NOT_FOUND` (validates the `WHERE id = $2 AND company_id = $3` company-scoped UPDATE — important: prevents cross-tenant completion of someone else's session).
+    - WORKER → 403 RBAC.
+  - `GET /api/standup/materials/:project_id`: WORKER → 403 RBAC.
+- Happy paths NOT covered: they require a fully seeded project + APPROVED foreman assignment in `assignment_requests` chain, which is heavy. Documented as e2e/manual.
 
 ### Phase 54 — Onboarding /complete (the second public endpoint)
 
