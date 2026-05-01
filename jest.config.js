@@ -45,17 +45,22 @@ module.exports = {
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'text-summary', 'lcov'],
 
-  // Coverage thresholds — ratcheted after Phase 15 (CI #80):
-  //   Measured: Statements 18.14% / Branches 10.01% / Functions 14.00% / Lines 18.79%
-  // Floors set ~2pp below current values to catch genuine regressions
-  // without flapping on small drift. Ratchet up again as more tests land.
-  // Goal from Section 18 Week 4: ≥70% line coverage on routes/ eventually.
+  // Coverage thresholds — ratcheted at Phase 58 (May 1, 2026, after Section 19 close):
+  //   Measured (CI #131): Statements 34.85% / Branches 26.44% / Functions 33.9% / Lines 35.97%
+  //   Phase 15 baseline   (CI #80):  Statements 18.14% / Branches 10.01% / Functions 14.00% / Lines 18.79%
+  //
+  // Floors set ~1-2pp below current measured to catch genuine regressions
+  // without flapping on small drift (env order, single-test reorderings,
+  // etc.). The Section 19 marathon doubled the floor in one day — these
+  // numbers exist to prevent that work from regressing silently.
+  // Goal: ≥70% line coverage on routes/ eventually. Ratchet up again
+  // each time a section closes with new coverage.
   coverageThreshold: {
     global: {
-      statements: 16,
-      branches: 8,
-      functions: 12,
-      lines: 16,
+      statements: 33,
+      branches: 25,
+      functions: 32,
+      lines: 34,
     },
   },
 
