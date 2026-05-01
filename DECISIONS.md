@@ -2201,7 +2201,7 @@ A route file passes the bar when it has 1, 2, and 3 (where applicable). Doesn't 
 | `standup.js` | 7 | ✅ /tomorrow + /session + /session/:id/complete + /materials/:project_id RBAC (Phase 34, 53) |
 | `project_trades.js` | 4 | ✅ (Phase 22) |
 | `push_tokens_route.js` | 1 | ✅ (Phase 25) |
-| `onboarding.js` | 2 | 🟡 1 test + 1 skipped (Phase 23, schema bug 6) |
+| `onboarding.js` | 2 | 🟡 /verify validation (Phase 23) + /complete validation (Phase 54), happy paths blocked by Bug 6 |
 | `reports.js` | 6 | 🟡 Only /hours (Phase 32) — 5 other endpoints not tested |
 | `auto_assign.js` | 2 | ✅ /auto-suggest + /auto-confirm validation (Phase 38, 52) |
 | `admin_users.js` | 1 | ❌ BLOCKED — needs SENDGRID env mock |
@@ -2257,9 +2257,20 @@ POST /session + POST /session/:id/complete + GET /materials/:project_id.
   - `GET /api/standup/materials/:project_id`: WORKER → 403 RBAC.
 - Happy paths NOT covered: they require a fully seeded project + APPROVED foreman assignment in `assignment_requests` chain, which is heavy. Documented as e2e/manual.
 
-### Phase 54 — Onboarding /complete (the second public endpoint)
+### Phase 54 — Onboarding /complete (the second public endpoint) ✅
 
-Validation paths only — happy path blocked on user_invites bug.
+Validation paths only — happy path blocked on user_invites bug (Bug 6).
+
+**Done (May 1, 2026):**
+
+`tests/integration/onboarding.test.js` extended with three POST validation tests:
+- empty body `{}` → 400 `TOKEN_REQUIRED`
+- `{ token }` only → 400 `USERNAME_REQUIRED`
+- `{ token, username }` (no pin) → 400 `PIN_REQUIRED`
+
+The validation guards run BEFORE the `SELECT FROM public.user_invites FOR UPDATE` query, so these all short-circuit cleanly without hitting the missing table. The error-code ordering is now pinned — a future refactor that reorders the checks (e.g. PIN before USERNAME) would break the test, which is intentional: clients depend on the specific error code to render the right field-level error message.
+
+Anything past the validation guards (token lookup, username uniqueness, account creation, profile update, invite mark-as-used) still 500s on the missing `user_invites` table. Documented as e2e/manual until Bug 6 is unblocked (Phase 56).
 
 ### Phase 55 — Schema fix: add `notes` column? Actually `decision_note` rename WAS the fix (April 30). Confirm no remaining drift.
 

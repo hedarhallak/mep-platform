@@ -34,3 +34,42 @@ describeIfDb('Onboarding — /api/onboarding/verify', () => {
     expect(res.body).toMatchObject({ ok: false, error: 'TOKEN_NOT_FOUND' });
   });
 });
+
+// Phase 54 — POST /api/onboarding/complete validation surface.
+//
+// /complete is the second public endpoint in this route file. It also
+// hits public.user_invites, which is missing from the baseline schema
+// (Bug 6) — so the happy path 500s. But validation guards run BEFORE
+// the DB query, so we can pin them: missing token / username / pin
+// each short-circuits with a 400 + specific error code, in order.
+//
+// This protects the validation contract from accidental refactor
+// regressions even while the underlying user_invites table is missing.
+describeIfDb('Onboarding — POST /api/onboarding/complete (validation)', () => {
+  afterAll(async () => {
+    await cleanupTestRows();
+    await closePool();
+  });
+
+  test('POST /complete with empty body returns 400 TOKEN_REQUIRED', async () => {
+    const res = await request(app).post('/api/onboarding/complete').send({});
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toMatchObject({ ok: false, error: 'TOKEN_REQUIRED' });
+  });
+
+  test('POST /complete with token only returns 400 USERNAME_REQUIRED', async () => {
+    const res = await request(app)
+      .post('/api/onboarding/complete')
+      .send({ token: 'placeholder-token' });
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toMatchObject({ ok: false, error: 'USERNAME_REQUIRED' });
+  });
+
+  test('POST /complete with token + username but no pin returns 400 PIN_REQUIRED', async () => {
+    const res = await request(app)
+      .post('/api/onboarding/complete')
+      .send({ token: 'placeholder-token', username: 'newuser' });
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toMatchObject({ ok: false, error: 'PIN_REQUIRED' });
+  });
+});
