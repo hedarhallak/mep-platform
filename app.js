@@ -209,7 +209,9 @@ app.use('/api/daily-dispatch', auth, loadRouter('./routes/daily_dispatch'));
 // ── User & invite management ──────────────────────────────────
 app.use('/api/invite-employee', auth, require('./routes/invite_employee'));
 
-app.use('/api/user-invites', auth, loadRouter('./routes/user_invites'));
+// Phase 63 (May 2026) — /api/user-invites/generate was redundant with
+// /api/invite-employee + /api/users/:id/resend (audit confirmed no
+// frontend usage). Route file deleted. See DECISIONS.md Phase 63.
 app.use('/api/admin/users', auth, loadRouter('./routes/admin_users'));
 
 // ── RBAC Permissions ──────────────────────────────────────────

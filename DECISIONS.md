@@ -2125,7 +2125,7 @@ After Phase 12+13+14+15 closed the security baseline (tenant isolation, RBAC, wo
 | 3 | `routes/project_trades.js` JOIN | `ep.id = au.employee_id` — `employee_profiles` PK is `employee_id`, not `id`. |
 | 4 | `routes/project_trades.js` SELECT | `ep.first_name || ep.last_name` — `employee_profiles` has no first/last name columns; only `full_name`. |
 | 5 | `routes/project_trades.js` subquery + DELETE guard | `assignment_requests.project_trade_id` doesn't exist — there's no FK from assignments to trades in the current schema. Subquery + HAS_ACTIVE_ASSIGNMENTS guard removed; TODO to redesign linkage. |
-| 6 | `routes/onboarding.js` + `routes/admin_users.js` + `routes/invite_employee.js` + `routes/user_invites.js` + `routes/user_management.js` (`POST /:id/resend`) | Queries `public.user_invites` — a table that doesn't exist in the baseline schema. Confirmed by Phase 55 audit (May 1, 2026): 5 routes touch `user_invites`. Three are blocked outright (admin_users, invite_employee, user_invites). `onboarding.js` 500s past the validation guards (`/verify` past TOKEN_REQUIRED, `/complete` past PIN_REQUIRED) — Phase 23 + Phase 54 pin only the validation paths. `user_management.js /resend` is shielded from the missing table in CI by the SendGrid env-gate (Phase 55 test pins that ordering). All 5 wait on the same fix: either add `user_invites` table or remove the routes. |
+| 6 ✅ RESOLVED (May 1, 2026 — Phase 59 + 61 + 61b + 62 + 63) | `routes/onboarding.js` + `routes/admin_users.js` + `routes/invite_employee.js` + `routes/user_invites.js` + `routes/user_management.js` (`POST /:id/resend`) | Queries `public.user_invites` — a table that doesn't exist in the baseline schema. Confirmed by Phase 55 audit: 5 routes touched the missing table. **Fix:** Phase 59 added `migrations/001_user_invites.sql` (CI also taught to apply migrations on top of baseline). Phase 61 + 61b + 62 added happy-path tests for admin_users, user_management /resend, invite_employee, onboarding /verify + /complete (all 4 of these now exercise the previously-500ing SQL successfully). Phase 63 deleted `routes/user_invites.js` outright — it had no frontend call sites and was functionally redundant. |
 | 7 | `routes/reports.js` (assignments report) | `ar.notes` doesn't exist — should be `ar.decision_note AS notes`. Same column-rename pattern as Bug 1. Every `GET /api/reports/assignments` was 500-ing. Fixed in Phase 50 (May 1, 2026). |
 | 8 | `routes/daily_dispatch.js` (`POST /prepare`) | Queries `public.assignments` — a table that doesn't exist in the schema. Source of truth is `public.assignment_requests` with different column names (`requested_for_employee_id` not `employee_id`; separate `shift_start`/`shift_end` TIME columns not a single `shift` text). Every `POST /api/daily-dispatch/prepare` was 500-ing in prod. Fixed in Phase 52 (May 1, 2026): rewrote the SELECT to use `assignment_requests`, alias `requested_for_employee_id AS employee_id`, build the `shift` string with `to_char(shift_start, 'HH24:MI') || '-' || to_char(shift_end, 'HH24:MI')`, and added `AND a.status = 'APPROVED'` filter. |
 
@@ -2416,7 +2416,7 @@ Goal — "every non-blocked route has at least ONE test" — **MET**. Section 19
 | `purchase_orders.js` | ✅ | 47 |
 | `admin_users.js` | ✅ | 5 tests (Phase 61) — happy path + RBAC + role-rank + INVALID_ROLE + duplicate |
 | `invite_employee.js` | ✅ | 5 tests (Phase 61b) — happy path + RBAC + 3 validation branches |
-| `user_invites.js` | ⛔ BLOCKED | Bug 6 + SendGrid env, possibly dead code (Phase 56 doc) |
+| ~~`user_invites.js`~~ | DELETED | Phase 63 — confirmed no frontend usage, redundant with admin_users + invite_employee + /resend |
 | `project_foremen.js` | ⛔ BLOCKED | route uses `pf.id` but PK is composite — Phase 56 doc |
 
 22 routes ✅ + 1 🟡 (validation-only) + 4 ⛔ (documented).
@@ -2489,7 +2489,7 @@ Goal: unblock all 5 routes that touch `public.user_invites`.
 | 60 | Run migration on the test schema; verify the 5 affected routes no longer 500 on the missing table | (verification — covered by Phase 61 tests) |
 | 61 | Write tests for `admin_users` + `invite_employee` + `user_management /resend` (env-gate-only or full happy-path with SendGrid mock) | ✅ partial (admin_users + /resend done; invite_employee deferred to Phase 61b) |
 | 62 | Write tests for `onboarding /verify` + `/complete` happy paths — un-skip the Phase 23 test | ✅ 1 PR |
-| 63 | Decide fate of `user_invites.js` (keep as a redundant endpoint, or delete) + mark Bug 6 as resolved in the bug table | 1 PR |
+| 63 | Decide fate of `user_invites.js` (keep as a redundant endpoint, or delete) + mark Bug 6 as resolved in the bug table | ✅ DELETED |
 
 ### Phase 59 — `user_invites` migration ✅
 
@@ -2569,6 +2569,23 @@ The third public endpoint surface (after /verify validation and /complete valida
 - Username already taken → 409 `USERNAME_TAKEN` (uniqueness enforced at the app layer before the INSERT).
 
 **Bug 6 status: 4 of 5 routes ✅.** Only `routes/user_invites.js` remains, and that's pending Phase 63's decide-fate-first call.
+
+### Phase 63 — Delete user_invites.js (Bug 6 fully RESOLVED) ✅
+
+**Done (May 1, 2026):**
+
+Audited `mep-frontend/`, `mep-mobile/`, and `constrai-landing/` for any reference to `/api/user-invites/generate` or the `user-invites` endpoint. **No frontend code calls this endpoint.** The web app's "Add Employee" flow uses `/api/invite-employee` (Phase 61b coverage); the mobile app and landing don't touch invite generation at all. The route was orphan code from an earlier iteration that never got wired up to a UI.
+
+**Decision: delete the file outright** rather than test it. Reasons:
+1. No frontend call sites — adding tests for dead code is just maintenance debt.
+2. Functional redundancy: every code path it offers is already covered by `admin_users.js` (create-user-with-invite) or `user_management.js POST /:id/resend` (regenerate-existing-invite).
+3. Keeping unused routes around is a Bug-6-style risk: schema drift in the live tables would silently break a route nobody noticed, exactly like what happened with `daily_dispatch /prepare` (Bug 8).
+
+**Changes:**
+- Deleted `routes/user_invites.js`.
+- Removed the `app.use('/api/user-invites', ...)` mount from `app.js` and replaced with a comment pointer to this section.
+
+**Bug 6 — RESOLVED.** All five originally-affected routes are now either tested (4) or deleted (1). The Section 18 bug table can be updated to mark Bug 6 closed:
 
 **Bug 6 inventory update.** The Bug 6 entry in Section 18's bug table can be marked **partially resolved**:
 - `routes/admin_users.js` — ✅ tested (Phase 61).
