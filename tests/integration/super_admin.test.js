@@ -142,3 +142,54 @@ describeIfDb('Super admin — company suspend / activate', () => {
     expect(res.body).toMatchObject({ ok: false, error: 'COMPANY_NOT_FOUND' });
   });
 });
+
+describeIfDb('Super admin — PATCH /api/super/companies/:id', () => {
+  afterAll(async () => {
+    await cleanupTestRows();
+    await closePool();
+  });
+
+  test('PATCH /:id with valid plan + name updates the company (200)', async () => {
+    const company = await seedCompany();
+    const sa = await seedUser({ role: 'SUPER_ADMIN', pin: 'sa-pin-1234' });
+    const { token } = await loginUser(sa);
+
+    const res = await request(app)
+      .patch(`/api/super/companies/${company.company_id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Renamed Co', plan: 'PRO' });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.company.name).toBe('Renamed Co');
+    expect(res.body.company.plan).toBe('PRO');
+  });
+
+  test('PATCH /:id with INVALID_PLAN returns 400', async () => {
+    const company = await seedCompany();
+    const sa = await seedUser({ role: 'SUPER_ADMIN', pin: 'sa-pin-1234' });
+    const { token } = await loginUser(sa);
+
+    const res = await request(app)
+      .patch(`/api/super/companies/${company.company_id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ plan: 'NOT_A_REAL_PLAN' });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toMatchObject({ ok: false, error: 'INVALID_PLAN' });
+  });
+
+  test('PATCH /:id with INVALID_STATUS returns 400', async () => {
+    const company = await seedCompany();
+    const sa = await seedUser({ role: 'SUPER_ADMIN', pin: 'sa-pin-1234' });
+    const { token } = await loginUser(sa);
+
+    const res = await request(app)
+      .patch(`/api/super/companies/${company.company_id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: 'NOT_A_STATUS' });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toMatchObject({ ok: false, error: 'INVALID_STATUS' });
+  });
+});
