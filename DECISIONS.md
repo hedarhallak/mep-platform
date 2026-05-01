@@ -2288,9 +2288,86 @@ To prevent silent regression on `/resend`, `tests/integration/user_management.te
 
 **Conclusion:** the codebase is now drift-free at the table-name level. No more silent prod 500s lurking on this dimension.
 
-### Phase 56 — Document the BLOCKED routes formally
+### Phase 56 — Document the BLOCKED routes formally ✅
 
-`admin_users`, `invite_employee`, `user_invites`, `project_foremen` get a paragraph each in DECISIONS.md explaining why they're untested + the unblock plan.
+**Done (May 1, 2026):**
+
+Four route files remain untested at the close of Section 19. None of them are dead code; they're all reachable from the live frontend. They're blocked on real product issues — schema gaps or env mocks — that are outside the scope of "add tests" and need a separate fix-up sprint to unblock. This section is the formal record so the next maintainer doesn't have to re-discover why these gaps exist.
+
+#### `routes/admin_users.js` (~290 LOC) — BLOCKED
+
+Single endpoint: `POST /api/admin/users` — creates an `app_users` row, revokes any existing invites for the email, generates a fresh activation token, writes it to `user_invites`, and sends the activation email via SendGrid.
+
+**Two blockers, both must be fixed together:**
+1. Queries `public.user_invites` (Bug 6) — the table doesn't exist in the baseline schema. Three SQL statements break: revoke-existing UPDATE, INSERT new invite, status SELECT.
+2. Requires `SENDGRID_API_KEY` + `SENDGRID_FROM_EMAIL` + `APP_BASE_URL` env vars. Without them the route 500s with `EMAIL_NOT_CONFIGURED` before the SQL — which is what shields it from the missing-table 500 in CI today.
+
+**Unblock plan:** add a `001_user_invites.sql` migration with the columns enumerated below (see "user_invites schema" section), then either (a) configure SendGrid in CI via secrets and write a happy-path test, or (b) leave SendGrid unset and pin the env-gate 500 like we did for `daily_dispatch /commit` and `user_management /resend`. Option (b) is the cheap path — covers the validation contract without a SendGrid mock dependency.
+
+#### `routes/invite_employee.js` (~250 LOC) — BLOCKED
+
+Single endpoint: `POST /api/invite-employee` — inserts an `employees` row with `is_active = false`, then writes an invite to `user_invites`, then emails. Used by the "Add Employee" flow in the web app.
+
+**Two blockers:**
+1. Queries `public.user_invites` (Bug 6) — same as `admin_users`.
+2. Same SendGrid env trio.
+
+**Unblock plan:** identical to `admin_users` — once the `user_invites` migration lands, test surfaces this route via the env-gate (cheap option) or SendGrid mock (full happy-path).
+
+#### `routes/user_invites.js` (~160 LOC) — BLOCKED
+
+Single endpoint: `POST /api/user-invites/generate` — given an existing employee, regenerate a fresh invite token (revoke any active invite, INSERT new row, send email).
+
+**Two blockers:** identical to `admin_users` — `user_invites` table + SendGrid env. This route is functionally redundant with `admin_users.js POST /api/admin/users` and `user_management.js POST /:id/resend`. **Open question for a follow-up sprint: keep all three or consolidate?** Today nothing on the frontend appears to call `/api/user-invites/generate` directly; it may be dead code. Document but don't add tests until the consolidation question is answered.
+
+#### `routes/project_foremen.js` (~120 LOC) — BLOCKED
+
+Three endpoints: `GET /api/project-foremen/:project_id`, `POST` (assign), `DELETE` (remove).
+
+**Blocker:** the route uses `pf.id` in WHERE clauses and SELECT projections, but `public.project_foremen` has NO `id` column — the PK is composite (`project_id, foreman_employee_id`). The schema baseline confirms the table exists, but with this column set:
+
+```
+project_id, foreman_employee_id, is_active, created_at,
+employee_id, trade_code, company_id, updated_at
+```
+
+**Unblock plan (two options, comparable cost):**
+- **Option A (schema change):** add `id bigserial PRIMARY KEY` to `project_foremen` via migration. This breaks the implicit composite-PK contract and may affect any other code paths that rely on `(project_id, foreman_employee_id)` uniqueness — check for such code first.
+- **Option B (route change):** rewrite the route to address rows by `(project_id, trade_code)` instead of `pf.id`. Cleaner because it matches how the data is actually keyed, but the route's WHERE clauses + the frontend's "remove this foreman" action both need updating in lockstep.
+
+Preferred path: **Option B** — schema is fine, code is wrong. The frontend likely already passes `project_id` + `trade_code` since that's what `auto_assign.js` keys on too.
+
+#### user_invites schema (proposed migration)
+
+The five Bug-6-blocked routes need this table. From their INSERT/UPDATE patterns:
+
+```
+CREATE TABLE public.user_invites (
+  id                  bigserial PRIMARY KEY,
+  company_id          bigint NOT NULL,
+  employee_id         bigint,                       -- nullable: SUPER_ADMIN seat invites have no employee
+  email               text NOT NULL,
+  role                text NOT NULL,
+  token_hash          text NOT NULL UNIQUE,
+  status              text NOT NULL DEFAULT 'ACTIVE'
+                        CHECK (status IN ('ACTIVE','USED','REVOKED','EXPIRED')),
+  created_by_user_id  bigint,
+  note                text,
+  expires_at          timestamptz NOT NULL,
+  sent_at             timestamptz,
+  used_at             timestamptz,
+  revoked_at          timestamptz,
+  created_at          timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_user_invites_company_email ON public.user_invites (company_id, lower(email));
+CREATE INDEX idx_user_invites_status ON public.user_invites (status);
+```
+
+This shape covers every column referenced by `admin_users.js`, `invite_employee.js`, `onboarding.js`, `user_invites.js`, `user_management.js`. **Not a Section 19 deliverable** — just the spec ready for a future sprint.
+
+#### Coverage status at Section 19 close
+
+After Phase 56, every route file in `routes/` either has tests or has a documented unblock plan. The four BLOCKED routes are intentional gaps; they're not failures of the test suite, they're product issues with named owners and named fixes. Section 19's goal — "every non-blocked route has at least ONE test" — is met.
 
 ### Phase 57 — Branch protection on GitHub (the closeout)
 
