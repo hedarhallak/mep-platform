@@ -424,6 +424,46 @@ async function seedAttendanceFixture(overrides = {}) {
   return { assignment, employee: emp };
 }
 
+// Phase 62 (May 2026) — seed a row into public.user_invites so onboarding
+// /verify and /complete tests can exercise the full token-validation flow.
+// The caller passes a `token` (raw string); we hash it the same way the
+// route does (sha256) and insert with that hash. The raw token is
+// returned so the test can pass it to the verify/complete request.
+async function seedUserInvite(overrides = {}) {
+  await ensureSeedData();
+  const pool = getPool();
+  const crypto = require('crypto');
+  const tag = uniqueTag();
+  const token = overrides.token || `${TEST_PREFIX}token_${tag}`;
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const expiresAt =
+    overrides.expires_at !== undefined
+      ? overrides.expires_at
+      : new Date(Date.now() + 48 * 60 * 60 * 1000); // 48h default
+  const status = overrides.status || 'ACTIVE';
+  const email = overrides.email || `${TEST_PREFIX}invite_${tag}@constrai.test`;
+  const role = overrides.role || 'WORKER';
+  const companyId = overrides.company_id || null;
+  const employeeId = overrides.employee_id || null;
+  const { rows } = await pool.query(
+    `INSERT INTO public.user_invites
+       (company_id, employee_id, email, role, token_hash, status, expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING id`,
+    [companyId, employeeId, email, role, tokenHash, status, expiresAt]
+  );
+  return {
+    id: Number(rows[0].id),
+    token, // raw token — pass to /verify / /complete
+    token_hash: tokenHash,
+    email,
+    role,
+    company_id: companyId,
+    employee_id: employeeId,
+    status,
+  };
+}
+
 async function seedUserPermission(overrides = {}) {
   await ensureSeedData();
   const pool = getPool();
@@ -518,5 +558,6 @@ module.exports = {
   seedMaterialRequest,
   seedAttendanceFixture,
   seedUserPermission,
+  seedUserInvite,
   cleanupTestRows,
 };
