@@ -2369,10 +2369,94 @@ This shape covers every column referenced by `admin_users.js`, `invite_employee.
 
 After Phase 56, every route file in `routes/` either has tests or has a documented unblock plan. The four BLOCKED routes are intentional gaps; they're not failures of the test suite, they're product issues with named owners and named fixes. Section 19's goal — "every non-blocked route has at least ONE test" — is met.
 
-### Phase 57 — Branch protection on GitHub (the closeout)
+### Phase 57 — Branch protection on GitHub (the closeout) ✅
 
-Final UI step. Closes Section 18 + Section 19 together.
+**Done (May 1, 2026):**
 
-### Goal: every non-blocked route has at least ONE test by end of Section 19.
+Branch protection rule enabled on `main` via `https://github.com/hedarhallak/mep-platform/settings/branches`. Configuration:
 
-After Section 19 closes, the only untested code is the 4 routes blocked on real product issues — which are themselves documented bugs/dependencies tracked separately.
+- **Require a pull request before merging** — direct pushes to `main` are now blocked. All changes go through PRs.
+- **Require status checks to pass before merging** — all 5 CI jobs are required: `Backend (Node 20)`, `Frontend (Node 20)`, `Mobile (Node 20)`, `Security (Semgrep)`, `Schema (Atlas)`.
+- **Require branches to be up to date before merging** — prevents stale-base merges that would skip running the latest tests.
+- **Require conversation resolution before merging** — every review thread must be resolved.
+- **Do not allow bypassing the above settings** — the rule applies to admins (Hedar) too. No backdoor.
+- **Allow force pushes / Allow deletions** — both off. Main branch history is now immutable.
+- **Require approvals** — left OFF (solo team — GitHub doesn't allow self-approval, and the alternative would be locking Hedar out of his own merges). When the team grows, flip this on with N=1.
+
+The only remaining "trust the human" surface is the optional `Squash and merge` button after CI is green — Hedar still chooses when to land a PR, but he can't land it past red CI.
+
+### Section 19 — CLOSED (May 1, 2026)
+
+Goal — "every non-blocked route has at least ONE test" — **MET**. Section 19 inventory at close:
+
+| Route | Status | Phases |
+|---|---|---|
+| `auth.js` | ✅ | 11d/e + 33 |
+| `employees.js` | ✅ | 12, 16, 48 |
+| `projects.js` | ✅ | 12.2, 16, 20 |
+| `suppliers.js` | ✅ | 12.3, 16, 20 |
+| `assignments.js` | ✅ | 12.4, 14, 38, 41, 45 |
+| `material_requests.js` | ✅ | 12.5, 17, 42, 43 |
+| `attendance.js` | ✅ | 12.6, 18 |
+| `hub.js` | ✅ | 12.7, 39, 44 |
+| `profile.js` | ✅ | 19 |
+| `permissions.js` | ✅ | 21, 31, 35, 46 |
+| `user_management.js` | ✅ | 24, 51, 55 |
+| `super_admin.js` | ✅ | 26, 30, 36, 37, 40 |
+| `ccq_rates.js` | ✅ | 28 |
+| `daily_dispatch.js` | ✅ | 27, 52 |
+| `bi.js` | ✅ | 29 |
+| `standup.js` | ✅ | 34, 53 |
+| `project_trades.js` | ✅ | 22 |
+| `push_tokens_route.js` | ✅ | 25 |
+| `onboarding.js` | 🟡 | 23, 54 — validation only (Bug 6) |
+| `reports.js` | ✅ | 32, 50 |
+| `auto_assign.js` | ✅ | 38, 52 |
+| `activate.js` | ✅ | 49 |
+| `purchase_orders.js` | ✅ | 47 |
+| `admin_users.js` | ⛔ BLOCKED | Bug 6 + SendGrid env (Phase 56 doc) |
+| `invite_employee.js` | ⛔ BLOCKED | Bug 6 + SendGrid env (Phase 56 doc) |
+| `user_invites.js` | ⛔ BLOCKED | Bug 6 + SendGrid env, possibly dead code (Phase 56 doc) |
+| `project_foremen.js` | ⛔ BLOCKED | route uses `pf.id` but PK is composite — Phase 56 doc |
+
+22 routes ✅ + 1 🟡 (validation-only) + 4 ⛔ (documented).
+
+**Production bugs caught + fixed by tests across Section 18 + Section 19:** 8 (logged at the top of Section 18). Every one was a silent prod 500 that nobody had noticed because nothing exercised the route. The test suite is now the canary for these.
+
+### Section 18 — CLOSED (May 1, 2026)
+
+The Engineering Quality Program (CI gates, Prettier, ESLint, route-audit pre-commit hook, Semgrep, Atlas schema check, branch protection) is fully wired. Combined with Section 19's coverage push, the codebase has hard gates at every step from local commit → push → PR → merge. The only thing left to harden is incrementally raising the coverage floor (currently 35.97% lines / 26.44% branches) — but that's a continuous-improvement loop, not a section.
+
+---
+
+## Section 20 — Session Log — May 1, 2026 (full-day testing + Section 18/19 closeout)
+
+**Phases landed today (in order):** 49, 50, 51, 52, 53, 54, 55, 56, 57. Section 19 closed; Section 18 closed.
+
+**Bugs caught + fixed today:**
+- **Bug 7** — `routes/reports.js` queried `ar.notes` (column doesn't exist; should be `ar.decision_note AS notes`). Same pattern as Bug 1. Caught by Phase 50.
+- **Bug 8** — `routes/daily_dispatch.js` `POST /prepare` queried `public.assignments` (table never existed; source of truth is `public.assignment_requests` with different column names). Caught by Phase 52.
+
+**Headline numbers (CI #109 → CI #131):**
+- Tests: 138 → 232 passing (+94 tests in one day)
+- Statements: 26.50% → 34.85% lines (+8.35 pp)
+- Branches: ~22% → 26.44%
+- Test files: 33 → 41
+
+**Workflow changes after today:**
+- All future work goes through PRs (branch protection enforces). No more direct pushes to `main`.
+- New PR workflow:
+  ```
+  git checkout -b <branch-name>
+  # make changes
+  git add . && git commit -m "..."
+  git push origin <branch-name>
+  # open PR on GitHub, wait for all 5 CI checks green, click "Squash and merge"
+  ```
+
+**Where we left off:** Section 19 closed. The next priority is Hedar's choice — options on the table:
+1. **Tackle Bug 6** — write the `user_invites` migration, unblock the 5 affected routes, write happy-path tests for them.
+2. **Coverage floor raise** — start failing CI if coverage drops below the current floor (35% lines). Add `coverageThreshold` to `jest.config.js`.
+3. **Move on to features** — testing infra is solid; pick up product backlog (mobile features, web polish, Quebec-launch checklist).
+
+No automatic next step — pick when ready.
