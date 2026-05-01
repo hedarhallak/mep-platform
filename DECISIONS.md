@@ -2415,7 +2415,7 @@ Goal — "every non-blocked route has at least ONE test" — **MET**. Section 19
 | `activate.js` | ✅ | 49 |
 | `purchase_orders.js` | ✅ | 47 |
 | `admin_users.js` | ✅ | 5 tests (Phase 61) — happy path + RBAC + role-rank + INVALID_ROLE + duplicate |
-| `invite_employee.js` | ⛔ BLOCKED | Bug 6 + SendGrid env (Phase 56 doc) |
+| `invite_employee.js` | ✅ | 5 tests (Phase 61b) — happy path + RBAC + 3 validation branches |
 | `user_invites.js` | ⛔ BLOCKED | Bug 6 + SendGrid env, possibly dead code (Phase 56 doc) |
 | `project_foremen.js` | ⛔ BLOCKED | route uses `pf.id` but PK is composite — Phase 56 doc |
 
@@ -2524,7 +2524,29 @@ Two of the five Bug-6-affected routes now have happy-path coverage thanks to the
 **`tests/helpers/db.js` (extended):** `cleanupTestRows()` now also DELETEs from `public.user_invites` for test companies, before the `app_users` delete (in case of future FK on `user_invites.created_by_user_id`).
 
 **Routes still pending Phase 61b:**
-- `routes/invite_employee.js` — `POST /api/invite-employee`. Heavier flow (creates `employees` row + `user_invites` row + sends two emails). Deferred to its own PR for clarity.
+- `routes/invite_employee.js` — `POST /api/invite-employee`. Heavier flow (creates `employees` row + `user_invites` row + sends two emails). Deferred to its own PR for clarity. ✅ landed in Phase 61b.
+
+### Phase 61b — invite_employee happy path ✅
+
+**Done (May 1, 2026):**
+
+Different mock approach from Phase 61. `routes/invite_employee.js` doesn't use `@sendgrid/mail` directly — it goes through `lib/email.js`'s `sendEmail()` helper. That helper captures `SENDGRID_API_KEY` at MODULE LOAD time (snapshot semantics, lines 17-18 of lib/email.js), so even if `beforeAll` sets the env afterwards, the captured value is still `undefined`. `sendEmail` therefore falls into its graceful no-op branch (logs a warning, returns false) instead of trying to call SendGrid. The route returns `201` with `email_sent: false` — which is exactly what the test wants: SQL writes happen, no real email is sent, no 500. The `jest.mock('@sendgrid/mail', ...)` call is still hoisted at the top as belt-and-suspenders in case lib/email's load order changes.
+
+**`tests/integration/invite_employee.test.js` (new — 5 tests):**
+- Happy path: COMPANY_ADMIN POST → 201 with `employee_id` + `invite_url`. Asserts both rows landed atomically — the `employees` row has `is_active = false` (set true only after onboarding /complete) and `contact_email` matches the invite, the `user_invites` row has `status = 'ACTIVE'` and `expires_at` in the future.
+- WORKER without `employees.invite` → 403 RBAC. Permission was newly added to `tests/helpers/db.js` ensureSeedData (was missing — CI flagged it).
+- Missing `first_name` → 400 `FIRST_NAME_REQUIRED` (validation chain ordering pinned).
+- Invalid email format → 400 `INVALID_EMAIL`.
+- Duplicate email in same company → 409 `EMAIL_ALREADY_REGISTERED`.
+
+**`tests/helpers/db.js` (extended):** added `('employees.invite', 'Invite new employees', 'employees')` to the permissions catalog + `('COMPANY_ADMIN', 'employees.invite')` to the role-permissions seed. This was the missing piece that caused the WORKER-403 test to fail initially.
+
+**Bug 6 inventory update.** Now 3 of 5 routes covered:
+- `routes/admin_users.js` — ✅ (Phase 61).
+- `routes/user_management.js POST /:id/resend` — ✅ (Phase 61).
+- `routes/invite_employee.js` — ✅ (Phase 61b).
+- `routes/onboarding.js` — pending Phase 62.
+- `routes/user_invites.js` — pending Phase 63 (decide fate first).
 
 **Bug 6 inventory update.** The Bug 6 entry in Section 18's bug table can be marked **partially resolved**:
 - `routes/admin_users.js` — ✅ tested (Phase 61).
