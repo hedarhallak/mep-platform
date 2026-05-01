@@ -2194,14 +2194,14 @@ A route file passes the bar when it has 1, 2, and 3 (where applicable). Doesn't 
 | `user_management.js` | 4 | 🟡 Only GET tested (Phase 24) — missing PATCH role/status |
 | `super_admin.js` | 7 | ✅ (Phase 26, 30, 36, 37, 40) |
 | `ccq_rates.js` | 5 | ✅ (Phase 28) |
-| `daily_dispatch.js` | 3 | 🟡 Only /preview (Phase 27) — POST endpoints not tested |
+| `daily_dispatch.js` | 3 | ✅ /preview + /prepare + /commit (Phase 27, 52) |
 | `bi.js` | 1 | ✅ (Phase 29) |
 | `standup.js` | 7 | 🟡 Only /tomorrow (Phase 34) — POST /session etc not tested |
 | `project_trades.js` | 4 | ✅ (Phase 22) |
 | `push_tokens_route.js` | 1 | ✅ (Phase 25) |
 | `onboarding.js` | 2 | 🟡 1 test + 1 skipped (Phase 23, schema bug 6) |
 | `reports.js` | 6 | 🟡 Only /hours (Phase 32) — 5 other endpoints not tested |
-| `auto_assign.js` | 2 | 🟡 Only /auto-suggest (Phase 38) — /auto-confirm not tested |
+| `auto_assign.js` | 2 | ✅ /auto-suggest + /auto-confirm validation (Phase 38, 52) |
 | `admin_users.js` | 1 | ❌ BLOCKED — needs SENDGRID env mock |
 | `invite_employee.js` | 1 | ❌ BLOCKED — needs SENDGRID env mock |
 | `user_invites.js` | 1 | ❌ BLOCKED — `user_invites` table missing (bug 6) |
@@ -2220,9 +2220,24 @@ Extends `tests/integration/reports.test.js` to cover `/attendance`, `/travel`, `
 
 Extends `tests/integration/user_management.test.js`. Verifies role-rank check (caller can't promote target above caller's rank).
 
-### Phase 52 — Daily dispatch + auto-assign mutation surfaces
+### Phase 52 — Daily dispatch + auto-assign mutation surfaces ✅
 
 POST endpoints on these routes — light coverage, validation-only assertions where business logic is heavy.
+
+**Done (May 1, 2026 — single batch commit per Section 4.5 rule):**
+
+- `tests/integration/daily_dispatch.test.js` extended with two new `describeIfDb` blocks:
+  - `POST /api/daily-dispatch/prepare`:
+    - SUPER_ADMIN (no company) → 400 `company_required`
+    - empty tenant happy path → 200 with `run.id`, `employees: 0`, `assignments: 0` (route does NOT 500 on no data — pinned)
+    - second `/prepare` on same date → 409 `already_prepared` with `run` payload (uniqueness gate)
+  - `POST /api/daily-dispatch/commit`:
+    - In CI (no `SENDGRID_API_KEY` / `SENDGRID_FROM_EMAIL`) → 500 `EMAIL_NOT_CONFIGURED`. The env-gate runs BEFORE the run lookup, so a missing SendGrid env never silently falls through to "no run"; pinning this prevents a future refactor from reordering the checks and changing the failure shape.
+- `tests/integration/auto_assign.test.js` extended with `POST /auto-confirm`:
+  - empty body `{}` → 400 `INVALID_PAYLOAD`
+  - `{ target_date, confirmed: [] }` → 400 `INVALID_PAYLOAD` (empty array still rejected)
+  - WORKER without `assignments.smart_assign` → 403 with `permission: 'assignments.smart_assign'` (RBAC gate runs before payload validation)
+  - Happy path NOT covered: business logic is heavy (transaction over `assignment_requests`, overlap checks, SendGrid email queue) and depends on a fully seeded company + email env. Documented as e2e/manual.
 
 ### Phase 53 — Standup additional endpoints
 
