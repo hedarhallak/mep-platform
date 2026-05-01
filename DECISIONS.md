@@ -2454,9 +2454,47 @@ The Engineering Quality Program (CI gates, Prettier, ESLint, route-audit pre-com
   # open PR on GitHub, wait for all 5 CI checks green, click "Squash and merge"
   ```
 
-**Where we left off:** Section 19 closed. The next priority is Hedar's choice — options on the table:
-1. **Tackle Bug 6** — write the `user_invites` migration, unblock the 5 affected routes, write happy-path tests for them.
-2. **Coverage floor raise** — start failing CI if coverage drops below the current floor (35% lines). Add `coverageThreshold` to `jest.config.js`.
-3. **Move on to features** — testing infra is solid; pick up product backlog (mobile features, web polish, Quebec-launch checklist).
+**Where we left off:** Section 19 closed. Decided to do all three follow-ups in sequence — Section 21 below.
+
+---
+
+## Section 21 — Post-Section-19 Roadmap (May 1, 2026 onwards)
+
+After Section 19 closed, three follow-ups stayed on the table. Decision (May 1, 2026): do all three, in this order — coverage floor → Bug 6 → features. Logic: Phase 58 locks today's gains so Bug 6 can't accidentally regress them; Bug 6 raises the floor naturally as it adds tests; features come last on a hardened base.
+
+### Phase 58 — Coverage floor ratchet ✅
+
+**Done (May 1, 2026):**
+
+`jest.config.js` `coverageThreshold` block bumped from the Phase 15 baseline (16/8/12/16) to floors set ~1-2 pp below the current measured values from CI #131:
+
+| Metric | Phase 15 floor | CI #131 measured | Phase 58 floor |
+|---|---|---|---|
+| Statements | 16 | 34.85% | 33 |
+| Branches | 8 | 26.44% | 25 |
+| Functions | 12 | 33.9% | 32 |
+| Lines | 16 | 35.97% | 34 |
+
+The 1-2pp buffer absorbs natural drift from test-order changes or small refactors without flapping CI. Anything bigger — a deleted test suite, a deleted route, a refactor that loses coverage — now fails the `Backend (Node 20)` check, which is a required check on `main` (Phase 57). No silent regression possible.
+
+**Convention going forward:** every section that closes with measurable coverage gain should bump these floors by the same 1-2pp-below-current rule. The floor is a ratchet, not a ceiling.
+
+### Phase 59-63 — Bug 6 fix (NEXT — pending)
+
+Goal: unblock all 5 routes that touch `public.user_invites`.
+
+| Phase | Work | Output |
+|---|---|---|
+| 59 | Write `002_user_invites.sql` migration with the spec from Phase 56 + add the table to `db/schema_baseline_2026-04-26.sql` (or supersede with a fresh dump) | 1 PR |
+| 60 | Run migration on the test schema; verify the 5 affected routes no longer 500 on the missing table | (verification — no PR if Phase 59 covered it) |
+| 61 | Write tests for `admin_users` + `invite_employee` + `user_management /resend` (env-gate-only or full happy-path with SendGrid mock) | 1 PR |
+| 62 | Write tests for `onboarding /verify` + `/complete` happy paths — un-skip the Phase 23 test | 1 PR |
+| 63 | Decide fate of `user_invites.js` (keep as a redundant endpoint, or delete) + mark Bug 6 as resolved in the bug table | 1 PR |
+
+### Phase 64+ — Features (pending)
+
+After Bug 6 closes, the testing infra is fully ratcheted and the codebase is drift-free. Next step is product backlog — Quebec launch checklist, mobile feature gaps, web polish. Specific phases TBD when we get there.
+
+---
 
 No automatic next step — pick when ready.
