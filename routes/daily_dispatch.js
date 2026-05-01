@@ -90,29 +90,37 @@ router.post('/prepare', async (req, res) => {
       throw e;
     }
 
-    // 2) Build snapshot from APPROVED assignments that cover the date
-    // We assume "assignments" table is the source of truth.
+    // 2) Build snapshot from APPROVED assignments that cover the date.
+    // Bug 8 (May 2026): the source-of-truth table is `assignment_requests`,
+    // not `assignments` (which never existed in the schema). Column names
+    // also differ: `requested_for_employee_id` instead of `employee_id`,
+    // separate `shift_start`/`shift_end` TIME columns instead of a single
+    // `shift` text column. We rebuild the `shift` field as a "HH:MM-HH:MM"
+    // string for downstream consumers (preview / commit) that still read
+    // `task.shift`. We also filter to APPROVED — PENDING/REJECTED/CANCELLED
+    // requests are not real assignments.
     const { rows } = await pool.query(
       `
       SELECT
-  a.id AS assignment_id,
-  a.employee_id,
-  e.employee_code,
-  (COALESCE(e.first_name,'') || ' ' || COALESCE(e.last_name,''))::text AS employee_name,
-  a.project_id,
-  p.project_code,
-  p.project_name,
-  p.site_address,
-  a.start_date,
-  a.end_date,
-  a.shift,
-  NULLIF(split_part(COALESCE(a.shift,''), '-', 1), '')::time AS shift_start
-FROM public.assignments a
-      JOIN public.employees e ON e.id = a.employee_id
+        a.id AS assignment_id,
+        a.requested_for_employee_id AS employee_id,
+        e.employee_code,
+        (COALESCE(e.first_name,'') || ' ' || COALESCE(e.last_name,''))::text AS employee_name,
+        a.project_id,
+        p.project_code,
+        p.project_name,
+        p.site_address,
+        a.start_date,
+        a.end_date,
+        (to_char(a.shift_start, 'HH24:MI') || '-' || to_char(a.shift_end, 'HH24:MI')) AS shift,
+        a.shift_start
+      FROM public.assignment_requests a
+      JOIN public.employees e ON e.id = a.requested_for_employee_id
       JOIN public.projects  p ON p.id = a.project_id
       WHERE a.start_date <= $1::date AND a.end_date >= $1::date
         AND a.company_id IS NOT DISTINCT FROM $2
-      ORDER BY a.employee_id, shift_start, p.project_code, a.id
+        AND a.status = 'APPROVED'
+      ORDER BY a.requested_for_employee_id, a.shift_start, p.project_code, a.id
       `,
       [date, companyId]
     );

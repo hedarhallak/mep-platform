@@ -2126,6 +2126,8 @@ After Phase 12+13+14+15 closed the security baseline (tenant isolation, RBAC, wo
 | 4 | `routes/project_trades.js` SELECT | `ep.first_name || ep.last_name` — `employee_profiles` has no first/last name columns; only `full_name`. |
 | 5 | `routes/project_trades.js` subquery + DELETE guard | `assignment_requests.project_trade_id` doesn't exist — there's no FK from assignments to trades in the current schema. Subquery + HAS_ACTIVE_ASSIGNMENTS guard removed; TODO to redesign linkage. |
 | 6 | `routes/onboarding.js` | Queries `public.user_invites` — a table that doesn't exist in the baseline schema. Test skipped with TODO until schema is added or route is removed. |
+| 7 | `routes/reports.js` (assignments report) | `ar.notes` doesn't exist — should be `ar.decision_note AS notes`. Same column-rename pattern as Bug 1. Every `GET /api/reports/assignments` was 500-ing. Fixed in Phase 50 (May 1, 2026). |
+| 8 | `routes/daily_dispatch.js` (`POST /prepare`) | Queries `public.assignments` — a table that doesn't exist in the schema. Source of truth is `public.assignment_requests` with different column names (`requested_for_employee_id` not `employee_id`; separate `shift_start`/`shift_end` TIME columns not a single `shift` text). Every `POST /api/daily-dispatch/prepare` was 500-ing in prod. Fixed in Phase 52 (May 1, 2026): rewrote the SELECT to use `assignment_requests`, alias `requested_for_employee_id AS employee_id`, build the `shift` string with `to_char(shift_start, 'HH24:MI') || '-' || to_char(shift_end, 'HH24:MI')`, and added `AND a.status = 'APPROVED'` filter. |
 
 In all cases the routes were silently broken on prod for weeks/months and nobody noticed because nothing was exercising them. Tests light up the dead corners of the codebase.
 
@@ -2225,6 +2227,8 @@ Extends `tests/integration/user_management.test.js`. Verifies role-rank check (c
 POST endpoints on these routes — light coverage, validation-only assertions where business logic is heavy.
 
 **Done (May 1, 2026 — single batch commit per Section 4.5 rule):**
+
+**Bug 8 surfaced + fixed (the most consequential outcome of Phase 52):** the new `POST /prepare` empty-tenant test failed with 500 in CI: `relation "public.assignments" does not exist`. The route was querying a table that never existed in the baseline schema. Source of truth is `public.assignment_requests`. Same pattern as Bug 1 + Bug 7 — schema drift on a never-tested mutation route. Fix: rewrote the SELECT in `routes/daily_dispatch.js` to use `assignment_requests` with `requested_for_employee_id AS employee_id`, composite `shift` from `shift_start`/`shift_end` via `to_char(..., 'HH24:MI')`, and added a `status = 'APPROVED'` filter (PENDING/REJECTED/CANCELLED requests aren't real assignments). Recorded in the bug table at the top of this section as Bug 8.
 
 - `tests/integration/daily_dispatch.test.js` extended with two new `describeIfDb` blocks:
   - `POST /api/daily-dispatch/prepare`:
