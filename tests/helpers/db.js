@@ -108,7 +108,8 @@ async function ensureSeedData() {
        ('bi.access_full',             'Access BI insights',      'bi'),
        ('settings.permissions',       'Manage RBAC matrix',      'settings'),
        ('reports.view',               'View company reports',    'reports'),
-       ('standup.manage',             'Manage daily standup',    'standup')
+       ('standup.manage',             'Manage daily standup',    'standup'),
+       ('assignments.smart_assign',   'Smart auto-assign',       'assignments')
      ON CONFLICT (code) DO NOTHING`
   );
 
@@ -136,7 +137,8 @@ async function ensureSeedData() {
        ('COMPANY_ADMIN', 'bi.access_full'),
        ('COMPANY_ADMIN', 'settings.permissions'),
        ('COMPANY_ADMIN', 'reports.view'),
-       ('COMPANY_ADMIN', 'standup.manage')
+       ('COMPANY_ADMIN', 'standup.manage'),
+       ('COMPANY_ADMIN', 'assignments.smart_assign')
      ON CONFLICT (role, permission_code) DO NOTHING`
   );
 
