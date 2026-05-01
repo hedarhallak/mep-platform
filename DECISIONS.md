@@ -2414,7 +2414,7 @@ Goal — "every non-blocked route has at least ONE test" — **MET**. Section 19
 | `auto_assign.js` | ✅ | 38, 52 |
 | `activate.js` | ✅ | 49 |
 | `purchase_orders.js` | ✅ | 47 |
-| `admin_users.js` | ⛔ BLOCKED | Bug 6 + SendGrid env (Phase 56 doc) |
+| `admin_users.js` | ✅ | 5 tests (Phase 61) — happy path + RBAC + role-rank + INVALID_ROLE + duplicate |
 | `invite_employee.js` | ⛔ BLOCKED | Bug 6 + SendGrid env (Phase 56 doc) |
 | `user_invites.js` | ⛔ BLOCKED | Bug 6 + SendGrid env, possibly dead code (Phase 56 doc) |
 | `project_foremen.js` | ⛔ BLOCKED | route uses `pf.id` but PK is composite — Phase 56 doc |
@@ -2487,7 +2487,7 @@ Goal: unblock all 5 routes that touch `public.user_invites`.
 |---|---|---|
 | 59 | Write `001_user_invites.sql` migration with the spec from Phase 56 + teach CI to apply migrations on top of baseline | ✅ 1 PR |
 | 60 | Run migration on the test schema; verify the 5 affected routes no longer 500 on the missing table | (verification — covered by Phase 61 tests) |
-| 61 | Write tests for `admin_users` + `invite_employee` + `user_management /resend` (env-gate-only or full happy-path with SendGrid mock) | 1 PR |
+| 61 | Write tests for `admin_users` + `invite_employee` + `user_management /resend` (env-gate-only or full happy-path with SendGrid mock) | ✅ partial (admin_users + /resend done; invite_employee deferred to Phase 61b) |
 | 62 | Write tests for `onboarding /verify` + `/complete` happy paths — un-skip the Phase 23 test | 1 PR |
 | 63 | Decide fate of `user_invites.js` (keep as a redundant endpoint, or delete) + mark Bug 6 as resolved in the bug table | 1 PR |
 
@@ -2500,6 +2500,38 @@ Created `migrations/001_user_invites.sql` — the formal migration that adds `pu
 **CI workflow change (the harder half of Phase 59):**
 
 Until now, `.github/workflows/ci.yml` only applied `migrations/000_baseline_2026-04-28.sql` and stopped — newer migrations were never replayed. That worked while the only migration was the baseline, but breaks the moment a new migration lands. Both the `Backend (Node 20)` job and the `Schema (Atlas)` job got a new step that loops over `migrations/*.sql`, skips the `000_*` baseline (already applied), and replays everything else in lexicographic order via `psql ... -v ON_ERROR_STOP=1`. From now on, any migration we drop into `migrations/` will be picked up by CI automatically.
+
+### Phase 61 — Bug 6 happy-path tests (partial — admin_users + /resend) ✅
+
+**Done (May 1, 2026):**
+
+Two of the five Bug-6-affected routes now have happy-path coverage thanks to the migration from Phase 59 + a SendGrid mock pattern.
+
+**The SendGrid mock approach.** Each test file that exercises a route which calls `sgMail.send` adds `jest.mock('@sendgrid/mail', () => ({ setApiKey: jest.fn(), send: jest.fn().mockResolvedValue([{statusCode:202},{}]) }))` at the top. Jest hoists this above any `require`, so when the route module is loaded transitively via `require('../app')`, it gets the mock — `sgMail.send` becomes a no-op that returns a fake 202 response. Other test files that DON'T hoist this mock (e.g. `daily_dispatch.test.js`'s `/commit` env-gate test) still see the real module — Jest's module isolation works per-file by default. The `beforeAll`/`afterAll` env-var dance further protects the env-gate tests: each happy-path describe block sets `SENDGRID_API_KEY`/`SENDGRID_FROM_EMAIL`/`APP_BASE_URL` only for its tests, then restores the originals (which are `undefined` in CI — keeping the env-gate tests' `EMAIL_NOT_CONFIGURED` assertions valid).
+
+**`tests/integration/admin_users.test.js` (new — 5 tests):**
+- COMPANY_ADMIN creates a TRADE_ADMIN → 201, app_user + ACTIVE user_invite written, `sent_at` non-null after the (mocked) email send. Asserts the row's status + role + sent_at via direct pool query.
+- WORKER without `settings.user_management` → 403 (RBAC).
+- COMPANY_ADMIN tries to create another COMPANY_ADMIN → 403 `INSUFFICIENT_PRIVILEGE` (role-rank check: equal ranks blocked, prevents privilege cloning).
+- Invalid role → 400 `INVALID_ROLE` with `allowed` array.
+- Duplicate email → 409 `USER_EMAIL_EXISTS` with the existing user payload.
+
+**`tests/integration/user_management.test.js` (extended — 3 tests on /resend):**
+- Happy path: POST /:id/resend on un-activated target → 200, fresh ACTIVE invite written under the target's email.
+- Already-activated target → 400 `ALREADY_ACTIVATED`.
+- Cross-company target (admin from company A, target in company B) → 403 `CROSS_COMPANY` (validates the company-scoped check that prevents one tenant from regenerating invites for another tenant's users — important multi-tenant guard).
+
+**`tests/helpers/db.js` (extended):** `cleanupTestRows()` now also DELETEs from `public.user_invites` for test companies, before the `app_users` delete (in case of future FK on `user_invites.created_by_user_id`).
+
+**Routes still pending Phase 61b:**
+- `routes/invite_employee.js` — `POST /api/invite-employee`. Heavier flow (creates `employees` row + `user_invites` row + sends two emails). Deferred to its own PR for clarity.
+
+**Bug 6 inventory update.** The Bug 6 entry in Section 18's bug table can be marked **partially resolved**:
+- `routes/admin_users.js` — ✅ tested (Phase 61).
+- `routes/user_management.js POST /:id/resend` — ✅ tested (Phase 61).
+- `routes/onboarding.js` — pending Phase 62 (un-skip /verify + add /complete happy path).
+- `routes/invite_employee.js` — pending Phase 61b.
+- `routes/user_invites.js` — pending Phase 63 (decide fate first).
 
 **Production deploy note:** when this PR lands on `main`, prod also needs to run the migration. From the server (`ssh root@143.110.218.84`), after pulling main:
 
