@@ -97,7 +97,11 @@ describeIfDb('Daily dispatch — POST /api/daily-dispatch/prepare', () => {
     expect(res.statusCode).toBe(200);
     expect(res.body.ok).toBe(true);
     expect(res.body.run).toBeDefined();
-    expect(typeof res.body.run.id).toBe('number');
+    // run.id is `daily_dispatch_runs.id` which is bigint — pg returns
+    // bigints as strings to avoid losing precision past 2^53. Just
+    // verify it's present and parseable as a positive integer.
+    expect(res.body.run.id).toBeDefined();
+    expect(Number(res.body.run.id)).toBeGreaterThan(0);
     expect(res.body.employees).toBe(0);
     expect(res.body.assignments).toBe(0);
   });
