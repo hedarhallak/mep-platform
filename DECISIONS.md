@@ -2585,7 +2585,42 @@ Audited `mep-frontend/`, `mep-mobile/`, and `constrai-landing/` for any referenc
 - Deleted `routes/user_invites.js`.
 - Removed the `app.use('/api/user-invites', ...)` mount from `app.js` and replaced with a comment pointer to this section.
 
-**Bug 6 — RESOLVED.** All five originally-affected routes are now either tested (4) or deleted (1). The Section 18 bug table can be updated to mark Bug 6 closed:
+**Bug 6 — RESOLVED.** All five originally-affected routes are now either tested (4) or deleted (1).
+
+**Production deploy (May 1, 2026, ~18:37 UTC):** the migration was applied to prod the same day. `scripts/migrate.js` doesn't work on the baseline because `migrations/000_baseline_2026-04-28.sql` is a `pg_dump` output containing meta-commands (`\connect`, `\unrestrict`, `\restrict`) that `node-postgres` can't execute — it errored out with `syntax error at or near "\"`. The fix: skip migrate.js for the baseline entirely and apply only `001_user_invites.sql` directly via `sudo -u postgres psql -f`, then seed `public.schema_migrations` with both filenames so future migrations (`002_*`, `003_*`, ...) land cleanly.
+
+The exact prod sequence (recorded here so the next migration doesn't repeat the same hour of debugging):
+
+```
+sudo -u postgres psql -d mepdb -f /var/www/mep/migrations/001_user_invites.sql
+
+sudo -u postgres psql -d mepdb <<EOF
+CREATE TABLE IF NOT EXISTS public.schema_migrations (
+  id SERIAL PRIMARY KEY,
+  filename TEXT NOT NULL UNIQUE,
+  executed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+INSERT INTO public.schema_migrations (filename) VALUES
+  ('000_baseline_2026-04-28.sql'),
+  ('001_user_invites.sql')
+ON CONFLICT (filename) DO NOTHING;
+EOF
+
+sudo -u postgres psql -d mepdb -c "\d public.user_invites"  # verify
+pm2 restart mep-backend
+```
+
+**Verification on prod (live curl after restart):**
+
+| Endpoint | Expected | Got |
+|---|---|---|
+| `GET /api/health` | 200 `{"ok":true,...}` | ✅ 200 |
+| `GET /api/onboarding/verify` (no token) | 400 `TOKEN_REQUIRED` | ✅ 400 |
+| `GET /api/onboarding/verify?token=fake-token-prod-test` | 404 `TOKEN_NOT_FOUND` | ✅ 404 |
+
+The third row is the proof Bug 6 is closed in prod — that exact call returned 500 with `relation "public.user_invites" does not exist` for the entire history of the route until today. **Section 21 effectively complete.**
+
+**TODO for the next maintainer:** once a 002_ migration is needed, `node scripts/migrate.js` should "just work" because schema_migrations now has both 000_ + 001_ marked applied. The baseline-via-meta-commands trap won't repeat — only pg_dump-style files have it, and we won't be writing more pg_dump migrations. The Section 18 bug table can be updated to mark Bug 6 closed:
 
 **Bug 6 inventory update.** The Bug 6 entry in Section 18's bug table can be marked **partially resolved**:
 - `routes/admin_users.js` — ✅ tested (Phase 61).
