@@ -61,9 +61,11 @@ describeIfDb('Assignments — small-surface GETs', () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.body.ok).toBe(true);
-    // The route hardcodes these fallbacks when default_shift_start/end are NULL.
-    expect(res.body.shift_start).toBe('06:00');
-    expect(res.body.shift_end).toBe('14:30');
+    // companies has DEFAULT '06:00:00' / '14:30:00' on shift columns
+    // so pg returns them with seconds; the route's hardcoded fallback
+    // ('06:00' / '14:30') never fires for fresh tenants. Accept either.
+    expect(res.body.shift_start).toMatch(/^06:00(:00)?$/);
+    expect(res.body.shift_end).toMatch(/^14:30(:00)?$/);
   });
 
   test('GET /api/assignments/my-today on a user with no assignment returns null', async () => {
