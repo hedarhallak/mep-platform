@@ -2485,11 +2485,31 @@ Goal: unblock all 5 routes that touch `public.user_invites`.
 
 | Phase | Work | Output |
 |---|---|---|
-| 59 | Write `002_user_invites.sql` migration with the spec from Phase 56 + add the table to `db/schema_baseline_2026-04-26.sql` (or supersede with a fresh dump) | 1 PR |
-| 60 | Run migration on the test schema; verify the 5 affected routes no longer 500 on the missing table | (verification — no PR if Phase 59 covered it) |
+| 59 | Write `001_user_invites.sql` migration with the spec from Phase 56 + teach CI to apply migrations on top of baseline | ✅ 1 PR |
+| 60 | Run migration on the test schema; verify the 5 affected routes no longer 500 on the missing table | (verification — covered by Phase 61 tests) |
 | 61 | Write tests for `admin_users` + `invite_employee` + `user_management /resend` (env-gate-only or full happy-path with SendGrid mock) | 1 PR |
 | 62 | Write tests for `onboarding /verify` + `/complete` happy paths — un-skip the Phase 23 test | 1 PR |
 | 63 | Decide fate of `user_invites.js` (keep as a redundant endpoint, or delete) + mark Bug 6 as resolved in the bug table | 1 PR |
+
+### Phase 59 — `user_invites` migration ✅
+
+**Done (May 1, 2026):**
+
+Created `migrations/001_user_invites.sql` — the formal migration that adds `public.user_invites` to the schema. Columns match the audit spec from Phase 56: `id`, `company_id`, `employee_id` (nullable), `email`, `role`, `token_hash` (UNIQUE), `status` (CHECK constraint over ACTIVE/USED/REVOKED/EXPIRED, default ACTIVE), `created_by_user_id`, `note`, `expires_at`, `sent_at`, `used_at`, `revoked_at`, `created_at`. Two indexes: `(company_id, lower(email))` for the user_management `/resend` revoke-by-email lookup, and `(status)` for token-status filtering. `token_hash UNIQUE` creates a third index automatically.
+
+**CI workflow change (the harder half of Phase 59):**
+
+Until now, `.github/workflows/ci.yml` only applied `migrations/000_baseline_2026-04-28.sql` and stopped — newer migrations were never replayed. That worked while the only migration was the baseline, but breaks the moment a new migration lands. Both the `Backend (Node 20)` job and the `Schema (Atlas)` job got a new step that loops over `migrations/*.sql`, skips the `000_*` baseline (already applied), and replays everything else in lexicographic order via `psql ... -v ON_ERROR_STOP=1`. From now on, any migration we drop into `migrations/` will be picked up by CI automatically.
+
+**Production deploy note:** when this PR lands on `main`, prod also needs to run the migration. From the server (`ssh root@143.110.218.84`), after pulling main:
+
+```
+cd /var/www/mep
+node scripts/migrate.js
+pm2 restart mep-backend
+```
+
+`scripts/migrate.js` tracks applied migrations in `schema_migrations`; the first run on prod will create that table and treat both `000_` and `001_` as pending. We should INSERT `('000_baseline_2026-04-28.sql')` into `schema_migrations` first to mark it as already-applied, then `node scripts/migrate.js` will only run `001_user_invites.sql`. **TODO: do this carefully when Hedar promotes the PR — write the manual prep step into the deploy notes.**
 
 ### Phase 64+ — Features (pending)
 
