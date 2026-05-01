@@ -2639,10 +2639,164 @@ pm2 restart mep-backend
 
 `scripts/migrate.js` tracks applied migrations in `schema_migrations`; the first run on prod will create that table and treat both `000_` and `001_` as pending. We should INSERT `('000_baseline_2026-04-28.sql')` into `schema_migrations` first to mark it as already-applied, then `node scripts/migrate.js` will only run `001_user_invites.sql`. **TODO: do this carefully when Hedar promotes the PR — write the manual prep step into the deploy notes.**
 
-### Phase 64+ — Features (pending)
+### Phase 64+ — Features (deferred to Section 23)
 
-After Bug 6 closes, the testing infra is fully ratcheted and the codebase is drift-free. Next step is product backlog — Quebec launch checklist, mobile feature gaps, web polish. Specific phases TBD when we get there.
+Originally planned to be next, but May 1 evening retro raised a higher-priority question: is the foundation actually "professional production-grade"? Honest answer: it's MVP-grade but not yet professional. Three tiers of work remain (operational hardening, test coverage push, documentation + compliance) before features should be the focus. Captured as Section 22 below; features deferred to Section 23.
 
 ---
 
-No automatic next step — pick when ready.
+## Section 22 — Production Hardening Roadmap (May 1, 2026 evening)
+
+After the May 1 marathon (Section 18 + 19 + 21 + Bug 6 RESOLVED + prod deploy), Hedar pushed the question: "do we actually have professional, protected code now?" Honest answer: we have **MVP-grade** code with a strong foundation, but not yet **production-professional**. Real gaps:
+
+- **Frontend tests:** zero. `mep-frontend/` is roughly 50% of the codebase by line count and 0% tested.
+- **Mobile tests:** zero. Same for `mep-mobile/`.
+- **E2E tests:** zero. Critical user journeys (login → assignment → check-in → report) have never been exercised end-to-end.
+- **Production monitoring:** zero. If the backend goes down, nobody knows until users complain.
+- **Backup verification:** backups exist (DO Spaces) but never restored — could be silently corrupt.
+- **Coverage:** 35% lines on backend. Industry standard for serious SaaS is 60-80%.
+- **API documentation:** hand-written `API.md`, no auto-generated OpenAPI.
+- **Compliance:** Quebec Loi 25 not audited.
+- **Disaster recovery:** no documented runbook.
+
+Section 22 is the formal roadmap to close these. Phases listed in priority order — highest-leverage / fastest-to-build first, so even partial completion materially improves the foundation.
+
+### Tier A — Operational Hardening (~2-3 hours total)
+
+These three phases are the highest leverage per minute spent. Without monitoring, every test we write is for nothing — we won't know when prod is broken.
+
+#### Phase 64 — Production monitoring (UptimeRobot + Sentry)
+
+Set up two free-tier services:
+- **UptimeRobot** — pings `https://app.constrai.ca/api/health` every 5 minutes; alerts via email + (optionally) SMS when down for 2+ checks.
+- **Sentry** — backend error tracking. Wires into Express via `@sentry/node`'s requestHandler/errorHandler middleware. Free tier covers 5K events/month — plenty for current scale.
+
+Document the alert thresholds + on-call procedure in `RECOVERY.md`. Estimated time: 1 hour (mostly account signup + DSN config).
+
+#### Phase 65 — Backup restore drill
+
+The daily backup (`scripts/backup/`, runs 07:00 UTC, ships to DO Spaces `constrai-backups/`) has never been restored. Do a one-time drill:
+1. Pull the most recent backup tarball from Spaces to a fresh test database.
+2. Run `pg_restore` (or `psql -f` for `.sql` dumps).
+3. Verify table count matches prod, row counts in critical tables (companies, employees, assignments) are non-zero, schema_migrations is intact.
+4. Document the restore runbook in `scripts/backup/RESTORE.md` so future drills (quarterly target) are scripted, not guessed.
+
+Estimated time: 30 minutes.
+
+#### Phase 66 — Health endpoint expansion
+
+Today `/api/health` returns `{ ok: true, service, time }` — a liveness probe but not a readiness probe. Expand to check:
+- DB connectivity: `SELECT 1` succeeds within 500ms.
+- Disk space: at least 1 GB free on `/var/www/mep` partition (read via `df -k`).
+- Process memory: under 80% of allocated limit.
+
+Return shape stays backward-compatible (`{ ok: true, ... }` on full pass; `{ ok: false, checks: { db: false, ... } }` on any failure). UptimeRobot from Phase 64 can then alert on `ok: false` instead of just connection refused.
+
+Estimated time: 30 minutes.
+
+### Tier B — Test Coverage Push (multiple sessions)
+
+#### Phase 67 — Backend coverage push: 35% → 50%
+
+Focus on the cheap wins first — pure functions in `lib/` and `middleware/` that don't need DB, network, or auth setup. Each ratchet of the floor in `jest.config.js` should be ~1-2pp below the new measured value (same convention as Phase 58).
+
+Targets:
+- `lib/auth_utils.js` — PIN hashing, JWT generation/verification, refresh token rotation. Pure functions, no DB.
+- `lib/email.js` — `escapeHtml`, formatters (`fmtDate`, `fmtTime`), template builders. No SendGrid required for these.
+- `middleware/permissions.js` — `can(...)` predicate logic. Pure.
+- `middleware/auth.js` — JWT validation middleware. Mock-friendly.
+- Catch branches in existing routes — write 1 test per route that triggers an exception (e.g. by passing malformed input the existing tests skip).
+
+Estimated time: 1 full session.
+
+#### Phase 68 — Frontend test setup (Vitest + RTL)
+
+`mep-frontend/` is React + Vite. Add Vitest (Vite-native, fast) + `@testing-library/react`. Smoke tests for:
+- `LoginForm` — form submission, error display.
+- `EmployeesPage` — list rendering, invite modal open/close.
+- `ProjectsPage` — list rendering, filter behavior.
+- `Top-level App` — routing + auth context.
+
+Goal: 5 smoke tests landing on CI as a new required check (`Frontend tests`). Doesn't need to be exhaustive; this is the foundation for future test growth, same way Phase 11 was for backend.
+
+Estimated time: 1 full session.
+
+#### Phase 69 — E2E tests with Playwright
+
+Install Playwright at the repo root (or in `e2e/`). Three critical journeys:
+1. **Worker journey:** login → check-in → check-out → see today's record in attendance list.
+2. **Admin journey:** create project → invite worker → assign worker to project → trigger daily dispatch.
+3. **Foreman journey:** standup tomorrow's plan → submit material request → review next morning.
+
+Run as the 6th required CI check (`E2E (Playwright)`). Spins up backend + frontend + a fresh test DB; runs the journeys against `http://localhost:3000` + `http://localhost:5173`.
+
+Estimated time: 1 full session.
+
+#### Phase 70 — Mobile test setup (Jest + RNTL)
+
+`mep-mobile/` is Expo + React Native + TypeScript. Add Jest + `@testing-library/react-native`. Smoke tests for:
+- `LoginScreen` — auth flow.
+- `DashboardScreen` — role-aware rendering.
+- `AssignmentsScreen` — data fetch + render.
+
+Goal: 3-5 smoke tests as a 7th required CI check (`Mobile tests`).
+
+Estimated time: half a session.
+
+### Tier C — Documentation + Compliance + Stretch Goals
+
+#### Phase 71 — OpenAPI auto-generation
+
+Replace the hand-written `API.md` with auto-generated OpenAPI 3.0 from route handlers. Options:
+- `express-oas-generator` — runtime introspection.
+- `swagger-jsdoc` — JSDoc-comment-based.
+
+Publish to `/api/docs` (Swagger UI). Auto-update on every backend deploy.
+
+Estimated time: half a session.
+
+#### Phase 72 — Quebec Loi 25 compliance audit
+
+Quebec's Law 25 (Personal Information Protection Act, equivalent of GDPR) applies to any company processing Quebec residents' personal data. Audit checklist:
+- Privacy policy: written + accessible at `https://www.constrai.ca/privacy` + linked from app.
+- Data residency: confirm DigitalOcean droplet is in Canadian region (TOR1 — already confirmed).
+- Right to deletion: implement `DELETE /api/me` that anonymizes the user's data.
+- Right to export: implement `GET /api/me/export` that returns the user's data as JSON.
+- Cookie consent: web app needs a banner (functional cookies only — auth — should be exempt).
+- Breach notification: documented incident response in `RECOVERY.md`.
+- Data Protection Officer (DPO) designated: probably Hedar himself for now.
+
+Estimated time: 1 full session (needs research time, not just code).
+
+#### Phase 73 — Backend coverage push: 50% → 65%
+
+Continue Phase 67's push into `services/`, `jobs/`, and the heavy routes. By this point we're hitting diminishing returns — each new test takes longer to write because the easy wins are gone. But this gets us into "professional" territory (60%+ is the common SaaS bar).
+
+Estimated time: 1 full session.
+
+#### Phase 74 — Disaster recovery runbook
+
+Document in `RECOVERY.md`:
+- DigitalOcean droplet failure: how to spin up a new one + restore.
+- DB corruption: restore from latest Spaces backup.
+- Domain DNS failure: how to repoint constrai.ca / app.constrai.ca.
+- SendGrid outage: queue emails, retry on recovery.
+- SSL cert expiry: certbot auto-renew + manual fallback.
+
+Each scenario gets a runbook with: detection method, command sequence, expected recovery time, who to call.
+
+Estimated time: half a session.
+
+### Section 22 success criteria
+
+By the time Phases 64-74 are done, the codebase moves from "MVP-grade with foundation" to "professional production-grade":
+- Operational visibility: monitoring + alerts on prod.
+- Test coverage: 65%+ backend, smoke tests on frontend + mobile, E2E for critical journeys.
+- Documentation: OpenAPI live, DR runbook, compliance audit.
+- Coverage floor in CI: ratcheted to 60%+, won't regress.
+
+After Section 22 closes, the answer to "is this professional and protected" becomes an unqualified **yes** — for the MVP-to-Series-A range. (Enterprise/SOC2 territory is Section 24+.)
+
+---
+
+No automatic next step — pick when ready. Recommended start point: Phase 64 (monitoring) — highest leverage per minute, sets up alerting before any other infra work matters.
