@@ -2086,3 +2086,78 @@ The variable name `notes` in JS code (request body field, function args) is pres
 **Re-enabled the Phase 14 POST test** that was skipped pending this fix. CI #83: 131/131 ✅, no skipped tests.
 
 This bug had probably been silently broken in any code path that calls these three INSERTs. The COMPANY_ADMIN auto-approve flow definitely 500'd on production for any assignment created via API. Now caught regression-wise.
+
+### Phase 16–34 — Coverage Push + Real-Bug Discovery Marathon (April 30, 2026)
+
+After Phase 12+13+14+15 closed the security baseline (tenant isolation, RBAC, workflows, security regressions), the second half of April 30 was a coverage + bug-hunt marathon: 19 more phases, 13 new test files, 6 production bugs uncovered and fixed.
+
+**Tests added across Phase 16–34:**
+
+| Phase | Suite | Cases |
+|---|---|---|
+| 16 | CRUD happy paths (employees PATCH, projects POST, suppliers CRUD) | 5 |
+| 17 | Materials workflow (POST + cancel) | 3 |
+| 18 | Attendance check-in / check-out lifecycle | 3 |
+| 19 | Profile (`/me`, `/dropdowns`) | 3 |
+| 20 | Projects PATCH + DELETE happy paths (extension of 16) | 2 |
+| 21 | Permissions introspection (`/my-permissions`) | 2 |
+| 22 | Project trades (after 4 separate bug fixes) | 3 |
+| 23 | Onboarding `/verify` (1 skipped — bug 6) | 1 + 1 skip |
+| 24 | User management (`/api/users`) | 2 |
+| 25 | Push tokens (`/api/profile/push-token`) | 2 |
+| 26 | Super admin (`/stats` SA + RBAC) | 2 |
+| 27 | Daily dispatch (`/preview`) | 2 |
+| 28 | CCQ rates (super-admin scoped) | 3 |
+| 29 | BI workforce-suggestions (empty + RBAC) | 2 |
+| 30 | Super admin extras (`/companies`, `/companies/:id`) | 2 |
+| 31 | Permissions matrix (`/permissions/matrix`) | 2 |
+| 32 | Reports validation (`/reports/hours`) | 3 |
+| 33 | Auth extras (whoami + deprecated signup endpoints) | 5 |
+| 34 | Standup (`/api/standup/tomorrow`) | 2 |
+| **Total this run** | | **49 active** |
+
+**Production bugs discovered + fixed by tests** (the most consequential outcome of this marathon):
+
+| # | File | Bug |
+|---|---|---|
+| 1 | `routes/assignments.js` (3 INSERTs) | column `notes` doesn't exist — should be `decision_note`. Every `POST /api/assignments/requests` was 500-ing in prod. |
+| 2 | `routes/project_trades.js` | `const pool = require('../db')` instead of `const { pool } = require('../db')`. Every project_trades route was 500-ing on prod (`pool.query is not a function`). |
+| 3 | `routes/project_trades.js` JOIN | `ep.id = au.employee_id` — `employee_profiles` PK is `employee_id`, not `id`. |
+| 4 | `routes/project_trades.js` SELECT | `ep.first_name || ep.last_name` — `employee_profiles` has no first/last name columns; only `full_name`. |
+| 5 | `routes/project_trades.js` subquery + DELETE guard | `assignment_requests.project_trade_id` doesn't exist — there's no FK from assignments to trades in the current schema. Subquery + HAS_ACTIVE_ASSIGNMENTS guard removed; TODO to redesign linkage. |
+| 6 | `routes/onboarding.js` | Queries `public.user_invites` — a table that doesn't exist in the baseline schema. Test skipped with TODO until schema is added or route is removed. |
+
+In all cases the routes were silently broken on prod for weeks/months and nobody noticed because nothing was exercising them. Tests light up the dead corners of the codebase.
+
+**Helpers extension (`tests/helpers/db.js`):**
+- `seedUserPermission({ user_id, permission_code, granted })` — added in Phase 13.
+- `seedAttendanceFixture({ company_id })` — added in Phase 18 (chains employee + profile + linked user + APPROVED assignment).
+- `ensureSeedData()` permission catalogue grew from 4 codes (Phase 12) to 22 codes by Phase 34: covers every route surface tested today.
+- `cleanupTestRows()` learned to swallow `audit_logs is immutable` (trigger blocks DELETE) and the company-FK-violation 23503 from audit_logs.company_id (so test_ companies leak harmlessly — uniqueTag prevents collisions).
+- `seedEmployee` defaults `first_name` / `last_name` to `Test{tag}` / `Employee{tag}` so the unique-by-name index on employees doesn't fire when the same company seeds multiple employees in a single test.
+
+**Coverage trajectory (April 30):**
+
+| Metric | Start of day (CI #59) | End of day (CI #109) |
+|---|---|---|
+| Statements | 13.35% | ~27% |
+| Branches | 7.04% | ~21% |
+| Functions | 7.86% | ~23% |
+| Lines | 13.96% | ~28% |
+
+Total tests: **86 → 181 active + 1 skipped**. CI runs today: **50+**.
+
+### Pending — what's NOT yet tested (deliberately)
+
+These routes are blocked on real product issues, not test infra:
+- `routes/project_foremen.js` — schema reference issues (`pf.id` doesn't exist as a column — table has composite PK).
+- `routes/admin_users.js`, `routes/invite_employee.js` — depend on SENDGRID env vars; tests would need email mocking.
+- `routes/user_invites.js`, `routes/onboarding.js` — query the missing `user_invites` table (bug 6).
+- `routes/auto_assign.js` — heavy Mapbox-dependent geocoding, complex fixture surface.
+- `routes/standup.js` (rest of endpoints) — only `/tomorrow` covered; the rest are POST flows that need session fixtures.
+- `routes/reports.js` (rest) — only `/hours` validation pinned; the heavy aggregate queries on filled data need synthetic attendance/assignment fixtures.
+
+### Pending — close-out items
+- **Branch protection** on GitHub `main` — UI step at https://github.com/hedarhallak/people-platform/settings/branches. With 181 enforcing tests + lint + format + Semgrep + Atlas, a passing CI is enforcing-grade signal.
+- **Schema redesigns** for the discovered linkage bugs (`assignment_requests.project_trade_id`, `user_invites` table) — separate engineering tracks.
+- **Coverage ratchet again** once Phase 35+ adds more tests; current floor 16/8/12/16, current measured ~27/21/23/28.
