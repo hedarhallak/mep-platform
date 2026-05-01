@@ -405,7 +405,7 @@ router.get('/assignments', can('reports.view'), async (req, res) => {
         ar.shift_start,
         ar.shift_end,
         ar.distance_km,
-        ar.notes,
+        ar.decision_note AS notes,
         au_req.username AS requested_by_username,
         ar.created_at
       FROM public.assignment_requests ar
@@ -610,4 +610,4 @@ router.get('/my-daily', canAny(['reports.view', 'reports.view_self']), async (re
   }
 });
 
-module.exports = router;
+module.e;

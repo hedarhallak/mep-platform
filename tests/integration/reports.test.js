@@ -134,10 +134,12 @@ describeIfDb('Reports — additional endpoints', () => {
     expect(res.body.ok).toBe(true);
   });
 
-  test('GET /api/reports/my-daily with valid date returns 200', async () => {
+  test('GET /api/reports/my-daily with valid range returns 200', async () => {
+    // my-daily uses the same parseRange helper as the other report
+    // endpoints — it wants from + to, not date.
     const res = await request(app2)
       .get('/api/reports/my-daily')
-      .query({ date: '2026-01-15' })
+      .query({ from: '2026-01-01', to: '2026-01-31' })
       .set('Authorization', `Bearer ${_token}`);
     expect(res.statusCode).toBe(200);
     expect(res.body.ok).toBe(true);
