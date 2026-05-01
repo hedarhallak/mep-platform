@@ -64,4 +64,33 @@ describeIfDb('Permissions matrix — /api/permissions/matrix', () => {
     expect(res.statusCode).toBe(403);
     expect(res.body.permission).toBe('settings.permissions');
   });
+
+  test('GET /role/COMPANY_ADMIN returns the role permission grants', async () => {
+    const company = await seedCompany();
+    const admin = await seedUser({ company_id: company.company_id, role: 'COMPANY_ADMIN' });
+    const { token } = await loginUser(admin);
+
+    const res = await request(app)
+      .get('/api/permissions/role/COMPANY_ADMIN')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.role).toBe('COMPANY_ADMIN');
+    expect(Array.isArray(res.body.permissions)).toBe(true);
+    const codes = res.body.permissions.map((p) => p.permission_code);
+    expect(codes).toEqual(expect.arrayContaining(['employees.view', 'projects.view']));
+  });
+
+  test('GET /role/INVALID_ROLE returns 400 Invalid role', async () => {
+    const company = await seedCompany();
+    const admin = await seedUser({ company_id: company.company_id, role: 'COMPANY_ADMIN' });
+    const { token } = await loginUser(admin);
+
+    const res = await request(app)
+      .get('/api/permissions/role/NOT_A_REAL_ROLE')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error).toBe('Invalid role');
+  });
 });
