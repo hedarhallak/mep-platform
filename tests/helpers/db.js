@@ -109,7 +109,8 @@ async function ensureSeedData() {
        ('settings.permissions',       'Manage RBAC matrix',      'settings'),
        ('reports.view',               'View company reports',    'reports'),
        ('standup.manage',             'Manage daily standup',    'standup'),
-       ('assignments.smart_assign',   'Smart auto-assign',       'assignments')
+       ('assignments.smart_assign',   'Smart auto-assign',       'assignments'),
+       ('hub.receive_tasks',          'Receive hub tasks',       'hub')
      ON CONFLICT (code) DO NOTHING`
   );
 
@@ -138,7 +139,8 @@ async function ensureSeedData() {
        ('COMPANY_ADMIN', 'settings.permissions'),
        ('COMPANY_ADMIN', 'reports.view'),
        ('COMPANY_ADMIN', 'standup.manage'),
-       ('COMPANY_ADMIN', 'assignments.smart_assign')
+       ('COMPANY_ADMIN', 'assignments.smart_assign'),
+       ('COMPANY_ADMIN', 'hub.receive_tasks')
      ON CONFLICT (role, permission_code) DO NOTHING`
   );
 
