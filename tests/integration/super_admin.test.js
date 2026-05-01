@@ -96,3 +96,49 @@ describeIfDb('Super admin — /api/super', () => {
     expect(res.body.company.name).toBe(company.name);
   });
 });
+
+describeIfDb('Super admin — company suspend / activate', () => {
+  afterAll(async () => {
+    await cleanupTestRows();
+    await closePool();
+  });
+
+  test('POST /api/super/companies/:id/suspend transitions status to SUSPENDED (200)', async () => {
+    const company = await seedCompany();
+    const sa = await seedUser({ role: 'SUPER_ADMIN', pin: 'sa-pin-1234' });
+    const { token } = await loginUser(sa);
+
+    const res = await request(app)
+      .post(`/api/super/companies/${company.company_id}/suspend`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.company.status).toBe('SUSPENDED');
+  });
+
+  test('POST /api/super/companies/:id/activate transitions status back to ACTIVE (200)', async () => {
+    const company = await seedCompany({ status: 'SUSPENDED' });
+    const sa = await seedUser({ role: 'SUPER_ADMIN', pin: 'sa-pin-1234' });
+    const { token } = await loginUser(sa);
+
+    const res = await request(app)
+      .post(`/api/super/companies/${company.company_id}/activate`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.company.status).toBe('ACTIVE');
+  });
+
+  test('POST /api/super/companies/:id/suspend on non-existent ID returns 404', async () => {
+    const sa = await seedUser({ role: 'SUPER_ADMIN', pin: 'sa-pin-1234' });
+    const { token } = await loginUser(sa);
+
+    const res = await request(app)
+      .post('/api/super/companies/99999999/suspend')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(404);
+    expect(res.body).toMatchObject({ ok: false, error: 'COMPANY_NOT_FOUND' });
+  });
+});
