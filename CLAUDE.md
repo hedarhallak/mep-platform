@@ -172,6 +172,38 @@ When starting work in a new area (UI design, monitoring, automation, deployment,
 
 ---
 
+## 4.5. The "Optimize Repetitive Work" Rule (NEW — May 2026)
+
+When Claude notices a task pattern repeating — same shape of operation done 3+ times in a row — **stop and propose a faster approach** before continuing manually.
+
+**Why:** the April 30 testing marathon hit this directly. We wrote 40+ test files one phase at a time, with a full chat round-trip per phase (read route → write test → user commits → CI → next). Each phase took 5–6 messages. After Phase 30+ Hedar correctly asked: "is there a faster way?" — and there was. Doing the same shape of work manually for hours when a batch / generator / template / existing tool exists is wasted time.
+
+**When to trigger:**
+- Same file pattern written 3+ times in a row (e.g., test file with same skeleton)
+- Same multi-step flow done repeatedly (e.g., add permission → grant → write test → commit)
+- Same manual transformation applied across many files
+
+**What to do:**
+1. **Pause** the manual loop.
+2. **Surface** the pattern out loud: "we just did X four times in the same shape — there's a faster way."
+3. **Propose 2–3 options**, ordered cheapest-to-build first:
+   - Batch (fewer chat round-trips, fewer commits)
+   - Template / helper function
+   - Generator script / tool
+   - Existing OSS tool or MCP
+4. **Let Hedar pick** before continuing.
+5. **Always prefer the cheapest option that meaningfully speeds the loop** — don't over-engineer.
+
+**Examples:**
+- Writing one test per chat round-trip → batch 4–5 in one round-trip.
+- Adding 20 permissions one-by-one → write a helper that takes a list.
+- Manually formatting 100 SQL strings → use Prettier / a script.
+- Triaging 50 Dependabot PRs by hand → bulk-close via API.
+
+This rule is the test/automation analogue of Section 4 ("Always Suggest Better Tools"). Section 4 fires at the start of a new area; Section 4.5 fires mid-flow when a pattern emerges.
+
+---
+
 ## 5. Required Reading at Session Start
 
 Every Claude session must begin by reading these in order:
@@ -247,42 +279,4 @@ Every Claude session must begin by reading these in order:
 
 - **Mobile errors:** ALWAYS ask for the terminal log, not a screenshot. Command:
   ```powershell
-  npx expo start --clear 2>&1 | Tee-Object -FilePath C:\Users\Lenovo\Desktop\expo_log.txt
-  ```
-- **Backend errors:** `pm2 logs mep-backend --err --lines 30 --nostream`
-- **Frontend errors:** browser DevTools → Console + Network tabs.
-- **DB errors:** `sudo -u postgres psql -d mepdb -c "..."` for arbitrary queries; `\dt` for table list, `\d table_name` for schema.
-
----
-
-## 10. Output Conventions When Sharing Files in Cowork
-
-- Use `computer://` links to share files Hedar should view.
-- Format: `[descriptive name](computer:///sessions/.../path/to/file)`.
-- Never expose internal session paths conversationally — refer to "the workspace folder" or specific filenames.
-- Always commit + push docs after editing them so they're not stuck only on Hedar's laptop.
-
----
-
-## 11. Pending Tasks & Roadmap
-
-**Active hardening (April 2026 — see `DECISIONS.md` Section 14):**
-- ✅ Layer 1: Daily DB backups to DigitalOcean Spaces (TOR1, tested end-to-end)
-- 🔄 Layer 2: Infrastructure (Droplet snapshots, SSL renewal verification, Nginx + .env templates)
-- 🔄 Layer 3: Human knowledge & access (Password Manager, emergency contacts, second GitHub admin, Apple ID recovery)
-
-**Roadmap (DECISIONS.md Section 5):**
-- Web Frontend i18n (EN/FR)
-- Android Google Play build
-- PDF/Email FR templates
-- Material Surplus System (DECISIONS.md Section 8)
-- Custom Job Titles per Company (DECISIONS.md Section 7)
-
----
-
-## 12. When in Doubt
-
-- **Defer to Hedar.** When a decision could go multiple reasonable ways, ask via `AskUserQuestion` instead of picking.
-- **Trust the docs.** `MASTER_README.md` + `DECISIONS.md` are the system of record. If something contradicts your assumption, the docs win.
-- **Update the docs.** If you discover something that should have been in the docs but wasn't, update them in the same response and tell Hedar to commit.
-- **Never delete an idea** from `DECISIONS.md` — only add and evolve. Section 13 documents this rule.
+  npx expo start --clear 2>&1 | Tee-Object -F

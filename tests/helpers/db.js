@@ -112,7 +112,8 @@ async function ensureSeedData() {
        ('assignments.smart_assign',   'Smart auto-assign',       'assignments'),
        ('hub.receive_tasks',          'Receive hub tasks',       'hub'),
        ('materials.catalog_view',     'View materials catalog',  'materials'),
-       ('materials.surplus_view',     'View materials surplus',  'materials')
+       ('materials.surplus_view',     'View materials surplus',  'materials'),
+       ('hub.materials_inbox',        'Materials inbox',         'hub')
      ON CONFLICT (code) DO NOTHING`
   );
 
@@ -144,7 +145,8 @@ async function ensureSeedData() {
        ('COMPANY_ADMIN', 'assignments.smart_assign'),
        ('COMPANY_ADMIN', 'hub.receive_tasks'),
        ('COMPANY_ADMIN', 'materials.catalog_view'),
-       ('COMPANY_ADMIN', 'materials.surplus_view')
+       ('COMPANY_ADMIN', 'materials.surplus_view'),
+       ('COMPANY_ADMIN', 'hub.materials_inbox')
      ON CONFLICT (role, permission_code) DO NOTHING`
   );
 
