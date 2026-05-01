@@ -102,3 +102,47 @@ describeIfDb('User management — PATCH /:id/role + /:id/status', () => {
     expect(res.body.permission).toBe('settings.user_management');
   });
 });
+
+// Phase 55 — POST /api/users/:id/resend env-gate + RBAC.
+//
+// /resend regenerates an activation invite, writes to public.user_invites
+// (Bug 6 — table missing), and emails via SendGrid. In CI we have neither
+// SendGrid env nor user_invites — but the env-gate runs FIRST, so the
+// route returns 500 EMAIL_NOT_CONFIGURED before touching the missing
+// table. Pinning that env-gate ordering is the safest coverage we can
+// add today; once Bug 6 is fixed and SendGrid is configured, the test
+// can be promoted to a full happy-path.
+describeIfDb('User management — POST /:id/resend', () => {
+  afterAll(async () => {
+    await cleanupTestRows();
+    await closePool();
+  });
+
+  test('POST /:id/resend without SendGrid env returns 500 EMAIL_NOT_CONFIGURED', async () => {
+    const company = await seedCompany();
+    const admin = await seedUser({ company_id: company.company_id, role: 'COMPANY_ADMIN' });
+    const target = await seedUser({ company_id: company.company_id, role: 'WORKER' });
+    const { token } = await loginUser(admin);
+
+    const res = await request(app)
+      .post(`/api/users/${target.id}/resend`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(500);
+    expect(res.body).toMatchObject({ ok: false, error: 'EMAIL_NOT_CONFIGURED' });
+  });
+
+  test('POST /:id/resend without settings.user_management returns 403', async () => {
+    const company = await seedCompany();
+    const worker = await seedUser({ company_id: company.company_id, role: 'WORKER' });
+    const target = await seedUser({ company_id: company.company_id, role: 'WORKER' });
+    const { token } = await loginUser(worker);
+
+    const res = await request(app)
+      .post(`/api/users/${target.id}/resend`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body.permission).toBe('settings.user_management');
+  });
+});

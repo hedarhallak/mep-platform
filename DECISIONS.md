@@ -2125,7 +2125,7 @@ After Phase 12+13+14+15 closed the security baseline (tenant isolation, RBAC, wo
 | 3 | `routes/project_trades.js` JOIN | `ep.id = au.employee_id` — `employee_profiles` PK is `employee_id`, not `id`. |
 | 4 | `routes/project_trades.js` SELECT | `ep.first_name || ep.last_name` — `employee_profiles` has no first/last name columns; only `full_name`. |
 | 5 | `routes/project_trades.js` subquery + DELETE guard | `assignment_requests.project_trade_id` doesn't exist — there's no FK from assignments to trades in the current schema. Subquery + HAS_ACTIVE_ASSIGNMENTS guard removed; TODO to redesign linkage. |
-| 6 | `routes/onboarding.js` | Queries `public.user_invites` — a table that doesn't exist in the baseline schema. Test skipped with TODO until schema is added or route is removed. |
+| 6 | `routes/onboarding.js` + `routes/admin_users.js` + `routes/invite_employee.js` + `routes/user_invites.js` + `routes/user_management.js` (`POST /:id/resend`) | Queries `public.user_invites` — a table that doesn't exist in the baseline schema. Confirmed by Phase 55 audit (May 1, 2026): 5 routes touch `user_invites`. Three are blocked outright (admin_users, invite_employee, user_invites). `onboarding.js` 500s past the validation guards (`/verify` past TOKEN_REQUIRED, `/complete` past PIN_REQUIRED) — Phase 23 + Phase 54 pin only the validation paths. `user_management.js /resend` is shielded from the missing table in CI by the SendGrid env-gate (Phase 55 test pins that ordering). All 5 wait on the same fix: either add `user_invites` table or remove the routes. |
 | 7 | `routes/reports.js` (assignments report) | `ar.notes` doesn't exist — should be `ar.decision_note AS notes`. Same column-rename pattern as Bug 1. Every `GET /api/reports/assignments` was 500-ing. Fixed in Phase 50 (May 1, 2026). |
 | 8 | `routes/daily_dispatch.js` (`POST /prepare`) | Queries `public.assignments` — a table that doesn't exist in the schema. Source of truth is `public.assignment_requests` with different column names (`requested_for_employee_id` not `employee_id`; separate `shift_start`/`shift_end` TIME columns not a single `shift` text). Every `POST /api/daily-dispatch/prepare` was 500-ing in prod. Fixed in Phase 52 (May 1, 2026): rewrote the SELECT to use `assignment_requests`, alias `requested_for_employee_id AS employee_id`, build the `shift` string with `to_char(shift_start, 'HH24:MI') || '-' || to_char(shift_end, 'HH24:MI')`, and added `AND a.status = 'APPROVED'` filter. |
 
@@ -2272,7 +2272,21 @@ The validation guards run BEFORE the `SELECT FROM public.user_invites FOR UPDATE
 
 Anything past the validation guards (token lookup, username uniqueness, account creation, profile update, invite mark-as-used) still 500s on the missing `user_invites` table. Documented as e2e/manual until Bug 6 is unblocked (Phase 56).
 
-### Phase 55 — Schema fix: add `notes` column? Actually `decision_note` rename WAS the fix (April 30). Confirm no remaining drift.
+### Phase 55 — Schema drift audit ✅
+
+**Done (May 1, 2026):**
+
+Ran a full audit comparing every `public.X` table reference inside `routes/*.js` SQL strings against the canonical `db/schema_baseline_2026-04-26.sql`. Method: extracted all `CREATE TABLE public.<name> (` and `CREATE VIEW public.<name>` lines from the baseline (57 tables/views total), extracted all `FROM | JOIN | INTO | UPDATE | DELETE FROM public.X` references from routes (30 unique tables referenced), computed the set difference.
+
+**Result: zero new schema drift.** The four already-known bugs (Bug 1 column rename, Bug 6 missing table, Bug 7 column rename, Bug 8 wrong table) account for every drift in the codebase. Every other table reference in routes has a matching `CREATE TABLE` in the baseline.
+
+**One scope-extension finding:** the audit confirmed that `routes/user_management.js` `POST /:id/resend` ALSO references `public.user_invites` — same root cause as Bug 6. It was not listed previously because nothing tested `/resend`. The Bug 6 entry above now lists all 5 affected routes (`onboarding.js`, `admin_users.js`, `invite_employee.js`, `user_invites.js`, `user_management.js /:id/resend`).
+
+To prevent silent regression on `/resend`, `tests/integration/user_management.test.js` got a new `describeIfDb` block:
+- `POST /:id/resend` without SendGrid env → 500 `EMAIL_NOT_CONFIGURED` (env-gate runs BEFORE the `user_invites` query, so the missing table never gets exercised in CI). Same pattern as `daily_dispatch /commit` (Phase 52).
+- `POST /:id/resend` without `settings.user_management` → 403 (RBAC).
+
+**Conclusion:** the codebase is now drift-free at the table-name level. No more silent prod 500s lurking on this dimension.
 
 ### Phase 56 — Document the BLOCKED routes formally
 
