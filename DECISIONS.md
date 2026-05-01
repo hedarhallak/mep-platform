@@ -2409,7 +2409,7 @@ Goal — "every non-blocked route has at least ONE test" — **MET**. Section 19
 | `standup.js` | ✅ | 34, 53 |
 | `project_trades.js` | ✅ | 22 |
 | `push_tokens_route.js` | ✅ | 25 |
-| `onboarding.js` | 🟡 | 23, 54 — validation only (Bug 6) |
+| `onboarding.js` | ✅ | 23, 54, 62 — full /verify + /complete coverage |
 | `reports.js` | ✅ | 32, 50 |
 | `auto_assign.js` | ✅ | 38, 52 |
 | `activate.js` | ✅ | 49 |
@@ -2488,7 +2488,7 @@ Goal: unblock all 5 routes that touch `public.user_invites`.
 | 59 | Write `001_user_invites.sql` migration with the spec from Phase 56 + teach CI to apply migrations on top of baseline | ✅ 1 PR |
 | 60 | Run migration on the test schema; verify the 5 affected routes no longer 500 on the missing table | (verification — covered by Phase 61 tests) |
 | 61 | Write tests for `admin_users` + `invite_employee` + `user_management /resend` (env-gate-only or full happy-path with SendGrid mock) | ✅ partial (admin_users + /resend done; invite_employee deferred to Phase 61b) |
-| 62 | Write tests for `onboarding /verify` + `/complete` happy paths — un-skip the Phase 23 test | 1 PR |
+| 62 | Write tests for `onboarding /verify` + `/complete` happy paths — un-skip the Phase 23 test | ✅ 1 PR |
 | 63 | Decide fate of `user_invites.js` (keep as a redundant endpoint, or delete) + mark Bug 6 as resolved in the bug table | 1 PR |
 
 ### Phase 59 — `user_invites` migration ✅
@@ -2547,6 +2547,28 @@ Different mock approach from Phase 61. `routes/invite_employee.js` doesn't use `
 - `routes/invite_employee.js` — ✅ (Phase 61b).
 - `routes/onboarding.js` — pending Phase 62.
 - `routes/user_invites.js` — pending Phase 63 (decide fate first).
+
+### Phase 62 — Onboarding happy paths ✅
+
+**Done (May 1, 2026):**
+
+The third public endpoint surface (after /verify validation and /complete validation in earlier phases) now has full coverage. The Phase 23 skipped test is un-skipped.
+
+**`tests/helpers/db.js` — new `seedUserInvite` helper.** Takes optional `{ company_id, employee_id, email, role, token, expires_at, status }` and INSERTs a row directly into `public.user_invites`. Hashes the raw token with sha256 (matching the route's `hashToken` helper). Returns the raw token + the row's id so the test can pass the token to the route. Without this helper, every onboarding test would re-implement the token hashing inline.
+
+**`tests/integration/onboarding.test.js` — 4 new /verify tests:**
+- Un-skipped: GET /verify with unknown token → 404 `TOKEN_NOT_FOUND`.
+- GET /verify with valid ACTIVE token → 200 with `invite.role`, `invite.first_name`, `invite.last_name` (joined from employees via the route's LEFT JOIN).
+- GET /verify with already-USED token → 410 `TOKEN_ALREADY_USED`.
+- GET /verify with expired ACTIVE token (expires_at in the past) → 410 `TOKEN_EXPIRED`.
+
+**4 new /complete tests:**
+- Happy path: POST /complete with valid token + username + pin → 200, plus direct DB asserts that (a) app_user was created with the chosen username + invite's role/employee_id/company_id, `is_active=true`, `must_change_pin=false`; (b) the invite row's `status` flipped to `USED` with `used_at` non-null. Validates the entire FOR UPDATE → INSERT app_user → activate employee → upsert profile → mark invite USED transaction.
+- Unknown token → 404 `TOKEN_NOT_FOUND`.
+- Already-USED token → 410 `TOKEN_ALREADY_USED`.
+- Username already taken → 409 `USERNAME_TAKEN` (uniqueness enforced at the app layer before the INSERT).
+
+**Bug 6 status: 4 of 5 routes ✅.** Only `routes/user_invites.js` remains, and that's pending Phase 63's decide-fate-first call.
 
 **Bug 6 inventory update.** The Bug 6 entry in Section 18's bug table can be marked **partially resolved**:
 - `routes/admin_users.js` — ✅ tested (Phase 61).
