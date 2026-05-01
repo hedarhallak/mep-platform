@@ -610,4 +610,4 @@ router.get('/my-daily', canAny(['reports.view', 'reports.view_self']), async (re
   }
 });
 
-module.e;
+module.exports = router;
