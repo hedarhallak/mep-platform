@@ -476,6 +476,14 @@ async function cleanupTestRows() {
      WHERE company_id IN (SELECT company_id FROM public.companies WHERE name LIKE $1)`,
     [`${TEST_PREFIX}%`]
   );
+  // Phase 59 (May 2026) — clean up user_invites rows for test companies.
+  // Done BEFORE app_users delete in case future schema adds an FK on
+  // user_invites.created_by_user_id → app_users.id.
+  await pool.query(
+    `DELETE FROM public.user_invites
+     WHERE company_id IN (SELECT company_id FROM public.companies WHERE name LIKE $1)`,
+    [`${TEST_PREFIX}%`]
+  );
   await pool.query(`DELETE FROM public.app_users WHERE username LIKE $1`, [`${TEST_PREFIX}%`]);
   await pool.query(`DELETE FROM public.employees WHERE employee_code LIKE $1`, [`${TEST_PREFIX}%`]);
   await pool.query(`DELETE FROM public.projects WHERE project_code LIKE $1`, [`${TEST_PREFIX}%`]);
