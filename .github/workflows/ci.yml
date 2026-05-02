@@ -186,6 +186,11 @@ jobs:
         run: npx tsc --noEmit
         continue-on-error: true
 
+      - name: Tests (Jest + RNTL, blocking — Phase 70 onward)
+        # Phase 70 (May 2026): jest-expo preset + React Native Testing Library
+        # wired up. Theme constants + RNTL smoke. Real screen tests follow.
+        run: npm test
+
       - name: Security audit (informational)
         run: npm audit --audit-level=high
         continue-on-error: true
