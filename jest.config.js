@@ -45,25 +45,26 @@ module.exports = {
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'text-summary', 'lcov'],
 
-  // Coverage thresholds — ratcheted at Phase 67b (May 2, 2026, after Section 22 hardening week):
-  //   Measured post-67b   (CI #178): Statements 45.69% / Branches 40.22% / Functions 47.79% / Lines 46.71%
-  //   Phase 67 ratchet    (CI #170): Statements 44.52% / Branches 39.53% / Functions 46.07% / Lines 45.60%
-  //   Phase 58 ratchet    (CI #131): Statements 34.85% / Branches 26.44% / Functions 33.9% / Lines 35.97%
-  //   Phase 15 baseline   (CI #80):  Statements 18.14% / Branches 10.01% / Functions 14.00% / Lines 18.79%
+  // Coverage thresholds — ratcheted at Phase 73d (May 2, 2026, Section 22 closeout):
+  //   Phase 73d measured (CI probe):   Statements 48.54% / Branches 43.70% / Functions 51.47% / Lines 49.62%
+  //                                    +13.65pp lines from Phase 67b in one day. 129 new tests across
+  //                                    73a (services/geocoding), 73b (jobs/), 73c (middleware + lib),
+  //                                    73d (email senders happy paths). Original 65% target deferred
+  //                                    to Phase 75+ — needs routes/ error branches with DB fixtures.
+  //   Phase 67b ratchet  (CI #178):    Statements 45.69% / Branches 40.22% / Functions 47.79% / Lines 46.71%
+  //   Phase 67 ratchet   (CI #170):    Statements 44.52% / Branches 39.53% / Functions 46.07% / Lines 45.60%
+  //   Phase 58 ratchet   (CI #131):    Statements 34.85% / Branches 26.44% / Functions 33.9%  / Lines 35.97%
+  //   Phase 15 baseline  (CI #80):     Statements 18.14% / Branches 10.01% / Functions 14.00% / Lines 18.79%
   //
   // Floors set ~1-2pp below current measured to catch genuine regressions
-  // without flapping on small drift (env order, single-test reorderings,
-  // etc.). Phase 67 + 67b together added 67 unit/integration tests covering
-  // lib/email + lib/weeklyReport (helpers + runWeeklyReports) + lib/pushNotification.
-  // Phase 67's stated target was 50% lines; reached 46.71% — accepted as
-  // sufficient (Section 22 has Phase 73 queued for 50% → 65%).
+  // without flapping on small drift (env order, single-test reorderings).
   // Goal: ≥70% line coverage on routes/ eventually.
   coverageThreshold: {
     global: {
-      statements: 44,
-      branches: 39,
-      functions: 46,
-      lines: 45,
+      statements: 47,
+      branches: 42,
+      functions: 50,
+      lines: 48,
     },
   },
 
