@@ -3770,3 +3770,81 @@ git commit -m "docs(section33): Phase 71 closeout — OpenAPI spec + Swagger UI 
 git push -u origin docs/section33-phase71-openapi
 ```
 Then open PR, wait for CI, squash merge.
+
+---
+
+## Section 34 — Session Log — May 2, 2026 (Phase 72 — Quebec Loi 25 compliance audit)
+
+Continued same-day. Goal per Section 22 roadmap: first-pass audit of where Constrai stands against Quebec's *Loi 25* (privacy modernisation, formerly Bill 64), with a prioritised gap list.
+
+### Headline
+
+**`COMPLIANCE.md` shipped — 190-line engineering audit covering data inventory, data-flow map, subject rights status, breach readiness, and 14 priority-ordered action items.** Identifies the three real cross-border PII vectors (SendGrid, Mapbox, Expo Push — all US) and flags privacy policy + right-to-deletion + breach procedure as "must fix before next customer".
+
+### What was added
+
+- `COMPLIANCE.md` — 8 sections:
+  1. Executive summary with a 12-row status table
+  2. Loi 25 obligations summary (article-level, with CAD 25M penalty note)
+  3. Data inventory — every PII column in the schema, classified by sensitivity
+  4. Data-flow map — every external destination, jurisdiction, and Loi 25 status
+  5. Subject rights implementation status (access / correct / delete / port)
+  6. Breach notification readiness — gap analysis
+  7. **14 prioritised action items** — split "must fix before next customer" / "next quarter" / "nice to have"
+  8. Engineering decisions that already help (multi-tenant isolation, bcrypt 12, JWT short access, Sentry `sendDefaultPii: false`, all primary data in TOR1, daily encrypted backups)
+
+### Top 3 gaps identified
+
+1. **No published privacy policy.** Required before commercial multi-customer launch.
+2. **Cross-border transfer assessments missing for Sentry / SendGrid / Mapbox / Expo Push.** Loi 25 Section 17 requires PIA + DPA + privacy-policy disclosure.
+3. **No right-to-deletion endpoint or breach response procedure.** Both are explicit Loi 25 requirements.
+
+### Already-strong points worth recording
+
+- Multi-tenant `company_id` isolation (every business table, every route).
+- Bcrypt 12-rounds for PINs (raised from 10 in Phase 12).
+- JWT 1h access + 7d refresh rotation.
+- Append-only `audit_logs` + `sensitive_access_log`.
+- Sentry configured with `sendDefaultPii: false` (Phase 64 — explicit choice).
+- Primary data + backups all in TOR1 (Toronto, Canada).
+- Encrypted daily backups with documented restore procedure (Phase 65 drilled).
+
+### Where we are now
+
+| Phase | Status | What |
+|---|---|---|
+| 64 | ✅ DONE | Sentry live in prod (Section 24) |
+| 65 | ✅ DONE | Backup drill + drift fix (Section 25) |
+| 66 | ✅ DONE | `/api/health/deep` readiness probe (Section 26) |
+| 67 | ✅ DONE | Backend coverage 35% → 46.7% (Sections 27 + 28) |
+| 68 | ✅ DONE | Frontend Vitest + RTL harness (Section 29) |
+| 70 | ✅ DONE | Mobile Jest + jest-expo harness (Section 30) |
+| 68b | ✅ DONE | First real frontend component test (Section 31) |
+| 69 | ✅ DONE | Playwright E2E setup (Section 32) |
+| 71 | ✅ DONE | OpenAPI spec + Swagger UI (Section 33) |
+| 72 | ✅ DONE | Loi 25 compliance audit (this section) |
+| 73 | ⏳ NEXT | Backend coverage 50% → 65% (heavy — multiple PRs) |
+| 74 | ⏳ Pending | DR runbook |
+| 71b | ⏳ Pending | Fan `@openapi` blocks across remaining ~25 routes |
+| 69b | ⏳ Pending | Vite preview build for E2E + interaction tests |
+| 70b | ⏳ Pending | Mobile component tests once RNTL/RN ecosystem stabilises |
+
+### Lessons captured
+
+1. **Engineering audits surface gaps that policy-only audits miss** — and vice versa. The COMPLIANCE.md table maps Loi 25 articles to specific code surfaces (route handlers, schema columns, third-party calls). A lawyer's pure-text audit would miss the `sendDefaultPii: false` win; an engineering-only audit would miss the privacy-policy publication requirement. Both perspectives are needed.
+2. **Cross-border PII is mostly through SaaS, not the database.** The DB sits comfortably in TOR1; the leakage points are vendor SDK calls (SendGrid, Mapbox, Expo Push). Each is a small documented PIA, not a re-architecture project.
+3. **"Engineering decisions that already help" section is psychologically valuable.** A compliance audit that only enumerates what's broken is demoralising. Listing the wins keeps morale honest about where we stand.
+
+### Commit / push checklist for this section
+
+Files touched:
+- `COMPLIANCE.md` (new) — committed via PR #50 (`097cd66`).
+- `DECISIONS.md` — this Section 34. **Pending.**
+
+```powershell
+git checkout -b docs/section34-phase72-loi25
+git add DECISIONS.md
+git commit -m "docs(section34): Phase 72 closeout — Loi 25 compliance audit shipped as COMPLIANCE.md"
+git push -u origin docs/section34-phase72-loi25
+```
+Then open PR, wait for CI, squash merge.
