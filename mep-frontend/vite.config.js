@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
@@ -125,6 +126,29 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+    },
+  },
+  // Vitest config (Phase 68, May 2026, Section 22 hardening week).
+  // Co-located with the Vite config so the test runner picks up the same
+  // alias + plugin pipeline as the dev server. Overrides only what tests
+  // need to be different (jsdom for the DOM, globals for terser tests,
+  // setup file for jest-dom matchers, css: false to skip Tailwind compile
+  // during tests since assertions don't depend on styles).
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: './src/test/setup.js',
+    css: false,
+    include: ['src/**/*.{test,spec}.{js,jsx,ts,tsx}'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'text-summary', 'lcov'],
+      include: ['src/**/*.{js,jsx,ts,tsx}'],
+      exclude: [
+        'src/**/*.{test,spec}.{js,jsx,ts,tsx}',
+        'src/test/**',
+        'src/main.jsx',
+      ],
     },
   },
   server: {

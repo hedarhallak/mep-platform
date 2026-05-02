@@ -147,6 +147,11 @@ jobs:
         run: npm run lint
         continue-on-error: true
 
+      - name: Tests (Vitest, blocking — Phase 68 onward)
+        # Phase 68 (May 2026): Vitest + React Testing Library wired up.
+        # Pure helper tests + RTL smoke. Real component tests follow in 68b+.
+        run: npm test
+
       - name: Build
         run: npm run build
 
