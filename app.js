@@ -164,10 +164,79 @@ app.get('/api/config', (req, res) => {
   });
 });
 
+// /api-docs — interactive Swagger UI for the OpenAPI spec, generated
+// from the @openapi JSDoc blocks scattered across this file + routes/.
+// Public (no auth) so frontend devs / partners can self-serve. Phase 71
+// (May 2026, Section 22 hardening). See lib/openapi.js for the base
+// definition; per-route schemas are added incrementally in Phase 71b.
+{
+  const swaggerUi = require('swagger-ui-express');
+  const { spec } = require('./lib/openapi');
+  app.get('/api-docs.json', (req, res) => res.json(spec));
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(spec, { explorer: true }));
+}
+
+/**
+ * @openapi
+ * /api/health:
+ *   get:
+ *     tags: [Health]
+ *     summary: Liveness probe
+ *     description: |
+ *       Cheap liveness probe — no I/O, no DB. Polled by UptimeRobot every
+ *       5 minutes. Always returns 200 if the Node process is responsive.
+ *     security: []
+ *     responses:
+ *       200:
+ *         description: Process is responsive.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 ok:      { type: boolean, example: true }
+ *                 service: { type: string, example: mep-site-workforce }
+ *                 time:    { type: string, format: date-time }
+ */
 app.get('/api/health', (req, res) => {
   res.json({ ok: true, service: 'mep-site-workforce', time: new Date().toISOString() });
 });
 
+/**
+ * @openapi
+ * /api/health/deep:
+ *   get:
+ *     tags: [Health]
+ *     summary: Readiness probe with structured checks
+ *     description: |
+ *       Phase 66 readiness probe. Returns DB connectivity, disk space, and
+ *       last-backup-age status. Returns 503 if any hard-fail check trips
+ *       (DB or disk); 200 otherwise. Soft warnings (stale backup) surface
+ *       in the response body via a `warnings` array but do NOT trip 503.
+ *     security: []
+ *     responses:
+ *       200:
+ *         description: All hard-fail checks passed; soft warnings may be present.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 ok:       { type: boolean, example: true }
+ *                 service:  { type: string }
+ *                 time:     { type: string, format: date-time }
+ *                 checks:
+ *                   type: object
+ *                   properties:
+ *                     db:     { type: object }
+ *                     disk:   { type: object }
+ *                     backup: { type: object }
+ *                 warnings:
+ *                   type: array
+ *                   items: { type: string }
+ *       503:
+ *         description: One or more hard-fail checks tripped (DB or disk).
+ */
 // /api/health/deep — Phase 66 readiness probe. Runs structured checks
 // (DB connectivity, disk space, last backup age) and returns 503 when a
 // hard-fail check trips. UptimeRobot continues polling the cheap
