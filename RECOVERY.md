@@ -99,10 +99,18 @@ s3cmd ls s3://constrai-backups/daily/
     s3://constrai-backups/daily/mepdb_<DATE>.sql.gz \
     mepdb_recovered
 
-# 3. Verify
-sudo -u postgres psql -d mepdb_recovered -c "SELECT COUNT(*) FROM users;"
-sudo -u postgres psql -d mepdb_recovered -c "SELECT COUNT(*) FROM employees;"
-sudo -u postgres psql -d mepdb_recovered -c "SELECT COUNT(*) FROM projects;"
+# 3. Verify — compare row counts against current production
+# (canonical table names, validated in Phase 65 drill, May 2 2026)
+for tbl in companies app_users employees projects suppliers material_catalog \
+           material_requests audit_logs ccq_travel_rates user_invites \
+           attendance_records refresh_tokens roles permissions; do
+  PROD=$(sudo -u postgres psql -tA -d mepdb -c "SELECT COUNT(*) FROM $tbl;" 2>/dev/null || echo ERR)
+  REC=$(sudo -u postgres psql -tA -d mepdb_recovered -c "SELECT COUNT(*) FROM $tbl;" 2>/dev/null || echo ERR)
+  STATUS=OK
+  [ "$PROD" != "$REC" ] && STATUS=MISMATCH
+  [ "$PROD" = ERR ] || [ "$REC" = ERR ] && STATUS=ERR
+  printf "%-22s prod=%-8s rec=%-8s [%s]\n" "$tbl" "$PROD" "$REC" "$STATUS"
+done
 
 # 4. Cut over
 pm2 stop mep-backend
@@ -118,6 +126,28 @@ curl https://app.constrai.ca/api/health
 
 - **RPO (data loss):** up to 24 hours (backup runs once/day at 03:00).
 - **RTO (recovery time):** 15–30 minutes from incident detection to app back online.
+
+### 3.4 Drill timing & verified runbook (Phase 65, May 2 2026)
+
+Phase 65 ran the restore procedure end-to-end on prod with a fresh backup of the live `mepdb` (22 MB, 61 tables). All row counts matched 1:1; PostGIS extension restored cleanly. Recorded timings for capacity planning:
+
+| Step | Wall-clock | Notes |
+|---|---|---|
+| `s3cmd get` (download .sql.gz) | <1s | 64 KB compressed |
+| `gunzip` decompress | <1s | 712 KB SQL |
+| `DROP DATABASE` + `CREATE DATABASE` | <1s | superuser via `sudo -u postgres psql` |
+| `psql` apply (full restore + ownership) | ~7s | dominates the wall clock at this DB size |
+| **End-to-end (`time` on the script)** | **8.846s** | from invocation to "Restore complete" |
+
+This is the floor. Restore time scales roughly linearly with DB size and S3 egress latency. At 1 GB the script will likely take 30–90 seconds; at 10 GB consider a streaming restore (`pg_restore -j N`) or volume snapshot path instead.
+
+### 3.5 Known operational gotchas (validated against incidents)
+
+1. **Backup script file-mode drift** — Until commit `50486df` (PR #32), `scripts/backup/*.sh` were tracked as `100644` in git, so any `git pull` rewrote them as non-executable and silently broke cron. **Fixed at the root** by `git update-index --chmod=+x`. Verify with `git ls-files --stage scripts/backup/` — all `.sh` files must show `100755`. If you ever see Phase 65's symptom (`Permission denied` in `/var/log/mep-backup.log`), check this first.
+2. **Backups can fail silently for days.** No alerting wired up beyond writing to `/var/log/mep-backup.log`. Wire up Healthchecks.io (see `scripts/backup/SETUP.md` Part 4) or Phase 66 will add a "last successful backup" probe to `/api/health`. Until then, **manual check at quarterly verification (Section 8) is the only line of defence.**
+3. **PostGIS requires superuser to restore** — the script already runs psql as `sudo -u postgres` for this reason. Don't change to `mepuser`.
+4. **`git pull` after manual `chmod +x`** will refuse to merge with "would be overwritten by merge". Resolution: `git checkout scripts/backup/` to discard the local mode override (the new commit will set the same mode anyway), then `git pull`.
+5. **Verification table list is canonical.** The names above (`app_users`, `material_catalog`, `ccq_travel_rates`, etc.) are not always intuitive — first instinct (`users`, `materials`, `ccq_rates`) is wrong. Use the script in 3.2 verbatim.
 
 ---
 
