@@ -3848,3 +3848,72 @@ git commit -m "docs(section34): Phase 72 closeout — Loi 25 compliance audit sh
 git push -u origin docs/section34-phase72-loi25
 ```
 Then open PR, wait for CI, squash merge.
+
+---
+
+## Section 35 — Session Log — May 2, 2026 (Phase 73a — services/geocoding tests)
+
+Continued same-day. Goal per Section 22: backend coverage 50% → 65% in batches. **Phase 73a** is batch one — fully cover `services/geocoding.js`, the only file under `services/` and previously untested.
+
+### Headline
+
+**12 unit tests covering all 8 result branches of `services/geocoding.geocodeHomeAddress` — configuration guard, happy path, fallback coordinates parser, Mapbox 4xx/5xx, empty results, malformed coordinates, network error, AbortController timeout, custom timeoutMs, default-country.** Mocks `global.fetch`; no DB, no network. Surfaced one piece of dead code along the way (the `GEOCODE_INPUT_EMPTY` branch is unreachable because `country` always defaults to `'Canada'`).
+
+### What was added
+
+- `tests/smoke/geocoding.test.js` — 12 tests across four describe blocks:
+  - **configuration guard** — missing `MAPBOX_ACCESS_TOKEN` → `GEOCODE_PROVIDER_NOT_CONFIGURED`
+  - **Mapbox responses** — happy path, fallback to `properties.coordinates` when `geometry.coordinates` absent, `GEOCODE_PROVIDER_ERROR` (with body and with text() throwing), `GEOCODE_NO_RESULTS` (empty + missing features), `GEOCODE_BAD_RESPONSE` for malformed coordinates
+  - **network errors** — `GEOCODE_NETWORK_ERROR` for generic failure, `GEOCODE_TIMEOUT` for AbortError, custom `timeoutMs` honoured, default country = `Canada`
+- Test-level `afterEach` restores `MAPBOX_ACCESS_TOKEN` env + `global.fetch`. Module-level `jest.resetModules()` lets each test re-read env at module load (same pattern as the Phase 66 lib/health env-resolver tests).
+
+### Adversities — surfaced dead code
+
+First test pass had 2 failures on the `GEOCODE_INPUT_EMPTY` branch. Reading the function:
+
+```js
+const q = buildAddress({ street, city, province, postal_code, country: country || 'Canada' });
+if (!q) return { ok: false, error: 'GEOCODE_INPUT_EMPTY' };
+```
+
+`country: country || 'Canada'` means `q` is **never empty** — even with every field null, the resulting query string is `'Canada'`. The `GEOCODE_INPUT_EMPTY` branch is dead code. Documented in the test file's preamble; tracked as a follow-up to either remove the branch or short-circuit when country is the only non-empty field.
+
+### Where we are now
+
+| Phase | Status | What |
+|---|---|---|
+| 64 | ✅ DONE | Sentry live in prod (Section 24) |
+| 65 | ✅ DONE | Backup drill + drift fix (Section 25) |
+| 66 | ✅ DONE | `/api/health/deep` readiness probe (Section 26) |
+| 67 | ✅ DONE | Backend coverage 35% → 46.7% (Sections 27 + 28) |
+| 68 | ✅ DONE | Frontend Vitest + RTL harness (Section 29) |
+| 70 | ✅ DONE | Mobile Jest + jest-expo harness (Section 30) |
+| 68b | ✅ DONE | First real frontend component test (Section 31) |
+| 69 | ✅ DONE | Playwright E2E setup (Section 32) |
+| 71 | ✅ DONE | OpenAPI spec + Swagger UI (Section 33) |
+| 72 | ✅ DONE | Loi 25 compliance audit (Section 34) |
+| 73a | ✅ DONE | services/geocoding fully covered, 12 tests (this section) |
+| 73b | ⏳ NEXT | jobs/ tests (weeklyReportJob, ccqRatesReminderJob) — node-cron mock |
+| 73c | ⏳ Pending | Middleware deep tests + leftover lib branches |
+| 73d | ⏳ Pending | Final push to 65% (likely route error branches) |
+| 74 | ⏳ Pending | DR runbook |
+
+### Lessons captured
+
+1. **Dead-code discovery is a side benefit of full-branch coverage tests.** Without the failed test, the unreachable `GEOCODE_INPUT_EMPTY` would have stayed in the codebase indefinitely. Worth recording when each phase surfaces one — it's a coverage-quality signal beyond the line-count metric.
+2. **`jest.resetModules()` + `require()` inside the test** is the cleanest way to re-read env-driven module-level constants without restructuring the production code. Used here for `MAPBOX_TOKEN`. Pattern reusable for any `const X = process.env.Y` at module scope.
+3. **Estimated +1pp lines coverage gain** (117 lines / ~4000 statements ≈ 3% but most of it is in branches, not new lines). Real number visible only after CI.
+
+### Commit / push checklist for this section
+
+Files touched (Phase 73a):
+- `tests/smoke/geocoding.test.js` (new) — committed via PR #54 (`3c11022`).
+- `DECISIONS.md` — this Section 35. **Pending.**
+
+```powershell
+git checkout -b docs/section35-phase73a-geocoding
+git add DECISIONS.md
+git commit -m "docs(section35): Phase 73a closeout — services/geocoding 12 tests, dead-code finding"
+git push -u origin docs/section35-phase73a-geocoding
+```
+Then open PR, wait for CI, squash merge.
