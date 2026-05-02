@@ -4,8 +4,16 @@
 // so tests can drive the app via Supertest without binding to a port and
 // without scheduling production cron jobs. This file remains the canonical
 // entry started by `npm start` / `pm2 start` / `node index.js`.
+//
+// Phase 64 (May 2026): require './instrument' as the FIRST line so
+// Sentry's auto-instrumentation patches Node's http/pg/express modules
+// at require-time, before app.js loads them. Tests don't go through
+// index.js (they require app.js directly) so Sentry stays disabled in
+// the Jest process.
 
 'use strict';
+
+require('./instrument');
 
 const app = require('./app');
 const { pool } = require('./db');
