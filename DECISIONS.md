@@ -3554,3 +3554,73 @@ git commit -m "docs(section30): Phase 70 closeout — jest-expo on mep-mobile, 9
 git push -u origin docs/section30-phase70-mobile-test-setup
 ```
 Then open PR, wait for CI, squash merge.
+
+---
+
+## Section 31 — Session Log — May 2, 2026 (Phase 68b — first real React component test)
+
+Continued same-day from Section 30. Goal: write the first non-smoke component test on mep-frontend, validating that the harness from Phase 68 actually supports interesting tests.
+
+### Headline
+
+**6 new tests covering `usePermissions` / `PermissionsProvider` / `Can` — the central RBAC gate that every UI permission check funnels through. Mocks `@/hooks/useAuth` and `@/lib/api` via `vi.mock`, then asserts the rendered `<Can>` output across SUPER_ADMIN bypass, granted, denied, default-action, missing-module, and API-error branches.**
+
+### Why this surface first
+
+`<Can module="..." action="...">` is the most security-relevant React surface in the app. Every "Delete project", "Edit assignment", "View payroll" button is gated through it. A regression here is invisible until either:
+- a worker can suddenly see / press a destructive action (data-loss risk), or
+- an admin can't approve something (workflow blocker).
+
+The cost of a test was low (~135 lines, one file) because the helper functions and Provider are co-located — and the value is high. Worth doing before any cosmetic page test.
+
+### What was added
+
+`mep-frontend/src/hooks/usePermissions.test.jsx` — 6 tests:
+
+1. Renders children when permission granted (`{ projects: { view: true } }` + `<Can module="projects" action="view">`).
+2. Renders fallback when permission denied (worker, no `edit` flag).
+3. SUPER_ADMIN sees all even with empty permissions object (the role-bypass branch).
+4. Defaults `action` to `view` when not specified.
+5. Missing module entry treated as denied (defensive `?.` chain).
+6. API rejection falls back to `permissions={}` → `can()` returns false → fallback renders.
+
+`vi.mock` pattern: define a module-level `nextApiResponse` / `nextApiError` and have the mock return them. Each test sets these in its body. Mirrors the `mockResolvedValueOnce` pattern from the backend's `push_notification.test.js` but adapted to the closure-style mock that vi.mock requires (since module mocks are hoisted).
+
+### Adversities
+
+None this round. The Phase 68 harness (Vitest + RTL + jsdom) "just worked" once the mocks were configured. Nice contrast to Phase 70's RNTL/RN incompatibility — when the ecosystem is mature, a single test file lands cleanly.
+
+### Where we are now
+
+| Phase | Status | What |
+|---|---|---|
+| 64 | ✅ DONE | Sentry live in prod (Section 24) |
+| 65 | ✅ DONE | Backup drill + drift fix (Section 25) |
+| 66 | ✅ DONE | `/api/health/deep` readiness probe (Section 26) |
+| 67 | ✅ DONE | Backend coverage 35% → 46.7% (Sections 27 + 28) |
+| 68 | ✅ DONE | Frontend Vitest + RTL harness (Section 29) |
+| 70 | ✅ DONE | Mobile Jest + jest-expo harness — theme tests only (Section 30) |
+| 68b | ✅ DONE | First real frontend component test — `usePermissions`/`Can` RBAC gate (this section) |
+| 69 | ⏳ NEXT | Playwright E2E |
+| 70b | ⏳ Pending | Mobile component tests once RNTL/RN ecosystem stabilises |
+| 71+ | ⏳ Pending | (Section 22 roadmap continues) |
+
+### Lessons captured
+
+1. **`vi.mock` hoists like `jest.mock`** — declare side-effects (the `nextApiResponse` capture variables) at module scope, then refer to them inside the factory. The factory closes over the lexical binding correctly. Same pattern as the backend's pushNotification test.
+2. **RBAC tests are cheap insurance.** This whole file is 135 lines and protects every permission gate in the app. Worth doing first on any new app's frontend test setup.
+3. **Phase 68b vs 68 cost.** Phase 68 took ~30min for harness + 19 starter tests. Phase 68b took ~10min for 6 real tests. After the harness lands, marginal cost of new component tests is small.
+
+### Commit / push checklist for this section
+
+Files touched:
+- `mep-frontend/src/hooks/usePermissions.test.jsx` (new) — committed via PR #44 (`d0b4d81`).
+- `DECISIONS.md` — this Section 31. **Pending.**
+
+```powershell
+git checkout -b docs/section31-phase68b-permissions-tests
+git add DECISIONS.md
+git commit -m "docs(section31): Phase 68b closeout — usePermissions/Can tests, 6 new"
+git push -u origin docs/section31-phase68b-permissions-tests
+```
+Then open PR, wait for CI, squash merge.
