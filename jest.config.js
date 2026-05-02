@@ -45,24 +45,25 @@ module.exports = {
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'text-summary', 'lcov'],
 
-  // Coverage thresholds — ratcheted at Phase 67 (May 2, 2026, after Section 22 hardening week):
-  //   Measured (CI #170): Statements 44.52% / Branches 39.53% / Functions 46.07% / Lines 45.6%
+  // Coverage thresholds — ratcheted at Phase 67b (May 2, 2026, after Section 22 hardening week):
+  //   Measured post-67b   (CI #178): Statements 45.69% / Branches 40.22% / Functions 47.79% / Lines 46.71%
+  //   Phase 67 ratchet    (CI #170): Statements 44.52% / Branches 39.53% / Functions 46.07% / Lines 45.60%
   //   Phase 58 ratchet    (CI #131): Statements 34.85% / Branches 26.44% / Functions 33.9% / Lines 35.97%
   //   Phase 15 baseline   (CI #80):  Statements 18.14% / Branches 10.01% / Functions 14.00% / Lines 18.79%
   //
   // Floors set ~1-2pp below current measured to catch genuine regressions
   // without flapping on small drift (env order, single-test reorderings,
-  // etc.). Phase 67 added 62 unit tests covering lib/email + lib/weeklyReport
-  // helpers + lib/pushNotification — branches alone jumped +8pp from the
-  // ccqZone table-driven block.
-  // Goal: ≥70% line coverage on routes/ eventually. Ratchet up again
-  // each time a section closes with new coverage.
+  // etc.). Phase 67 + 67b together added 67 unit/integration tests covering
+  // lib/email + lib/weeklyReport (helpers + runWeeklyReports) + lib/pushNotification.
+  // Phase 67's stated target was 50% lines; reached 46.71% — accepted as
+  // sufficient (Section 22 has Phase 73 queued for 50% → 65%).
+  // Goal: ≥70% line coverage on routes/ eventually.
   coverageThreshold: {
     global: {
-      statements: 43,
-      branches: 38,
-      functions: 44,
-      lines: 44,
+      statements: 44,
+      branches: 39,
+      functions: 46,
+      lines: 45,
     },
   },
 

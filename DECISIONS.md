@@ -3328,3 +3328,90 @@ git commit -m "docs(section27): Phase 67 coverage batch 1 — +9.6pp lines, ratc
 git push -u origin docs/section27-phase67-coverage-batch1
 ```
 Then open PR, wait for CI, squash merge.
+
+---
+
+## Section 28 — Session Log — May 2, 2026 (Phase 67b — DB-backed runWeeklyReports test, Phase 67 closeout)
+
+Continued same-day from Section 27. Goal: close the remaining ~4pp gap to the 50% line-coverage target.
+
+### Headline
+
+**Phase 67b added 5 DB-backed integration tests for `runWeeklyReports`. Coverage moved from 45.6% → 46.71% lines (+1.11pp). The 50% target was missed by 3.3pp — accepting the gap and closing Phase 67 as "sufficient", with the remaining push deferred to Phase 73 (Section 22 roadmap already has it scheduled for 50% → 65%).**
+
+### Coverage delta (CI #178 vs Phase-67-batch-1 baseline CI #170)
+
+| Metric | Phase 67 (CI #170) | Phase 67b (CI #178) | Δ |
+|---|---|---|---|
+| Statements | 44.52% | 45.69% | +1.17 |
+| Branches | 39.53% | 40.22% | +0.69 |
+| Functions | 46.07% | 47.79% | +1.72 |
+| Lines | 45.60% | 46.71% | +1.11 |
+
+Compared to the Section 19 close (CI #131, May 1 evening): **+10.74pp on lines** in one calendar day.
+
+### What was added
+
+`tests/integration/weekly_report.test.js` — 5 DB-backed tests, ~301 lines:
+
+1. **Empty-state**: completes without throwing when no companies have overlapping assignments.
+2. **Worker happy path**: seeds company + employee + employee_profile (with contact_email) + APPROVED assignment overlapping the previous week + one CONFIRMED attendance record. Asserts `sgMail.send` called once with the expected `to`, `from`, `subject` (`Weekly Work Report`), and HTML body.
+3. **No contact_email branch**: profile without contact_email → no email goes out (route's `if (!asgn.contact_email) continue` guard).
+4. **Foreman reminder branch**: foreman + worker on same project, worker has CHECKED_OUT (unconfirmed) record → foreman gets the `[ACTION REQUIRED] N unconfirmed hour(s)` reminder. Filtered by subject because foreman is also an assignee and gets a worker-style report on the same address.
+5. **SendGrid send error**: `sgMail.send.mockRejectedValueOnce` → function still resolves cleanly, error logged via `console.error` (the per-employee try/catch holds the line).
+
+Mock pattern mirrors `tests/integration/admin_users.test.js`:
+- `jest.mock('@sendgrid/mail', ...)` hoisted to file top — both `setApiKey` and `send` become Jest spies.
+- `SENDGRID_API_KEY` + `SENDGRID_FROM_EMAIL` set in `beforeAll`, restored in `afterAll`.
+- Each test calls `sgMail.send.mockClear()` before invoking `runWeeklyReports`.
+
+### Adversities
+
+1. **The foreman gets two emails, not one.** Foremen are themselves APPROVED assignees, so the route's per-assignment loop hits them once with a worker-style report — then again later in the foreman-reminder loop. First test pass asserted `length === 1` filtering only by `to`, which received 2. Fix: filter by both `to` AND `subject` (`/ACTION REQUIRED/`). Worth noting in the route's design — the second email is intentional behaviour but not obvious from the function signature.
+2. **The `from`/`to` date range computed by `previousWeekRange()` runs on the test box's local clock**, so the test must call it inside the test body and use whatever it returned to seed attendance dates. Hardcoded dates would break weekly as time passes.
+3. **CI ran the OLD commit's expected output once** because the rebase + push sequence raced the previously-queued run. The empty-commit `ci: retrigger after rebase` trick (also used in earlier sessions) reliably forces a fresh run on the latest tip — worth keeping in the standard playbook.
+
+### Why we stopped at 46.71% instead of pushing to 50%
+
+The next ~3pp would come from finer-grained tests on:
+- `routes/*` happy-path-but-with-filters (e.g. `?project_id=N` and `?employee_id=N` branches in `routes/reports.js`).
+- `lib/email.sendEmail` actual happy path (real `sgMail.send` call assertion via mock).
+- Various error-handling branches across services.
+
+Each of those tests adds ~0.2–0.5pp. Reaching 50% would need 8–15 more tests. ROI is dropping; better to ship Phase 67 as-is and let Phase 73 (already scheduled for the 50% → 65% push) take the next leg with a fresh coverage analysis.
+
+### Threshold ratchet
+
+Bumped from `43/38/44/44` to `44/39/46/45` — matches the new measured floor minus ~1pp, same convention as previous ratchets.
+
+### Where we are now
+
+| Phase | Status | What |
+|---|---|---|
+| 64 | ✅ DONE | Sentry live in prod (Section 24) |
+| 65 | ✅ DONE | Backup drill + drift fix (Section 25) |
+| 66 | ✅ DONE | `/api/health/deep` readiness probe (Section 26) |
+| 67 | ✅ DONE | Coverage 35.97% → 46.71% lines (Sections 27 + 28). Target 50% missed by 3.3pp; accepted. |
+| 68 | ⏳ NEXT | Frontend test setup — Vitest + RTL on `mep-frontend/` |
+| 73 | ⏳ Pending | Backend coverage 50% → 65% (Section 22 roadmap; will pick up the 50% target when it runs) |
+
+### Lessons captured
+
+1. **"Single-batch coverage push" estimates are noisy.** Phase 67's batch-1 estimate was "~+9pp" — actual was +9.63. Phase 67b's estimate was "~+3-4pp" — actual was +1.11. Big-target (`runWeeklyReports`) tests cover paths but those paths share helpers/HTML builders that were already covered in batch 1, so the marginal gain is smaller than line-count would suggest. Future estimates: divide the obvious "uncovered lines" estimate by ~3 to get realistic delta after duplication.
+2. **The squash-merge included docs/jest.config changes from a previous PR (#37)** because that branch wasn't fully synced into 67b's base before rebase. Visible in the post-merge `git pull` showing 3 files. No harm, but a reminder that rebase carries everything since the parent commit, not just "your" diffs. Rebase from current `main` BEFORE the first push to keep PR diffs clean.
+3. **Foremen are also assignees** — the route emits 2 emails per foreman (worker report + foreman reminder). This was unexpected from reading the function signature. Worth a comment in `lib/weeklyReport.js` so the next reader doesn't make the same assumption.
+
+### Commit / push checklist for this section
+
+Files touched in Phase 67b:
+- `tests/integration/weekly_report.test.js` (new) — committed via PR #38 (`7484d55`).
+- `jest.config.js` — threshold ratchet. **Pending.**
+- `DECISIONS.md` — this Section 28. **Pending.**
+
+```powershell
+git checkout -b docs/section28-phase67b-closeout
+git add DECISIONS.md jest.config.js
+git commit -m "docs(section28): Phase 67b closeout — runWeeklyReports test, +1.1pp lines, accept 46.7% target"
+git push -u origin docs/section28-phase67b-closeout
+```
+Then open PR, wait for CI, squash merge.
