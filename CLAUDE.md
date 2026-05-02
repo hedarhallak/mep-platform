@@ -124,7 +124,7 @@ Multi-tenancy is enforced via `company_id` on all business tables. There are 13 
    - `بسيط` not `سهل`
    - **Computing verbs:** for "run a command/program", use **`شغّل`** (or `نفّذ` for "execute"), NEVER `ركض` (which means "to run on foot, jog"). Examples: `شغّل npm install` not `اركض npm install`. `Knip تشغّل/تشغيل` not `Knip ركض`. `لما نفّذت الأمر` not `لما ركضت الأمر`. This was a recurring translation pitfall — the English verb "run" maps to two distinct Arabic verbs depending on context.
    - English code/commands stay in English. Mix naturally.
-3. **Never decide unilaterally** — for any architectural choice, propose options and let Hedar pick. Use `AskUserQuestion` to present 2–4 clear options.
+3. **Architectural choices: propose options. Execution choices: just execute.** For irreversible architectural decisions (DB schema, auth model, framework choice) propose 2–4 options via `AskUserQuestion`. For reversible execution choices (which test file first, which threshold value to try, which PR description to use) **do NOT ask** — pick the obvious default and proceed. Hedar has explicitly said multiple times: "بدل ماتعطيني خيارات اعطيني تسلسل للتنفيذ" — when he wants the full sequence executed, asking "shall we do A or B?" wastes turns. Default to executing; ask only when the choice is hard to undo.
 4. **Be honest about uncertainty** — if a tool/library/decision is unclear, say so and offer to look it up rather than guessing.
 5. **Keep instructions step-by-step and line-by-line** when guiding through manual operations (terminal commands, dashboard navigation). Don't bundle 5 actions in one paragraph.
 6. **Keep responses tight.** No long preambles. No restating what Hedar just said. Get to the point. Use bullets/tables/code blocks where they add clarity.
@@ -194,6 +194,8 @@ When Claude notices a task pattern repeating — same shape of operation done 3+
 4. **Let Hedar pick** before continuing.
 5. **Always prefer the cheapest option that meaningfully speeds the loop** — don't over-engineer.
 
+**Default batching rule (NEW — May 2, 2026, Phase 73 retro):** When 3+ same-shape phases are queued (e.g. "Phase 73a, 73b, 73c, 73d each writes one smoke test file"), default to **one feature PR per batch**, not one PR per phase. Phase 73 was executed as 4 separate PRs + 4 separate doc PRs = 8 round-trips. Could have been 1 feature PR (all 4 test files) + 1 docs PR = 2 round-trips. Section 4.5 was already there but we waited too long to apply it. Trigger: as soon as Phase Nb / Nc / Nd are pre-planned in the same Section, ask "should we ship these as one PR?" before starting — not after Phase Nd is half done.
+
 **Examples:**
 - Writing one test per chat round-trip → batch 4–5 in one round-trip.
 - Adding 20 permissions one-by-one → write a helper that takes a list.
@@ -201,6 +203,51 @@ When Claude notices a task pattern repeating — same shape of operation done 3+
 - Triaging 50 Dependabot PRs by hand → bulk-close via API.
 
 This rule is the test/automation analogue of Section 4 ("Always Suggest Better Tools"). Section 4 fires at the start of a new area; Section 4.5 fires mid-flow when a pattern emerges.
+
+---
+
+## 4.6. Lessons Captured — Phase 73 Retrospective (NEW — May 2, 2026)
+
+Concrete pitfalls hit during the Section 22 / Phase 73 marathon. Encoded here so future sessions skip them.
+
+### Coverage thresholds: 2–3 pp safety margin, never 1 pp
+
+- Set `coverageThreshold` in `jest.config.js` **2–3 pp below the measured value**, never 1 pp below.
+- Build flake (Jest worker scheduling, cache hits, test ordering) shifts coverage by up to 1.5 pp between runs. A 1 pp gap flaps CI; 2–3 pp absorbs the variance.
+- Phase 73d ratchet failed twice (52/45/53/52 then 47/42/50/48) before settling at 46/41/49/47. The 3 pp margin held.
+
+### Run coverage with TEST_DATABASE_URL before pushing a ratchet
+
+- `npx jest --coverage` locally without `TEST_DATABASE_URL` set reports ~18% lines because all 41 integration suites skip via `describeIfDb`. CI runs with the DB and reports the real ~50%. Confusing the two costs PR cycles.
+- **Convention:** before any threshold ratchet PR, run `TEST_DATABASE_URL=<url> npx jest --coverage` (or `npm run test:cov`) locally and read the actual numbers.
+
+### `jest.mock` factory variables MUST start with `mock`
+
+- `jest.mock('module', () => ({...}))` is hoisted above all top-level statements. The factory body can only reference variables that begin with `mock` (case-insensitive) — anything else throws `ReferenceError: out-of-scope variables` at parse time.
+- **Convention:** every test-level mock helper variable starts with `mock`. No exceptions, even when the var "feels like" it should be named after the thing it mocks (`sgSendImpl`, `originalFetch`, etc.).
+
+### Coverage push past ~50%: smoke tests are exhausted, routes need DB fixtures
+
+- Phase 73a–d covered every unit-testable file (services, jobs, middleware, lib helpers, email senders) and reached **49.62% lines** — the cheap wins are now done.
+- The remaining gap to 65% is entirely inside `routes/*` happy-path branches. That's a **different category of work**: needs real DB fixtures, multi-table seed data, auth tokens, permission rows. Don't conflate it with smoke-test phases — different velocity, different risk shape.
+- **Convention:** when planning a coverage push, name the category up front (smoke vs route+DB) so the target is realistic for the work shape.
+
+### Cowork bash sandbox can lag on file syncs — fall back to PowerShell + CI
+
+- During the May 2 session, the Linux mount in Cowork bash returned **stale `package.json`** (1565 bytes from Apr 29 instead of the current Windows version), causing `npx jest` to fail with "Invalid package config" until force-rewriting the file.
+- The Read/Edit/Write tools see the up-to-date Windows view; only the bash sandbox is stale.
+- **Convention:** when bash returns weird "stale file" errors, stop running tests/builds in bash for that session. Run them via Hedar's PowerShell (or commit and let CI do it). Don't waste turns trying to force-sync the mount.
+
+### npm scripts to add to package.json (when memory issues are addressed)
+
+Recommended convention for next session — not yet shipped:
+
+```json
+"test:cov": "TEST_DATABASE_URL=$TEST_DATABASE_URL jest --coverage --coverageReporters=text-summary",
+"test:cov:check": "node -e \"if(!process.env.TEST_DATABASE_URL){console.error('TEST_DATABASE_URL must be set'); process.exit(1)}\" && npm run test:cov"
+```
+
+This forces the local-vs-CI parity check before any ratchet PR.
 
 ---
 

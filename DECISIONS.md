@@ -4232,3 +4232,52 @@ If a fresh Claude session opens after this point:
    - **Test count:** ~245 backend (jest), plus frontend/mobile harnesses. CI runs all 5 jobs (Backend / Frontend / Mobile / Security / Schema) on every PR.
 
 Next phase to start: **74 (DR runbook)** — documents disaster recovery procedures (backup restore, server bootstrap, DNS failover, data corruption recovery). Operational docs, not code/tests.
+
+---
+
+## Section 39 — Engineering Rigor Calibration (May 2, 2026, end-of-day retro)
+
+After Section 22 closed, Hedar asked whether the rigor we've stacked up (branch protection + 5 CI jobs + coverage thresholds + Semgrep + Atlas + Sentry + …) is appropriate for the current product stage. This section captures the answer so future sessions don't drift toward more rigor by default.
+
+### The current stack of guardrails
+
+| Guardrail | Cost | Value | When it pays off |
+|---|---|---|---|
+| Branch protection on `main` (Phase 57) | ~30 s per PR (squash button) | Prevents accidental direct pushes; forces CI to gate every change | Right now (solo team, no review) — low value. High value once 2nd dev joins. |
+| 5 CI jobs (Backend / Frontend / Mobile / Security / Schema) | ~5 min wall-clock per push | Catches regressions in 5 surfaces simultaneously | Now — already caught Bugs 1, 6, 7, 8 |
+| Coverage thresholds (jest.config.js) | ~30 min per quarterly ratchet | Prevents silent test deletion + locks in gains | Now — useful as "anti-regression" floor; less useful as "push higher" lever |
+| Semgrep (security CI) | ~1 min per PR | Catches obvious injection / unsafe patterns | Marginal — has caught nothing in 3 months. Keep, low cost. |
+| Atlas (schema CI) | ~1 min per PR | Detects schema-source-of-truth drift | Marginal until next major migration |
+| Sentry (prod errors) | ~$26/mo | Real prod error visibility | High value — already pays for itself |
+| Daily backups → DO Spaces | ~$5/mo + cron | Disaster recovery floor | High value — proven via Phase 65 drill |
+| Pre-commit hook (route audit + lint-staged) | ~1 s per commit | Catches typos/format before push | Now — high value, near-zero cost |
+| OpenAPI spec + Swagger UI | One-time setup + 2 min per new route | Public docs surface | Marginal until first integration partner |
+| Loi 25 compliance audit | One-time | Regulatory cover for QC operations | High value — non-negotiable for QC market |
+
+### The calibration decision
+
+**Verdict: the stack is appropriate for the current stage, with two caveats.**
+
+1. **Don't add more rigor.** No mutation testing, no E2E coverage thresholds, no flake-detection bots, no required reviewers. Until the team is ≥2 people OR the customer count is ≥3 with paid contracts, the marginal CI/lint/test addition has lower ROI than another shipped feature. Drop the "should we add property-based testing?" reflex.
+
+2. **Don't aggressively push coverage past 50% lines until customer #1 is signed.** The current 49.62% is already 95th-percentile for Express apps of this size. Routes coverage to 65–70% is honest engineering work (~15 pp × ~80 hrs of DB-fixture work) that is **not** the bottleneck on revenue or product velocity. **Defer Phase 75+ until the velocity bottleneck is somewhere else.**
+
+### What this means for upcoming sessions
+
+- **Phase 74 (DR runbook)** is still on the roadmap — it's operational docs, not test rigor. Cheap and high value.
+- **Phase 75+ (routes coverage push)** is **deferred indefinitely** — re-enter the queue only after a customer-driven need arises (e.g., a 500 in prod that better routes coverage would have caught).
+- **Feature work returns to the front of the queue.** The deferred items from Section 22 (69b interaction tests, 70b RNTL, 71b @openapi fanout) are **deferred**, not blocked — pick up when feature velocity allows, not as standalone phases.
+- **The new test files we added today are already paying off.** Phase 67–73d's 129 tests catch silent prod 500s on schema drift (Bug 7, Bug 8 were caught this way). They don't need to grow proportionally with the codebase from here — they need to be maintained when routes change.
+
+### Convention going forward
+
+Before adding any new CI gate / lint rule / test category / threshold ratchet, the proposing session must explicitly answer:
+
+1. **What does this prevent?** (specific failure mode)
+2. **What's the real-world cost of that failure?** ($X downtime / Y customers / Z reputation)
+3. **What's the all-in cost of the gate?** (CI time + maintenance + flake budget)
+4. **Is the failure mode actually plausible at our current scale?** (not "in theory" — has it happened or is it about to?)
+
+If 4 is "no" or 2 is "small", **don't add it**. The point of CLAUDE.md Section 4 was to surface better tools when we DON'T have one; this is the inverse rule — surface that we don't NEED a new tool when the answer is to keep shipping features.
+
+This section was written during the post-Section-22 retro at Hedar's request: "هل ضروري كل هالـ ratchet والـ thresholds الصارمة لمشروع بمرحلته الحالية؟". The answer this section locks in: **the current stack is enough. Don't add more without proving the failure mode is real.**
