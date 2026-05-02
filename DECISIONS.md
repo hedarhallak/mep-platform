@@ -3699,3 +3699,74 @@ git commit -m "docs(section32): Phase 69 closeout — Playwright E2E + new CI jo
 git push -u origin docs/section32-phase69-playwright-e2e
 ```
 Then open PR, wait for CI, squash merge.
+
+---
+
+## Section 33 — Session Log — May 2, 2026 (Phase 71 — OpenAPI auto-gen + Swagger UI)
+
+Continued same-day. Goal per Section 22 roadmap: auto-generate an OpenAPI spec from the Express routes and serve an interactive `/api-docs` UI for the 27+ backend endpoints.
+
+### Headline
+
+**OpenAPI 3.0 spec wired with `swagger-jsdoc` + `swagger-ui-express`. Base definition (info, servers, securityScheme, common error/response shapes, 15 tag categories) lives in `lib/openapi.js`. Three proof-of-concept routes annotated with `@openapi` JSDoc blocks: `GET /api/health`, `GET /api/health/deep`, `POST /api/auth/login`. UI mounted at `/api-docs`; raw spec at `/api-docs.json`.** Phase 71b will fan out the per-route blocks across the remaining ~25 routes.
+
+### Tooling decisions (Section 4 better-tools check)
+
+| Concern | Choice | Rationale |
+|---|---|---|
+| Spec source | **`swagger-jsdoc` 6.x** | Reads `@openapi` JSDoc blocks colocated with route handlers. No separate spec file to drift. Forgiving of partial coverage — undocumented routes simply don't appear (acceptable for an incremental rollout). |
+| UI | **`swagger-ui-express` 5.x** | Standard pairing. Mounts the canonical Swagger UI at any path. Public, no auth (we want frontend / partner devs to self-serve). |
+| Alternatives ruled out | **`tsoa`** (needs TypeScript), **`zod-to-openapi`** (needs Zod schemas, none yet), **`express-oas-generator`** (sniffs traffic — hacky, unreliable). |
+
+### What was added
+
+- `lib/openapi.js` — base definition: `info`, `servers` (prod + local), `securitySchemes.bearerAuth`, common `schemas` (`ErrorResponse`, `OkResponse`), reusable `responses` (`Unauthorized`, `Forbidden`, `ValidationError`), 15 tags (Health, Auth, Onboarding, Employees, Projects, Assignments, Attendance, Materials, Suppliers, Reports, Permissions, SuperAdmin, Hub, Standup, Dispatch). `apis` glob points at `app.js` + `routes/*.js` so future `@openapi` blocks get picked up automatically.
+- `app.js` — `@openapi` blocks on `GET /api/health` (liveness, public) and `GET /api/health/deep` (readiness, public, 200/503 documented). Mount block at `/api-docs` (UI) + `/api-docs.json` (raw).
+- `routes/auth.js` — `@openapi` block on `POST /api/auth/login` covering request body, 200 success, 400 validation, 401 credentials/suspended, 429 rate limit. Documents the security-relevant error code differentiation (`INVALID_CREDENTIALS` / `ACCOUNT_SUSPENDED` / `COMPANY_SUSPENDED`).
+- `package.json` + lock — added `swagger-jsdoc@^6.2.8` + `swagger-ui-express@^5.0.1` to dependencies (not devDeps — the UI ships in production).
+- `API.md` — new row for `/api-docs` in the Public Endpoints table.
+
+### Adversities
+
+1. **First spec write tripped Prettier.** Long object-literal lines past 100 chars; `prettier --write` reformatted in place. Fixed before commit.
+2. **Decision: ship deps as `dependencies` not `devDependencies`.** Swagger UI runs in production for live API browsing. Adds ~3MB to the prod node_modules but worth the developer-experience win.
+
+### Where we are now
+
+| Phase | Status | What |
+|---|---|---|
+| 64 | ✅ DONE | Sentry live in prod (Section 24) |
+| 65 | ✅ DONE | Backup drill + drift fix (Section 25) |
+| 66 | ✅ DONE | `/api/health/deep` readiness probe (Section 26) |
+| 67 | ✅ DONE | Backend coverage 35% → 46.7% (Sections 27 + 28) |
+| 68 | ✅ DONE | Frontend Vitest + RTL harness (Section 29) |
+| 70 | ✅ DONE | Mobile Jest + jest-expo harness (Section 30) |
+| 68b | ✅ DONE | First real frontend component test (Section 31) |
+| 69 | ✅ DONE | Playwright E2E setup (Section 32) |
+| 71 | ✅ DONE | OpenAPI spec + Swagger UI at `/api-docs` (this section) |
+| 71b | ⏳ Pending | Fan `@openapi` blocks across the remaining ~25 routes |
+| 72 | ⏳ NEXT | Quebec Loi 25 compliance audit |
+| 73 | ⏳ Pending | Backend coverage 50% → 65% |
+| 74 | ⏳ Pending | DR runbook |
+| 69b | ⏳ Pending | Vite preview build for E2E + interaction tests |
+| 70b | ⏳ Pending | Mobile component tests once RNTL/RN ecosystem stabilises |
+
+### Lessons captured
+
+1. **JSDoc-driven specs scale incrementally.** Annotate routes one batch at a time; spec stays valid at every step. Compare to schema-first (`zod-to-openapi`) which requires upfront commitment to a typing library — bigger blocker for a JS codebase.
+2. **Mount the JSON spec alongside the UI** (`/api-docs.json`). Useful for downstream tooling (codegen, contract testing, Postman import) without scraping the UI HTML.
+3. **15 tag categories matched the route file count almost 1:1.** Worth keeping in sync — when a new feature area is added, add the tag at the same time the route file lands.
+
+### Commit / push checklist for this section
+
+Files touched (Phase 71):
+- `lib/openapi.js`, `app.js`, `routes/auth.js`, `package.json`, `package-lock.json`, `API.md` — all committed via PR #48 (`9508c0f`).
+- `DECISIONS.md` — this Section 33. **Pending.**
+
+```powershell
+git checkout -b docs/section33-phase71-openapi
+git add DECISIONS.md
+git commit -m "docs(section33): Phase 71 closeout — OpenAPI spec + Swagger UI at /api-docs"
+git push -u origin docs/section33-phase71-openapi
+```
+Then open PR, wait for CI, squash merge.
