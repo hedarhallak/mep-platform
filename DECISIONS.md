@@ -3415,3 +3415,75 @@ git commit -m "docs(section28): Phase 67b closeout — runWeeklyReports test, +1
 git push -u origin docs/section28-phase67b-closeout
 ```
 Then open PR, wait for CI, squash merge.
+
+---
+
+## Section 29 — Session Log — May 2, 2026 (Phase 68 — Frontend test harness with Vitest + RTL)
+
+Continued same-day from Section 28. Goal per Section 22 roadmap: stand up a frontend test harness on `mep-frontend/` so future component-level work has a runnable safety net.
+
+### Headline
+
+**Vitest + React Testing Library + jsdom wired into `mep-frontend/`. 19 starter tests passing locally and on CI (16 formatter unit tests + 3 RTL smoke). New `npm test` step added to the Frontend CI job (blocking).** Phase 68 closed; component-level test coverage of real screens deferred to Phase 68b.
+
+### Tooling decisions (Section 4 better-tools check)
+
+| Concern | Choice | Rationale |
+|---|---|---|
+| Test runner | **Vitest 2.x** | Native Vite integration (same alias / plugin pipeline), 5–10× faster cold start than Jest in benchmarks, ESM-first. Jest would have required `babel-jest` + ESM hacks for React 19. |
+| Component lib | **@testing-library/react 16.x** | The de facto standard. Pairs with `@testing-library/jest-dom` for matchers. Enzyme is unmaintained; explicitly avoided. |
+| User interactions | **@testing-library/user-event 14.x** | Higher-fidelity than `fireEvent` (synthesises real keyboard / pointer sequences). |
+| DOM env | **jsdom 25.x** | The standard Vitest pair. Considered `happy-dom` (faster) but jsdom has wider compatibility for React 19's hydration paths. |
+| Coverage | **@vitest/coverage-v8 2.x** | Built-in V8 coverage; same `lcov` reporter as the backend so future tooling can read both. |
+
+No alternatives meaningfully better. No new SaaS / MCP needed.
+
+### What was added
+
+- `mep-frontend/package.json` — devDeps: `vitest`, `@testing-library/dom` (peer of RTL), `@testing-library/jest-dom`, `@testing-library/react`, `@testing-library/user-event`, `@vitest/coverage-v8`, `jsdom`. Scripts: `test`, `test:watch`, `test:coverage`.
+- `mep-frontend/vite.config.js` — added a `test:` block (jsdom env, globals, `setupFiles`, `css: false` for speed, V8 coverage with `lcov` + `text-summary`). Triple-slash `<reference types="vitest/config" />` at the top so TS-aware editors don't choke on the new key.
+- `mep-frontend/src/test/setup.js` — single import of `@testing-library/jest-dom/vitest`, which extends `expect` with `toBeInTheDocument` / `toHaveTextContent` / etc.
+- `mep-frontend/src/utils/formatters.test.js` — 16 tests covering `todayStr`, `tomorrowStr`, `fmtTime`, `fmtHours`, `fmtDate`, `fmtDateTime`. Same shape as the backend's `weekly_report_helpers.test.js` — both contracts are intentionally identical because workers see the same string in web, mobile, and the weekly email.
+- `mep-frontend/src/test/rtl_smoke.test.jsx` — 3 tests against an inline `Counter` component, validating render + props + `userEvent.click`. Acts as the canary: if the suite ever regresses to "RTL is broken", this is the test that fails first.
+- `.github/workflows/ci.yml` — added `Tests (Vitest, blocking — Phase 68 onward)` step in the Frontend job, after lint and before the production build. **Blocking** by default; if it goes flaky we'd weaken to `continue-on-error: true` later, but starting strict.
+
+### Adversities (worth recording)
+
+1. **`@testing-library/react@16` does not auto-install `@testing-library/dom`.** First `npm test` run failed with `Cannot find module '@testing-library/dom'` because RTL declares it as a peer dependency rather than a direct dep. Fix: add `@testing-library/dom@^10.4.0` to devDeps explicitly. Same trap applies to anyone bumping the RTL major in the future.
+2. **`globals: true` in the Vitest config** lets tests skip the `import { describe, test, expect } from 'vitest'` line. We kept the explicit imports anyway because they make the test files more grep-friendly and survive a future config flip. Personal preference; flip if the team finds it annoying.
+
+### Initial coverage measurement (deferred)
+
+We did NOT add `coverageThreshold` to `vite.config.js` for the front end yet. Reason: the front end had ZERO tests until this PR — the first measured coverage will be ~5% (`utils/formatters.js` only). Threshold-setting is a Phase 68b concern after enough real component tests exist to make a floor meaningful (~25–30% lines).
+
+### Where we are now
+
+| Phase | Status | What |
+|---|---|---|
+| 64 | ✅ DONE | Sentry live in prod (Section 24) |
+| 65 | ✅ DONE | Backup drill + drift fix (Section 25) |
+| 66 | ✅ DONE | `/api/health/deep` readiness probe (Section 26) |
+| 67 | ✅ DONE | Backend coverage 35% → 46.7% (Sections 27 + 28) |
+| 68 | ✅ DONE | Frontend test harness — Vitest + RTL + jsdom (this section) |
+| 68b | ⏳ NEXT | Real component tests — start with the smallest pages (`PermissionsPage`, `StandupPage`); add coverage threshold once the floor is meaningful |
+| 69+ | ⏳ Pending | (Section 22 roadmap continues — E2E with Playwright, mobile tests, OpenAPI, Loi 25 audit, DR runbook) |
+
+### Lessons captured
+
+1. **Pair frontend formatters with backend formatters intentionally.** `mep-frontend/src/utils/formatters.js` and `lib/weeklyReport.js` helpers (`fmtTime`, `fmtHours`, `fmtDate`) have the same signatures and outputs by design. This phase exposes both to the same shape of unit tests; future contract drift would now break tests on both sides — desirable.
+2. **The CI Frontend job ran `npm ci` + `npm run build` for months without a single test step.** That's the kind of quiet gap our Section 22 / 67 retrospective is supposed to catch — adding the test step now turns `npm run build` from "the only signal frontend code compiles" to "compile + behaviour both pass before merge".
+3. **Vitest's `setupFiles` runs ONCE per worker, not per test file.** That's what we want for jest-dom matcher extension. If we ever need per-file setup, that goes inside individual `beforeAll` hooks, not the global setup.
+
+### Commit / push checklist for this section
+
+Files touched in Phase 68:
+- `mep-frontend/package.json`, `package-lock.json`, `vite.config.js`, `src/test/setup.js`, `src/test/rtl_smoke.test.jsx`, `src/utils/formatters.test.js`, `.github/workflows/ci.yml` — all committed via PR #39 (`3cc3463`).
+- `DECISIONS.md` — this Section 29. **Pending.**
+
+```powershell
+git checkout -b docs/section29-phase68-frontend-test-setup
+git add DECISIONS.md
+git commit -m "docs(section29): Phase 68 closeout — Vitest + RTL on mep-frontend, 19 starter tests"
+git push -u origin docs/section29-phase68-frontend-test-setup
+```
+Then open PR, wait for CI, squash merge.
