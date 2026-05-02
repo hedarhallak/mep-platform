@@ -34,12 +34,10 @@ if (!isTest && dsn) {
     // back to a generic tag.
     release: process.env.RELEASE_SHA || 'unknown',
   });
-   
   console.log(`[sentry] initialized — env=${process.env.NODE_ENV || 'production'}`);
 } else if (!isTest && !dsn) {
   // Helpful warning so an accidental missing SENTRY_DSN on prod doesn't
   // silently disable error tracking.
-   
   console.warn('[sentry] SENTRY_DSN not set — error tracking disabled');
 }
 
