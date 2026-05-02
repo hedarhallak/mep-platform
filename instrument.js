@@ -12,6 +12,12 @@
 
 'use strict';
 
+// Phase 64 hotfix (May 2026): instrument.js loads BEFORE app.js (which is
+// where dotenv normally runs), so we must load .env here too — otherwise
+// SENTRY_DSN is undefined at this point and Sentry stays disabled in prod.
+// dotenv.config() is idempotent; loading it twice (here + in app.js) is safe.
+require('dotenv').config();
+
 const Sentry = require('@sentry/node');
 
 const isTest = process.env.NODE_ENV === 'test';
