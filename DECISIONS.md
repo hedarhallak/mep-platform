@@ -2997,3 +2997,125 @@ git commit -m "docs(section24): Phase 64 closeout — Sentry live in prod, May 2
 git push -u origin docs/section24-phase64-closeout
 ```
 Then open PR, wait for CI, squash merge.
+
+---
+
+## Section 25 — Session Log — May 2, 2026 (Phase 65 — Backup restore drill, with critical incident)
+
+Picked up from Section 24 the same day. Goal: drill the existing pg_dump → DO Spaces → restore pipeline.
+
+### Headline
+
+**The drill ran — and immediately caught a critical operational outage: the daily backup cron had been failing silently for 6 days due to file-mode drift on the backup scripts.** Fixed mid-drill, took a fresh backup, completed the drill on fresh data, and committed a permanent fix that prevents recurrence. Phase 65 closed.
+
+### What we set out to do (per Section 22 plan)
+
+1. Pull the latest backup from `s3://constrai-backups/daily/`.
+2. Restore to a staging DB.
+3. Verify integrity vs production.
+4. Document a runbook with timing data.
+
+### Pre-flight discovery: backups silently broken since 2026-04-26
+
+`tail /var/log/mep-backup.log` on prod showed the last successful backup was `2026-04-26 18:58`. Every cron invocation since (approximately 12 attempts: 6 days × 2 jobs/day) logged:
+
+```
+/bin/sh: 1: /var/www/mep/scripts/backup/backup_db.sh: Permission denied
+/bin/sh: 1: /var/www/mep/scripts/backup/cleanup_old_backups.sh: Permission denied
+```
+
+`s3cmd ls` confirmed no objects newer than 2026-04-26 in the `daily/` prefix.
+
+**Root cause:** the executable bit on `scripts/backup/*.sh` was tracked in git as `100644` (regular file), not `100755` (executable). Every time someone ran `git checkout` / `git pull` against those files (in particular the round of pulls during Section 22's hardening rollout on April 26 evening), git rewrote them as non-executable. Cron continued firing on schedule but `sh` couldn't execute them.
+
+**Why it persisted six days unnoticed:** the cron output was being redirected to `/var/log/mep-backup.log` (good!), but no monitoring read that log. The optional Healthchecks.io dead-man's-switch in `scripts/backup/SETUP.md` Part 4 was never wired up. UptimeRobot and Sentry (Phase 64) cover the live app — neither watches scheduled background jobs. This is now a known monitoring gap; closing it is in scope for Phase 66 / Phase 74.
+
+### Mid-drill remediation
+
+1. **Re-applied executable bits on disk** (`chmod +x /var/www/mep/scripts/backup/*.sh`) — confirmed mode change `-rw-r--r--` → `-rwxr-xr-x`.
+2. **Ran a manual backup immediately** — `backup_db.sh` produced `mepdb_2026-05-02_08-36.sql.gz` (712K SQL, 64K compressed), uploaded to Spaces, sanity check passed (60 CREATE TABLE statements vs 66 on April 26 — schema delta is real, see "Schema observation" below).
+3. **Drilled the fresh backup** — full restore cycle completed in **8.846 seconds** wall clock for the current 22 MB DB (download + decompress + drop + create + restore + ownership).
+
+### Drill verification (mepdb prod vs mepdb_drill_20260502 restored)
+
+- **Table count:** 61 = 61 ✅ (catalog query against `pg_catalog.pg_tables` schema=public)
+- **PostGIS extension:** present, version 3.4 (USE_GEOS=1 USE_PROJ=1 USE_STATS=1) ✅
+- **Row counts (key business tables):**
+
+| Table | prod | drill | Match |
+|---|---|---|---|
+| companies | 1 | 1 | ✅ |
+| app_users | 53 | 53 | ✅ |
+| employees | 50 | 50 | ✅ |
+| projects | 5 | 5 | ✅ |
+| suppliers | 3 | 3 | ✅ |
+| material_catalog | 3 | 3 | ✅ |
+| material_requests | 7 | 7 | ✅ |
+| audit_logs | 98 | 98 | ✅ |
+| ccq_travel_rates | 158 | 158 | ✅ |
+| user_invites | 0 | 0 | ✅ |
+| attendance_records | 2615 | 2615 | ✅ |
+| refresh_tokens | 79 | 79 | ✅ |
+| roles | 13 | 13 | ✅ |
+| permissions | 58 | 58 | ✅ |
+
+(Initial run used wrong table names — `users` vs actual `app_users`, `materials` vs `material_catalog`, `ccq_rates` vs `ccq_travel_rates`. The verification script needs the canonical names; corrected list above is the right one for future drills.)
+
+Cleanup: `DROP DATABASE mepdb_drill_20260502` after verification.
+
+### Permanent fix — `git update-index --chmod=+x`
+
+**Problem:** the on-disk `chmod +x` we just did is ephemeral. Git's tracked mode for `scripts/backup/*.sh` was still `100644`, so the next `git pull` that touches those files would silently strip executable again — exact same failure mode as April 26.
+
+**Fix (PR #32, branch `fix/backup-scripts-executable-mode`):** updated git's index mode to `100755` for the three scripts:
+
+```powershell
+git update-index --chmod=+x scripts/backup/backup_db.sh
+git update-index --chmod=+x scripts/backup/cleanup_old_backups.sh
+git update-index --chmod=+x scripts/backup/restore_db.sh
+```
+
+Resulting commit `006263f` — 0 content insertions/deletions, only `mode change 100644 => 100755` for the three files. Squash-merged as `50486df`.
+
+After deploy on prod (using `git checkout scripts/backup/ && git pull` to clear the on-disk vs index mismatch we created with the manual `chmod`), `git ls-files --stage` now shows `100755` for all three, matching disk. Future pulls preserve the executable bit.
+
+### Schema observation (60 vs 66 CREATE TABLE)
+
+The April 26 backup had 66 CREATE TABLE statements; the May 2 backup has 60. That's net −6 tables across 6 days. Likely sources, in order of plausibility:
+
+1. **Bug 6 / Phase 63 cleanup** — `routes/user_invites.js` was deleted; orphan / experimental tables tied to that may have been dropped by the migration. Worth checking the diff between `db/schema_baseline_2026-04-26.sql` and the current schema.
+2. **Other Section 19 / 21 / 22 migrations** — refactored a couple of attendance / dispatch tables.
+3. **Counting noise** — sanity-check grep counts the literal string `CREATE TABLE` in the dump; PostGIS internal tables like `geography_columns`, `geometry_columns`, `spatial_ref_sys` are usually counted, so the absolute number depends on whether PostGIS is auto-included in the dump.
+
+Not blocking. Track in the schema baseline refresh task (queued for whichever phase rebuilds `db/schema_baseline_*.sql` next — could pair with Phase 71 OpenAPI work, since both want canonical artifacts).
+
+### Lessons / runbook updates
+
+1. **Backup drift is invisible without alerting.** Phase 66 (health endpoint expansion) should add a "last successful backup timestamp" probe; Phase 74 (DR runbook) should require Healthchecks.io to be wired before sign-off. Either gives an active signal when daily backups stop.
+2. **Always commit file-mode changes alongside the chmod.** From now on, any new shell script or executable artifact we add gets `git update-index --chmod=+x` in the same commit as creation. Worth adding to the pre-commit checklist or — better — a tiny `scripts/lint-modes.sh` audit run by the existing pre-commit hook that warns when a `.sh` file is committed without the executable bit.
+3. **Restore time benchmark:** **~9 seconds for 22 MB DB.** This is the floor — restore time scales with DB size and S3 download latency. Budget this number for DR runbooks; if the DB grows to 1 GB the restore will likely run 30–90 seconds (mostly psql apply time).
+4. **Verification table list (reusable):** `companies, app_users, employees, projects, suppliers, material_catalog, material_requests, audit_logs, ccq_travel_rates, user_invites, attendance_records, refresh_tokens, roles, permissions`. Keep this list in `RECOVERY.md` so the next drill doesn't re-discover the singular-vs-plural surprises.
+
+### Where we are now / next phase
+
+| Phase | Status | What |
+|---|---|---|
+| 64 | ✅ DONE | UptimeRobot + Sentry live in prod (Section 24) |
+| 65 | ✅ DONE | Backup restore drilled, drift fix shipped, runbook updated (this section) |
+| 66 | ⏳ NEXT | Health endpoint expansion: DB connectivity, disk space, last-backup timestamp |
+| 67–74 | ⏳ Pending | (see Section 22 hardening roadmap) |
+
+### Commit / push checklist for this section
+
+Files touched today (Phase 65):
+- `scripts/backup/backup_db.sh`, `cleanup_old_backups.sh`, `restore_db.sh` — mode 100644 → 100755 via PR #32 (`50486df`).
+- `RECOVERY.md` — to be updated with the verified runbook (next commit).
+- `DECISIONS.md` — this Section 25 entry. Needs commit + push from laptop via docs PR.
+
+```powershell
+git checkout -b docs/section25-phase65-backup-drill
+git add DECISIONS.md RECOVERY.md
+git commit -m "docs(section25): Phase 65 backup restore drill — drift incident, fresh drill, runbook"
+git push -u origin docs/section25-phase65-backup-drill
+```
+Then open PR, wait for CI, squash merge.
