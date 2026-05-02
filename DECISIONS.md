@@ -2914,3 +2914,86 @@ All 8 documented bugs are RESOLVED in code. Bug 6 is the only one whose RESOLVED
 ---
 
 No automatic next step — pick when ready. Recommended start point: Phase 64 PR merge + prod deploy → Phase 65 (backup drill).
+
+---
+
+## Section 24 — Session Log — May 2, 2026 (Phase 64 closeout — Sentry live in prod)
+
+Picked up from Section 23. Goal: finish Phase 64 — merge the open PR, deploy Sentry to prod, verify.
+
+### Phase 64 — Sentry production deploy (DONE ✅)
+
+**1. PR #29 merge cycle (resolved CI flakiness):**
+- Branch `feat/phase64-production-monitoring` had local commit `f274250` (trailing whitespace fix on `instrument.js`) that had not been pushed to origin — only `d5ca0b3` was on GitHub. CI was failing on `prettier --check` because of the unpushed fix.
+- Pushed `f274250` → CI re-ran → all 5 checks green → Squash and merge → main at `cb8755d`.
+- Lesson: when CI complains about formatting and local prettier passes, first verify the failing commit on origin matches expectations. We initially burned time investigating Prettier config / line endings before noticing the commit on origin was the OLD one.
+
+**2. First prod deploy attempt — silent fail:**
+- Pulled, `npm install --production` failed on husky (`prepare` script tries to run husky, which is a devDependency). Workaround: `npm install --omit=dev --ignore-scripts`. This is the canonical fix for husky on prod servers and should probably be baked into deploy docs / a `predeploy` flag.
+- After install, `pm2 restart mep-backend` warned `Use --update-env to update environment variables`. Re-ran with `--update-env`.
+- Despite `SENTRY_DSN` being set in `/var/www/mep/.env`, the process logged `[sentry] SENTRY_DSN not set — error tracking disabled`.
+
+**3. Root cause — dotenv ordering:**
+- `index.js:16` does `require('./instrument')` (Sentry init runs).
+- `index.js:18` does `require('./app')`, and `app.js:17` is the only `require('dotenv').config()` in the codebase.
+- So `instrument.js` reads `process.env.SENTRY_DSN` BEFORE dotenv ever runs → undefined → Sentry init skipped.
+
+**4. PR #30 — hotfix `fix/phase64-sentry-dotenv-loading`:**
+- Added `require('dotenv').config()` at the top of `instrument.js` (idempotent — calling it twice with `app.js` is safe).
+- Branch → CI green (5/5) → Squash and merge → main at `34baa4e`.
+
+**5. Second prod deploy — verified:**
+- `git pull` + `pm2 flush` + `pm2 restart --update-env`.
+- Logs: `[sentry] initialized — env=production` ✅
+- Sentry verification event sent via `node -e "require('./instrument'); const S=require('@sentry/node'); S.captureMessage('Phase 64 verification ...', 'info'); setTimeout(...)"` — appeared in Sentry dashboard within ~1 minute as expected (project `constrai-backend`, environment `production`, "New" status).
+
+**Phase 64 status: CLOSED.**
+
+### Architectural notes for future deploys
+
+1. **Husky on prod:** Always use `npm install --omit=dev --ignore-scripts` on the production server (or move husky setup into a `prepare` script that no-ops outside of dev — e.g. `"prepare": "husky || true"`). Document this in RECOVERY.md / deploy runbook so the next session doesn't hit the same wall. Consider this for Phase 74 (DR runbook).
+2. **dotenv in entry-point chains:** Any new file that requires env vars and is loaded BEFORE `app.js` must call `require('dotenv').config()` itself. Currently this only affects `instrument.js`, but if more pre-app modules are added (telemetry, feature flags, etc.) keep this in mind.
+3. **`pm2 restart --update-env`** is the right invocation when `.env` changes. Plain `pm2 restart` does NOT re-read environment.
+4. **CI flakiness debugging order:** when local-vs-CI prettier disagree, first check `git log origin/<branch>` to confirm the failing CI is for the latest pushed commit before deep-diving into config differences.
+
+### Lessons captured for `CLAUDE.md` (consider promoting later)
+
+- "Wrong tool word" → use **`السيرفر`** / `prod` not `البرود` (made-up shorthand) for the production server.
+- For trivial sequential local commands (e.g. `git checkout main; git pull; git branch -D x`), bundling into one block is fine. The "one command at a time" rule applies to: (a) SSH→server transitions, (b) commands whose output gates the next, (c) interactive editors like `nano`.
+- The Edit tool can produce a corrupted file when the target spans many lines and there is unicode (em-dash etc.) — observed today on `instrument.js`. Workaround: use the Write tool for full-file rewrites when a previous Edit shows truncation.
+
+### Sentry test event cleanup (optional follow-up)
+
+The verification event "Phase 64 verification — May 2 deploy from constrai-prod" sits in Sentry's "Issues" view as `New`. Resolving it from the dashboard (or just leaving it as evidence of the working deploy) is a one-click decision — non-blocking.
+
+### Where we are now / next phase
+
+| Phase | Status | What |
+|---|---|---|
+| 64 | ✅ DONE | UptimeRobot + Sentry both live in prod, verified end-to-end |
+| 65 | ⏳ NEXT | Backup restore drill — pull latest backup from DO Spaces, restore to staging DB, verify integrity, document runbook |
+| 66+ | ⏳ Pending | (see Section 22 hardening roadmap) |
+
+Recommended next start point: Phase 65 (backup restore drill).
+
+### Commit / push checklist for this session
+
+Files touched today:
+- `instrument.js` — committed via PR #30 (`34baa4e`).
+- `DECISIONS.md` — this Section 24 entry. Needs commit + push from laptop.
+
+```powershell
+git add DECISIONS.md
+git commit -m "docs(section24): Phase 64 closeout — Sentry live in prod, May 2 session log"
+git push origin main
+```
+
+Note: `git push origin main` is blocked by branch protection. Use a docs-only PR if needed:
+
+```powershell
+git checkout -b docs/section24-phase64-closeout
+git add DECISIONS.md
+git commit -m "docs(section24): Phase 64 closeout — Sentry live in prod, May 2 session log"
+git push -u origin docs/section24-phase64-closeout
+```
+Then open PR, wait for CI, squash merge.
