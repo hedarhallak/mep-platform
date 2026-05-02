@@ -14,7 +14,8 @@
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/api/health` | Health check (returns `{ ok: true, service, time }`) |
+| GET | `/api/health` | Liveness probe (returns `{ ok: true, service, time }`). Cheap — no I/O. UptimeRobot polls this every 5 min. |
+| GET | `/api/health/deep` | Readiness probe (Phase 66). Runs structured checks (DB connectivity, disk space, last backup age) and returns `{ ok, service, time, checks: { db, disk, backup }, warnings? }`. Hard-fail (DB or disk) → 503. Soft-warn (stale backup) → 200 with `warnings` array. Intended for ops dashboards / on-demand inspection, not 5-min polling. |
 | GET | `/api/config` | App config (mapbox_token, feature flags) |
 | GET | `/api/geocode/suggest` | Mapbox address autocomplete proxy |
 

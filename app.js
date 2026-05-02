@@ -168,6 +168,22 @@ app.get('/api/health', (req, res) => {
   res.json({ ok: true, service: 'mep-site-workforce', time: new Date().toISOString() });
 });
 
+// /api/health/deep — Phase 66 readiness probe. Runs structured checks
+// (DB connectivity, disk space, last backup age) and returns 503 when a
+// hard-fail check trips. UptimeRobot continues polling the cheap
+// /api/health endpoint above; this deeper variant is intended for ops
+// dashboards and ad-hoc inspection. See lib/health.js for check details.
+app.get('/api/health/deep', async (req, res) => {
+  try {
+    const { pool } = require('./db');
+    const { runChecks } = require('./lib/health');
+    const { statusCode, body } = await runChecks(pool);
+    res.status(statusCode).json(body);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // ── Auth (public) ─────────────────────────────────────────────
 app.use('/api/auth', loadRouter('./routes/auth'));
 app.use('/api/onboarding', require('./routes/onboarding')); // public — no auth
