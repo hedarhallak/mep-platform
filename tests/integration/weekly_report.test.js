@@ -251,10 +251,14 @@ describeIfDb('Phase 67b — lib/weeklyReport.runWeeklyReports', () => {
     sgMail.send.mockClear();
     await runWeeklyReports(pool);
 
-    const foremanCalls = sgMail.send.mock.calls.filter((c) => c[0].to === foremanEmail);
-    expect(foremanCalls.length).toBe(1);
-    const [foremanMsg] = foremanCalls[0];
-    expect(foremanMsg.subject).toMatch(/ACTION REQUIRED/);
+    // The foreman is themselves an APPROVED assignee, so they also get the
+    // standard "Weekly Work Report" email — that's two messages to the same
+    // address. We only want the ACTION REQUIRED reminder here.
+    const foremanReminderCalls = sgMail.send.mock.calls.filter(
+      (c) => c[0].to === foremanEmail && /ACTION REQUIRED/.test(c[0].subject)
+    );
+    expect(foremanReminderCalls.length).toBe(1);
+    const [foremanMsg] = foremanReminderCalls[0];
     expect(foremanMsg.subject).toMatch(/unconfirmed/);
     expect(foremanMsg.html).toMatch(/Phase 67b Unconfirmed Worker/);
   });
