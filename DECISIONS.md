@@ -3917,3 +3917,107 @@ git commit -m "docs(section35): Phase 73a closeout — services/geocoding 12 tes
 git push -u origin docs/section35-phase73a-geocoding
 ```
 Then open PR, wait for CI, squash merge.
+
+---
+
+## Section 36 — Session Log — May 2, 2026 (Phase 73b — jobs/ tests, full coverage on cron entry points)
+
+Continued same-day. Section 22 coverage roadmap, batch 2 of the 50% → 65% push.
+
+### Headline
+
+**20 unit tests covering both files in `jobs/` — `weeklyReportJob.js` (8 tests) and `ccqRatesReminderJob.js` (12 tests) — with `node-cron`, `../db`, and `@sendgrid/mail` all mocked.** No real timers fire, no DB hit, no SendGrid traffic. Both files were at zero coverage before this phase.
+
+### What was added
+
+- `tests/smoke/weekly_report_job.test.js` — 8 tests:
+  - default cron schedule `0 23 * * 1` registered when `WEEKLY_REPORT_CRON` is unset
+  - `WEEKLY_REPORT_CRON` env override is honoured
+  - cron callback invokes `runWeeklyReports(pool)` with the pool argument
+  - cron callback swallows errors from `runWeeklyReports` (logs `[weeklyReportJob] Uncaught error:` but does not throw)
+  - `RUN_WEEKLY_REPORT_NOW=true` triggers an immediate run
+  - `RUN_WEEKLY_REPORT_NOW=false` does NOT trigger an immediate run
+  - `RUN_WEEKLY_REPORT_NOW` unset does NOT trigger an immediate run
+  - manual-run error path logs `[weeklyReportJob] Manual run error:` but does not throw
+
+- `tests/smoke/ccq_rates_reminder_job.test.js` — 12 tests across two describe blocks:
+  - **registration** (5 tests):
+    - registers two cron schedules at `0 14 1 3 *` (Mar 1) + `0 14 1 4 *` (Apr 1) — both 14:00 UTC
+    - cron callbacks no-op when `new Date().getFullYear() !== 2028`
+    - cron callbacks invoke `sendCCQReminder(pool)` when year **is** 2028
+    - calls `sgMail.setApiKey(...)` at module load when `SENDGRID_API_KEY` is set
+    - does NOT call `setApiKey` when `SENDGRID_API_KEY` is unset
+  - **sendCCQReminder** (7 tests):
+    - returns silently when no SUPER_ADMIN with email-formatted username exists
+    - sends one email per qualifying admin (verified content: `April 30, 2028`, `acq.org`, subject)
+    - falls back to `noreply@mepplatform.com` when `SENDGRID_FROM_EMAIL` is unset
+    - continues iterating after a per-admin send failure (logs `[ccqRatesReminder] Failed to send to <email>:`)
+    - swallows DB-level errors (logs `[ccqRatesReminder] Error:` and returns)
+    - falls back to module-level `pool` when called without an argument
+    - SQL shape pinned: `app_users` + `SUPER_ADMIN` + `LIKE '%@%'`
+
+### Mocking pattern (reusable)
+
+The "swap module before require" pattern from Phase 67 (`push_notification.test.js`) extended to a three-mock setup:
+
+```js
+jest.mock('node-cron', () => ({
+  schedule: jest.fn((expr, cb) => { cronRegistrations.push({ expr, cb }); return { stop: jest.fn() }; }),
+}));
+jest.mock('../../db', () => ({ pool: { query: (...a) => mockQueryImpl(...a) } }));
+jest.mock('@sendgrid/mail', () => ({
+  setApiKey: (...a) => mockSgSetApiKey(...a),
+  send:      (...a) => mockSgSend(...a),
+}));
+```
+
+Combined with a `loadJob()` helper that calls `jest.resetModules()` + `jest.doMock(...)` to re-establish the same mocks on every test, this pattern lets a single `process.env.SENDGRID_API_KEY` flip change the module-level `setApiKey` call's behaviour without restarting the test process. Same shape will work for any future `jobs/*` file.
+
+### Year-2028 guard test (FakeDate technique)
+
+Both cron callbacks contain `if (new Date().getFullYear() === 2028) sendCCQReminder(...)`. Tested both branches by overriding `global.Date` for the duration of one test:
+
+```js
+const realDate = global.Date;
+class FakeDate extends realDate { getFullYear() { return 2026; } }
+global.Date = FakeDate;
+// ... assert no-op ...
+global.Date = realDate;
+```
+
+Cleaner than mocking `Date.prototype.getFullYear` because the rest of `Date` (parsing, formatting) keeps real behaviour. No timer fakes, no `jest.useFakeTimers()` overhead.
+
+### Where we are now
+
+| Phase | Status | What |
+|---|---|---|
+| 64–72 | ✅ DONE | (Sections 24–34) |
+| 73a | ✅ DONE | services/geocoding 12 tests (Section 35) |
+| 73b | ✅ DONE | jobs/ 20 tests, both files fully covered (this section) |
+| 73c | ⏳ NEXT | Middleware deep tests + leftover lib branches |
+| 73d | ⏳ Pending | Final push to 65% (route error branches) |
+| 74 | ⏳ Pending | DR runbook |
+
+### Lessons captured
+
+1. **`jobs/` is a tractable coverage target** — small files, well-bounded I/O surface (cron + DB + email), and zero coupling to Express/Supertest setup. Always cheaper to cover than route handlers. When chasing a coverage floor, exhaust this category first.
+2. **Override `global.Date` for date-branch tests** instead of `jest.useFakeTimers({ doNotFake: ['..'] })` — it's surgical, doesn't interfere with the cron mock, and cleans up trivially. Recorded as a reusable trick.
+3. **The Linux mount in this Cowork session is severely lagging on file syncs** (saw stale `package.json` and stale `DECISIONS.md` with Apr 29 mtime even after fresh writes). Workaround: stop running `npx jest` from the bash sandbox during a session and rely on Hedar's PowerShell + CI for test verification. The Read/Edit/Write tools see the up-to-date Windows view; only bash is stale. Worth keeping in mind for any future session that mixes Cowork bash + local edits.
+
+### Commit / push checklist for this section
+
+Files touched (Phase 73b):
+- `tests/smoke/weekly_report_job.test.js` (new) — committed via the `feat/phase73b-jobs-tests` PR (`8b8a548`).
+- `tests/smoke/ccq_rates_reminder_job.test.js` (new) — same PR.
+- `DECISIONS.md` — this Section 36. **Pending.**
+
+```powershell
+git checkout main
+git pull origin main
+git branch -D feat/phase73b-jobs-tests
+git checkout -b docs/section36-phase73b-jobs
+git add DECISIONS.md
+git commit -m "docs(section36): Phase 73b closeout — jobs/ tests, 20 tests across both cron files"
+git push -u origin docs/section36-phase73b-jobs
+```
+Then open PR, wait for CI, squash merge. After merge: local cleanup `git checkout main && git pull origin main && git branch -D docs/section36-phase73b-jobs`.
