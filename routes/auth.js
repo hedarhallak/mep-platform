@@ -58,6 +58,54 @@ function buildTokenPayload(user, role, mustChangePin) {
 // ===================
 // LOGIN
 // ===================
+/**
+ * @openapi
+ * /api/auth/login:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Username + PIN login
+ *     description: |
+ *       Validates credentials and issues a JWT access token (1h validity)
+ *       plus a refresh token (7-day rotation). Rate-limited 20 attempts /
+ *       15min by IP. The error code differentiates between INVALID_CREDENTIALS,
+ *       ACCOUNT_SUSPENDED, and COMPANY_SUSPENDED so the UI can render
+ *       the right message.
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [username, pin]
+ *             properties:
+ *               username: { type: string, example: jane.tester }
+ *               pin:      { type: string, example: '1234', description: '4-6 digit numeric PIN' }
+ *     responses:
+ *       200:
+ *         description: Authenticated. Returns access + refresh tokens and the user object.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 ok:           { type: boolean, example: true }
+ *                 accessToken:  { type: string, description: 'JWT, 1h validity' }
+ *                 refreshToken: { type: string, description: '7-day rotation token' }
+ *                 user:         { type: object }
+ *       400:
+ *         description: Missing username or pin in the request body.
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ *       401:
+ *         description: Invalid credentials, account suspended, or company suspended.
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ *       429:
+ *         description: Rate-limited (20 attempts / 15min from this IP).
+ */
 router.post('/login', async (req, res) => {
   try {
     const { username, pin } = req.body || {};
