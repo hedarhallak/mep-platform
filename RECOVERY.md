@@ -255,6 +255,40 @@ Run through this list the 1st of every quarter (Jan / Apr / Jul / Oct):
 
 ---
 
+## 8.5. Production Monitoring (Phase 64, May 2026)
+
+Two services watch the production backend. Both are on free tiers; neither stores Quebec PII.
+
+### UptimeRobot — liveness check
+- **What it watches:** `GET https://app.constrai.ca/api/health` every 5 minutes from outside the network.
+- **Alert trigger:** 2 consecutive failed checks (~10-minute outage detection).
+- **Alert channel:** Email to Hedar (the address used at signup).
+- **Dashboard:** `https://dashboard.uptimerobot.com/`
+- **What to do when an alert fires:**
+  1. Try the URL yourself — sometimes it's an UptimeRobot false positive.
+  2. If genuinely down, SSH in and run `pm2 status`. If `mep-backend` is offline, `pm2 restart mep-backend` and check `pm2 logs mep-backend --lines 50`.
+  3. If pm2 looks fine, check Nginx: `systemctl status nginx`.
+  4. If both are fine, check the database: `sudo -u postgres psql -d mepdb -c "SELECT 1"`.
+  5. Log the incident in the table below regardless of root cause.
+
+### Sentry — error tracking
+- **What it watches:** every uncaught exception thrown inside the backend Node process. Captured via `@sentry/node` v8 auto-instrumentation (registered in `instrument.js`, loaded as the very first require in `index.js`).
+- **Alert trigger:** "high priority issues" — Sentry's heuristic for new + frequent errors.
+- **Alert channel:** Email to Hedar.
+- **Dashboard:** `https://constrai.sentry.io/issues/`
+- **Privacy:** `sendDefaultPii: false` — IPs, cookies, request bodies are NOT sent. Stack traces only.
+- **When an alert fires:**
+  1. Open the issue in Sentry — read the stack trace + breadcrumbs.
+  2. If it's a known harmless error (e.g. user passed bad input), mark it "Resolved" in Sentry to silence; consider adding a 4xx response in the route so it stops being treated as an error.
+  3. If it's a real bug, file a fix branch + PR per the standard workflow.
+
+### What to do during planned maintenance
+Both services will alert during a deploy that takes >10 min. To silence:
+- **UptimeRobot:** dashboard → monitor → "Pause" before maintenance, "Resume" after.
+- **Sentry:** ignore (alerts are issue-based, not uptime-based).
+
+---
+
 ## 9. Incident Log
 
 Record every production incident here. Short entries: date, what broke, what fixed it, what we changed to prevent recurrence.
@@ -284,4 +318,5 @@ Record every production incident here. Short entries: date, what broke, what fix
 ### Nice-to-have (next 6 months)
 - [ ] CI/CD via GitHub Actions — automated deploys instead of manual git pull + pm2 restart.
 - [ ] Off-cloud backup copy — monthly dump downloaded to Hedar's laptop or second cloud provider.
-- [ ] Uptime monitoring (UptimeRobot free tier).
+- [x] Uptime monitoring (UptimeRobot free tier). — Done Phase 64, May 2026.
+- [x] Error tracking (Sentry free tier). — Done Phase 64, May 2026.

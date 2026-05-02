@@ -225,4 +225,13 @@ app.use('/api/hub', auth, require('./routes/hub'));
 app.use('/api/standup', auth, require('./routes/standup'));
 app.use('/uploads/hub', require('express').static(path.join(__dirname, 'uploads/hub')));
 
+// ── Sentry error handler ──────────────────────────────────────
+// Phase 64 (May 2026). Must be registered AFTER all routes so it sees
+// every uncaught exception bubbling up. Inside Jest (NODE_ENV=test),
+// instrument.js skips Sentry.init(), making this a no-op — but we
+// still register the handler unconditionally so prod and dev have
+// matching middleware stacks.
+const Sentry = require('@sentry/node');
+Sentry.setupExpressErrorHandler(app);
+
 module.exports = app;
