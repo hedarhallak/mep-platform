@@ -3487,3 +3487,70 @@ git commit -m "docs(section29): Phase 68 closeout — Vitest + RTL on mep-fronte
 git push -u origin docs/section29-phase68-frontend-test-setup
 ```
 Then open PR, wait for CI, squash merge.
+
+---
+
+## Section 30 — Session Log — May 2, 2026 (Phase 70 — Mobile test harness with jest-expo)
+
+Continued same-day from Section 29. Goal per Section 22 roadmap: stand up a mobile test harness on `mep-mobile/` mirroring what Phase 68 did for the web frontend.
+
+### Headline
+
+**Jest + jest-expo wired into `mep-mobile/`. 9 starter tests passing locally and on CI, covering the centralized color theme. New `npm test` step added to the Mobile CI job (blocking).** RNTL component-level tests deferred — current RNTL versions don't support React Native 0.85 yet.
+
+### Tooling decisions (Section 4 better-tools check)
+
+| Concern | Choice | Rationale |
+|---|---|---|
+| Test runner | **Jest 29.x via `jest-expo` preset** | Expo's official preset; handles RN's transformer, jest-environment-node, mocks for native modules. No reasonable alternative — Vitest doesn't support React Native runtime out of the box. |
+| RN preset bridge | **`@react-native/jest-preset` ^0.85** | RN 0.85 split this preset out of `react-native` core; `jest-expo` requires it as a peer. First time we've hit this gotcha — caught it in the second `npm test` run. |
+| TypeScript types | **`@types/jest`** | Native TS support via `babel-preset-expo` + Jest's TS handling. |
+| Component testing | **Deferred** (would have used `@testing-library/react-native`) | RNTL 12.x can't introspect RN 0.85's new internal native specs (`Unable to determine event arguments for "onChange"`). RNTL 13 addresses this but the latest published version we tried (13.3.4) doesn't exist on npm; 12.9 fails. Documented and parked. |
+
+### What was added
+
+- `mep-mobile/package.json` — devDeps: `jest`, `jest-expo`, `@react-native/jest-preset`, `@types/jest`. Scripts: `test`, `test:watch`. Inline `jest` config block: `preset: jest-expo`, `testPathIgnorePatterns: ['/node_modules/', '/.expo/']`.
+- `mep-mobile/src/theme/colors.test.ts` — 9 tests against the centralized color palette: every brand / accent / status color is a 6-digit hex, text-tier colors all defined, `headerColors` convenience export wires the brand color to header background. Catches accidental "rebrand by typo" — if anyone changes `Colors.primary` without intent, two tests fail (the structural one and the documented-value one).
+- `.github/workflows/ci.yml` — added `Tests (Jest + RNTL, blocking — Phase 70 onward)` step in the Mobile job, between TypeScript check and the security audit. Blocking by default.
+
+### Adversities (worth recording)
+
+1. **`@testing-library/react-native@^13.3.4` does not exist on npm** — first install fail. Latest published is 12.9.x. Dropped to ^12.9.0.
+2. **RN 0.85 split out the Jest preset.** `jest-expo` chains through to `react-native/jest-preset` which now throws a hard "moved to a separate package" error. Fix: add `@react-native/jest-preset@^0.85.0` to devDeps so Jest can resolve it.
+3. **RNTL 12.9 + RN 0.85 incompatible.** Once Jest could load, the RNTL smoke test threw `Unable to determine event arguments for "onChange"` from `host-component-names.tsx`. RNTL is trying to introspect RN's deprecated native component specs and the structure changed. RNTL >13 is supposed to fix this but isn't published in a usable version yet. Removed `@testing-library/react-native` and `react-test-renderer` from devDeps and dropped the smoke test file. Coverage of RN components is parked for "Phase 70b — when the RN/RNTL ecosystem stabilises".
+4. **Phase 70 vs Phase 68 cost asymmetry.** Phase 68 (web) was a clean ~30 min setup. Phase 70 ate ~45 min of debugging across 3 distinct version-mismatch issues. This is the natural cost of Expo SDK 54 / RN 0.85 being bleeding-edge. Noting it so the next "set up tests on a new platform" estimate can be ~50% more generous.
+
+### Where we are now
+
+| Phase | Status | What |
+|---|---|---|
+| 64 | ✅ DONE | Sentry live in prod (Section 24) |
+| 65 | ✅ DONE | Backup drill + drift fix (Section 25) |
+| 66 | ✅ DONE | `/api/health/deep` readiness probe (Section 26) |
+| 67 | ✅ DONE | Backend coverage 35% → 46.7% (Sections 27 + 28) |
+| 68 | ✅ DONE | Frontend Vitest + RTL harness (Section 29) |
+| 70 | ✅ DONE | Mobile Jest + jest-expo harness — theme tests only (this section) |
+| 70b | ⏳ Pending | Component-level mobile tests once RNTL/RN ecosystem stabilises |
+| 68b | ⏳ Pending | Real frontend component tests (start with smallest pages) |
+| 69 | ⏳ Pending | Playwright E2E |
+| 71+ | ⏳ Pending | (Section 22 roadmap continues) |
+
+### Lessons captured
+
+1. **Always check npm registry for the version BEFORE picking a `^x.y.z` constraint.** Three of the four version errors today (RNTL 13.3.4, jest-expo missing peer, RNTL/RN 0.85 incompat) would have been caught in 30 seconds with `npm view <pkg> versions`. Adding to the standard "before pinning a new dep" checklist.
+2. **Bleeding-edge platform versions cost setup time.** Expo SDK 54 with React 19 is brand new — the test ecosystem is still catching up. For Phase 73+ work involving fresh major-version bumps, budget extra time for ecosystem-mismatch debugging.
+3. **Deferring is OK when the ecosystem isn't ready.** Could've kept hammering on RNTL config. Cleaner to ship the harness with what works (theme tests prove jest-expo wiring) and document the parked piece. The CI step is in place; future RNTL bump just needs a re-run.
+
+### Commit / push checklist for this section
+
+Files touched in Phase 70:
+- `mep-mobile/package.json`, `package-lock.json`, `src/theme/colors.test.ts`, `.github/workflows/ci.yml` — all committed via PR #42 (`92b88da`).
+- `DECISIONS.md` — this Section 30. **Pending.**
+
+```powershell
+git checkout -b docs/section30-phase70-mobile-test-setup
+git add DECISIONS.md
+git commit -m "docs(section30): Phase 70 closeout — jest-expo on mep-mobile, 9 theme tests"
+git push -u origin docs/section30-phase70-mobile-test-setup
+```
+Then open PR, wait for CI, squash merge.
