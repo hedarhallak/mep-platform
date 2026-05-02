@@ -19,6 +19,8 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
+    "test:cov": "jest --coverage --coverageReporters=text-summary",
+    "test:cov:check": "node -e \"if(!process.env.TEST_DATABASE_URL){console.error('TEST_DATABASE_URL must be set for full-coverage check (otherwise integration suites are skipped, giving misleading low numbers). Set it to your local test DB URL or run via CI.'); process.exit(1)} else { console.log('TEST_DATABASE_URL set, running full coverage...') }\" && npm run test:cov",
     "prepare": "husky"
   },
   "dependencies": {
