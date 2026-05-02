@@ -3119,3 +3119,114 @@ git commit -m "docs(section25): Phase 65 backup restore drill — drift incident
 git push -u origin docs/section25-phase65-backup-drill
 ```
 Then open PR, wait for CI, squash merge.
+
+---
+
+## Section 26 — Session Log — May 2, 2026 (Phase 66 — `/api/health/deep` readiness probe)
+
+Continued same-day from Sections 24 and 25. Goal: turn the existing liveness probe into a structured readiness probe so the next backup outage (or DB / disk issue) doesn't go invisible for 6 days like the one Phase 65 caught.
+
+### Architectural decisions (taken with Hedar in chat)
+
+1. **Two endpoints, not one.** Kept `/api/health` exactly as it was — cheap, no I/O, no DB query, returned by Express in microseconds — so UptimeRobot's existing 5-min poll stays cheap and stable. Added `/api/health/deep` for the heavier checks. This matches the kubernetes liveness vs readiness convention without forcing UptimeRobot to swallow extra latency every poll.
+2. **Hard-fail vs soft-warn split.** DB and disk are hard-fail (route returns 503 → wakes someone up). Backup age is soft-warn (route still returns 200, response body has a `warnings` array → no 3 AM page for a backup that's a few hours late). This is the right balance: app-broken = page now, ops-hygiene-issue = surface but don't escalate.
+3. **Threshold = 26 hours for backup age.** Cron runs daily at 07:00 UTC, so worst-case a healthy backup is just under 24h old when the next cron starts. 26h gives 2h grace for one slow run / one missed retry / clock drift before the warn fires.
+4. **No external dependency.** Considered `@cloudnative/health`, `terminus`, `express-actuator` — all overkill for three checks. Kept the implementation in `lib/health.js` (~200 lines including comments and the aggregator), zero new npm packages.
+
+### Implementation
+
+**New module — `lib/health.js`:**
+- `checkDb(pool)` — `SELECT 1` round-trip; returns `{ status: 'ok' | 'fail', latency_ms? , error? }`.
+- `checkDisk(diskPathArg?)` — `fs.statfs()` against `/var/lib/postgresql` (override via `DISK_CHECK_PATH`); returns `{ status, used_pct, threshold_pct, path }`. `used_pct > 90` → fail. Path missing → `skipped` (so dev / CI without the prod-specific path doesn't fake-fail).
+- `checkBackup(logPathArg?, now?)` — reads the tail of `/var/log/mep-backup.log` (override via `BACKUP_LOG_PATH`), finds the latest `===== Backup complete =====` marker, parses the bracketed timestamp as UTC, compares to `now`. Returns `ok` / `warn` / `skipped`. `skipped` (not `warn`) when the log is missing or has no completion marker yet — a fresh server shouldn't page before the first cron run lands.
+- `runChecks(pool, opts?)` — runs all three in parallel, builds the response payload (statusCode, body with `checks` and optional `warnings`).
+
+**Route — `app.js`:**
+```js
+app.get('/api/health/deep', async (req, res) => {
+  try {
+    const { pool } = require('./db');
+    const { runChecks } = require('./lib/health');
+    const { statusCode, body } = await runChecks(pool);
+    res.status(statusCode).json(body);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+```
+Lazy-`require`s inside the handler, matching the pattern used by `routes/*.js`.
+
+**Tests — `tests/integration/health_deep.test.js`:** 12 tests total, organised as:
+- `describe('checkDisk')` — 2 cases: real path returns sane numbers; missing path → `skipped`.
+- `describe('checkBackup')` — 5 cases: recent → ok, stale → warn, missing log → skipped, no completion marker → skipped, multiple markers → returns the LATEST.
+- `describeIfDb('Phase 66 health endpoints (DB available)')` — 5 DB-backed cases: `checkDb` against the live test pool, `/api/health` regression, `/api/health/deep` happy path, aggregator with no warnings, aggregator surfaces a stale-backup warning correctly.
+
+DB-backed tests are gated behind `describeIfDb` (skipped without `DATABASE_URL`), same convention as the rest of the integration suite.
+
+### CI failure → fix-forward (committed mid-PR)
+
+First green-locally / red-on-CI cycle. The DB-required test for the `/api/health/deep` route asserted that the response showed `disk.status === 'skipped'` (because the test set `process.env.DISK_CHECK_PATH = '/nonexistent-for-health-test'` in `beforeAll`). On CI the test got `'ok'` instead.
+
+**Root cause:** `lib/health.js` originally captured the env-driven defaults at module load time:
+```js
+const DEFAULT_DISK_PATH = process.env.DISK_CHECK_PATH || '/var/lib/postgresql';
+```
+Module load happened (transitively, via `app.js`) BEFORE the test's `beforeAll` ran, so the override never took effect. `DEFAULT_DISK_PATH` was already frozen at `/var/lib/postgresql`, which exists on Linux runners → `checkDisk` returned `'ok'`.
+
+**Fix:** read env at call time via `resolveDiskPath()` / `resolveBackupLogPath()` helpers. Idempotent for production (no behavior change when env vars are set once) and lets tests override at any moment in their lifecycle.
+
+Committed on the same branch (`fix(phase66): read env vars at call time so test overrides take effect`) → CI green → squash merged.
+
+### Production verification (May 2, 09:43 UTC)
+
+After deploy:
+```bash
+curl -s http://localhost:3000/api/health/deep
+```
+Returned 200 with:
+- `db.status = ok, latency_ms = 53`
+- `disk.status = ok, used_pct = 6, path = /var/lib/postgresql`
+- `backup.status = ok, last_run = 2026-05-02T08:36:37Z, age_hours = 1.1`
+
+The `last_run` matches the manual backup we triggered mid-Phase-65 drill — proving the log-tail parser finds the right marker and the timezone math is correct.
+
+### What's left (not blocking Phase 66 sign-off)
+
+1. **Wire UptimeRobot or healthchecks.io to `/api/health/deep`** — optional second monitor, lower poll frequency (e.g. every 15 min instead of 5). The cheap `/api/health` already covers app-up alerting; the deep one would add disk-full / backup-stale alerting without paging on every transient DB hiccup. Not done in this session — open question whether to add it now or defer to Phase 74 (DR runbook).
+2. **Document the response shape consumer-side** — `API.md` has the one-line entry; if a frontend dashboard ever consumes this, the per-check sub-object types should be promoted to a TypeScript-ish doc block. Low priority.
+3. **Healthchecks.io for the backup cron itself** — separate from this endpoint. Even with the deep probe, a passive observer (Healthchecks.io) is more reliable than a pull-based health endpoint that requires someone to look at it. Tracking under the same Phase 74.
+
+### Lessons captured
+
+1. **Env-driven module defaults are a foot-gun in tests.** Anything `process.env.X || default` at the top of a module gets frozen when `require()` runs. Use a tiny resolver function that reads `process.env` at call time. Worth scanning the rest of the codebase for the same pattern (`lib/auth_utils.js`, `lib/email.js`, `db.js`) — for a follow-up, not now.
+2. **`fs.statfs()` is in Node 18.15+ / 20+** — fine for our prod (Node 20) and CI matrix, but worth tagging for portability if we ever bump the support floor downward.
+3. **`pm2 restart` without `--update-env` is the third time we've hit this.** Should be the default in a deploy script. Add a `scripts/deploy.sh` wrapper as part of Phase 74 that always passes `--update-env`.
+
+### Where we are now
+
+| Phase | Status | What |
+|---|---|---|
+| 64 | ✅ DONE | Sentry live in prod (Section 24) |
+| 65 | ✅ DONE | Backup drill + drift fix (Section 25) |
+| 66 | ✅ DONE | `/api/health/deep` readiness probe live in prod (this section) |
+| 67 | ⏳ NEXT | Backend coverage push: 35% → 50% (lib/, middleware/, error branches) |
+| 68–74 | ⏳ Pending | (Section 22 hardening roadmap) |
+
+Three production-hardening phases shipped end-to-end in a single day, each with documentation and verified prod deploy.
+
+### Commit / push checklist for this section
+
+Files touched today (Phase 66):
+- `lib/health.js` (new) — committed via PR #34 (`c726198`).
+- `app.js` — same PR.
+- `tests/integration/health_deep.test.js` (new) — same PR.
+- `API.md` + `.env.example` — same PR.
+- `DECISIONS.md` — this Section 26. Needs commit + push from laptop via docs PR.
+
+```powershell
+git checkout -b docs/section26-phase66-readiness-probe
+git add DECISIONS.md
+git commit -m "docs(section26): Phase 66 closeout — /api/health/deep live in prod, May 2 session log"
+git push -u origin docs/section26-phase66-readiness-probe
+```
+Then open PR, wait for CI, squash merge.
