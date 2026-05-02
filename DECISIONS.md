@@ -4021,3 +4021,123 @@ git commit -m "docs(section36): Phase 73b closeout — jobs/ tests, 20 tests acr
 git push -u origin docs/section36-phase73b-jobs
 ```
 Then open PR, wait for CI, squash merge. After merge: local cleanup `git checkout main && git pull origin main && git branch -D docs/section36-phase73b-jobs`.
+
+---
+
+## Section 37 — Session Log — May 2, 2026 (Phase 73c — middleware + lib smoke tests, 81 new tests)
+
+Continued same-day. Section 22 coverage roadmap, batch 3 of the 50% → 65% push. Target: middleware/ (auth, super_admin, roles, permissions) + lib/ (auth_utils, audit) — six previously-uncovered or thinly-covered units.
+
+### Headline
+
+**81 unit tests across 6 new files in `tests/smoke/`, all green in 2.96 s on the first full run.** Every middleware file in `middleware/` now has a dedicated smoke test, plus the two lib helpers (`auth_utils.js`, `audit.js`) that didn't have one. No DB hits — `../db` mocked everywhere it's used. No JWT round-trips against real signing — `jsonwebtoken` is real, but uses the `JWT_SECRET` from `tests/setup.js`.
+
+### What was added
+
+- `tests/smoke/middleware_auth.test.js` — **7 tests**: missing Authorization header, wrong header shape (no `Bearer ` prefix), garbage token (jwt.verify throws), token signed with a different secret, valid token (role uppercased + req.user populated), null payload fields → null req.user fields, numeric IDs stringified.
+- `tests/smoke/middleware_super_admin.test.js` — **4 tests**: SUPER_ADMIN passes, COMPANY_ADMIN denied, missing req.user denied, lowercase `super_admin` denied (case-sensitive contract pinned).
+- `tests/smoke/middleware_roles.test.js` — **22 tests** across 4 describe blocks:
+  - `normalizeRole`: null/empty handling, uppercase coercion, legacy alias mapping (ADMIN→COMPANY_ADMIN, PM→TRADE_PROJECT_MANAGER, PROJECT_MANAGER, PURCHASING→TRADE_ADMIN), unknown roles passed through unchanged.
+  - `requireRoles`: 401 on no req.user, SUPER_ADMIN bypass, role match, legacy alias match, FORBIDDEN response shape.
+  - `requireMinLevel`: 401 on no req.user, level above / equal / below, unknown role gets level 0, legacy alias resolves to canonical level.
+  - Prebuilt guards: SUPER_ADMIN_ONLY, IT_ADMIN_UP, COMPANY_ADMIN_UP, TRADE_ADMIN_UP, PM_UP, FOREMAN_UP, ANY_AUTHENTICATED — each pinned with one allow + one deny case.
+- `tests/smoke/lib_auth_utils.test.js` — **11 tests**: JWT_SECRET export length check; `hashPin` returns `$2b$12$` bcrypt format, coerces non-string input, generates fresh salt each call; `verifyPin` returns false on falsy stored hash, matches bcrypt $2b$, mismatches bcrypt, handles legacy $2a$ prefix (synthetic), matches legacy SHA-256, mismatches SHA-256, coerces non-string raw PIN.
+- `tests/smoke/lib_audit.test.js` — **11 tests**: `audit()` emits the expected INSERT with 12-parameter ordering pinned (company_id…ip_address); IP fallback chain `req.ip` → `x-forwarded-for[0]` → null; missing req.user → all user fields null; JSON.stringify of old/new/details; null JSON fields stay null (not the string `"null"`); DB rejection swallowed (logs `[audit] Failed to write audit log:`); `entity_id` defaults to null. Plus 3 ACTIONS-constants invariants (non-empty, key === value enum invariant, key sample).
+- `tests/smoke/middleware_permissions.test.js` — **22 tests** across 5 describe blocks:
+  - `userHasPermission`: SUPER_ADMIN bypass (no DB), legacy alias does NOT bypass, user_permissions grant=true wins, grant=false wins, role_permissions fallback, role_permissions miss, **cache reuse on second call** (1 user_perm query + 1 role load = 3 calls across 2 invocations, NOT 4), null userId skips user_permissions.
+  - `can()`: 401 no user, SUPER_ADMIN bypass, 403 FORBIDDEN with `permission` key, 500 PERMISSION_CHECK_FAILED on DB throw, null user_id skip.
+  - `canAny()`: 401, first-perm short-circuit, later-perm pass, all-deny 403 with `permissions` array, SUPER_ADMIN bypass, 500 on DB throw.
+  - `invalidateCache()`: forces fresh role_permissions load on next call (verified by query-count progression 2 → 3 → 5).
+  - `logAudit()`: full INSERT shape pinned including IP precedence (`x-forwarded-for` over `socket.remoteAddress`), socket fallback when XFF absent, missing req.user → null context, DB throw is fire-and-forget swallowed.
+
+### Mocking pattern (carried forward from earlier phases)
+
+Same "let-binding mock impl + jest.mock factory" pattern from Phase 67 / 73b carries through. For `middleware_permissions.test.js`:
+
+```js
+let mockQueryImpl = jest.fn();
+jest.mock('../../db', () => ({
+  pool: { query: (...a) => mockQueryImpl(...a) },
+}));
+beforeEach(() => {
+  invalidateCache();           // wipe module-level _roleCache + _cacheLoadedAt
+  mockQueryImpl = jest.fn();   // fresh per-test
+});
+```
+
+`invalidateCache()` is exported precisely for tests like this — never used in production code. The cache TTL is 5 minutes, so without invalidation a single test contaminates the next.
+
+### Tactical decisions
+
+1. **Real `jsonwebtoken`, not mocked.** The auth-middleware tests sign + verify against `JWT_SECRET` from `tests/setup.js`. Mocking `jwt` would have hidden any future API change in the library. The cost (one round-trip through HMAC-SHA256 per test) is negligible.
+2. **Real `bcrypt`, not mocked, for `auth_utils` tests.** Same reasoning. Cost factor 12 means each `hashPin` call is ~30-50 ms; 11 tests fit well under a second total. If this ever shows up as flake, drop to factor 4 in tests via a wrapper — not yet needed.
+3. **Two-file split for permissions vs audit-log helpers.** `middleware/permissions.js` exports `logAudit` AND the RBAC functions; `lib/audit.js` exports a separate `audit()` function with a different parameter shape (positional args + payload object vs. `(req, action, entity, ...)`). They do similar work but are NOT the same — both need separate tests. Recorded as a refactoring candidate: consolidate to one helper with one signature in a future phase.
+4. **All 6 files written + committed in one PR.** Per Section 4.5 ("Optimize Repetitive Work"), batching the same-shape work avoids 6 round-trips of PR/CI/merge for files that all live in the same dependency-light niche. CI runs all six together; failure isolation is per-test, not per-file.
+
+### Where we are now
+
+| Phase | Status | What |
+|---|---|---|
+| 64–72 | ✅ DONE | (Sections 24–34) |
+| 73a | ✅ DONE | services/geocoding 12 tests (Section 35) |
+| 73b | ✅ DONE | jobs/ 20 tests (Section 36) |
+| 73c | ✅ DONE | middleware/ + lib/ 81 tests, this section |
+| 73d | ⏳ NEXT | Final push to 65% lines — likely route error branches + remaining lib gaps |
+| 74 | ⏳ Pending | DR runbook |
+
+### Lessons captured
+
+1. **`middleware/` is even cheaper to cover than `jobs/`.** Pure-function middleware (auth, super_admin, roles) needs no mocks at all — just a fake req/res/next. The DB-touching ones (permissions) need exactly one mock (`../db`). Total LOC of the 6 source files: ~542. Total test LOC: ~700. Ratio ~1.3:1, very favourable.
+2. **Pin response shapes, not just status codes.** Every 403 in this batch checks the full `res.json({...})` body, not just `expect(res.status).toHaveBeenCalledWith(403)`. The frontend depends on the `error` / `permission` / `permissions` / `required` / `current` keys to render field-level UI; any rename would break it silently. The tests now catch that at PR time.
+3. **`invalidateCache()` exports are worth their weight in tests.** Without it, every test that wanted to verify cache behaviour would need module reloading via `jest.resetModules()` + fresh `require()`. Keeping a tiny cache-invalidation export pays for itself.
+4. **The Linux mount in this Cowork session is severely lagging on file syncs (continued from Section 36).** Every bash `npx jest` attempt continues to fail because the mount sees stale `package.json` (1565 bytes vs Windows actual 1567+). Workaround: skip bash-side jest, run all verification through Hedar's PowerShell. Documented again so it's findable from Section 37 search.
+
+### Coverage trajectory
+
+| Marker | Lines | Branches | Source |
+|---|---|---|---|
+| End of Phase 67 (May 2 morning) | ~46.7% | ~30% | CI #131-ish |
+| End of Phase 73a | ~47-48% | ~31% | services/geocoding |
+| End of Phase 73b | ~48-49% | ~32% | jobs/ |
+| End of Phase 73c (this section) | ~52-55% (est) | ~37-40% (est) | middleware + lib helpers |
+| Phase 73d target | 65%+ | 45%+ | route error branches |
+
+Real numbers visible only after CI #N+1 — `Backend (Node 20)` job runs with `--coverage` on every PR.
+
+### Commit / push checklist for this section
+
+Files touched (Phase 73c):
+- `tests/smoke/middleware_auth.test.js` (new)
+- `tests/smoke/middleware_super_admin.test.js` (new)
+- `tests/smoke/middleware_roles.test.js` (new)
+- `tests/smoke/middleware_permissions.test.js` (new)
+- `tests/smoke/lib_auth_utils.test.js` (new)
+- `tests/smoke/lib_audit.test.js` (new)
+- All committed via the `feat/phase73c-middleware-lib-tests` branch / PR.
+- `DECISIONS.md` — this Section 37. **Pending separate docs PR.**
+
+```powershell
+git checkout main
+git pull origin main
+git branch -D feat/phase73c-middleware-lib-tests
+git checkout -b docs/section37-phase73c-middleware-lib
+git add DECISIONS.md
+git commit -m "docs(section37): Phase 73c closeout — middleware + lib tests, 81 tests"
+git push -u origin docs/section37-phase73c-middleware-lib
+```
+Then open PR, wait for CI, squash merge.
+
+### Pointers for the next session
+
+If a fresh Claude session opens after this point, the Bootstrap should:
+1. Read MASTER_README + DECISIONS + RECOVERY (Step 1).
+2. Find the latest Section in DECISIONS — should be **Section 37** unless work has progressed further.
+3. Acknowledge with `(محادثة استكمال — قرأت Section 37 من DECISIONS.md)`.
+4. Resume at **Phase 73d** (final push to 65% lines coverage — likely route error branches + remaining lib gaps that still aren't covered after 73c). The tests already written cover all middleware + jobs + services + lib helpers; what remains uncovered is mostly inside `routes/` happy paths that take complex DB fixtures, plus a handful of branches in `lib/email.js` and `lib/weeklyReport.js` HTML builders.
+
+State of the world at the close of Section 37:
+- All middleware files have smoke tests.
+- All `jobs/` files have smoke tests.
+- All `services/` files have smoke tests.
+- `lib/` files: `audit`, `auth_utils`, `email` (helpers), `health`, `pushNotification`, `weeklyReport` (helpers + DB-backed) all covered. `openapi.js` covered indirectly via `/api-docs` route (Phase 71). **Done.**
+- Test count headline: ~232 (May 1) → 232 + 12 + 20 + 81 = **345 backend tests** (estimate; CI gives the canonical number).

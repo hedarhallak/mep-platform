@@ -1,8 +1,10 @@
 # MEP Platform — Master Project README
-> Last updated: April 18, 2026 | Maintainer: Hedar Hallak
+> Last updated: May 2, 2026 | Maintainer: Hedar Hallak
 > Production: https://app.constrai.ca
 > Website: https://www.constrai.ca (Coming Soon landing page)
 > Server: root@143.110.218.84
+> Latest DECISIONS section: **Section 37** (Phase 73c — middleware + lib smoke tests, 81 new tests)
+> Next phase: **73d** (final push to 65% lines coverage — route error branches)
 > Backend path on server: /var/www/mep
 > Landing page path on server: /var/www/constrai-landing
 > DB: mepdb / mepuser / MepSecure2026X
