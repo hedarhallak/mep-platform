@@ -159,6 +159,47 @@ jobs:
         run: npm audit --audit-level=high
         continue-on-error: true
 
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+    # Phase 69 (May 2026, Section 22 hardening): Playwright smoke against
+    # the public Login page. Boots Vite via the playwright `webServer`
+    # config; no backend required for the current test set. Future
+    # logged-in flows will need either a test backend or page.route mocks.
+    defaults:
+      run:
+        working-directory: mep-frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: mep-frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers (chromium only)
+        # `--with-deps` pulls the Linux system libs Playwright needs for
+        # Chromium. We only install Chromium (not webkit + firefox) to
+        # keep the cold-start under 60s.
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        run: npm run e2e
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: mep-frontend/playwright-report/
+          retention-days: 7
+
   mobile:
     name: Mobile (Node ${{ matrix.node }})
     runs-on: ubuntu-latest
