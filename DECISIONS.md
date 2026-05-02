@@ -3624,3 +3624,78 @@ git commit -m "docs(section31): Phase 68b closeout — usePermissions/Can tests,
 git push -u origin docs/section31-phase68b-permissions-tests
 ```
 Then open PR, wait for CI, squash merge.
+
+---
+
+## Section 32 — Session Log — May 2, 2026 (Phase 69 — Playwright E2E setup)
+
+Continued same-day from Section 31. Goal per Section 22 roadmap: stand up E2E browser-driven tests so refactors that break "the user can sign in" surface in CI before they hit prod.
+
+### Headline
+
+**Playwright wired into mep-frontend with auto-starting Vite dev server. 3 smoke tests passing locally + on CI against the public Login page. New `e2e` CI job installs Chromium and runs Playwright. Total CI checks moved from 5 to 6.** Interaction tests (fill / click) deferred — flaky against React 19 + Vite HMR, fixable in Phase 69b by switching to `vite preview` against a static build.
+
+### Tooling decisions (Section 4 better-tools check)
+
+| Concern | Choice | Rationale |
+|---|---|---|
+| E2E framework | **`@playwright/test` 1.48** | Cross-browser, fast, Microsoft-backed, official `webServer` integration, modern API (auto-waiting, trace viewer). Cypress is the main alternative — slower runs, paywalls on parallel runs in CI, weaker trace tooling. Puppeteer is lower-level and lacks the test runner. |
+| Browsers | **Chromium only for now** | Multi-browser is valuable for UI library tests (Material UI, etc.), less so for our React 19 + Tailwind app. Single browser keeps CI install time under ~60s vs ~3min for full set. |
+| App lifecycle | **`webServer: npm run dev`** in playwright.config | Auto-starts Vite, kills it after. `reuseExistingServer: !CI` means local runs reuse a running dev server (fast iteration); CI always boots a fresh one (hermetic). |
+
+### What was added
+
+- `mep-frontend/package.json` — devDep `@playwright/test@^1.48.0`. Scripts: `e2e`, `e2e:ui`.
+- `mep-frontend/playwright.config.js` — defines port 5173, base URL, retry policy (2x in CI, 0 locally), Chromium project, `webServer` block.
+- `mep-frontend/e2e/login.spec.js` — 3 tests: brand/headline/form scaffolding, PIN type=password regression net, footer year display.
+- `mep-frontend/.gitignore` — added `test-results/`, `playwright-report/`, `blob-report/`, `playwright/.cache/`.
+- `.github/workflows/ci.yml` — new top-level `e2e:` job. Steps: checkout → Node 20 → `npm ci` → `npx playwright install --with-deps chromium` → `npm run e2e`. On failure, uploads `playwright-report/` as a build artifact (7-day retention) for debugging.
+
+### Adversities
+
+1. **React 19 + Vite HMR breaks input.fill().** First version of the test suite had 3 tests; 2 of them (PIN toggle, typing into inputs) failed locally with "Execution context destroyed" / "value never updates". Root cause is the dev server's fast-refresh racing the synthetic input events — the React state update lands on a stale DOM node. Documented in the test file's preamble. Switching the CI job to `vite build && vite preview` (no HMR) is the planned fix in Phase 69b.
+2. **Chromium download is heavy.** `npx playwright install chromium` pulled ~180MB locally + ~110MB shell + 1MB FFmpeg + 0.1MB Winldd. CI runs it fresh every time (~30-45s on Linux). Acceptable for now; long-term we can cache the install in Actions.
+3. **The `webServer` config option is the right move.** We considered manually `npm run dev &` from a step + waiting on the port, but Playwright's built-in does the wait + cleanup correctly. Saves config + no orphan processes.
+
+### What's left for Phase 69b
+
+1. **Switch CI to `vite preview` static build** — kills the HMR race, lets us add interaction tests reliably.
+2. **Add a "logged-in flow" test** — needs either a test backend (heavyweight) or `page.route()` mocks for `/api/auth/login` + `/api/permissions/my-permissions` (lightweight, mirror of what usePermissions tests already do for component-level).
+3. **Multi-browser matrix** — once we have meaningful tests, add Firefox + WebKit. Cheap once Chromium passes.
+4. **`mep-frontend/dev-dist/sw.js` showed up as modified** in this session's working copy — that's a generated PWA service worker. Worth adding `dev-dist/` to `.gitignore` so it stops appearing in `git status`. Quick fix for whoever opens that PR next.
+
+### Where we are now
+
+| Phase | Status | What |
+|---|---|---|
+| 64 | ✅ DONE | Sentry live in prod (Section 24) |
+| 65 | ✅ DONE | Backup drill + drift fix (Section 25) |
+| 66 | ✅ DONE | `/api/health/deep` readiness probe (Section 26) |
+| 67 | ✅ DONE | Backend coverage 35% → 46.7% (Sections 27 + 28) |
+| 68 | ✅ DONE | Frontend Vitest + RTL harness (Section 29) |
+| 70 | ✅ DONE | Mobile Jest + jest-expo harness (Section 30) |
+| 68b | ✅ DONE | First real frontend component test (Section 31) |
+| 69 | ✅ DONE | Playwright E2E setup, 3 login smoke tests (this section) |
+| 69b | ⏳ Pending | Vite preview build for CI E2E + interaction tests + logged-in flows |
+| 70b | ⏳ Pending | Mobile component tests once RNTL/RN ecosystem stabilises |
+| 71+ | ⏳ Pending | (Section 22 roadmap continues) |
+
+### Lessons captured
+
+1. **HMR ≠ test environment.** Dev servers optimised for hot-reload aren't ideal for E2E because the page can re-mount mid-test. `vite preview` (or any production-build static server) is hermetic and the right target for browser-driven tests. Worth standardising on this pattern before adding real interaction tests.
+2. **CI artifact uploads are cheap insurance.** The `actions/upload-artifact` step on E2E failure uploads `playwright-report/` so debugging a CI flake doesn't require re-running locally to reproduce. 7-day retention is plenty.
+3. **Phase 69 cost vs Phase 68 cost.** Phase 68 (Vitest setup) was clean. Phase 69 was rougher — three different React/Vite/Playwright corner cases — but landed in similar wall-clock time (~45 min) because the framework choice was clear and the rough edges were all surface-level (mockable / configurable).
+
+### Commit / push checklist for this section
+
+Files touched:
+- `mep-frontend/package.json`, `package-lock.json`, `playwright.config.js`, `e2e/login.spec.js`, `.gitignore`, `.github/workflows/ci.yml` — all committed via PR #46 (`c323176`).
+- `DECISIONS.md` — this Section 32. **Pending.**
+
+```powershell
+git checkout -b docs/section32-phase69-playwright-e2e
+git add DECISIONS.md
+git commit -m "docs(section32): Phase 69 closeout — Playwright E2E + new CI job"
+git push -u origin docs/section32-phase69-playwright-e2e
+```
+Then open PR, wait for CI, squash merge.
