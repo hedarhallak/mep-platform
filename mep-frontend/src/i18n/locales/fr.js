@@ -215,6 +215,46 @@ export default {
     },
   },
 
+  suppliers: {
+    title: 'Fournisseurs',
+    subtitle: 'Gérez votre répertoire de fournisseurs',
+    addButton: 'Ajouter un fournisseur',
+
+    searchPlaceholder: 'Rechercher des fournisseurs...',
+
+    empty: 'Aucun fournisseur trouvé',
+    emptyHint: 'Ajoutez votre premier fournisseur pour commencer',
+
+    confirmDelete: 'Désactiver ce fournisseur ?',
+    successAdded: 'Fournisseur ajouté ✓',
+    successUpdated: 'Fournisseur mis à jour ✓',
+    successRemoved: 'Fournisseur supprimé',
+
+    modal: {
+      titleNew: 'Nouveau fournisseur',
+      titleEdit: 'Modifier le fournisseur',
+      name: 'Nom du fournisseur',
+      namePlaceholder: 'ex. ABC Plomberie Inc.',
+      email: 'Courriel',
+      emailPlaceholder: 'fournisseur@exemple.com',
+      phone: 'Téléphone',
+      phonePlaceholder: '+1 514 000 0000',
+      address: 'Adresse',
+      addressPlaceholder: 'Optionnel — pour ramassage',
+      trade: 'Métier',
+      note: 'Note (optionnel)',
+      notePlaceholder: 'Notes sur ce fournisseur...',
+      cancel: 'Annuler',
+      update: 'Mettre à jour',
+      add: 'Ajouter le fournisseur',
+      errors: {
+        nameRequired: 'Le nom est requis',
+        emailRequired: 'Le courriel est requis',
+        phoneRequired: 'Le téléphone est requis',
+      },
+    },
+  },
+
   projects: {
     title: 'Projets',
     subtitle: '{{count}} projets au total',

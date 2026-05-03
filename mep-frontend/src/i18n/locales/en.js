@@ -215,6 +215,46 @@ export default {
     },
   },
 
+  suppliers: {
+    title: 'Suppliers',
+    subtitle: 'Manage your supplier directory',
+    addButton: 'Add Supplier',
+
+    searchPlaceholder: 'Search suppliers...',
+
+    empty: 'No suppliers found',
+    emptyHint: 'Add your first supplier to get started',
+
+    confirmDelete: 'Deactivate this supplier?',
+    successAdded: 'Supplier added ✓',
+    successUpdated: 'Supplier updated ✓',
+    successRemoved: 'Supplier removed',
+
+    modal: {
+      titleNew: 'New Supplier',
+      titleEdit: 'Edit Supplier',
+      name: 'Supplier Name',
+      namePlaceholder: 'e.g. ABC Plumbing Supply',
+      email: 'Email',
+      emailPlaceholder: 'supplier@example.com',
+      phone: 'Phone',
+      phonePlaceholder: '+1 514 000 0000',
+      address: 'Address',
+      addressPlaceholder: 'Optional — for pickup',
+      trade: 'Trade',
+      note: 'Note (optional)',
+      notePlaceholder: 'Any notes about this supplier...',
+      cancel: 'Cancel',
+      update: 'Update',
+      add: 'Add Supplier',
+      errors: {
+        nameRequired: 'Name is required',
+        emailRequired: 'Email is required',
+        phoneRequired: 'Phone is required',
+      },
+    },
+  },
+
   projects: {
     title: 'Projects',
     subtitle: '{{count}} projects total',

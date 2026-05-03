@@ -5797,3 +5797,83 @@ These should land in `docs/i18n/glossary.md` as the source of truth before Tier 
 - **Tier 1 i18n: 5/5 done. Closed. ✅**
 - **Web i18n total: 5/30 pages.** Tier 2 next.
 - **Today closed at 14 sections.** Hedar said multiple times he'll call the stop himself — no premature wrap. This section is the natural Tier-1 closeout but doesn't have to be the last.
+
+---
+
+## Section 57 — SuppliersPage i18n (Tier 2 batch 1) — May 3, 2026, very late evening
+
+First page of Tier 2. SuppliersPage is small (233 lines, ~30 strings) — picked deliberately to keep momentum going without sinking another 90 minutes into AssignmentsPage's 867-line monster.
+
+### Tier 2 strategy decision
+
+Tier 2 has 5 pages with very uneven sizes:
+
+| Page | Lines | Estimated strings |
+|---|---|---|
+| **SuppliersPage** | 233 | ~30 |
+| **AttendancePage** | 439 | ~50 |
+| **MaterialRequestPage** | 478 | ~60 |
+| **PurchaseOrdersPage** | (TBD) | ~50 |
+| **AssignmentsPage** | 867 | ~100+ (multi-tab: List, Map, Calendar) |
+
+Going smallest → largest keeps each section's blast radius bounded and lets a post-merge break be cheap. AssignmentsPage gets its own dedicated session.
+
+### What shipped
+
+- `suppliers.*` bucket added to en.js + fr.js (~30 keys).
+- `mep-frontend/src/pages/suppliers/SuppliersPage.jsx` rewired to use `t()` everywhere.
+
+### Strings translated
+
+**Page level:** title (Suppliers), subtitle (Manage your supplier directory), Add Supplier button, search placeholder, empty state, success messages (Added/Updated/Removed), confirm dialog (Deactivate this supplier?).
+
+**SupplierModal:** New/Edit titles, 5 field labels (Name, Email, Phone, Address, Trade, Note), 5 placeholders, Cancel/Update/Add buttons, 3 error messages (name/email/phone required).
+
+### Refactoring detail — array-of-objects with i18n
+
+The original `SupplierModal` had an inline array of `{ label, key, type, placeholder }` objects with hardcoded EN strings. Moved that array inside the component (so `t()` is in scope) and made labels/placeholders go through `t()`. Same render logic, no JSX changes — just where the labels resolve. Reusable pattern for any modal that uses a config-driven form.
+
+### Quebec FR conventions reinforced
+
+| EN | Quebec FR |
+|---|---|
+| Suppliers | Fournisseurs |
+| Add Supplier | Ajouter un fournisseur |
+| Manage your supplier directory | Gérez votre répertoire de fournisseurs |
+| Optional — for pickup | Optionnel — pour ramassage |
+| Deactivate this supplier? | Désactiver ce fournisseur ? |
+| Update | Mettre à jour |
+| Email | Courriel (consistent with employees + projects) |
+
+The `Optionnel — pour ramassage` translation specifically uses Quebec FR's "ramassage" (pickup) which is the construction-specific term, not France's more generic "récupération."
+
+### Recurring git pitfall — merge --abort wipes working tree
+
+This section had a near-disaster: after the commit was prepared, Hedar ran `git pull origin main` while still on a feature branch (instead of switching to main first). Vim's MERGE_MSG editor opened. Ran `:cq` to abort. Then `git merge --abort` ran, and **wiped all uncommitted edits in the working tree** — meaning ~30 strings of fresh i18n work disappeared.
+
+CLAUDE.md already flagged this as recurring (4+ times before). The fix sequence is always:
+
+1. `git checkout main` (BEFORE pulling — even if you're on a different branch)
+2. `git pull origin main` (now safe)
+3. `git checkout -b feat/...` (new branch from clean main)
+
+Not "git pull while on the feature branch."
+
+This time the recovery was: re-apply the same edits via the editor (Claude regenerated them), then re-stage + re-commit + push. ~10 extra minutes lost. Convention: when CLAUDE.md flags something as "happens 4+ times," the next failure should be a CLAUDE.md update (e.g. `Section 0 Step 6` checkpoint), not just another retry.
+
+### Scope still inside the page (deferred)
+
+The page filters by trade code via the `TRADES` constants array (`mep-frontend/src/constants/trades.js`). Those button labels (Plumbing, Electrical, etc.) come from that file and aren't translated yet. Filing a follow-up — the `TRADES` array is referenced in multiple pages (Suppliers, Materials, Employees), so translating it once benefits all of them.
+
+### Backlog from this section
+
+- **(P0 — convention)** Encode the merge-abort lesson into CLAUDE.md Section 0 Step 6: "BEFORE `git pull`, always `git checkout main` first. Never pull while on a feature branch unless intentionally rebasing."
+- **(P1)** Translate `mep-frontend/src/constants/trades.js` `TRADES` array (used by Suppliers, MaterialRequest, EmployeeFilters). Reusable bucket once.
+- **(P2)** Tier 2 next: AttendancePage (439 lines).
+- **(P3)** Apply localized date format pattern (Section 56) to SuppliersPage if dates are added later.
+
+### Pointer for next sessions
+
+- **Tier 2: 1/5 done.**
+- **Web i18n total: 6/30 pages.**
+- **Today: 15 sections.** New record. Hedar still going.
