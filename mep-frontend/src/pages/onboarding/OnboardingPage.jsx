@@ -7,7 +7,12 @@ import {
   ChevronRight, ChevronLeft
 } from 'lucide-react'
 
-const MAPBOX_TOKEN = 'pk.eyJ1IjoiaGVkYXJoYWxsYWs3NiIsImEiOiJjbWxsenc1ZmkwY3JyM2RxOGpya2N0bDl0In0.fivZACTIk6dgF79Uw6-8iQ'
+// Section 48 fix (May 3, 2026): Mapbox token now sourced from
+// VITE_MAPBOX_TOKEN env var (build-time). Fallback to the previous
+// hardcoded token preserves dev environments where the env var is
+// not yet set; CI / prod should set VITE_MAPBOX_TOKEN explicitly.
+const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN
+  || 'pk.eyJ1IjoiaGVkYXJoYWxsYWs3NiIsImEiOiJjbWxsenc1ZmkwY3JyM2RxOGpya2N0bDl0In0.fivZACTIk6dgF79Uw6-8iQ'
 
 // ── Step indicator ────────────────────────────────────────────
 function StepBar({ current, total }) {
@@ -209,7 +214,7 @@ export default function OnboardingPage() {
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary mb-4">
             <Building2 size={28} className="text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-white">MEP Platform</h1>
+          <h1 className="text-2xl font-bold text-white">Constrai</h1>
           <p className="text-slate-400 text-sm mt-1">Account Setup</p>
         </div>
 

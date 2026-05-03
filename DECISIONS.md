@@ -5067,3 +5067,87 @@ State after Section 47 merges:
 - **P0 #1 done as audit.** Top 3 fixes are queued; pick whichever Hedar wants first.
 - **The onboarding `/verify` + `/complete` test gap is now visible in Section 47 + the existing Phase 73 closeout list.** When Bug 6 / SendGrid mocking is unblocked, those happy-path tests are the obvious next coverage extension — but per Section 39 calibration, only if a real failure mode emerges (e.g. an invite-flow regression escapes to prod).
 - **Customer-#1 framing still rules.** Don't drift into the 11-friction-point full backlog without checking which actually block a sale.
+
+---
+
+## Section 48 — Onboarding fixes 1 + 2 + 3 closeout (May 3, 2026, late evening)
+
+Three small fixes from Section 47's top-3 list, executed back-to-back as one feature PR per Section 4.5 default batching rule. **Fix 3 turned out to be already implemented** — Section 47 audit was wrong about it; documented here.
+
+### Fix 1 — Brand consistency (MEP Platform → Constrai)
+
+Two single-line changes:
+
+| File | Line | Change |
+|---|---|---|
+| `routes/invite_employee.js` | 144 | `process.env.APP_NAME \|\| 'MEP Platform'` → `process.env.APP_NAME \|\| 'Constrai'` |
+| `mep-frontend/src/pages/onboarding/OnboardingPage.jsx` | 212 | `<h1>MEP Platform</h1>` → `<h1>Constrai</h1>` |
+
+**Effect:** when `APP_NAME` env var is unset (which is the case on the current prod server per audit), invite emails now say "You're invited to join Constrai" instead of "MEP Platform". The onboarding page header (the first thing a new user sees after clicking the email link) now also matches the LoginPage.jsx brand.
+
+**Server-side follow-up still needed:** Hedar should explicitly set `APP_NAME=Constrai` in `/var/www/mep/.env` on the prod server. The default-fallback is the safety net; the explicit env var is the primary source.
+
+### Fix 2 — Mapbox token to env var
+
+`mep-frontend/src/pages/onboarding/OnboardingPage.jsx` line 10:
+
+```js
+// Before
+const MAPBOX_TOKEN = 'pk.eyJ1...'
+
+// After
+const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN
+  || 'pk.eyJ1...'  // hardcoded fallback preserved for dev environments
+```
+
+Created `mep-frontend/.env.example` to document the env var (and the convention that VITE_-prefixed vars are inlined into the client bundle at build time).
+
+**Effect:** future builds can override the token without touching source. Dev environments without the env var continue to work via the hardcoded fallback. Token rotation now requires only an env update + rebuild, not a code commit.
+
+**Trade-off accepted:** kept the hardcoded fallback rather than failing loudly. Failing loudly would be cleaner long-term but breaks every dev who hasn't set up `.env` locally — too disruptive for a 1-line audit fix. Future cleanup: drop the fallback once everyone has set up `.env`.
+
+### Fix 3 — Email-send failure surfaced (already done)
+
+The Section 47 audit said: "The admin UI almost certainly shows 'Invite sent ✓' regardless of `email_sent: false`. Need to verify."
+
+**Verification result:** `mep-frontend/src/pages/employees/EmployeesPage.jsx` already handles this correctly. Lines 155–160 render an amber warning block when `success.email_sent === false`:
+
+```jsx
+{!success.email_sent && (
+  <div className="bg-amber-50 border border-amber-200 ...">
+    Email could not be sent. Share this link manually:<br/>
+    <span className="font-mono break-all text-primary">{success.invite_url}</span>
+  </div>
+)}
+```
+
+The admin sees the warning AND the raw invite URL to share manually. **No code change needed.**
+
+**Section 47 audit revision:** the "almost certainly" hedge in friction-point #6 was honest about the uncertainty but the underlying assumption (admin doesn't see email failure) was wrong. **Convention captured: when an audit says "needs to verify," do the verification before committing the fix list rather than as a follow-up.**
+
+### Files touched (Section 48)
+
+| File | Change |
+|---|---|
+| `routes/invite_employee.js` | 1 line: APP_NAME default → 'Constrai' |
+| `mep-frontend/src/pages/onboarding/OnboardingPage.jsx` | 2 lines: Mapbox token → env var (with fallback); brand header → 'Constrai' |
+| `mep-frontend/.env.example` | NEW: documents VITE_MAPBOX_TOKEN |
+| `DECISIONS.md` | Section 48 (this) |
+| `MASTER_README.md` | header pointer refresh |
+
+### Commit / push checklist
+
+```powershell
+git checkout -b feat/section48-onboarding-fixes
+git add routes/invite_employee.js mep-frontend/src/pages/onboarding/OnboardingPage.jsx mep-frontend/.env.example DECISIONS.md MASTER_README.md
+git commit -m "feat(section48): onboarding fixes 1+2 — brand to Constrai, Mapbox token to env var"
+git push -u origin feat/section48-onboarding-fixes
+```
+
+### Pointer for next sessions
+
+State after Section 48 merges:
+- **Section 47 fixes 1+2 done. Fix 3 was already done — Section 47 audit error noted.**
+- **Server-side env update still pending:** Hedar to set `APP_NAME=Constrai` and `VITE_MAPBOX_TOKEN=pk.…` on prod (`/var/www/mep/.env` + Vite build env).
+- **Friction points 4–11 from Section 47 remain queued.** Triage when next session has bandwidth + customer signal.
+- **Convention added:** audits that say "needs to verify" must verify before the audit ships, not after.

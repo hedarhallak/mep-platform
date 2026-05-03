@@ -3,10 +3,10 @@
 > Production: https://app.constrai.ca
 > Website: https://www.constrai.ca (Coming Soon landing page)
 > Server: root@143.110.218.84
-> Latest DECISIONS section: **Section 47** (onboarding flow audit — 11 friction points documented, top 3 fixes queued)
-> Active program: **none** — feature work front-of-queue. P0 #1 done as audit per Section 46 default.
+> Latest DECISIONS section: **Section 48** (onboarding fixes 1+2+3 closeout — brand to Constrai, Mapbox token to env var, Fix 3 was already done)
+> Active program: **none** — feature work front-of-queue.
 > **Customer #1 status:** unsigned (constraint per Section 46). Engineering rigor work is paused pending revenue.
-> **Top 3 onboarding fixes queued (per Section 47):** brand "MEP Platform" → "Constrai" in onboarding flow + email; Mapbox token to env var; surface email-send failure in admin UI.
+> **Server-side env update pending:** set `APP_NAME=Constrai` + `VITE_MAPBOX_TOKEN` on prod.
 > Coverage thresholds: 51 / 45 / 52 / 52. Backend tests: **553 / 65 suites**. Bug 9 — fixed. Web i18n: pipeline live, 1/30 pages translated.
 > Backend path on server: /var/www/mep
 > Landing page path on server: /var/www/constrai-landing
