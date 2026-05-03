@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import api from '@/lib/api'
 import { TRADES, tradeBadge } from '@/constants/trades'
 import {
@@ -7,6 +8,7 @@ import {
 } from 'lucide-react'
 
 function SupplierModal({ supplier, onClose, onSaved }) {
+  const { t } = useTranslation()
   const isEdit = !!supplier?.id
   const [form, setForm] = useState({
     name:       supplier?.name       || '',
@@ -22,9 +24,9 @@ function SupplierModal({ supplier, onClose, onSaved }) {
 
   const handleSave = async () => {
     setError('')
-    if (!form.name.trim())  return setError('Name is required')
-    if (!form.email.trim()) return setError('Email is required')
-    if (!form.phone.trim()) return setError('Phone is required')
+    if (!form.name.trim())  return setError(t('suppliers.modal.errors.nameRequired'))
+    if (!form.email.trim()) return setError(t('suppliers.modal.errors.emailRequired'))
+    if (!form.phone.trim()) return setError(t('suppliers.modal.errors.phoneRequired'))
     setSaving(true)
     try {
       if (isEdit) await api.patch(`/suppliers/${supplier.id}`, form)
@@ -34,24 +36,27 @@ function SupplierModal({ supplier, onClose, onSaved }) {
     finally { setSaving(false) }
   }
 
+  // Section 57: field labels + placeholders are computed from i18n at render time.
+  const fields = [
+    { label: t('suppliers.modal.name'),    key: 'name',    type: 'text',  placeholder: t('suppliers.modal.namePlaceholder') },
+    { label: t('suppliers.modal.email'),   key: 'email',   type: 'email', placeholder: t('suppliers.modal.emailPlaceholder') },
+    { label: t('suppliers.modal.phone'),   key: 'phone',   type: 'text',  placeholder: t('suppliers.modal.phonePlaceholder') },
+    { label: t('suppliers.modal.address'), key: 'address', type: 'text',  placeholder: t('suppliers.modal.addressPlaceholder') },
+  ]
+
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Truck className="w-4 h-4 text-primary" />
-            <h3 className="text-sm font-bold text-slate-800">{isEdit ? 'Edit Supplier' : 'New Supplier'}</h3>
+            <h3 className="text-sm font-bold text-slate-800">{isEdit ? t('suppliers.modal.titleEdit') : t('suppliers.modal.titleNew')}</h3>
           </div>
           <button onClick={onClose} className="p-1.5 text-slate-400 hover:bg-slate-100 rounded-lg"><X className="w-4 h-4" /></button>
         </div>
 
         <div className="px-6 py-4 space-y-3 max-h-[65vh] overflow-y-auto">
-          {[
-            { label: 'Supplier Name', key: 'name',    type: 'text',  placeholder: 'e.g. ABC Plumbing Supply' },
-            { label: 'Email',         key: 'email',   type: 'email', placeholder: 'supplier@example.com' },
-            { label: 'Phone',         key: 'phone',   type: 'text',  placeholder: '+1 514 000 0000' },
-            { label: 'Address',       key: 'address', type: 'text',  placeholder: 'Optional — for pickup' },
-          ].map(({ label, key, type, placeholder }) => (
+          {fields.map(({ label, key, type, placeholder }) => (
             <div key={key}>
               <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">{label}</label>
               <input type={type} value={form[key]} onChange={e => set(key, e.target.value)}
@@ -61,23 +66,23 @@ function SupplierModal({ supplier, onClose, onSaved }) {
           ))}
 
           <div>
-            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Trade</label>
+            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">{t('suppliers.modal.trade')}</label>
             <div className="flex flex-wrap gap-2">
-              {TRADES.map(t => (
-                <button key={t.value} onClick={() => set('trade_code', t.value)}
+              {TRADES.map(tr => (
+                <button key={tr.value} onClick={() => set('trade_code', tr.value)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
-                    form.trade_code === t.value ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                    form.trade_code === tr.value ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                   }`}>
-                  {t.label}
+                  {tr.label}
                 </button>
               ))}
             </div>
           </div>
 
           <div>
-            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Note (optional)</label>
+            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">{t('suppliers.modal.note')}</label>
             <textarea value={form.note} onChange={e => set('note', e.target.value)}
-              rows={2} placeholder="Any notes about this supplier..."
+              rows={2} placeholder={t('suppliers.modal.notePlaceholder')}
               className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-light placeholder:text-slate-300 resize-none" />
           </div>
 
@@ -89,10 +94,10 @@ function SupplierModal({ supplier, onClose, onSaved }) {
         </div>
 
         <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors">Cancel</button>
+          <button onClick={onClose} className="px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors">{t('suppliers.modal.cancel')}</button>
           <button onClick={handleSave} disabled={saving}
             className="flex items-center gap-2 px-5 py-2 bg-primary text-white text-xs font-bold rounded-xl hover:bg-primary-dark disabled:opacity-60 transition-colors">
-            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><Check className="w-3.5 h-3.5" />{isEdit ? 'Update' : 'Add Supplier'}</>}
+            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><Check className="w-3.5 h-3.5" />{isEdit ? t('suppliers.modal.update') : t('suppliers.modal.add')}</>}
           </button>
         </div>
       </div>
@@ -101,6 +106,7 @@ function SupplierModal({ supplier, onClose, onSaved }) {
 }
 
 export default function SuppliersPage() {
+  const { t } = useTranslation()
   const [suppliers, setSuppliers] = useState([])
   const [loading, setLoading]     = useState(true)
   const [search, setSearch]       = useState('')
@@ -123,11 +129,11 @@ export default function SuppliersPage() {
   const showSuccess = (msg) => { setSuccessMsg(msg); setTimeout(() => setSuccessMsg(''), 3000) }
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Deactivate this supplier?')) return
+    if (!window.confirm(t('suppliers.confirmDelete'))) return
     setDeleting(id)
     try {
       await api.delete(`/suppliers/${id}`)
-      showSuccess('Supplier removed')
+      showSuccess(t('suppliers.successRemoved'))
       fetchSuppliers()
     } catch (e) { alert(e.response?.data?.message || e.message) }
     finally { setDeleting(null) }
@@ -150,13 +156,13 @@ export default function SuppliersPage() {
               <Truck className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-slate-900">Suppliers</h1>
-              <p className="text-xs text-slate-400 mt-0.5">Manage your supplier directory</p>
+              <h1 className="text-lg font-bold text-slate-900">{t('suppliers.title')}</h1>
+              <p className="text-xs text-slate-400 mt-0.5">{t('suppliers.subtitle')}</p>
             </div>
           </div>
           <button onClick={() => setModal('new')}
             className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-xs font-bold rounded-lg hover:bg-primary-dark transition-colors">
-            <Plus className="w-3.5 h-3.5" />Add Supplier
+            <Plus className="w-3.5 h-3.5" />{t('suppliers.addButton')}
           </button>
         </div>
 
@@ -164,16 +170,16 @@ export default function SuppliersPage() {
         <div className="flex items-center gap-3">
           <div className="relative flex-1 max-w-xs">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search suppliers..."
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('suppliers.searchPlaceholder')}
               className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary-light placeholder:text-slate-400" />
           </div>
           <div className="flex items-center gap-1">
-            {TRADES.map(t => (
-              <button key={t.value} onClick={() => setTradeFilter(t.value)}
+            {TRADES.map(tr => (
+              <button key={tr.value} onClick={() => setTradeFilter(tr.value)}
                 className={`px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
-                  tradeFilter === t.value ? 'bg-primary text-white' : 'text-slate-500 hover:bg-slate-100'
+                  tradeFilter === tr.value ? 'bg-primary text-white' : 'text-slate-500 hover:bg-slate-100'
                 }`}>
-                {t.label}
+                {tr.label}
               </button>
             ))}
           </div>
@@ -194,8 +200,8 @@ export default function SuppliersPage() {
         {!loading && filtered.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <Truck className="w-10 h-10 text-slate-200 mb-3" />
-            <p className="text-sm font-semibold text-slate-400">No suppliers found</p>
-            <p className="text-xs text-slate-300 mt-1">Add your first supplier to get started</p>
+            <p className="text-sm font-semibold text-slate-400">{t('suppliers.empty')}</p>
+            <p className="text-xs text-slate-300 mt-1">{t('suppliers.emptyHint')}</p>
           </div>
         )}
 
@@ -248,7 +254,7 @@ export default function SuppliersPage() {
         <SupplierModal
           supplier={modal === 'new' ? null : modal}
           onClose={() => setModal(null)}
-          onSaved={() => { setModal(null); fetchSuppliers(); showSuccess(modal === 'new' ? 'Supplier added ✓' : 'Supplier updated ✓') }}
+          onSaved={() => { setModal(null); fetchSuppliers(); showSuccess(modal === 'new' ? t('suppliers.successAdded') : t('suppliers.successUpdated')) }}
         />
       )}
     </div>
