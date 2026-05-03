@@ -3,13 +3,13 @@
 > Production: https://app.constrai.ca
 > Website: https://www.constrai.ca (Coming Soon landing page)
 > Server: root@143.110.218.84
-> Latest DECISIONS section: **Section 54** (tab title fix + deploy.sh tracks `.last-deployed-sha`)
-> Active program: **Web Tier 1 i18n** (4 pages: Login ✅, Dashboard ✅, Layout ✅, Employees, Projects).
+> Latest DECISIONS section: **Section 55** (EmployeesPage i18n + Section 50 feature recovery)
+> Active program: **Web Tier 1 i18n** — **4/5 done** (Login ✅, Dashboard ✅, Layout ✅, Employees ✅, Projects pending).
 > **Customer #1 status:** unsigned (constraint per Section 46). Engineering rigor work is paused pending revenue.
-> **Prod is in sync with main**. `APP_NAME=Constrai` + `VITE_MAPBOX_TOKEN` live. Tab title now "Constrai" everywhere.
+> **Prod is in sync with main**. `APP_NAME=Constrai` + `VITE_MAPBOX_TOKEN` live. Tab title "Constrai" everywhere.
 > **Deploy command** (after `ssh root@143.110.218.84`): `bash /var/www/mep/scripts/deploy.sh` — see Section 53/54 for behavior.
-> **Monitoring posture:** UptimeRobot pinging `/api/health/deep` ✅. Sentry alert rule (new issue → email Hedar) ✅. Sentry frontend SDK gap (Section 55 candidate).
-> Coverage thresholds: 51 / 45 / 52 / 52. Backend tests: **553 / 65 suites**. Total tests today: **590/590 passing** (4 harnesses). Bug 9 — fixed + deployed. Web i18n: **3/30 pages translated, live on prod** (Login + Dashboard + Layout).
+> **Monitoring posture:** UptimeRobot pinging `/api/health/deep` ✅. Sentry alert rule (new issue → email Hedar) ✅. Sentry frontend SDK gap (Section 56 candidate).
+> Coverage thresholds: 51 / 45 / 52 / 52. Backend tests: **553 / 65 suites**. Total tests today: **590/590 passing** (4 harnesses). Bug 9 — fixed + deployed. Web i18n: **4/30 pages translated, live on prod** (Login + Dashboard + Layout + Employees).
 > Backend path on server: /var/www/mep
 > Landing page path on server: /var/www/constrai-landing
 > DB: mepdb / mepuser / MepSecure2026X

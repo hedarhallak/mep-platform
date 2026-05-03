@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '@/hooks/useAuth'
 import { usePermissions } from '@/hooks/usePermissions.jsx'
 import { usePWA } from '@/hooks/usePWA.jsx'
@@ -11,26 +12,29 @@ import {
   Download, WifiOff, RefreshCw
 } from 'lucide-react'
 
+// Section 50: nav items reference i18n keys instead of inline EN strings.
+// `labelKey` is resolved at render time via t().
 const mainNav = [
-  { to: '/dashboard',        icon: LayoutDashboard, label: 'Dashboard',        permission: null },
-  { to: '/employees',        icon: Users,           label: 'Employees',        permission: { module: 'employees',       action: 'view'           } },
-  { to: '/projects',         icon: FolderKanban,    label: 'Projects',         permission: { module: 'projects',        action: 'view'           } },
-  { to: '/suppliers',        icon: Truck,           label: 'Suppliers',        permission: { module: 'suppliers',       action: 'view'           } },
-  { to: '/assignments',      icon: ClipboardList,   label: 'Assignments',      permission: { module: 'assignments',     action: 'view'           } },
-  { to: '/attendance',       icon: CalendarCheck,   label: 'Attendance',       permission: { module: 'attendance',      action: 'view_self'      } },
-  { to: '/reports',          icon: BarChart2,       label: 'Reports',          permission: { module: 'reports', action: 'view_self' } },
-  { to: '/standup',          icon: ClipboardList,   label: 'Daily Standup',    permission: { module: 'standup',         action: 'manage'         } },
-  { to: '/task-request',     icon: Send,            label: 'Task Request',     permission: { module: 'hub',             action: 'send_tasks'     } },
-  { to: '/material-request', icon: Package,         label: 'Material Request', permission: { module: 'materials',       action: 'request_submit' } },
-  { to: '/purchase-orders',  icon: FileText,        label: 'Purchase Orders',  permission: { module: 'purchase_orders', action: 'view'           } },
-  { to: '/my-hub',           icon: Inbox,           label: 'My Hub',           permission: null, badge: true },
+  { to: '/dashboard',        icon: LayoutDashboard, labelKey: 'nav.dashboard',        permission: null },
+  { to: '/employees',        icon: Users,           labelKey: 'nav.employees',        permission: { module: 'employees',       action: 'view'           } },
+  { to: '/projects',         icon: FolderKanban,    labelKey: 'nav.projects',         permission: { module: 'projects',        action: 'view'           } },
+  { to: '/suppliers',        icon: Truck,           labelKey: 'nav.suppliers',        permission: { module: 'suppliers',       action: 'view'           } },
+  { to: '/assignments',      icon: ClipboardList,   labelKey: 'nav.assignments',      permission: { module: 'assignments',     action: 'view'           } },
+  { to: '/attendance',       icon: CalendarCheck,   labelKey: 'nav.attendance',       permission: { module: 'attendance',      action: 'view_self'      } },
+  { to: '/reports',          icon: BarChart2,       labelKey: 'nav.reports',          permission: { module: 'reports', action: 'view_self' } },
+  { to: '/standup',          icon: ClipboardList,   labelKey: 'nav.standup',          permission: { module: 'standup',         action: 'manage'         } },
+  { to: '/task-request',     icon: Send,            labelKey: 'nav.taskRequest',      permission: { module: 'hub',             action: 'send_tasks'     } },
+  { to: '/material-request', icon: Package,         labelKey: 'nav.materialRequest',  permission: { module: 'materials',       action: 'request_submit' } },
+  { to: '/purchase-orders',  icon: FileText,        labelKey: 'nav.purchaseOrders',   permission: { module: 'purchase_orders', action: 'view'           } },
+  { to: '/my-hub',           icon: Inbox,           labelKey: 'nav.myHub',            permission: null, badge: true },
 ]
 
 const biNav = [
-  { to: '/bi/workforce-planner', icon: Brain, label: 'Workforce Planner', permission: { module: 'bi', action: 'workforce_planner' } },
+  { to: '/bi/workforce-planner', icon: Brain, labelKey: 'nav.workforcePlanner', permission: { module: 'bi', action: 'workforce_planner' } },
 ]
 
 export default function AppLayout() {
+  const { t } = useTranslation()
   const { user, logout } = useAuth()
   const { can, loading: permsLoading } = usePermissions()
   const { installPrompt, isOnline, updateAvailable, promptInstall, applyUpdate } = usePWA()
@@ -129,13 +133,13 @@ export default function AppLayout() {
           {/* Brand */}
           <div className="flex items-center gap-2 px-5 py-5 border-b border-slate-800">
             <Building2 size={20} className="text-primary-light" />
-            <span className="font-bold text-white text-sm">MEP Platform</span>
+            <span className="font-bold text-white text-sm">{t('common.appName')}</span>
           </div>
 
           {/* Nav */}
           <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
 
-            {visibleMain.map(({ to, icon: Icon, label, badge }) => (
+            {visibleMain.map(({ to, icon: Icon, labelKey, badge }) => (
               <NavLink key={to} to={to}
                 className={({ isActive }) =>
                   `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -144,7 +148,7 @@ export default function AppLayout() {
                 }
               >
                 <Icon size={16} />
-                <span className="flex-1">{label}</span>
+                <span className="flex-1">{t(labelKey)}</span>
                 {badge && totalHubCount > 0 && (
                   <span className="flex-shrink-0 min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
                     {totalHubCount > 99 ? '99+' : totalHubCount}
@@ -167,7 +171,7 @@ export default function AppLayout() {
                 >
                   <div className="flex items-center gap-3">
                     <BarChart2 size={16} />
-                    <span>Business Intelligence</span>
+                    <span>{t('nav.bi')}</span>
                   </div>
                   {biOpen
                     ? <ChevronDown size={13} className="text-slate-500" />
@@ -177,7 +181,7 @@ export default function AppLayout() {
 
                 {biOpen && (
                   <div className="ml-3 pl-3 border-l border-slate-700 space-y-0.5">
-                    {visibleBi.map(({ to, icon: Icon, label }) => (
+                    {visibleBi.map(({ to, icon: Icon, labelKey }) => (
                       <NavLink key={to} to={to}
                         className={({ isActive }) =>
                           `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -185,7 +189,7 @@ export default function AppLayout() {
                           }`
                         }
                       >
-                        <Icon size={15} />{label}
+                        <Icon size={15} />{t(labelKey)}
                       </NavLink>
                     ))}
                   </div>
@@ -206,7 +210,7 @@ export default function AppLayout() {
                   }`
                 }
               >
-                <Users size={16} />User Management
+                <Users size={16} />{t('nav.userManagement')}
               </NavLink>
             )}
 
@@ -219,7 +223,7 @@ export default function AppLayout() {
                   }`
                 }
               >
-                <Shield size={16} />Permissions
+                <Shield size={16} />{t('nav.permissions')}
               </NavLink>
             )}
 
@@ -232,7 +236,7 @@ export default function AppLayout() {
                   }`
                 }
               >
-                <Settings size={16} />Settings
+                <Settings size={16} />{t('nav.settings')}
               </NavLink>
             )}
 
@@ -240,7 +244,7 @@ export default function AppLayout() {
 
           {/* User */}
           <div className="px-4 py-4 border-t border-slate-800">
-            <div className="text-xs text-slate-500 mb-1 truncate">{user?.company_name || 'Company'}</div>
+            <div className="text-xs text-slate-500 mb-1 truncate">{user?.company_name || t('nav.companyFallback')}</div>
             <div className="flex items-center justify-between gap-2">
               <NavLink to="/profile" className="min-w-0 flex-1 hover:opacity-80 transition-opacity">
                 <div className="text-sm font-medium text-white truncate">{user?.username}</div>
@@ -248,7 +252,7 @@ export default function AppLayout() {
               </NavLink>
               <button onClick={handleLogout}
                 className="flex-shrink-0 p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
-                title="Logout"
+                title={t('nav.logout')}
               >
                 <LogOut size={15} />
               </button>
@@ -263,17 +267,17 @@ export default function AppLayout() {
           {!isOnline && (
             <div className="flex-shrink-0 flex items-center justify-center gap-2 bg-amber-500 text-white text-xs font-semibold py-2 px-4">
               <WifiOff size={13} />
-              You're offline — some features may be unavailable
+              {t('layout.offline')}
             </div>
           )}
 
           {/* Update banner */}
           {updateAvailable && (
             <div className="flex-shrink-0 flex items-center justify-between gap-2 bg-primary text-white text-xs font-semibold py-2 px-4">
-              <span>🆕 A new version is available</span>
+              <span>{t('layout.updateAvailable')}</span>
               <button onClick={applyUpdate}
                 className="flex items-center gap-1.5 px-3 py-1 bg-white text-primary rounded-full font-bold hover:bg-primary-pale transition-colors">
-                <RefreshCw size={11} />Update now
+                <RefreshCw size={11} />{t('layout.updateNow')}
               </button>
             </div>
           )}
@@ -292,12 +296,12 @@ export default function AppLayout() {
               <Download size={18} />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold">Install MEP Platform</p>
-              <p className="text-xs text-slate-400 mt-0.5">Add to home screen for quick access</p>
+              <p className="text-sm font-semibold">{t('layout.installTitle')}</p>
+              <p className="text-xs text-slate-400 mt-0.5">{t('layout.installSubtitle')}</p>
             </div>
             <button onClick={promptInstall}
               className="flex-shrink-0 px-3 py-1.5 bg-primary hover:bg-primary-dark text-white text-xs font-bold rounded-lg transition-colors">
-              Install
+              {t('layout.installButton')}
             </button>
           </div>
         </div>
