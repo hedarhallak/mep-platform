@@ -1,10 +1,11 @@
 # MEP Platform — Master Project README
-> Last updated: May 2, 2026 | Maintainer: Hedar Hallak
+> Last updated: May 3, 2026 | Maintainer: Hedar Hallak
 > Production: https://app.constrai.ca
 > Website: https://www.constrai.ca (Coming Soon landing page)
 > Server: root@143.110.218.84
-> Latest DECISIONS section: **Section 38** (Phase 73c + 73d closeout — coverage 35.97% → 49.62%, 129 new tests)
-> Next phase: **74** (DR runbook) or Phase 75+ (route error branches → 65% target)
+> Latest DECISIONS section: **Section 41** (Phase 75a closeout — assignments routes integration tests + Bug 9 pinned, coverage 49.62% → 51.77%)
+> Active program: **Section 40** — Routes Coverage Push roadmap (5 batches, 75a–e, target ≥65% lines)
+> Next phase: **75b** (`routes/material_requests.js` — 15 endpoints, 18-22 integration tests)
 > Backend path on server: /var/www/mep
 > Landing page path on server: /var/www/constrai-landing
 > DB: mepdb / mepuser / MepSecure2026X
