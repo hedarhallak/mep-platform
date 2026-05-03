@@ -932,7 +932,12 @@ router.patch('/requests/:id/move', can('assignments.edit'), async (req, res) => 
         message: 'Only APPROVED assignments can be moved.',
       });
     }
-    if (r.project_id === Number(new_project_id)) {
+    // Bug 9 fix (May 3, 2026): node-pg returns bigint columns as strings,
+    // so `r.project_id` is a string while `Number(new_project_id)` is a JS
+    // Number. Strict === between "5" and 5 is always false, making this
+    // guard dead code. Coerce both sides to Number for a correct compare.
+    // See DECISIONS.md Section 41 for the original Bug 9 pin.
+    if (Number(r.project_id) === Number(new_project_id)) {
       await client.query('ROLLBACK');
       return res.status(400).json({
         ok: false,
