@@ -4,26 +4,34 @@
 # Usage (from prod server, after `ssh root@143.110.218.84`):
 #   bash /var/www/mep/scripts/deploy.sh
 #
-# Encodes the 10-step deploy sequence documented in DECISIONS.md Section 52.
-# Idempotent: running twice in a row is safe — second run is a no-op when
-# main hasn't moved.
+# Encodes the deploy sequence documented in DECISIONS.md Section 52.
+# Idempotent: re-running is safe — true no-op when nothing has changed since
+# the last successful deploy via this script.
+#
+# State tracking: writes the deployed commit SHA to `.last-deployed-sha`
+# at the end of every successful run. Future runs compare current HEAD
+# against this file (NOT against `git pull` result), so deploys still
+# trigger correctly even when an external process (mep-webhook) has
+# already pulled the commits before us. (See DECISIONS.md Section 54.)
 #
 # What it does:
-#   1. Verifies we're on `main` and captures the starting commit
+#   1. Verifies we're on `main` and captures current state
 #   2. Backs up backend `.env` (timestamped)
-#   3. Resets known package-lock.json drift (from prior npm-install runs on prod)
+#   3. Resets known package-lock.json drift (from prior npm-install runs)
 #   4. Pulls latest from origin/main
-#   5. Detects which areas changed (backend / frontend) — skips work where it can
-#   6. Runs `npm install --production` on backend if backend touched
-#   7. Runs `npm install` + `npm run build` + `rsync` on frontend if frontend touched
-#   8. Restarts pm2 mep-backend with --update-env (always — picks up .env changes)
-#   9. Verifies https://app.constrai.ca/api/health/deep returns ok=true
-#  10. Prints a summary
+#   5. Reads .last-deployed-sha; compares to current HEAD
+#   6. If unchanged → restart pm2 (for env) and exit
+#   7. Otherwise: detects which areas changed (backend / frontend)
+#   8. Runs `npm install --production` on backend if backend touched
+#   9. Runs `npm install` + `npm run build` + `rsync` on frontend if frontend touched
+#  10. Restarts pm2 mep-backend with --update-env
+#  11. Verifies https://app.constrai.ca/api/health/deep returns ok=true
+#  12. Writes new SHA to `.last-deployed-sha` on success
 #
 # What it does NOT do:
 #   - Run database migrations (intentional — migrations should be explicit;
 #     run `node scripts/migrate.js` separately when needed)
-#   - Roll back on failure (manual rollback: `git reset --hard <BEFORE_SHA>`
+#   - Roll back on failure (manual rollback: `git reset --hard <SHA>`
 #     then re-run this script)
 #   - Touch the marketing landing page (separate path: /var/www/constrai-landing)
 
@@ -37,6 +45,7 @@ FRONTEND_DIR="${REPO_DIR}/mep-frontend"
 PUBLIC_DIR="${REPO_DIR}/public"
 PM2_APP="mep-backend"
 HEALTH_URL="https://app.constrai.ca/api/health/deep"
+DEPLOYED_SHA_FILE="${REPO_DIR}/.last-deployed-sha"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Helpers
@@ -57,7 +66,7 @@ echo
 
 cd "${REPO_DIR}"
 
-# 1. Must be on main
+# Must be on main
 CURRENT_BRANCH=$(git branch --show-current)
 if [ "${CURRENT_BRANCH}" != "main" ]; then
   err "Not on main (currently on '${CURRENT_BRANCH}'). Aborting."
@@ -65,9 +74,20 @@ if [ "${CURRENT_BRANCH}" != "main" ]; then
 fi
 log "On branch main ✓"
 
-# 2. Capture starting commit
-BEFORE_SHA=$(git rev-parse --short HEAD)
-log "Starting at commit ${BEFORE_SHA}"
+# Read previously-deployed SHA (empty if first run)
+LAST_DEPLOYED=""
+if [ -f "${DEPLOYED_SHA_FILE}" ]; then
+  LAST_DEPLOYED=$(cat "${DEPLOYED_SHA_FILE}" | head -c 40 | tr -d '[:space:]')
+fi
+if [ -n "${LAST_DEPLOYED}" ]; then
+  log "Last deployed SHA: ${LAST_DEPLOYED}"
+else
+  log "No prior deploy SHA found — treating as first run (full deploy)."
+fi
+
+# Capture pre-pull commit (for diagnostic only)
+PRE_PULL_SHA=$(git rev-parse --short HEAD)
+log "HEAD before pull: ${PRE_PULL_SHA}"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Step 1: backup .env
@@ -88,25 +108,48 @@ log "Lockfile drift cleared"
 log "Pulling origin/main..."
 git pull origin main
 
-AFTER_SHA=$(git rev-parse --short HEAD)
-if [ "${BEFORE_SHA}" = "${AFTER_SHA}" ]; then
-  log "Already at latest (${AFTER_SHA}) — nothing new to deploy."
+CURRENT_SHA=$(git rev-parse --short HEAD)
+log "HEAD after pull:  ${CURRENT_SHA}"
+echo
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Step 4: decide if we need to deploy
+#
+# We compare against .last-deployed-sha (recorded by our previous successful
+# run) — NOT against the pre-pull HEAD. This is the fix for the bug found in
+# Section 54: the mep-webhook process auto-pulls on push, which would
+# otherwise make the pre/post-pull comparison return "no changes" even when
+# the public/ bundle is stale relative to git HEAD.
+# ──────────────────────────────────────────────────────────────────────────────
+if [ -n "${LAST_DEPLOYED}" ] && [ "${LAST_DEPLOYED}" = "${CURRENT_SHA}" ]; then
+  log "Already deployed at ${CURRENT_SHA} — true no-op."
   log "Restarting pm2 anyway to pick up any .env changes..."
   pm2 restart "${PM2_APP}" --update-env
   log "=== Deploy complete (no-op for code; pm2 restarted) ==="
   exit 0
 fi
 
-COMMITS_PULLED=$(git rev-list --count "${BEFORE_SHA}..${AFTER_SHA}")
-log "Pulled ${COMMITS_PULLED} commit(s): ${BEFORE_SHA} → ${AFTER_SHA}"
-echo
+# ──────────────────────────────────────────────────────────────────────────────
+# Step 5: detect what changed since last deploy
+# ──────────────────────────────────────────────────────────────────────────────
+if [ -z "${LAST_DEPLOYED}" ]; then
+  log "First run via this script — forcing full backend + frontend deploy."
+  BACKEND_CHANGED="(initial)"
+  FRONTEND_CHANGED="(initial)"
+else
+  log "Diffing ${LAST_DEPLOYED}..${CURRENT_SHA}"
+  CHANGED=$(git diff --name-only "${LAST_DEPLOYED}..${CURRENT_SHA}" 2>/dev/null || echo "(diff-failed)")
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Step 4: detect what changed
-# ──────────────────────────────────────────────────────────────────────────────
-CHANGED=$(git diff --name-only "${BEFORE_SHA}..${AFTER_SHA}")
-BACKEND_CHANGED=$(echo "${CHANGED}" | grep -E "^(routes/|services/|middleware/|lib/|jobs/|migrations/|index\.js|app\.js|db\.js|seed\.js|package\.json|package-lock\.json)" || true)
-FRONTEND_CHANGED=$(echo "${CHANGED}" | grep -E "^mep-frontend/(src/|public/|index\.html|package\.json|package-lock\.json|vite\.config|tailwind\.config)" || true)
+  if [ "${CHANGED}" = "(diff-failed)" ]; then
+    log "WARN: diff failed (last-deployed SHA may be unreachable from HEAD)."
+    log "Falling back to full deploy."
+    BACKEND_CHANGED="(diff-failed)"
+    FRONTEND_CHANGED="(diff-failed)"
+  else
+    BACKEND_CHANGED=$(echo "${CHANGED}" | grep -E "^(routes/|services/|middleware/|lib/|jobs/|migrations/|index\.js|app\.js|db\.js|seed\.js|package\.json|package-lock\.json)" || true)
+    FRONTEND_CHANGED=$(echo "${CHANGED}" | grep -E "^mep-frontend/(src/|public/|index\.html|package\.json|package-lock\.json|vite\.config|tailwind\.config)" || true)
+  fi
+fi
 
 log "Changed areas:"
 [ -n "${BACKEND_CHANGED}" ]  && log "  backend:  yes" || log "  backend:  no"
@@ -114,7 +157,7 @@ log "Changed areas:"
 echo
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Step 5: backend install (if needed)
+# Step 6: backend install (if needed)
 # ──────────────────────────────────────────────────────────────────────────────
 if [ -n "${BACKEND_CHANGED}" ]; then
   log "Backend changed — running npm install --production..."
@@ -127,7 +170,7 @@ fi
 echo
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Step 6: frontend install + build + deploy (if needed)
+# Step 7: frontend install + build + deploy (if needed)
 # ──────────────────────────────────────────────────────────────────────────────
 if [ -n "${FRONTEND_CHANGED}" ]; then
   log "Frontend changed — installing deps..."
@@ -149,14 +192,14 @@ fi
 echo
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Step 7: pm2 restart (always — picks up env + new code)
+# Step 8: pm2 restart (always — picks up env + new code)
 # ──────────────────────────────────────────────────────────────────────────────
 log "Restarting pm2 ${PM2_APP}..."
 pm2 restart "${PM2_APP}" --update-env
 echo
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Step 8: verify health
+# Step 9: verify health
 # ──────────────────────────────────────────────────────────────────────────────
 log "Waiting 3s for backend warmup..."
 sleep 3
@@ -170,15 +213,27 @@ if [[ "${HEALTH}" == *"\"ok\":true"* ]]; then
 else
   err "Deep health probe FAILED. Response below."
   echo "${HEALTH}"
-  err "Consider manual rollback: cd ${REPO_DIR} && git reset --hard ${BEFORE_SHA}"
+  err "Consider manual rollback: cd ${REPO_DIR} && git reset --hard ${PRE_PULL_SHA}"
+  err "(.last-deployed-sha NOT updated — re-run after fix.)"
   exit 1
 fi
+echo
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Step 10: record successful deploy
+# ──────────────────────────────────────────────────────────────────────────────
+echo "${CURRENT_SHA}" > "${DEPLOYED_SHA_FILE}"
+log "Recorded deployed SHA: ${CURRENT_SHA} → ${DEPLOYED_SHA_FILE}"
 echo
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Done
 # ──────────────────────────────────────────────────────────────────────────────
 log "=== Deploy complete ==="
-log "  ${BEFORE_SHA} → ${AFTER_SHA} (${COMMITS_PULLED} commit(s))"
+if [ -n "${LAST_DEPLOYED}" ]; then
+  log "  ${LAST_DEPLOYED} → ${CURRENT_SHA}"
+else
+  log "  (first deploy) → ${CURRENT_SHA}"
+fi
 log "  pm2 ${PM2_APP}: restarted"
 log "  Health: ok"
