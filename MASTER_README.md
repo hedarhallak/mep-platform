@@ -3,10 +3,10 @@
 > Production: https://app.constrai.ca
 > Website: https://www.constrai.ca (Coming Soon landing page)
 > Server: root@143.110.218.84
-> Latest DECISIONS section: **Section 46** (end-of-day retro + 2-week roadmap — customer-#1 framing, P0/P1/Backlog candidate priorities)
-> Active program: **none** — Section 40 + Section 22 + Phase 74 + Section 45 (web i18n pilot) all closed. Feature work returns to front of queue.
+> Latest DECISIONS section: **Section 47** (onboarding flow audit — 11 friction points documented, top 3 fixes queued)
+> Active program: **none** — feature work front-of-queue. P0 #1 done as audit per Section 46 default.
 > **Customer #1 status:** unsigned (constraint per Section 46). Engineering rigor work is paused pending revenue.
-> Candidate next phases (Hedar to commit P0/P1/Backlog from Section 46): onboarding E2E test, pricing page, web Tier 1 i18n, pitch deck.
+> **Top 3 onboarding fixes queued (per Section 47):** brand "MEP Platform" → "Constrai" in onboarding flow + email; Mapbox token to env var; surface email-send failure in admin UI.
 > Coverage thresholds: 51 / 45 / 52 / 52. Backend tests: **553 / 65 suites**. Bug 9 — fixed. Web i18n: pipeline live, 1/30 pages translated.
 > Backend path on server: /var/www/mep
 > Landing page path on server: /var/www/constrai-landing
