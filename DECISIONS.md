@@ -4774,3 +4774,141 @@ State after Section 44 merges:
 - **Bug 9 closed.** No more pinned bugs in the test suite.
 - **Open follow-ups:** (ج) Frontend (web) i18n + (د) 2-week feature roadmap. Both queued for tonight or next session.
 - **Operational posture:** RECOVERY.md is now both a continuity doc and an incident-response runbook. Update Section 9 (incident log) + the relevant Section 11 entry after every prod incident. Quarterly verification (Section 8) still applies.
+
+---
+
+## Section 45 — Web i18n pilot (May 3, 2026 evening)
+
+i18next infrastructure on `mep-frontend/` + LanguageSwitcher component + LoginPage translated to FR/EN. Remaining ~29 components queued for follow-up sessions, with the pattern + locale files now in place.
+
+### Why a pilot, not a full translation
+
+The frontend has 17+ page directories + 6 standalone pages = ~30 components, ~500 user-visible strings total. Translating all in one PR would be 6–10 hours of mostly-mechanical work. Decision: ship the **plumbing** + a single translated page (`LoginPage`), document the pattern, defer the rest to subsequent sessions per Section 4.5 (don't manually grind 30+ same-shape transformations in one go).
+
+### Architecture (made in execution per Section 2.3)
+
+| Choice | Decision | Why |
+|---|---|---|
+| Library | `i18next` + `react-i18next` + `i18next-browser-languagedetector` | Industry standard, matches mobile (`mep-mobile/src/i18n/index.ts`). |
+| Default language | **French** (`fallbackLng: 'fr'`) | Quebec construction market. Matches mobile default. |
+| Storage | `localStorage` key `constrai_language` | Mirrors mobile's `mep_language` AsyncStorage key. |
+| Detection order | `localStorage` → browser language → fallback | User's explicit pick wins. |
+| Quebec FR specifics | "NIP" not "PIN", "Nom d'utilisateur", Quebec spellings | Match mobile FR translations. |
+
+### Files shipped
+
+| File | Status |
+|---|---|
+| `mep-frontend/package.json` | added 3 deps: `i18next`, `react-i18next`, `i18next-browser-languagedetector` |
+| `mep-frontend/src/main.jsx` | `import './i18n'` before `App` mounts |
+| `mep-frontend/src/i18n/index.js` | NEW — i18next init + detector + localStorage cache |
+| `mep-frontend/src/i18n/locales/en.js` | NEW — English strings (`common`, `language`, `login` buckets) |
+| `mep-frontend/src/i18n/locales/fr.js` | NEW — French (Quebec) strings — terminology matches mobile |
+| `mep-frontend/src/components/shared/LanguageSwitcher.jsx` | NEW — FR/EN pill toggle |
+| `mep-frontend/src/pages/auth/LoginPage.jsx` | translated — all 10 strings + error map → `t()` |
+
+### Pattern for translating the next component
+
+1. Identify strings (JSX literals + `placeholder` + `aria-label` + JS error messages).
+2. Add to BOTH `en.js` and `fr.js` (same key set on both — missing keys fall back silently).
+3. `import { useTranslation } from 'react-i18next'`, `const { t } = useTranslation()`.
+4. Replace literals with `t('bucket.key')`.
+5. Backend error codes: `t(\`bucket.errors.${code}\`)` with a fallback (`t('bucket.errors.GENERIC')`).
+6. Test: `npm run dev`, click LanguageSwitcher, watch DevTools console for `i18next::translator: missingKey` warnings.
+
+### Remaining pages — Tier list (by user-visibility / customer-onboarding-importance)
+
+**Tier 1 — visible during a customer demo (next priority):** dashboard, layout (top nav + sidebar), employees, projects.
+
+**Tier 2 — daily use:** assignments, attendance, materials, hub.
+
+**Tier 3 — admin / less-frequent:** auth (Login done; onboarding/activate remain), onboarding, profile, suppliers, bi.
+
+**Tier 4 — rarely-visited:** PermissionsPage, ReportsPage, StandupPage, TaskRequestPage, UserManagementPage.
+
+### Convention going forward
+
+- Any new page shipped from now uses `t()` from day one. Don't add new untranslated strings.
+- Mobile + web share the FR/EN convention (key naming, default language, Quebec spellings, "NIP" / "Nom d'utilisateur"). Future translation choices reference both files.
+
+---
+
+## Section 46 — End-of-day retro + 2-week roadmap (May 3, 2026)
+
+> **Audience:** Hedar. **Purpose:** consolidate today's shipped work, surface the actual constraint, propose a prioritized 2-week roadmap. **Starting point, not final plan** — Hedar should annotate it with sales-pipeline context.
+
+### Retro — what shipped today
+
+**16 PRs merged** across one calendar day. Sections 40–46 written in DECISIONS.md.
+
+| Track | PRs | What |
+|---|---|---|
+| Phase 75 (routes coverage) | 9 PRs (#62–#70) | 80 new integration tests across 6 batches; +6.64 pp lines (49.62% → 56.26%); 4 helper extensions; 3 ratchet PRs; 4 docs sections (40–43) |
+| Bug 9 fix | #72 | SAME_PROJECT guard pattern bug fixed; pinned test flipped; codebase sweep showed isolated occurrence |
+| Phase 74 — DR runbook | #73 | RECOVERY.md Sections 11–12: 11 incident-response playbooks + post-incident retro template |
+| Section 45–46 — Web i18n + retro | this PR | i18next + LanguageSwitcher + LoginPage FR/EN; 29 pages queued; retro + roadmap |
+
+**Coverage delta:** 48.54 → 55.12 / 43.70 → 48.98 / 51.47 → 55.39 / 49.62 → 56.26 (lines).
+
+**Tests delta:** 245 → 553 (Jest reports 64 → 65 suites).
+
+**Bugs:** 1 caught (Bug 9), fixed same day. Zero new bugs from Phase 75b–f despite 64 new tests — empirical reinforcement of Section 39's "don't grind past 50% without a reason".
+
+### The actual constraint
+
+**Customer #1 has not signed.** That is the only metric that matters at this stage. Section 39 already wrote the verdict; Section 40's stop signal confirmed it (5 of 6 batches found zero bugs). The question for the next 2 weeks isn't "what should we engineer?" — it's "what removes the last objection between us and customer #1?"
+
+### Honest gap analysis vs customer #1
+
+| Dimension | State today | Readiness | Gap |
+|---|---|---|---|
+| Backend correctness | 553 tests, Sentry, backups, monitoring | ✅ ready | none |
+| Mobile app | iOS shipped via TestFlight, FR/EN | 🟡 mostly | Android pending |
+| Web app | Functional, mostly EN | 🟡 partially | 29 pages need FR for Quebec market |
+| Onboarding flow | Routes exist, Bug 6 blocked happy path historically | ❓ unknown | needs end-to-end smoke test |
+| Sales material | Marketing site live | ❓ unknown | pitch deck? demo video? pricing page? |
+| Pricing model | Not visible in repo | ❓ unknown | needed for B2B due diligence |
+| Legal — Loi 25 | COMPLIANCE.md (Phase 72) | ✅ documented | TOS / Privacy Policy still TBD |
+| Sales pipeline | Unknown to this session | — | Hedar-only knowledge |
+
+**Anything ❓ is a gap I (Claude) can't see from the repo alone.** Hedar has the actual context.
+
+### Candidate priorities (Hedar marks P0 / P1 / Backlog)
+
+**P0 candidates — directly remove a customer-#1 blocker:**
+
+1. **Onboarding flow end-to-end test.** Walk the path: marketing site → "request demo" → first user provisioned → first project → first assignment → first attendance check-in. Document every friction point. Fix top 3.
+2. **Pricing page on marketing site.** Even "contact sales" → at least a /pricing page with tiers + CTA.
+3. **Web Tier 1 i18n** (continuation of Section 45). Dashboard + layout + employees + projects. ~2-3 hrs.
+4. **Pitch deck or one-pager.** 5-10 slides for outbound: problem, solution, pricing, references, ask.
+
+**P1 candidates — high value but deferrable past customer #1:**
+
+5. Web Tier 2 i18n (assignments/attendance/materials/hub).
+6. Bug 6 follow-up (onboarding `/complete` happy path).
+7. Android mobile build.
+8. Helpdesk / customer support workflow.
+9. TOS + Privacy Policy as standalone pages.
+
+**Backlog — explicitly deferred:**
+
+10. Section 22 deferred items (69b, 70b, 71b) — defer until customer-driven need.
+11. Phase 75 stretch (60% / 65% lines) — closed per Section 43.
+12. CI/CD via GitHub Actions auto-deploy — current manual deploy fine for solo team.
+
+### Process conventions for next 2 weeks
+
+1. **Default to feature work.** No new rigor program without a Section-39-style "what specific failure does this prevent + has it happened?" justification.
+2. **Track customer-pipeline state visibly.** A line at the top of MASTER_README so every session bootstrap sees it.
+3. **Phase 75-style stop conditions become standard.** Any new program spanning multiple phases must write its **stop condition** in the section that opens it.
+4. **Mega-batch pre-emptively** when ≥3 same-shape phases are queued.
+5. **First production incident:** log in RECOVERY.md Section 9, check Section 11 for matching runbook, add new runbook if missing.
+6. **DECISIONS.md remains append-only and section-numbered.** Every new program / non-trivial task gets a section: what / why / scope / stop-condition / pointers-for-next-session.
+
+### Pointer for next sessions
+
+When the next Claude session opens:
+- **Read Section 46 first**, then the latest pointer in MASTER_README.
+- **Ask Hedar before writing code:** "What's the customer pipeline status? Which P0/P1 items from Section 46 are now committed?"
+- **Default if no answer:** start with **P0 #1 (onboarding flow end-to-end test)** — information-gathering output is independently useful.
+- **Remember Section 39's verdict:** every proposed engineering task must answer "what specific failure does this prevent" before it gets time.
