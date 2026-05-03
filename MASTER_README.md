@@ -3,9 +3,10 @@
 > Production: https://app.constrai.ca
 > Website: https://www.constrai.ca (Coming Soon landing page)
 > Server: root@143.110.218.84
-> Latest DECISIONS section: **Section 41** (Phase 75a closeout — assignments routes integration tests + Bug 9 pinned, coverage 49.62% → 51.77%)
+> Latest DECISIONS section: **Section 42** (Phase 75b closeout — material_requests routes integration tests, coverage 51.77% → 53.22%, +1.45pp lines)
 > Active program: **Section 40** — Routes Coverage Push roadmap (5 batches, 75a–e, target ≥65% lines)
-> Next phase: **75b** (`routes/material_requests.js` — 15 endpoints, 18-22 integration tests)
+> Next phase: **75c** (`routes/hub.js` — task lifecycle + materials inbox)
+> Coverage thresholds: 50 / 44 / 51 / 50 (after Phase 75b ratchet PR merges)
 > Backend path on server: /var/www/mep
 > Landing page path on server: /var/www/constrai-landing
 > DB: mepdb / mepuser / MepSecure2026X
