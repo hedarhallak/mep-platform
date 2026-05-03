@@ -9,6 +9,12 @@
 // header / form scaffolding silently dropped during a refactor. Cheap,
 // fast, and a regression net for the most-trafficked URL in the app.
 //
+// Section 45 update (May 3, 2026): the page is now i18n'd and defaults to
+// French. We pin the language to English in localStorage before navigating
+// so the tests stay deterministic regardless of the browser locale or
+// future default-language changes. The "MEP Platform" brand was renamed
+// to "Constrai" as part of the same i18n pass — anchors updated below.
+//
 // Note: interaction tests (fill, click) currently flake on React 19 +
 // Vite HMR (the dev server's fast refresh races the synthetic events).
 // The Phase 69 setup intentionally ships static-render assertions only;
@@ -17,14 +23,29 @@
 
 import { test, expect } from '@playwright/test';
 
+// Force English UI for deterministic assertions. Set BEFORE the first
+// navigation so i18next-browser-languagedetector picks up the choice on
+// init rather than defaulting to French.
+test.beforeEach(async ({ context }) => {
+  await context.addInitScript(() => {
+    try {
+      window.localStorage.setItem('constrai_language', 'en');
+    } catch (_e) {
+      /* localStorage may be unavailable in some contexts; tolerate */
+    }
+  });
+});
+
 test.describe('Login page — public smoke', () => {
   test('renders the brand, headline, and form fields', async ({ page }) => {
     await page.goto('/login');
 
-    // Brand title — anchor for the page being recognisably "the login page".
-    await expect(page.getByRole('heading', { name: /MEP Platform/i })).toBeVisible();
+    // Brand title — "Constrai" replaces the legacy "MEP Platform" copy
+    // (Section 45 web i18n pilot, May 2026). Anchored as the marker that
+    // we are recognisably on the login page.
+    await expect(page.getByRole('heading', { name: /Constrai/i })).toBeVisible();
 
-    // Sign-in card header.
+    // Sign-in card header (English copy because beforeEach pins lang=en).
     await expect(page.getByRole('heading', { name: /Sign in to your account/i })).toBeVisible();
 
     // Inputs — match by placeholder rather than label since the labels are
@@ -45,6 +66,6 @@ test.describe('Login page — public smoke', () => {
   test('renders the year in the footer', async ({ page }) => {
     await page.goto('/login');
     const year = new Date().getFullYear().toString();
-    await expect(page.getByText(new RegExp(`MEP Platform © ${year}`))).toBeVisible();
+    await expect(page.getByText(new RegExp(`Constrai © ${year}`))).toBeVisible();
   });
 });
