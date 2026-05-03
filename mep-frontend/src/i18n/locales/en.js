@@ -17,6 +17,37 @@ export default {
     fr: 'Français',
   },
 
+  nav: {
+    dashboard: 'Dashboard',
+    employees: 'Employees',
+    projects: 'Projects',
+    suppliers: 'Suppliers',
+    assignments: 'Assignments',
+    attendance: 'Attendance',
+    reports: 'Reports',
+    standup: 'Daily Standup',
+    taskRequest: 'Task Request',
+    materialRequest: 'Material Request',
+    purchaseOrders: 'Purchase Orders',
+    myHub: 'My Hub',
+    bi: 'Business Intelligence',
+    workforcePlanner: 'Workforce Planner',
+    userManagement: 'User Management',
+    permissions: 'Permissions',
+    settings: 'Settings',
+    logout: 'Logout',
+    companyFallback: 'Company',
+  },
+
+  layout: {
+    offline: "You're offline — some features may be unavailable",
+    updateAvailable: '🆕 A new version is available',
+    updateNow: 'Update now',
+    installTitle: 'Install Constrai',
+    installSubtitle: 'Add to home screen for quick access',
+    installButton: 'Install',
+  },
+
   dashboard: {
     greetingMorning: 'Good morning, {{username}} 👋',
     greetingAfternoon: 'Good afternoon, {{username}} 👋',

@@ -17,6 +17,37 @@ export default {
     fr: 'Français',
   },
 
+  nav: {
+    dashboard: 'Tableau de bord',
+    employees: 'Employés',
+    projects: 'Projets',
+    suppliers: 'Fournisseurs',
+    assignments: 'Affectations',
+    attendance: 'Présences',
+    reports: 'Rapports',
+    standup: 'Réunion quotidienne',
+    taskRequest: 'Demande de tâche',
+    materialRequest: 'Demande de matériel',
+    purchaseOrders: "Bons d'achat",
+    myHub: 'Mon Hub',
+    bi: "Intelligence d'affaires",
+    workforcePlanner: "Planificateur d'effectifs",
+    userManagement: 'Gestion des utilisateurs',
+    permissions: 'Permissions',
+    settings: 'Paramètres',
+    logout: 'Déconnexion',
+    companyFallback: 'Entreprise',
+  },
+
+  layout: {
+    offline: 'Vous êtes hors ligne — certaines fonctions peuvent être indisponibles',
+    updateAvailable: '🆕 Une nouvelle version est disponible',
+    updateNow: 'Mettre à jour',
+    installTitle: 'Installer Constrai',
+    installSubtitle: "Ajouter à l'écran d'accueil pour un accès rapide",
+    installButton: 'Installer',
+  },
+
   dashboard: {
     greetingMorning: 'Bonjour, {{username}} 👋',
     greetingAfternoon: 'Bon après-midi, {{username}} 👋',
