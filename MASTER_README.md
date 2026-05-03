@@ -3,10 +3,10 @@
 > Production: https://app.constrai.ca
 > Website: https://www.constrai.ca (Coming Soon landing page)
 > Server: root@143.110.218.84
-> Latest DECISIONS section: **Section 42** (Phase 75b closeout — material_requests routes integration tests, coverage 51.77% → 53.22%, +1.45pp lines)
-> Active program: **Section 40** — Routes Coverage Push roadmap (5 batches, 75a–e, target ≥65% lines)
-> Next phase: **75c** (`routes/hub.js` — task lifecycle + materials inbox)
-> Coverage thresholds: 50 / 44 / 51 / 50 (after Phase 75b ratchet PR merges)
+> Latest DECISIONS section: **Section 43** (Phase 75 final closeout — 75c+d+e+f shipped, Section 40 CLOSED at 56.26% lines, +6.64 pp from kickoff)
+> Active program: **none** — Section 40 (Routes Coverage Push) closed. Bug yield 1/80 across 6 batches + per-test efficiency cliff in 75f triggered the Section 40 stop condition.
+> Next phase: **TBD** — feature work returns to front of queue per Section 39 calibration. No active rigor program.
+> Coverage thresholds: 51 / 45 / 52 / 52. Backend tests: **553 / 65 suites**. Bug 9 still pinned (fix deferred).
 > Backend path on server: /var/www/mep
 > Landing page path on server: /var/www/constrai-landing
 > DB: mepdb / mepuser / MepSecure2026X

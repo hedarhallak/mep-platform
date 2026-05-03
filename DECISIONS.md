@@ -4555,3 +4555,138 @@ State after Section 42 + ratchet merge:
 - **Bug 9** still pinned, fix still deferred.
 - **Helper extension precedent:** Phase 75c will likely need 3-5 more permissions added to `ensureSeedData` for hub/task routes — pre-check the route file before writing tests.
 
+---
+
+## Section 43 — Session Log — May 3, 2026 (Phase 75c+d+e + 75f closeout, Section 40 program close at 56.26% lines)
+
+Final closeout of Section 40. Covers Phase 75c+d+e (mega-batch, PR #68) + Phase 75c+d+e ratchet (PR #69) + Phase 75f (PR #70). Phase 75f was an explicit extension past the originally-planned 5 batches, requested at the end of session to push toward 60% lines. The data ended up reinforcing the Section 40 stop signal rather than overriding it.
+
+### What shipped this session — full Phase 75 stack
+
+| Phase | PR | Tests | Lines pre → post | Bugs found |
+|---|---|---|---|---|
+| 75a | #62 (+ #63 docs + #64 ratchet) | 16 | 49.62% → 51.77% (+2.15 pp) | **Bug 9** (SAME_PROJECT dead code) |
+| 75b | #65 (+ #66 docs + #67 ratchet) | 19 | 51.77% → 53.22% (+1.45 pp) | 0 |
+| 75c+d+e | #68 (+ #69 ratchet, this section partly) | 31 | 53.22% → 55.66% (+2.44 pp) | 0 |
+| 75f | #70 | 14 | 55.66% → 56.26% (+0.60 pp) | 0 |
+| **Total** | **6 feature PRs + 3 ratchet PRs** | **80 tests** | **49.62% → 56.26% (+6.64 pp)** | **1** |
+
+### Phase 75c+d+e (PR #68) — mega-batch by Section 4.5 default batching rule
+
+**31 new integration tests across 3 files** (896 lines), shipped as a single feature PR per Section 4.5. Saved ~6 round-trips vs. running 75c, 75d, 75e as separate phases.
+
+| File | Tests | Endpoints (covered/total) | Branches focus |
+|---|---|---|---|
+| `tests/integration/hub_phase75c.test.js` | 12 | 9/9 | task lifecycle (TITLE/RECIPIENTS/TOO_MANY) + 201 happy + sent/inbox/unread + read/ack/complete noop |
+| `tests/integration/attendance_phase75d.test.js` | 10 | 5/5 | checkin (REQUIRED/NOT_YOURS/201) + checkout (NOT_YOURS/200 chained) + confirm (NOT_FOUND/NOT_CHECKED_OUT_YET/200) |
+| `tests/integration/reports_phase75e.test.js` | 9 | 6/6 | parseRange (missing/inverted) + 200 happy on each endpoint + my-daily no-employee branch |
+
+Helper extension: 3 perms added (`attendance.view_self`, `attendance.approve`, `reports.view_self`) + 4 grants for COMPANY_ADMIN.
+
+**75c+d+e measurement (CI on commit b3686ad):** Statements 54.49% / Branches 48.33% / Functions 55.14% / Lines 55.66%. **Threshold ratchet (PR #69):** 50/44/51/50 → 51/45/52/52 (full +3pp safety on every metric).
+
+### Phase 75f (PR #70) — Section 40 stretch toward 60%
+
+After 75c+d+e closed at 55.66% lines, Hedar requested one more batch to push toward the 60% psychological round number. Target chosen: **`routes/user_management.js`** (4 endpoints, 268 LOC, only GET previously tested per Phase 73 closeout).
+
+**14 new integration tests in `tests/integration/user_management_phase75f.test.js`** (345 lines):
+
+| Endpoint | Tests | Branches |
+|---|---|---|
+| `GET /api/users` | 1 | 200 list with admin + worker |
+| `PATCH /:id/role` | 6 | INVALID_ROLE, USER_NOT_FOUND, CROSS_COMPANY, INSUFFICIENT_PRIVILEGE, CANNOT_ASSIGN_HIGHER_ROLE, 200 happy |
+| `PATCH /:id/status` | 5 | USER_NOT_FOUND, CROSS_COMPANY, CANNOT_DEACTIVATE_SELF, INSUFFICIENT_PRIVILEGE, 200 happy |
+| `POST /:id/resend` | 2 | EMAIL_NOT_CONFIGURED (env unset), USER_NOT_FOUND (env set) |
+
+Notable: the `/resend` tests use `process.env` snapshot/restore around each test to exercise both the env-guard branch and the user-lookup branch in the same suite — pattern worth re-using when other routes have `mustEnv()`-style guards.
+
+**75f measurement (CI on commit 6ea1496):**
+
+```
+=============================== Coverage summary ===============================
+Statements   : 55.12% ( 2355/4272 )
+Branches     : 48.98% ( 1354/2764 )
+Functions    : 55.39% (  226/408 )
+Lines        : 56.26% ( 2253/4004 )
+================================================================================
+Test Suites: 65 passed, 65 total
+Tests:       553 passed, 553 total
+```
+
+Gain over 75c+d+e: **+0.60 pp lines** for 14 tests. Per-test efficiency dropped roughly 50% vs. 75c+d+e (0.079 pp/test → 0.043 pp/test).
+
+**No ratchet PR for 75f** — per Section 4.6 ("if per-batch gain < 2 pp, hold and re-bump after next batch"), all 4 metrics gained <1 pp. Current thresholds 51/45/52/52 hold; headrooms after 75f are a comfortable 4.12 / 3.98 / 3.39 / 4.26 pp.
+
+### Section 40 — CLOSED at 56.26% lines (May 3, 2026)
+
+Section 40 is closed. Three converging signals:
+
+**1. Bug-yield trigger fired (75c onward).** Section 40 wrote: *"if the per-batch ROI drops to zero by 75c, reconsider stopping early."*
+
+| Phase | Tests | Bugs found |
+|---|---|---|
+| 75a | 16 | **Bug 9** (SAME_PROJECT dead code) |
+| 75b | 19 | 0 |
+| 75c+d+e | 31 | 0 |
+| 75f | 14 | 0 |
+| **Total** | **80** | **1** |
+
+64 tests across 4 batches surfaced zero new bugs. Section 40's own stop condition is met.
+
+**2. Coverage gain decay.** Per-test efficiency:
+
+| Phase | Tests | Lines delta | Lines delta per test |
+|---|---|---|---|
+| 75a | 16 | +2.15 pp | 0.134 pp/test |
+| 75b | 19 | +1.45 pp | 0.076 pp/test |
+| 75c+d+e | 31 | +2.44 pp | 0.079 pp/test |
+| 75f | 14 | +0.60 pp | 0.043 pp/test |
+
+The drop from 75e (0.079 pp/test) to 75f (0.043 pp/test) is a ~46% efficiency cliff in one phase. Continuing into smaller / partially-covered route files would compound that — the next phase would likely return ~0.03 pp/test, then 0.02, then 0.01.
+
+**3. Targets functionally met.** Section 40 set "≥65% lines (stretch 70%)" but the *underlying* Section 39 calibration argument was "anything above 50% is 95th-percentile for an Express app this size." We landed at **56.26% lines** — well past Section 39's 95th-percentile baseline. The 60% / 65% / 70% numbers are aesthetic rather than load-bearing.
+
+**Decision: Section 40 — CLOSED.** The 65% / 70% stretch targets are deferred indefinitely — same posture as Section 39 took on the routes push originally. Re-enter the queue only if a customer-driven need arises (a 500 in prod that better routes coverage would have caught).
+
+### What this leaves open
+
+- **Bug 9 fix** — still pinned, deferred to its own phase. Re-evaluate when next session touches `routes/assignments.js` for any reason; fold into that work.
+- **Routes still uncovered as of this session:** `super_admin.js`, `bi.js`, `ccq_rates.js`, `daily_dispatch.js`, `permissions.js`, `auto_assign.js`, `onboarding.js` (partial), `standup.js`, `project_trades.js`, `profile.js`, `push_tokens_route.js`, `admin_users.js` (BLOCKED — needs SENDGRID env mock), `invite_employee.js` (BLOCKED), `suppliers.js`, `projects.js`. Many already have lighter coverage from earlier phases; Section 40 left them alone by design.
+- **Section 22 deferred items** (69b interaction tests, 70b RNTL, 71b @openapi fanout) — still deferred per Section 22 closeout. Pick up only when feature work allows.
+
+### Lessons captured
+
+1. **Mega-batching is a force multiplier when the work is templatable.** Phase 75c+d+e shipped 31 tests as 1 feature PR + 1 ratchet PR + 1 docs section, vs. the 9-PR split it would have required as separate phases. Concrete saving: ~6 round-trips. Section 4.5's default batching rule worked exactly as designed once we triggered it before Phase 75c started.
+2. **Bug yield is the load-bearing stop signal, not a coverage number.** Section 40 codified "stop if ROI drops to zero by 75c" upfront. That turned a sunk-cost grind into a clean stop. **Future programs should write the stop condition into the section that opens them** — and re-evaluate the actual signal at every batch, not just at the planned end.
+3. **Per-test efficiency cliffs are visible early.** The 75f extension was useful precisely because it surfaced the efficiency cliff (0.079 → 0.043 pp/test in one phase). Without 75f, the team might have assumed a 60% target was 1-2 batches away. With 75f data, "60% is ~3 more batches at sharply diminishing return" is empirically clear.
+4. **`process.env` snapshot/restore in tests** is the right pattern for `mustEnv()`-guarded routes. Pattern: capture original, override, run, restore in `finally`. Re-use when covering other routes with the same env-gate (e.g. `admin_users.js`, `invite_employee.js`).
+5. **Helper extension cost is small but recurring.** Phase 75 batches added 7 perms to `ensureSeedData` total (4 in 75b, 3 in 75c+d+e, 0 in 75f). As programs cover broader route surfaces, the helper accumulates state. Eventually worth refactoring to load production seed data verbatim rather than maintaining a parallel matrix in the helper. Not urgent — note for later.
+
+### Files touched (Sections 43 docs only)
+
+| File | Change | Where |
+|---|---|---|
+| All 75c-f test files + helper + jest.config.js | already merged via PRs #68, #69, #70 | main |
+| `DECISIONS.md` | Section 43 (this) | pending in `docs/section43-phase75-final-closeout` |
+| `MASTER_README.md` | header pointer refresh + Section 40 marked CLOSED | pending in same docs PR |
+
+### Commit / push checklist
+
+```powershell
+git checkout -b docs/section43-phase75-final-closeout
+git add DECISIONS.md MASTER_README.md
+git commit -m "docs(section43): Phase 75 final closeout (75c+d+e+f) + Section 40 close at 56.26% lines"
+git push -u origin docs/section43-phase75-final-closeout
+```
+
+No ratchet PR for 75f — gains too small (<1 pp on every metric) per Section 4.6 hold rule.
+
+### Pointer for next sessions
+
+State after Section 43 merges:
+- **Section 40 — CLOSED.** Routes coverage push complete at 56.26% lines (was 49.62%). Stretch goals (60% / 65% / 70%) deferred indefinitely.
+- **Coverage:** 55.12 / 48.98 / 55.39 / 56.26.
+- **Thresholds:** 51 / 45 / 52 / 52 (unchanged from Phase 75c+d+e ratchet — 75f gains too small to justify another ratchet).
+- **Total backend tests:** 553 across 65 suites (was 245+ at start of Section 22; +6.04 pp lines from Phase 73d, +6.64 pp from 75a kickoff).
+- **Bug 9** still pinned, fix still deferred. Fold into the next `routes/assignments.js` change.
+- **Feature work returns to front of queue.** Section 39's calibration verdict is back in force: don't add new rigor without a proven failure mode.
