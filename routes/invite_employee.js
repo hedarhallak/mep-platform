@@ -141,7 +141,7 @@ router.post('/', can('employees.invite'), async (req, res) => {
 
     const companyId = req.user.company_id;
     const createdByUserId = req.user.user_id;
-    const appName = process.env.APP_NAME || 'MEP Platform';
+    const appName = process.env.APP_NAME || 'Constrai';
     const appBaseUrl = process.env.APP_BASE_URL || 'http://localhost:3000';
     const expiresHours = Number(process.env.USER_INVITE_EXPIRES_HOURS || 48);
 
