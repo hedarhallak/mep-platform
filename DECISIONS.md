@@ -5229,3 +5229,76 @@ The `labelKey: 'nav.foo'` indirection in nav arrays kept the JSX render path cle
 - **Web i18n: 3/30 pages translated** (Login + Dashboard + Layout). Layout counts as one "page" but actually touches 100% of authenticated views.
 - **Tier 1 next: EmployeesPage** — biggest data-heavy page after Dashboard; will also be the first page where table column headers + action buttons get translated, so it's the template for Tier 2.
 - **Quebec FR conventions reinforced this section:** `Bons d'achat` (not `Bons de commande`), `Intelligence d'affaires` (not `Business Intelligence` calque), `Réunion quotidienne` (not `Daily Standup` calque), `Présences` (not `Assiduité`), `NIP` (already established Section 45). Capture these in a glossary file when Tier 1 closes.
+
+---
+
+## Section 51 — Monitoring health check (May 3, 2026, late evening)
+
+After Hedar asked "ok so what did we actually get out of UptimeRobot + Sentry — did we forget to use them?" the answer was: they're passive prod runtime tools (not test tools), they ARE working, but several gaps were unaddressed since their initial setup. Did a 30-min health-check pass.
+
+### Pre-check observations
+
+- **UptimeRobot:** monitor "Constrai Backend Health" was pinging `https://app.constrai.ca/api/health` (shallow — only confirms Node is alive). The deep probe `/api/health/deep` (Phase 66, Section 26) was never wired in, defeating the point of building it. 1 incident in last 7 days, 35m 34s down — almost certainly the May 2 backup-restore drill (Section 25). Means UptimeRobot DID alert correctly during the drill.
+- **Sentry:** only `constrai-backend` project exists (no frontend project). One unresolved issue — the deliberate "Phase 64 verification" test event from May 2 deploy. Zero real production errors in 14 days. release: 100% unknown (no release tracking). No alert rules configured — silent prod errors would not have surfaced anywhere except by manually opening the dashboard.
+
+### Gap inventory
+
+| # | Gap | Customer impact | Status |
+|---|---|---|---|
+| 1 | UptimeRobot pinging shallow `/api/health`, not `/api/health/deep` | DB outage with Node alive = silent down | ✅ closed (this session) |
+| 2 | "Phase 64 verification" issue lingering as Unresolved | Cosmetic dashboard noise, real issues harder to spot | ✅ closed (this session) |
+| 3 | No Sentry alert rule (issue → email) | Silent prod errors invisible until dashboard checked | ✅ closed (this session) |
+| 4 | No `constrai-frontend` Sentry project | React crashes the user sees → completely silent | ⏳ deferred (Section 52 candidate) |
+| 5 | Sentry release: 100% unknown — no commit linkage | Errors can't be tied back to a deploy | ⏳ backlog |
+| 6 | No GitHub integration in Sentry | Issues can't be pushed to the repo as bugs | ⏳ backlog |
+
+### What changed (3 gaps closed)
+
+**Gap 1 — UptimeRobot URL changed.**
+- Old: `https://app.constrai.ca/api/health` (shallow, ~90ms response)
+- New: `https://app.constrai.ca/api/health/deep` (deep, ~200-400ms response — DB round-trip)
+- Verified status stayed "Up" after change.
+- Now any DB connectivity loss surfaces as a UptimeRobot alert within ~5 minutes (current check interval).
+
+**Gap 2 — Phase 64 verification resolved.**
+- Marked the only outstanding issue as "Resolved in upcoming release." Sentry feed now genuinely empty for unresolved issues. Any new issue that arrives is now signal, not noise.
+
+**Gap 3 — Sentry alert rule created.**
+- Rule name: `New issue → email Hedar`
+- WHEN: an event is captured AND a new issue is created
+- THEN: send notification to IssueOwners (with ActiveMembers fallback) — both routes resolve to Hedar's email since he's sole admin.
+- Action interval: at most once every 5 minutes (anti-flood).
+- Created on `constrai-backend` project. **No equivalent on frontend** because the project doesn't exist yet (gap 4).
+
+### What's deferred (3 gaps open)
+
+**Gap 4 — Sentry frontend SDK** (next session, ~60–90 min):
+- Create `constrai-frontend` project on Sentry (capture DSN).
+- `npm install @sentry/react @sentry/vite-plugin` in `mep-frontend/`.
+- Wire `Sentry.init({ dsn: import.meta.env.VITE_SENTRY_DSN, ... })` in `mep-frontend/src/main.jsx`.
+- Add `VITE_SENTRY_DSN` to `mep-frontend/.env.example` and to prod env.
+- Add an ErrorBoundary at the app root that reports to Sentry.
+- Repeat alert rule creation on the new project.
+- Deploy + verify with a deliberate test crash.
+
+This is a meaningful gap — every React render error a user encounters today (failed map load, missing prop, null deref) is invisible to us. Closing it is high-value for Customer #1 follow-up.
+
+**Gap 5 — Releases tracking** (~30 min):
+- Add `sentry-cli releases new` + `sentry-cli releases finalize` to the deploy script (`scripts/deploy.sh` or wherever deploy lives — TBD).
+- Each error then links back to a commit SHA and a diff.
+
+**Gap 6 — GitHub integration** (~15 min):
+- Sentry → Settings → Integrations → GitHub → connect `hedarhallak/mep-platform`.
+- Lets us push Sentry issues to GitHub issues and link commits.
+
+### Lesson encoded
+
+- **Section 4 ("Always Suggest Better Tools") cuts both ways.** When Hedar asks "what did we get from this tool?", the right answer requires actually opening the tool and checking — not relying on memory of how it was set up. The shallow `/api/health` URL was almost certainly correct at install time (when /deep didn't exist yet) and just never got revisited after Phase 66 shipped /deep. **Convention:** when a section ships a new endpoint or capability that an existing monitor could use, add a "back-fill monitors" step to that section's Pointer for next sessions.
+- **Test-tool vs prod-runtime-tool distinction matters.** Hedar's question started from "did we forget to use them in tests?" — but UptimeRobot and Sentry are not test tools. They run on prod, after deploy. Confusion between the two leads to "are we actually getting value?" doubts. Future onboarding: be explicit about which category each monitoring tool is in.
+
+### Pointer for next sessions
+
+- **Monitoring posture:** UptimeRobot deep probe live, Sentry alert rule live, Sentry backend project clean. Next gap is **Sentry frontend SDK** — open as Section 52 candidate when Customer #1 work allows.
+- **Test counts unchanged today:** 590/590 passing across 4 harnesses (Backend 553/553 with DB, Frontend Vitest 25/25, Mobile jest-expo 9/9, E2E Playwright 3/3). Today's i18n + monitoring work didn't break anything.
+- **Today's session was heavy:** Phase 75 closeout + Bug 9 + Phase 74 (DR runbook) + Sections 45 + 47 + 48 + 49 + 50 + 51. **9 sections in one day.** Next session should default to lighter scope — pick one of: Sentry frontend SDK (gap 4), EmployeesPage i18n (Tier 1 batch 3/4), or pricing page (Section 46 P0).
+

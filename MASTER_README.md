@@ -3,11 +3,12 @@
 > Production: https://app.constrai.ca
 > Website: https://www.constrai.ca (Coming Soon landing page)
 > Server: root@143.110.218.84
-> Latest DECISIONS section: **Section 50** (web i18n Tier 1 batch 2/4 — Layout / AppLayout FR/EN)
+> Latest DECISIONS section: **Section 51** (monitoring health check — UptimeRobot + Sentry, 3/6 gaps closed)
 > Active program: **Web Tier 1 i18n** (4 pages: Login ✅, Dashboard ✅, Layout ✅, Employees, Projects).
 > **Customer #1 status:** unsigned (constraint per Section 46). Engineering rigor work is paused pending revenue.
 > **Server-side env update pending:** set `APP_NAME=Constrai` + `VITE_MAPBOX_TOKEN` on prod.
-> Coverage thresholds: 51 / 45 / 52 / 52. Backend tests: **553 / 65 suites**. Bug 9 — fixed. Web i18n: **3/30 pages translated** (Login + Dashboard + Layout).
+> **Monitoring posture:** UptimeRobot pinging `/api/health/deep` ✅. Sentry alert rule (new issue → email Hedar) ✅. Sentry frontend SDK gap (next: Section 52 candidate).
+> Coverage thresholds: 51 / 45 / 52 / 52. Backend tests: **553 / 65 suites**. Total tests today: **590/590 passing** (4 harnesses). Bug 9 — fixed. Web i18n: **3/30 pages translated** (Login + Dashboard + Layout).
 > Backend path on server: /var/www/mep
 > Landing page path on server: /var/www/constrai-landing
 > DB: mepdb / mepuser / MepSecure2026X
