@@ -4886,3 +4886,123 @@ State after Section 45 merges:
 - **Web i18n pipeline is live.** Any new page shipped going forward should use `t()` from day one (don't add new untranslated strings).
 - **29 pages still hold hardcoded English.** Grind through Tier 1 in the next session that has time; tier 2-4 can be background work spread across multiple sessions or deferred until first francophone customer onboarding.
 - **Mobile + web now share the FR/EN convention** (key naming, default language, Quebec spellings, "NIP"/"Nom d'utilisateur" terminology). Future translation choices should reference both files for consistency.
+
+---
+
+## Section 46 — End-of-day retro + 2-week roadmap (May 3, 2026 evening)
+
+> **Audience:** Hedar (the only decision-maker on what to build next).
+>
+> **Purpose:** consolidate today's shipped work, surface the actual constraint, and propose a prioritized 2-week roadmap. **This section is a starting point, not a final plan** — Hedar should annotate it with what's actually relevant to his sales pipeline before treating it as committed.
+
+### Retro — what shipped today (May 3, 2026)
+
+Single calendar day. **15 PRs merged.** Sections 40–46 written in DECISIONS.md.
+
+| Track | PRs | What shipped |
+|---|---|---|
+| Phase 75 (routes coverage) | 9 PRs (#62, #63, #64, #65, #66, #67, #68, #69, #70) | 80 new integration tests across 6 batches; +6.64 pp lines coverage (49.62% → 56.26%); 4 helper extensions; 3 ratchet PRs; 4 docs sections (40, 41, 42, 43) |
+| Bug 9 fix | 1 PR (#72) | SAME_PROJECT guard pattern bug fixed; pinned test flipped; codebase-wide sweep showed isolated occurrence |
+| Phase 74 — DR runbook | 1 PR (#73) | RECOVERY.md Sections 11–12: 11 incident-response playbooks + post-incident retro template |
+| Section 45 — Web i18n pilot | 1 PR (#74) | i18next + LanguageSwitcher + LoginPage FR/EN; 29 pages queued for incremental translation |
+
+**Coverage delta:** Statements 48.54 → 55.12 / Branches 43.70 → 48.98 / Functions 51.47 → 55.39 / Lines 49.62 → 56.26.
+
+**Tests delta:** 245 → 553 (Jest reports 64 → 65 suites).
+
+**Bugs:** 1 caught (Bug 9), fixed same day. Zero new bugs from Phases 75b–f despite 64 new tests — empirical reinforcement of Section 39's "don't grind past 50% without a reason" calibration.
+
+**Documents updated:** DECISIONS.md (+7 sections, ~600 lines), RECOVERY.md (+2 sections, ~250 lines), MASTER_README.md (header refreshed 6 times).
+
+### The actual constraint
+
+**Customer #1 has not signed.** That is the only metric that matters at this stage. Every engineering decision we make should be evaluated against: does this make customer #1 closer or further away?
+
+Section 39 already wrote this verdict at the end of May 2: *"Don't aggressively push coverage past 50% lines until customer #1 is signed."* Section 40 (the Phase 75 push) tested the verdict and confirmed it — 5 of 6 batches found zero bugs, per-test efficiency cliff at 75f. The signal is consistent: **engineering rigor work past the current floor doesn't move the needle on revenue.**
+
+So the question for the next 2 weeks isn't "what should we engineer?" — it's "what removes the last objection between us and customer #1?"
+
+### Honest assessment of state vs. customer-#1 readiness
+
+What customer #1 will actually evaluate on:
+
+| Dimension | State today | Customer #1 readiness | Gap |
+|---|---|---|---|
+| Backend correctness | 553 tests, Sentry, backups, monitoring | ✅ ready | none |
+| Mobile app | iOS shipped via TestFlight, FR/EN | 🟡 mostly | Android pending; broader-distribution decision |
+| Web app | Functional, mostly EN | 🟡 partially | 29 pages need FR for Quebec market |
+| Onboarding flow | Routes exist (`onboarding.js`), Bug 6 blocked happy path historically | ❓ unknown | needs end-to-end smoke test by a real new user |
+| Sales material | Marketing site live at constrai.ca | ❓ unknown | pitch deck? demo video? pricing page? |
+| Pricing model | Not visible in repo | ❓ unknown | needed for B2B due diligence |
+| Legal — Loi 25 | COMPLIANCE.md (Phase 72) | ✅ documented | enforcement / TOS / Privacy Policy still TBD |
+| Sales pipeline | Unknown to this session | — | Hedar-only knowledge |
+| Customer support flow | Email-only (presumably) | 🟡 OK at v1 | helpdesk / SLA TBD post-#1 |
+
+**Anything ❓ is a gap I (Claude) can't see from the repo alone.** Hedar has the actual context.
+
+### Candidate next-2-week priorities (ordered by likely customer-#1 leverage)
+
+These are options to evaluate, not commitments. Hedar should mark each as P0 / P1 / Backlog after his next sales-pipeline check.
+
+**P0 candidates — directly remove a customer-#1 blocker:**
+
+1. **Onboarding flow end-to-end test.** Run through the path a real prospect would take: marketing site → "request demo" / "sign up" → first user provisioned → first project created → first assignment → first attendance check-in. Document every friction point. Fix the top 3.
+2. **Pricing page on marketing site.** Even if pricing is "contact sales", customers expect to see SOMETHING on /pricing. A 1-pager with tiers + "talk to us" CTA is better than no page at all.
+3. **Web Tier 1 i18n** (continuation of Section 45). Dashboard, layout (top nav + sidebar), employees, projects. ~2-3 hours. Most-visible pages during a demo. Without this, a Quebec customer demo feels half-baked even if backend is FR-aware.
+4. **Pitch deck or one-pager.** 5–10 slides: problem, solution, pricing, references, ask. Used in cold outreach + first calls. Marketing site is for inbound; pitch deck is for outbound.
+
+**P1 candidates — high value but deferrable past customer #1:**
+
+5. **Web Tier 2 i18n** (assignments, attendance, materials, hub).
+6. **Bug 6 follow-up** (onboarding `/complete` happy path). Was BLOCKED in Phase 73 closeout list.
+7. **Android mobile build.** TestFlight is iOS only; Android is "pending" in MASTER_README.
+8. **Helpdesk / customer support workflow.** Email-only is fine for customer #1, but plan for #2+.
+9. **TOS + Privacy Policy** as standalone pages, linked from marketing site footer.
+
+**Backlog — explicitly deferred:**
+
+10. Section 22 deferred items (69b RTL interaction tests, 70b RNTL component tests, 71b @openapi fanout) — defer until customer-driven need.
+11. Phase 75 stretch (60% / 65% lines) — closed per Section 43, do not re-open.
+12. CI/CD via GitHub Actions auto-deploy — nice-to-have, current manual deploy is fine for solo team.
+13. Off-cloud backup mirror — already covered by DigitalOcean Spaces; quarterly verification (RECOVERY.md Section 8) is the line of defence.
+
+### Process conventions for the next 2 weeks
+
+1. **Default to feature work.** No new rigor program (test coverage, lint rules, CI gates, monitoring) without a Section-39-style "what specific failure does this prevent + has it happened?" justification.
+2. **Track customer-pipeline state in a single place.** Could be a one-line entry at the top of MASTER_README, or a new `PIPELINE.md`, or a private note. Whichever, **make it visible from the README** so every session bootstrap sees it. The next Claude session shouldn't have to ask "what's the customer status?" — it should be in the file tree.
+3. **Phase 75-style stop conditions become standard.** Any new program that wants to span multiple phases must write its **stop condition** in the section that opens it (analogous to Section 40's "stop if bug yield = 0 by 75c"). This is now table stakes for opening a new program.
+4. **Mega-batch pre-emptively** when ≥3 same-shape phases are queued. Phase 75c+d+e proved the pattern (saved 6 round-trips). The Section 4.5 default batching rule applies.
+5. **At every checkpoint, run `RECOVERY.md` Section 11 review when an incident happens.** First incident in production: log in Section 9, check for matching runbook in Section 11, add new runbook if missing. Don't let the runbook stay theoretical.
+6. **DECISIONS.md remains append-only and section-numbered.** Section 47 onwards continues the same pattern. Every new program / non-trivial task gets a section with: what / why / scope / stop-condition / pointers-for-next-session.
+
+### What this section is NOT
+
+- **Not a feature spec.** Each P0/P1 item above is a one-liner; the implementing session writes the spec.
+- **Not a commitment.** Hedar has not yet said "P0 = X" — these are candidates ordered by my read of the customer-#1 leverage. Hedar's actual sales context will reorder this.
+- **Not a deadline.** "2 weeks" is a planning horizon, not a guarantee. Things slip; that's fine, just track in MASTER_README pointer.
+
+### Files touched (Section 46 docs only)
+
+| File | Change | Where |
+|---|---|---|
+| `DECISIONS.md` | Section 46 (this) | pending in `docs/section46-retro-and-roadmap` |
+| `MASTER_README.md` | header pointer refresh + customer-#1 marker | pending in same docs PR |
+
+### Commit / push checklist
+
+```powershell
+git checkout main
+git pull origin main
+git checkout -b docs/section46-retro-and-roadmap
+git add DECISIONS.md MASTER_README.md
+git commit -m "docs(section46): end-of-day retro + 2-week roadmap (customer-#1 framing)"
+git push -u origin docs/section46-retro-and-roadmap
+```
+
+### Pointer for next sessions
+
+When the next Claude session opens (probably tomorrow or later this week):
+- **Read Section 46 first**, then the latest pointer in MASTER_README.
+- **Ask Hedar before writing code:** "What's the customer pipeline status? Which P0/P1 items from Section 46 are now committed?" The answer dictates the session's priorities.
+- **Default behaviour if no answer:** start with **P0 #1 (onboarding flow end-to-end test)** because it's information-gathering (no code changes until problems are confirmed) and the output is independently useful regardless of pipeline state.
+- **Remember Section 39's verdict:** every proposed engineering task must answer "what specific failure does this prevent" before it gets time. Don't drift back into rigor work.

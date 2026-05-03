@@ -3,10 +3,11 @@
 > Production: https://app.constrai.ca
 > Website: https://www.constrai.ca (Coming Soon landing page)
 > Server: root@143.110.218.84
-> Latest DECISIONS section: **Section 45** (Web i18n pilot — i18next on mep-frontend, LoginPage FR/EN, ~29 pages queued for incremental translation)
-> Active program: **none** — Section 40 closed, Section 22 complete. Web i18n pilot shipped; remaining pages grind incrementally per Section 45 Tier 1-4 list.
-> Next phase: **TBD** — feature work / 2-week roadmap (Section 46) next.
-> Coverage thresholds: 51 / 45 / 52 / 52. Backend tests: **553 / 65 suites**. Bug 9 — fixed. Web i18n: pipeline live, FR/EN, default FR.
+> Latest DECISIONS section: **Section 46** (end-of-day retro + 2-week roadmap — customer-#1 framing, P0/P1/Backlog candidate priorities)
+> Active program: **none** — Section 40 + Section 22 + Phase 74 + Section 45 all closed. Feature work returns to front of queue.
+> **Customer #1 status:** unsigned (constraint per Section 46). Engineering rigor work is paused pending revenue.
+> Candidate next phases (Hedar to commit P0/P1/Backlog from Section 46): onboarding flow E2E, pricing page, web Tier 1 i18n, pitch deck.
+> Coverage thresholds: 51 / 45 / 52 / 52. Backend tests: **553 / 65 suites**. Bug 9 — fixed. Web i18n: pipeline live, 1/30 pages translated.
 > Backend path on server: /var/www/mep
 > Landing page path on server: /var/www/constrai-landing
 > DB: mepdb / mepuser / MepSecure2026X
