@@ -1,0 +1,16 @@
+# Constrai — git line-ending policy
+#
+# Shell scripts MUST be LF, regardless of the committer's OS. Windows clones
+# can otherwise corrupt them to CRLF and break execution on the prod Linux box
+# ("bad interpreter: /usr/bin/env\r" or weird syntax errors).
+*.sh text eol=lf
+
+# SQL migration files: LF (Postgres tools tolerate CRLF, but consistency
+# matters for diffs).
+*.sql text eol=lf
+
+# Markdown / config files default to LF for cross-platform consistency.
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
