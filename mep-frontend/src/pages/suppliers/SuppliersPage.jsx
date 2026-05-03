@@ -73,7 +73,7 @@ function SupplierModal({ supplier, onClose, onSaved }) {
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
                     form.trade_code === tr.value ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                   }`}>
-                  {tr.label}
+                  {t(tr.labelKey)}
                 </button>
               ))}
             </div>
@@ -179,7 +179,7 @@ export default function SuppliersPage() {
                 className={`px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
                   tradeFilter === tr.value ? 'bg-primary text-white' : 'text-slate-500 hover:bg-slate-100'
                 }`}>
-                {tr.label}
+                {t(tr.labelKey)}
               </button>
             ))}
           </div>

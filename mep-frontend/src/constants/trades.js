@@ -16,14 +16,20 @@ export const trade = (code) => TRADE_MAP[(code || '').toUpperCase()] || TRADE_MA
 /** Quick dot-color lookup */
 export const tradeDot = (code) => trade(code).dot
 
-/** Trade list for dropdowns (with ALL option) */
+/**
+ * Trade list for dropdowns (with ALL option).
+ *
+ * Section 58: switched from inline EN `label` to `labelKey` so consumers
+ * can resolve via i18n at render time. Keys live under `trades.*` in
+ * `src/i18n/locales/{en,fr}.js`. Same pattern as `mainNav` in AppLayout.
+ */
 export const TRADES = [
-  { value: 'ALL',        label: 'All Trades'  },
-  { value: 'PLUMBING',   label: 'Plumbing'    },
-  { value: 'ELECTRICAL', label: 'Electrical'  },
-  { value: 'HVAC',       label: 'HVAC'        },
-  { value: 'CARPENTRY',  label: 'Carpentry'   },
-  { value: 'GENERAL',    label: 'General'     },
+  { value: 'ALL',        labelKey: 'trades.all'        },
+  { value: 'PLUMBING',   labelKey: 'trades.plumbing'   },
+  { value: 'ELECTRICAL', labelKey: 'trades.electrical' },
+  { value: 'HVAC',       labelKey: 'trades.hvac'       },
+  { value: 'CARPENTRY',  labelKey: 'trades.carpentry'  },
+  { value: 'GENERAL',    labelKey: 'trades.general'    },
 ]
 
 /** Badge classes per trade (light variant with text) — includes ALL */
