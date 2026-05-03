@@ -4912,3 +4912,158 @@ When the next Claude session opens:
 - **Ask Hedar before writing code:** "What's the customer pipeline status? Which P0/P1 items from Section 46 are now committed?"
 - **Default if no answer:** start with **P0 #1 (onboarding flow end-to-end test)** — information-gathering output is independently useful.
 - **Remember Section 39's verdict:** every proposed engineering task must answer "what specific failure does this prevent" before it gets time.
+
+---
+
+## Section 47 — Onboarding flow audit (P0 #1, May 3, 2026 evening)
+
+> **Purpose:** information-gathering output of P0 #1 from Section 46. **No code changes** — read-only walk through the new-user path, document every observed friction point, surface a top-3 fix list for the next coding session.
+>
+> **Method:** read `routes/invite_employee.js` (admin invites a new employee) → `routes/onboarding.js` (token verify + complete) → `mep-frontend/src/pages/onboarding/OnboardingPage.jsx` (the form a new user fills) → connect with `routes/user_management.js` (admin re-sends invite).
+
+### The new-user path (today, end-to-end)
+
+```
+[Admin user]
+   │
+   │ POST /api/invite-employee   (invite_employee.js, line 135)
+   │   { first_name, last_name, email, role, trade_type_id, emp_code }
+   │
+   ├─ employees row created (is_active=false, employee_profile_type=role)
+   ├─ user_invites row created (token_hash, status='ACTIVE', expires=+48h)
+   └─ sendEmail(...) — out-of-transaction, returns boolean
+            │
+            ├─ APP_BASE_URL/onboarding?token=<rawToken>  (link in email)
+            │
+            ▼
+[New employee opens link in browser]
+   │
+   │ Frontend mounts OnboardingPage.jsx, reads token from URL query
+   │
+   │ GET /api/onboarding/verify?token=...
+   │   → 404 TOKEN_NOT_FOUND  (bad token)
+   │   → 410 TOKEN_ALREADY_USED  (status != ACTIVE)
+   │   → 410 TOKEN_EXPIRED  (expires_at < now)
+   │   → 200 { invite: {email, role, first_name, last_name, trade_name} }
+   │
+   ▼
+[Step 1 — Credentials]
+   │  username (normalized: lowercase, no spaces, ≥3 chars frontend-only)
+   │  pin       (≥4 chars frontend-only — backend accepts any non-empty)
+   │  pin_confirm (frontend-only equality check)
+   │
+   ▼
+[Step 2 — Profile]
+   │  phone (optional)
+   │  home_address (REQUIRED via frontend validation only)
+   │  home_lat / home_lng  (set via Mapbox geocoding autocomplete)
+   │
+   │ POST /api/onboarding/complete
+   │   { token, username, pin, phone, home_address, home_lat, home_lng }
+   │
+   │   → 400 TOKEN/USERNAME/PIN_REQUIRED
+   │   → 404 TOKEN_NOT_FOUND
+   │   → 410 TOKEN_ALREADY_USED / TOKEN_EXPIRED
+   │   → 409 USERNAME_TAKEN
+   │   → 200 ok=true
+   │
+   ├─ app_users row created (active, must_change_pin=false)
+   ├─ employees.is_active = true
+   ├─ employee_profiles upserted (full_name, phone, home_address, home_lat/lng, home_location PostGIS point)
+   └─ user_invites.status = 'USED', used_at = NOW()
+   │
+   ▼
+[Step 3 — Done]
+   "You're all set! 🎉" → button to /login
+   │
+   ▼
+[New user logs in via LoginPage.jsx]
+   POST /api/auth/login → JWT + refresh token → /dashboard
+```
+
+### Friction points found (read-only; no code changes this session)
+
+#### Brand / first-impression issues (high visibility, cheap fixes)
+
+1. **`MEP Platform` brand still hardcoded in onboarding flow.** Section 45's i18n pilot renamed the brand to **Constrai** in `LoginPage.jsx`, but the onboarding still says "MEP Platform":
+   - `routes/invite_employee.js` line 144: `const appName = process.env.APP_NAME || 'MEP Platform';` (default fallback)
+   - `mep-frontend/src/pages/onboarding/OnboardingPage.jsx` line 212: `<h1>MEP Platform</h1>` (hardcoded)
+   - Email subject: `You're invited to join ${appName}` → "MEP Platform" if env unset.
+   - **Customer impact:** prospect's first email + first page after click both show the OLD brand. Section 45 work undermined.
+
+2. **OnboardingPage has zero i18n.** Tier 3 in Section 45 list, but onboarding is the single most important page for first impressions of a Quebec FR customer. Worker invited in French gets EN-only setup screen.
+
+#### Security / robustness
+
+3. **Mapbox token hardcoded in source** (`OnboardingPage.jsx` line 10):
+   ```js
+   const MAPBOX_TOKEN = 'pk.eyJ1...'
+   ```
+   Token is a public-scoped Mapbox token (`pk.*`) so the security risk is bounded — but rotation, environment isolation, and not-in-git-history are all standard hygiene. Should be `import.meta.env.VITE_MAPBOX_TOKEN` and added to `.env.example`.
+
+4. **No rate limit on `/onboarding/verify` or `/onboarding/complete`.** A token guesser can probe these endpoints freely. 32-byte tokens are practically unguessable, but adding a per-IP rate limit (e.g. 60 req/min via `express-rate-limit`) is a defence-in-depth that costs ~5 lines. Same for `/api/auth/login` — Bug 6 history (per Phase 73 closeout) suggests there's been past concern around this surface.
+
+5. **PIN minimum length is frontend-only.** Frontend requires ≥4 chars (`OnboardingPage.jsx` line 131). Backend (`routes/onboarding.js` line 77) only checks `!pin` — accepts a single character. A malicious client can post a 1-char PIN. Backend should enforce the minimum too.
+
+#### Operational / silent-failure risks
+
+6. **Email-send failure is not surfaced loudly.** `routes/invite_employee.js` returns `email_sent: emailSent` in the 201 response. **The admin UI almost certainly shows "Invite sent ✓" regardless of `email_sent: false`** (need to verify in the admin invite UI — out of scope for this audit). If SendGrid quota / API key / verified sender breaks, invites silently never arrive. RECOVERY.md Section 11.6 documents the runbook but the trigger is "user complains they didn't get email" — late.
+
+7. **No test coverage on either onboarding endpoint's happy path.** Per Phase 73 closeout list:
+   > `onboarding.js` — 🟡 /verify validation (Phase 23) + /complete validation (Phase 54), happy paths blocked by Bug 6
+   > `admin_users.js` — ❌ BLOCKED — needs SENDGRID env mock
+   > `invite_employee.js` — ❌ BLOCKED — needs S(ENDGRID env mock)
+   The mostly-customer-critical path is the most-blocked-from-tests area.
+
+#### UX / polish
+
+8. **No "I lost my invite" flow for end-user.** If invite expires (48h) or is lost, the only recovery is `POST /api/users/:id/resend` — admin-driven. Self-service "request a new invite" would close a real friction loop, but probably P2 (waits for first complaint).
+
+9. **No password reset flow at all.** A user who forgets their PIN must contact the admin, who runs `/resend` to issue a new invite. This is workable for v1 but breaks down at scale. Customer #1 may never hit it; customer #5 will.
+
+10. **Username taken error UX:** the route returns `409 USERNAME_TAKEN`. The frontend displays "Username already taken, choose another." That's fine. But there's no "did you mean...?" suggestion. Minor.
+
+11. **Phone is optional but home_address is required.** Some workers may not have a stable home address (newly arrived, in-between housing). The frontend hard-blocks the form. Should be soft-warn with a "fill in later" path, OR accept "TBD" with a flag for follow-up.
+
+### Top 3 fixes for next coding session (recommended order)
+
+These are **small, customer-#1-aligned, no-rigor**. Each is < 30 min including PR.
+
+**Fix 1 — Brand consistency: "MEP Platform" → "Constrai" in onboarding (highest visibility, cheapest).**
+- Set `APP_NAME=Constrai` on prod server (server-side env, no code commit).
+- `mep-frontend/src/pages/onboarding/OnboardingPage.jsx` line 212: `<h1>MEP Platform</h1>` → `<h1>Constrai</h1>` (or use `t('common.appName')` if we i18n it at the same time).
+- Verify by triggering a test invite and reading the email + opening the link.
+
+**Fix 2 — Mapbox token to env var.**
+- Add `VITE_MAPBOX_TOKEN=pk.…` to `.env.example` + `.env` (gitignored).
+- `mep-frontend/src/pages/onboarding/OnboardingPage.jsx` line 10: `const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN`.
+- Build-time check in `vite.config.js` to fail loudly if the env var is missing.
+- Update server's actual Vite build env to inject the value.
+
+**Fix 3 — Surface email-send failure to admin UI.**
+- Audit the admin invite-form component (likely under `mep-frontend/src/pages/employees/` or `pages/UserManagementPage.jsx`).
+- After `POST /api/invite-employee`, read `response.data.email_sent`. If `false`, show a yellow warning toast: "Invite created, but email could not be sent. Share the link manually."
+- Same change for `POST /api/users/:id/resend` if it has equivalent UX path.
+
+These three together = a noticeably better demo experience for a Quebec customer evaluating Constrai. Each is reversible, each is independently shippable, each is < 30 min.
+
+### What this audit explicitly does NOT do
+
+- **No code changes.** Read-only investigation.
+- **No fix-prioritization beyond top-3.** The 11 friction points list above is for the next session(s) to triage further once the top 3 ship.
+- **No customer-pipeline assumptions.** If Hedar's actual customer #1 is EN-speaking and English-only is fine, Fix 1 + 2 still apply but the Section 45 i18n urgency drops.
+- **No infrastructure changes recommended.** Mapbox token rotation can wait until the next quarterly verification; no need to do it as part of Fix 2 (which is about env-var hygiene, not a token-leak emergency).
+
+### Files touched this section
+
+| File | Change | Where |
+|---|---|---|
+| `DECISIONS.md` | Section 47 (this audit) | pending in `docs/section47-onboarding-audit` |
+| `MASTER_README.md` | header pointer refresh | pending in same docs PR |
+
+### Pointer for next sessions
+
+State after Section 47 merges:
+- **P0 #1 done as audit.** Top 3 fixes are queued; pick whichever Hedar wants first.
+- **The onboarding `/verify` + `/complete` test gap is now visible in Section 47 + the existing Phase 73 closeout list.** When Bug 6 / SendGrid mocking is unblocked, those happy-path tests are the obvious next coverage extension — but per Section 39 calibration, only if a real failure mode emerges (e.g. an invite-flow regression escapes to prod).
+- **Customer-#1 framing still rules.** Don't drift into the 11-friction-point full backlog without checking which actually block a sale.
