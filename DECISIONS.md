@@ -5580,3 +5580,107 @@ The `.last-deployed-sha` file is a 7-byte canary that pins down the answer.
 - **`scripts/deploy.sh` v2 in place.** First run after this PR merges will be a "full deploy" (no prior SHA file). Subsequent runs use the file as the source of truth.
 - **Today closed at 12 sections.** New high-water mark. The session ran from morning Phase 75 work through to deploy automation in one sweep — long but coherent. Next session should be light.
 - **Coverage / tests untouched today since morning.** 590/590 passing across 4 harnesses. Nothing in today's later sections (i18n + monitoring + deploy automation) added test surface; nothing broke either.
+
+---
+
+## Section 55 — EmployeesPage i18n + Section 50 feature recovery (May 3, 2026, late late evening)
+
+When opening this section to translate `EmployeesPage.jsx`, a serious gap was discovered: **Section 50's feature commit was never actually merged to main.** Only the Section 50 docs PR landed (`d42af8a`, DECISIONS.md + MASTER_README.md only). The feature commit `5fea2d3` lived on the unmerged branch `origin/feat/section50-layout-i18n` and was never reviewed or merged.
+
+### The discovery
+
+While preparing to add an `employees` bucket to `mep-frontend/src/i18n/locales/{en,fr}.js`, I read the current state of those files and found them missing the `nav` and `layout` buckets that Section 50 was supposed to have added. Confirmed by reading `AppLayout.jsx` — still using inline `label: 'Dashboard'` etc., with no `useTranslation` import.
+
+The reason no one noticed all evening: **the prod bundle from Section 52's deploy was built from a local checkout that DID include the Section 50 changes** (because the feat branch was checked out locally at deploy time). So the bundle on `/var/www/mep/public/` had the translations — and the PWA service worker kept serving that cached bundle, masking the fact that subsequent rebuilds from main were producing OLD bundles.
+
+This is the second instance today of "merged docs without merging the feature." First was the docs/section51 PR earlier (caused the phantom-conflict mess). Now Section 50.
+
+### What Section 55 ships (consolidated PR)
+
+To avoid losing more time on archaeology, this single PR:
+
+1. **Re-implements Section 50's content from scratch on main** — adds `nav` + `layout` buckets to en.js + fr.js, switches `AppLayout.jsx` to use `useTranslation` and `t(labelKey)`. Identical to what `5fea2d3` was supposed to deliver, but cleanly authored from current main.
+2. **Adds Section 55's content** — full `employees` bucket with sub-buckets for the InviteModal and EditModal, plus role label maps (`roleShort` for badges, `roleFull` for selects). `EmployeesPage.jsx` rewired to use `t()` everywhere.
+
+The feature branch `feat/section50-layout-i18n` is now obsolete and should be deleted on GitHub once this PR merges.
+
+### `EmployeesPage` translation breakdown
+
+EmployeesPage is the largest data-heavy page so far — 693 lines, 3 components (main + InviteModal + EditModal), about 90 user-visible strings. Buckets:
+
+- `employees.title`, `employees.subtitleActive`, `employees.subtitleInactiveSuffix`, `employees.subtitleIncompleteSuffix`, `employees.inviteButton`
+- `employees.searchPlaceholder`, `employees.allRoles`, `employees.allTrades`, `employees.showInactive`
+- `employees.th.*` — table headers (employee, role, trade, level, contact, status, profile)
+- `employees.status.*` — active / inactive / invited
+- `employees.profileStatus.*` — complete / incomplete
+- `employees.empty`, `employees.emptyFiltered`, `employees.emptyDefault`
+- `employees.loadError` — interpolates `{{message}}`
+- `employees.roleShort.*` — 13 role short labels (used by `RoleBadge`)
+- `employees.roleFull.*` — 12 role full labels (used by selects)
+- `employees.invite.*` — InviteModal: title, sentTitle, sentBody, emailFailed, close, inviteAnother, intro, fields, errors
+- `employees.invite.errors.*` — 8 error strings (3 client-side + 5 backend codes)
+- `employees.edit.*` — EditModal: title, updated, fields, accountInfo, deactivate/reactivate, saveChanges, updateFailed
+
+Total: ~90 keys across en.js and fr.js.
+
+### Quebec FR conventions reinforced
+
+| EN | Quebec FR | Note |
+|---|---|---|
+| Email | Courriel | Quebec FR distinct from "e-mail" |
+| Trade | Métier | CCQ context |
+| Foreman | Contremaître | |
+| Journeyman | Compagnon | |
+| Apprentice | Apprenti | |
+| Worker | Ouvrier | (vs anglicism "Travailleur") |
+| Driver | Chauffeur | |
+| Manager | Gérant | (vs anglicism "Manager") |
+| Username | Nom d'utilisateur | |
+| Save changes | Enregistrer les modifications | |
+| Phone | Téléphone | |
+| Required | requis | |
+| Optional | optionnel | |
+| Cancel | Annuler | |
+| Sending… | Envoi… | |
+
+Long-term: when Tier 1 closes (after ProjectsPage), extract these into `docs/i18n/glossary.md` so all future translators reference one source.
+
+### Refactoring detail — module-level role lists
+
+Original `EmployeesPage.jsx` had `ALL_ROLES` and `INVITE_ROLES` as **module-level constants** with hardcoded `label` strings. These can't use `t()` directly (it requires a React hook).
+
+Two patterns were considered:
+- **(a) Pass `t` as a parameter:** `getAllRoles(t)` returning the array. Rebuilds the array on every render. Simple.
+- **(b) Move arrays into the component:** Same as (a) but inline.
+
+Picked a third option: **store only the role keys at module level** (`ALL_ROLES_KEYS`, `INVITE_ROLES_KEYS`), and resolve labels at render time directly via `t(\`employees.roleFull.\${r}\`)`. This keeps the module-level data minimal and avoids creating wrapper functions or arrays. Same pattern that worked for `mainNav` in AppLayout (`labelKey` indirection).
+
+### Re-shipping risk: Section 50's commit `5fea2d3` is now duplicated
+
+The unmerged feat branch still has `5fea2d3`. Once this PR merges, the branch's content is functionally identical to main's content (different commit hashes, same files). Plan:
+- After this PR merges, **delete `feat/section50-layout-i18n` on GitHub** (close PR if open, then delete branch).
+- Note in the PR description that this work supersedes the unmerged branch.
+
+### Lesson encoded — verify feature merges by reading files, not by trusting screenshots
+
+The May 3 evening pattern was: ship feature PR → ship docs PR → assume both merged. The docs PR shows up in GitHub merge UI, easy to confirm. Feature PRs need separate confirmation. Today proves: a green "merged" screenshot for ONE PR does not imply the OTHER PR also merged.
+
+**Convention to add to CLAUDE.md Section 0 Step 6** (End-of-Session Checkpoint): when shipping a feature + docs split into two PRs, the checkpoint must verify BOTH merged by:
+1. Confirming both branches show as deleted on GitHub, AND
+2. Reading the actual feature file from main and grep'ing for one of the new symbols (e.g., `useTranslation` or a known new key).
+
+Spot-checking the file is the only way to catch a missed feature merge.
+
+### Backlog from this section
+
+- **(P0 — convention)** Add the file-spot-check rule to CLAUDE.md Section 0 Step 6.
+- **(P3)** Delete the obsolete `feat/section50-layout-i18n` branch on GitHub after this PR merges.
+- **(P2)** ProjectsPage i18n (Tier 1 batch 4/4 — closes Tier 1).
+- **(P3)** Glossary file `docs/i18n/glossary.md` (when Tier 1 closes) capturing Quebec FR conventions.
+
+### Pointer for next sessions
+
+- **Tier 1 i18n: 4/5 pages translated and live on main** (Login, Dashboard, Layout, EmployeesPage; ProjectsPage remaining).
+- **Web i18n total: 4/30 pages translated.**
+- **Section 50 is officially "shipped via Section 55."** The original commit on the feature branch is obsolete.
+- **Today closed at 13 sections.** Even higher water mark. Next session must be ≤2 sections by design — Hedar's call when fatigue catches up.
