@@ -5299,6 +5299,131 @@ This is a meaningful gap — every React render error a user encounters today (f
 
 ### Pointer for next sessions
 
-- **Monitoring posture:** UptimeRobot deep probe live, Sentry alert rule live, Sentry backend project clean. Next gap is **Sentry frontend SDK** — open as Section 52 candidate when Customer #1 work allows.
+- **Monitoring posture:** UptimeRobot deep probe live, Sentry alert rule live, Sentry backend project clean. Next gap is **Sentry frontend SDK** — open as Section 53 candidate when Customer #1 work allows.
 - **Test counts unchanged today:** 590/590 passing across 4 harnesses (Backend 553/553 with DB, Frontend Vitest 25/25, Mobile jest-expo 9/9, E2E Playwright 3/3). Today's i18n + monitoring work didn't break anything.
-- **Today's session was heavy:** Phase 75 closeout + Bug 9 + Phase 74 (DR runbook) + Sections 45 + 47 + 48 + 49 + 50 + 51. **9 sections in one day.** Next session should default to lighter scope — pick one of: Sentry frontend SDK (gap 4), EmployeesPage i18n (Tier 1 batch 3/4), or pricing page (Section 46 P0).
+- **Today's session was heavy:** Phase 75 closeout + Bug 9 + Phase 74 (DR runbook) + Sections 45 + 47 + 48 + 49 + 50 + 51 + 52. **10 sections in one day.** Next session should default to lighter scope — pick one of: Sentry frontend SDK (gap 4), EmployeesPage i18n (Tier 1 batch 3/4), or pricing page (Section 46 P0).
+
+---
+
+## Section 52 — Prod env update + 31-commit deploy (May 3, 2026, late evening)
+
+After Section 51 closed, Hedar said "منكمل" (continue). The plan was a quick 15-min server env update to clear two long-standing items from MASTER_README's pending list (`APP_NAME=Constrai` and `VITE_MAPBOX_TOKEN`). Turned into a much larger deploy because prod was **31 commits behind main**.
+
+### What got deployed (the surprise)
+
+`git pull origin main` on prod returned: `Updating ae7c83b..dd5cab6 — 43 files changed, 7443 insertions(+), 62 deletions(-)`. Prod hadn't been updated since around Phase 67 (Section 27, May 2 morning). Everything between then and now had been merged into main but never deployed. That's:
+
+| Section / Phase | Customer-impacting? | Was live until tonight? |
+|---|---|---|
+| Phase 67-67b — coverage push | No (CI-only) | N/A |
+| Phase 68 + 68b + 70 — frontend / mobile test harnesses | No (CI-only) | N/A |
+| Phase 69 — Playwright E2E | No (CI-only) | N/A |
+| Phase 71 — OpenAPI auto-gen | Marginal (`/api/docs` Swagger UI) | ❌ |
+| Phase 72 — Loi 25 compliance audit | No (`COMPLIANCE.md`) | N/A |
+| Phase 73a-d — services/jobs/middleware tests | No (CI-only) | N/A |
+| Phase 74 — DR runbook | No (`RECOVERY.md`) | N/A |
+| **Phase 75a-f — routes integration tests** | No (CI-only) | N/A |
+| **Bug 9 — assignments SAME_PROJECT guard** | **YES — assignment validation logic** | **❌ NOT LIVE FOR ~12 HOURS AFTER MERGE** |
+| **Section 45 — Login i18n FR/EN** | **YES** | **❌** |
+| **Section 47 — onboarding audit** (no code) | N/A | N/A |
+| **Section 48 — onboarding Constrai brand + Mapbox env** | **YES** | **❌** |
+| **Section 49 — Dashboard i18n** | **YES** | **❌** |
+| **Section 50 — Layout i18n** | **YES — every authenticated screen** | **❌** |
+| **Section 51 — Monitoring health check** (dashboard config + 1 doc PR) | partial | partial |
+
+So Bug 9 + 4 customer-visible feature ships were merged today but didn't actually reach users until tonight's deploy.
+
+### Env changes applied
+
+| Var | Where | Before | After |
+|---|---|---|---|
+| `APP_NAME` | `/var/www/mep/.env` | `MEP Platform` | `Constrai` |
+| `VITE_MAPBOX_TOKEN` | `/var/www/mep/mep-frontend/.env` (NEW file) | not set | the `pk.eyJ...` public token |
+
+Backend's `MAPBOX_ACCESS_TOKEN` was already set (used by server-side geocoding) — left untouched.
+
+### Deploy sequence (for runbook)
+
+```bash
+# 1. SSH
+ssh root@143.110.218.84
+cd /var/www/mep
+
+# 2. Backup .env
+cp .env .env.bak.$(date +%Y%m%d-%H%M%S)
+
+# 3. Update APP_NAME
+sed -i 's/^APP_NAME=MEP Platform$/APP_NAME=Constrai/' .env
+
+# 4. Reset any local lockfile drift (came from prior npm install runs)
+git checkout -- package-lock.json mep-frontend/package-lock.json 2>/dev/null
+
+# 5. Pull
+git pull origin main
+
+# 6. Re-install
+npm install --production --no-audit --no-fund
+cd mep-frontend
+npm install --no-audit --no-fund
+
+# 7. Create frontend .env with the Mapbox token
+cat > /var/www/mep/mep-frontend/.env <<'EOF'
+VITE_MAPBOX_TOKEN=<token>
+EOF
+
+# 8. Build
+npm run build
+
+# 9. Deploy to nginx-served public/
+rsync -av --delete /var/www/mep/mep-frontend/dist/ /var/www/mep/public/
+
+# 10. Restart backend
+pm2 restart mep-backend --update-env
+```
+
+### Issues encountered (and how to avoid next time)
+
+**(a) `git pull` blocked by `package-lock.json` drift.** Prior npm install runs on prod had re-resolved the lockfile slightly differently from main's version. Fix: `git checkout -- package-lock.json` to discard, then pull. **Convention:** include the lockfile-reset step in the standard deploy runbook so it's not a surprise next time.
+
+**(b) `husky` postinstall failed during `npm install --production`.** The `prepare` script runs `husky` to install git hooks; husky is in devDependencies and skipped under `--production`, so the script can't find the binary. Non-blocking — actual deps installed fine. Fix later: gate the `prepare` script with `[ "$NODE_ENV" != "production" ] && husky` or use `--ignore-scripts`.
+
+**(c) `rsync --delete` removed `/var/www/mep/public/icons/`.** PWA install icons (icon-72/96/128/152/192/384/512) had been manually placed in prod's `public/icons/` at some past point but were never added to `mep-frontend/public/icons/` source. So they weren't in `dist/` and rsync deleted them. **Backlog (P2):** re-create the icon set as Constrai-branded PNGs and commit to `mep-frontend/public/icons/` so future builds carry them.
+
+**(d) Browser cache served old bundle.** Hedar's first verification showed "MEP Platform" brand even after the deploy. Service worker + cache layer. Resolved by opening incognito. **Convention:** post-deploy, always verify in incognito or after Application → Clear site data, not just hard refresh.
+
+### Verification (live)
+
+- `curl https://app.constrai.ca/api/health/deep` → `{ ok:true, db:{status:ok, latency_ms:44}, disk:{used_pct:7}, backup:{age_hours:12.3} }` — all three checks green.
+- Login page (EN incognito): brand `Constrai`, tagline `Construction ERP`, fields `USERNAME` + `PIN`, button `Sign In`, switcher visible.
+- Login page (FR incognito): brand `Constrai`, tagline `ERP de construction`, fields `NOM D'UTILISATEUR` + `NIP` (Quebec FR), button `Se connecter`.
+- pm2 logs clean — `[sentry] initialized — env=production`, server up, jobs scheduled.
+
+### Lesson encoded — "Deploy after merge"
+
+**31-commit drift is a process bug, not a one-off.** Today shows the failure mode: PRs merge to main → CI passes → done. But "deployed" is a separate event that nobody is automatically responsible for. The Bug 9 fix sat in main for ~12 hours before reaching users; the i18n work for ~6 hours; Section 48 brand fix from earlier today.
+
+Three options to fix the process, ordered cheapest-first:
+
+1. **Manual discipline (now).** Add a step to CLAUDE.md Section 0 Step 6 (End-of-Session Checkpoint): "If a PR merged today changes runtime behavior (routes, frontend code, env-affecting config), SSH to prod and deploy in the same session, OR explicitly note in DECISIONS.md why the deploy is deferred to a specific later time."
+2. **Manual deploy script (~30 min to write).** A `scripts/deploy.sh` that does steps 4-10 above in one go. Reduces friction; Hedar runs it manually each session.
+3. **GitHub Action auto-deploy on merge to main (~1 hour).** SSH key in GitHub Secrets, action runs the deploy script when main is updated. Eliminates the failure mode entirely.
+
+Recommendation: option 1 immediately (no work needed beyond editing CLAUDE.md), option 2 in the next session as one-off task, option 3 when a 1-hour slot opens up.
+
+### Tab title nit
+
+`<title>MEP Platform</title>` is still hardcoded in `mep-frontend/index.html`. P3 backlog — 1 line fix.
+
+### Backlog from this section
+
+- **(P2)** Restore PWA icons in `mep-frontend/public/icons/` and commit.
+- **(P2)** Write `scripts/deploy.sh` to consolidate the 10-step sequence above.
+- **(P2)** GitHub Action auto-deploy (option 3 above).
+- **(P3)** Fix tab title in `mep-frontend/index.html`.
+- **(P3)** Husky postinstall guard in package.json.
+
+### Pointer for next sessions
+
+- **Prod is now in sync with main** (commit `dd5cab6`). Future sessions should NOT see another 31-commit drift if the deploy convention from this section's "Lesson encoded" is followed.
+- **MASTER_README's "Server-side env update pending" note can now be removed.** Both `APP_NAME=Constrai` and `VITE_MAPBOX_TOKEN` are live.
+- **Today wrapped at 10 sections.** That's the new high-water mark for a single-day session. Next session should be ≤2 sections by design.
