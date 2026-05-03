@@ -4444,3 +4444,114 @@ State after Section 41 + ratchet PR merged:
 - **Thresholds:** 49 / 43 / 51 / 49 (after ratchet PR merges).
 - **Bug 9** pinned, fix deferred. If a `routes/*.js` change touches the same `===` vs string-pg-id pattern, fold into that work — don't make it its own ceremony.
 
+---
+
+## Section 42 — Session Log — May 3, 2026 (Phase 75b closeout — material_requests routes integration tests)
+
+Phase 75b delivered the second batch of the Section 40 routes coverage push. PR #65 merged into main as commit `0dbeafe`. Same-session closeout per CLAUDE.md Section 0 Step 6 (the lesson Section 41 captured: write the doc IN the same session as the code PR, not the next morning).
+
+### Headline
+
+**19 new integration tests in `tests/integration/material_requests_phase75b.test.js`** (484 lines), covering 8 endpoint groups in `routes/material_requests.js`:
+
+| Endpoint | Tests | Branches covered |
+|---|---|---|
+| `POST /api/materials/requests` | 5 | 400 PROJECT_REQUIRED, 400 ITEMS_REQUIRED, 400 ITEM_NAME_REQUIRED, 400 ITEM_QUANTITY_REQUIRED, 201 happy path |
+| `GET /api/materials/requests/:id` | 2 | 404 NOT_FOUND, 200 happy path with items array |
+| `PATCH /api/materials/requests/:id/cancel` | 3 | 404 NOT_FOUND, 409 CANNOT_CANCEL (status SENT), 200 happy path (manager cancels) |
+| `PATCH /api/materials/requests/:id/review` | 2 | 404 NOT_FOUND, 200 happy path (status + item splits) |
+| `GET /api/materials/pdf-data` | 1 | 400 REQUEST_IDS_REQUIRED |
+| `POST /api/materials/returns` | 3 | 400 PROJECT_REQUIRED, 400 ITEMS_REQUIRED, 201 happy path (qty_available = quantity on insert) |
+| `GET /api/materials/purchase-orders/:id` | 1 | 404 NOT_FOUND |
+| `POST /api/materials/send-order` | 2 | 400 REQUEST_IDS_REQUIRED, 400 ITEMS_REQUIRED |
+
+All tests gated by `describeIfDb`. Pattern mirrors Phase 75a — shared `loginUser` + new `seedAdminWithEmployee` + new `seedMaterialRequestItem` local helpers; per-block `afterAll(cleanupTestRows + closePool)`.
+
+### Helper extension — `tests/helpers/db.js`
+
+Phase 75a's tests passed because every permission they needed (`assignments.view`, `assignments.create`, `assignments.edit`, `assignments.smart_assign`) was already in `ensureSeedData`. Phase 75b touched routes guarded by **4 permissions not seeded by the helper**:
+
+- `hub.materials_merge_send` (PATCH /review, POST /send-order)
+- `purchase_orders.view` (GET /purchase-orders/:id)
+- `purchase_orders.print` (GET /pdf-data)
+- `materials.surplus_declare` (POST /returns)
+
+The CI test DB is built from `migrations/000_baseline_2026-04-28.sql` which **does not seed the RBAC permissions matrix** — that's seeded at runtime by app code on first boot in prod, but never runs in CI. Tests rely entirely on `tests/helpers/db.js#ensureSeedData` for the matrix.
+
+Fix: extended `ensureSeedData` with the 4 missing permission rows + the corresponding `role_permissions` grants for `COMPANY_ADMIN`. 8 lines, additive, `ON CONFLICT DO NOTHING` so it can't break other tests. Convention going forward: when a Phase 75 batch touches a permission-guarded route the helper doesn't know about, extend `ensureSeedData` in the same PR — don't paper over with per-test `seedUserPermission` calls.
+
+### Coverage measurement (CI run on PR #65 merge — commit 0dbeafe)
+
+```
+=============================== Coverage summary ===============================
+Statements   : 52.17% ( 2229/4272 )
+Branches     : 46.63% ( 1289/2764 )
+Functions    : 53.67% ( 219/408 )
+Lines        : 53.22% ( 2131/4004 )
+================================================================================
+Test Suites: 61 passed, 61 total
+Tests:       508 passed, 508 total
+```
+
+| Metric | Phase 75a (pre) | Phase 75b (post) | Delta | Threshold (pre) | Headroom |
+|---|---|---|---|---|---|
+| Statements | 50.67% | **52.17%** | +1.50 pp | 49% | +3.17 pp |
+| Branches   | 45.07% | **46.63%** | +1.56 pp | 43% | +3.63 pp |
+| Functions  | 52.45% | **53.67%** | +1.22 pp | 51% | +2.67 pp |
+| Lines      | 51.77% | **53.22%** | +1.45 pp | 49% | +4.22 pp |
+
+**Total backend tests: 508** (Section 41 reported ~261 — undercount in past sections; Jest's actual `Tests: N total` line is the source of truth going forward).
+
+### Threshold ratchet — partial, conservative
+
+Standard Section 4.6 convention is "3 pp below measured". After Phase 75b the gains are **smaller per metric** (1.22–1.56 pp) than after Phase 75a (0.98–2.15 pp), so a full +3 pp ratchet would compress headroom into the 1.5 pp build-flake band on functions and statements. Pushed a **partial ratchet** that holds the 2 pp safety floor on every metric:
+
+| Metric | Was | Measured | New | Reasoning |
+|---|---|---|---|---|
+| Statements | 49 | 52.17 | **50** | Bump +1, headroom 2.17 pp |
+| Branches   | 43 | 46.63 | **44** | Bump +1, headroom 2.63 pp |
+| Functions  | 51 | 53.67 | **51** (hold) | Bumping to 52 leaves 1.67 pp headroom — borderline, would flap on cache miss. Hold and re-bump after Phase 75c. |
+| Lines      | 49 | 53.22 | **50** | Bump +1, headroom 3.22 pp |
+
+Convention captured: **when per-batch gain on a metric is < 2 pp, hold that metric's threshold and re-bump after the next batch's gain compounds.** Don't ratchet just to ratchet — the safety margin is more valuable than the threshold number.
+
+### Lessons captured
+
+1. **Helper hygiene matters as test categories expand.** `ensureSeedData` reflected only the first wave of routes covered (assignments, projects, attendance). Phase 75 batches touching new permission groups need to extend it. Phase 75c (likely `routes/hub.js`) may need more — `hub.access`, `hub.attendance_approval`, possibly task-related perms. Audit upfront, not when CI fails with 403.
+2. **Per-metric ratchet decisions, not bulk +3.** Phase 75a's bulk ratchet had functions at 1.45 pp headroom (borderline). Phase 75b kept functions where it was instead of compounding the squeeze. Going forward: each metric ratchets independently; the "+3 pp below measured" guideline is a **maximum**, not a target.
+3. **CI bash sandbox quirk recurs:** the "Jest did not exit one second after the test run has completed" warning + `localhost` Pg connect retry messages are recurring sandbox/test-DB cleanup artifacts. Already documented in Section 4.6 — not a Phase 75b regression.
+4. **Test count sanity check.** Past sections (37, 38, 41) reported "245+" / "261" backend tests by counting incremental adds. Actual Jest output reports 508 — past counts undershot by ~80, likely from forgetting the e2e + smoke + auth + tenant + workflow buckets. Going forward: **report the Jest-reported `Tests: N total` line, don't try to compute it.**
+
+### Files touched (Phase 75b feature + ratchet + this section)
+
+| File | Change | Where |
+|---|---|---|
+| `tests/integration/material_requests_phase75b.test.js` | NEW (484 lines, 19 tests) | merged via PR #65 |
+| `tests/helpers/db.js` | +8 lines (4 perms + 4 grants) | merged via PR #65 |
+| `jest.config.js` | thresholds 49/43/51/49 → 50/44/51/50 | pending in `chore/phase75b-ratchet` |
+| `DECISIONS.md` | Section 42 (this) | pending in `docs/section42-phase75b-closeout` |
+| `MASTER_README.md` | header pointer refresh | pending in same docs PR |
+
+### Commit / push checklist for Section 42
+
+```powershell
+git checkout main
+git pull origin main
+git checkout -b docs/section42-phase75b-closeout
+git add DECISIONS.md MASTER_README.md
+git commit -m "docs(section42): Phase 75b closeout — 19 tests, +1.45pp lines, partial ratchet"
+git push -u origin docs/section42-phase75b-closeout
+```
+
+The ratchet PR ships separately (`chore/phase75b-ratchet`).
+
+### Pointer for next sessions
+
+State after Section 42 + ratchet merge:
+- **Section 40 still active.** Phase 75a + 75b done. Phase 75c (`routes/hub.js`) is next.
+- **Coverage:** 52.17 / 46.63 / 53.67 / 53.22.
+- **Thresholds:** 50 / 44 / 51 / 50 (after Phase 75b ratchet).
+- **Combined Phase 75a+75b delivery:** 35 new integration tests (+3.60 pp lines from Phase 73d's 49.62%). On track for ≥65% lines via Phase 75c–e.
+- **Bug 9** still pinned, fix still deferred.
+- **Helper extension precedent:** Phase 75c will likely need 3-5 more permissions added to `ensureSeedData` for hub/task routes — pre-check the route file before writing tests.
+
