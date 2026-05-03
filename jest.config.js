@@ -45,26 +45,29 @@ module.exports = {
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'text-summary', 'lcov'],
 
-  // Coverage thresholds — ratcheted at Phase 73d (May 2, 2026, Section 22 closeout):
-  //   Phase 73d measured (CI probe):   Statements 48.54% / Branches 43.70% / Functions 51.47% / Lines 49.62%
-  //                                    +13.65pp lines from Phase 67b in one day. 129 new tests across
-  //                                    73a (services/geocoding), 73b (jobs/), 73c (middleware + lib),
-  //                                    73d (email senders happy paths). Original 65% target deferred
-  //                                    to Phase 75+ — needs routes/ error branches with DB fixtures.
+  // Coverage thresholds — ratcheted at Phase 75a (May 3, 2026, Section 41 closeout):
+  //   Phase 75a measured (PR #62 CI):  Statements 50.67% / Branches 45.07% / Functions 52.45% / Lines 51.77%
+  //                                    +2.13pp lines from Phase 73d. 16 new integration tests on
+  //                                    routes/assignments.js (reassign + move + repeat-confirm + suggest).
+  //                                    Bug 9 surfaced & pinned: SAME_PROJECT guard dead code (string ===
+  //                                    Number mismatch). Section 40 re-opens routes coverage push toward
+  //                                    65% lines target across 5 batches (75a–e).
+  //   Phase 73d ratchet  (CI #?):      Statements 48.54% / Branches 43.70% / Functions 51.47% / Lines 49.62%
   //   Phase 67b ratchet  (CI #178):    Statements 45.69% / Branches 40.22% / Functions 47.79% / Lines 46.71%
   //   Phase 67 ratchet   (CI #170):    Statements 44.52% / Branches 39.53% / Functions 46.07% / Lines 45.60%
   //   Phase 58 ratchet   (CI #131):    Statements 34.85% / Branches 26.44% / Functions 33.9%  / Lines 35.97%
   //   Phase 15 baseline  (CI #80):     Statements 18.14% / Branches 10.01% / Functions 14.00% / Lines 18.79%
   //
-  // Floors set ~1-2pp below current measured to catch genuine regressions
-  // without flapping on small drift (env order, single-test reorderings).
-  // Goal: ≥70% line coverage on routes/ eventually.
+  // Floors set 3pp below measured per Section 4.6 convention — absorbs the
+  // ~1.5pp build flake (Jest worker scheduling, cache hits, parallel
+  // ordering) without flapping CI on small drift.
+  // Goal: ≥65% lines (stretch 70%) on routes/ via Phase 75a–e batches.
   coverageThreshold: {
     global: {
-      statements: 46,
-      branches: 41,
-      functions: 49,
-      lines: 47,
+      statements: 49,
+      branches: 43,
+      functions: 51,
+      lines: 49,
     },
   },
 
