@@ -5510,3 +5510,73 @@ If anything goes wrong, manual rollback is `git reset --hard <BEFORE_SHA>` on pr
 - **Deploy convention is now `bash /var/www/mep/scripts/deploy.sh`.** Whenever a session merges PRs to main that touch runtime code, follow with one SSH session that runs this script. Sub-minute operation when nothing changed; ~3 minutes when frontend rebuild is needed.
 - **The script is the source of truth for the deploy sequence.** When the sequence needs to evolve (new env var, new build step, new health check), update this script — don't keep parallel docs in DECISIONS.md.
 - **Today wrapped at 11 sections (1 + 10).** Section 53 is small but ships a tool that makes every future session lighter. Worth ending on it.
+
+---
+
+## Section 54 — Tab title fix + deploy.sh ".last-deployed-sha" tracking (May 3, 2026, very late evening)
+
+Two things in one section because they're tightly coupled: the tab-title fix surfaced a real bug in `scripts/deploy.sh` that was invisible until we tried to deploy a small frontend-only change.
+
+### Part A — Tab title fix shipped
+
+`mep-frontend/index.html` had four hardcoded "MEP Platform" references that survived the i18n migration (they're outside React, so `t()` doesn't reach them):
+
+| Line | Field | Before | After |
+|---|---|---|---|
+| 16 | `apple-mobile-web-app-title` | MEP Platform | Constrai |
+| 17 | `application-name` | MEP Platform | Constrai |
+| 25 | SEO `description` | MEP Construction & Workforce Management Platform | Constrai — Construction ERP for Quebec MEP teams |
+| 27 | `<title>` | MEP Platform | Constrai |
+
+Shipped via `chore/tab-title-fix` PR. Verified in incognito: tab now reads "Constrai" in both EN and FR sessions.
+
+### Part B — The bug we found while deploying Part A
+
+After merging the PR and running `bash /var/www/mep/scripts/deploy.sh` on prod, the script reported "Already at latest — nothing new to deploy" and exited as a no-op. But the deployed `index.html` in `/var/www/mep/public/` was still the old one — tab title still "MEP Platform" in the browser.
+
+Root cause: there's a `mep-webhook` process running in pm2 alongside `mep-backend`. It listens for GitHub push events on main and runs `git pull origin main` automatically — but it does NOT run the build or rsync. So by the time `deploy.sh` ran, `git` was already at the merged commit, and the script's `BEFORE_SHA == AFTER_SHA` test said "no work to do."
+
+The script was comparing the wrong things. It asked **"did THIS pull bring new commits?"** when it should have asked **"is what's in `public/` stale relative to current HEAD?"**.
+
+Manual workaround applied: `cd mep-frontend && npm run build && rsync -av --delete dist/ ../public/` directly on prod. Took 30 seconds. Fixed the tab title.
+
+### Part C — The fix: `.last-deployed-sha`
+
+Updated `scripts/deploy.sh` to track deploys via a state file at `/var/www/mep/.last-deployed-sha`. The new comparison is:
+
+```
+LAST_DEPLOYED (from file)  vs  CURRENT_SHA (git HEAD after pull)
+```
+
+If they match → true no-op (the bundle in `public/` is up-to-date with HEAD).
+If they differ → diff the range `LAST_DEPLOYED..CURRENT_SHA` to detect what changed (backend vs frontend), then install/build/rsync as needed.
+On successful deploy (after the health probe passes) → write `CURRENT_SHA` to the file.
+
+This makes the script robust against external pulls (the webhook), against manual `git pull` between deploys, and against the script being interrupted before completing (since the SHA is only written after the health check).
+
+The file is in `.gitignore` (added this section) — it's runtime state, not source.
+
+### Edge cases handled
+
+- **First run after this PR ships:** `.last-deployed-sha` doesn't exist → `LAST_DEPLOYED=""` → script forces a full deploy (BACKEND_CHANGED + FRONTEND_CHANGED both set to `(initial)`). Safe default.
+- **Health probe fails:** the SHA file is NOT updated (only written on the success path). Re-running picks up exactly the same range and retries. The `--update-env` pm2 restart already happened before the probe, but that's fine — pm2's restart is idempotent.
+- **`git diff` fails** (e.g., LAST_DEPLOYED is unreachable from HEAD because of a force-push or branch reset): script falls back to a full deploy. Conservative but safe.
+- **Manual build outside the script** (someone runs `npm run build && rsync` directly): script doesn't know, so the next `deploy.sh` run will redundantly rebuild. ~10 seconds of wasted work — acceptable.
+
+### Lesson encoded — "compare against deployed state, not against pull result"
+
+Generic principle for CI/deploy tooling: when the action is "publish a build", the question to ask is **"is what's published behind what's committed?"**, not **"did we just commit something new?"**. Anything that watches git on its own (webhooks, polling cron, IDE auto-pulls) can desynchronize the two questions, and a script that asks the wrong one becomes silently wrong.
+
+The `.last-deployed-sha` file is a 7-byte canary that pins down the answer.
+
+### Backlog from this section
+
+- **(P3)** Investigate `mep-webhook` source code. If it's just `git pull`, that's redundant with our script — the script handles pull anyway. Could either disable the webhook or extend it to call `deploy.sh`. For now, harmless coexistence.
+- **(P3)** PWA cache made the tab-title fix invisible in incognito until we cleared site data. Worth making the SW's auto-update banner more aggressive (currently requires user click). Section 50 wired the i18n strings; the trigger frequency is the open lever.
+- **(P3)** Investigate the lingering `/icons/icon-*.png` 404s referenced by `index.html` (icons deleted by Section 52 rsync). Restore branded PWA icons.
+
+### Pointer for next sessions
+
+- **`scripts/deploy.sh` v2 in place.** First run after this PR merges will be a "full deploy" (no prior SHA file). Subsequent runs use the file as the source of truth.
+- **Today closed at 12 sections.** New high-water mark. The session ran from morning Phase 75 work through to deploy automation in one sweep — long but coherent. Next session should be light.
+- **Coverage / tests untouched today since morning.** 590/590 passing across 4 harnesses. Nothing in today's later sections (i18n + monitoring + deploy automation) added test surface; nothing broke either.
