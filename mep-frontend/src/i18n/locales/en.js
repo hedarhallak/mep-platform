@@ -214,4 +214,58 @@ export default {
       updateFailed: 'Failed to update employee',
     },
   },
+
+  projects: {
+    title: 'Projects',
+    subtitle: '{{count}} projects total',
+    newButton: 'New Project',
+
+    searchPlaceholder: 'Search projects...',
+    allStatuses: 'All Statuses',
+
+    th: {
+      code: 'Code',
+      projectName: 'Project Name',
+      trade: 'Trade',
+      status: 'Status',
+      dates: 'Dates',
+      address: 'Address',
+    },
+
+    empty: 'No projects found',
+    emptyFiltered: 'Try adjusting your filters',
+    emptyDefault: 'Create your first project',
+    noAddress: 'No address',
+
+    modal: {
+      titleNew: 'New Project',
+      titleEdit: 'Edit Project',
+      projectName: 'Project Name *',
+      projectNamePlaceholder: 'Enter project name',
+      ccqSector: 'CCQ Sector',
+      ccqSectorHint: '(for travel allowance calculation)',
+      ccqSectorIC: 'Institutionnel / Commercial (IC)',
+      ccqSectorIndustrial: 'Industriel (I)',
+      ccqSectorResidential: 'Résidentiel (R)',
+      tradeType: 'Trade Type *',
+      selectTrade: 'Select trade',
+      status: 'Status',
+      selectStatus: 'Select status',
+      siteAddress: 'Site Address',
+      addressPlaceholder: 'Search address...',
+      coordinatesSaved: 'Coordinates saved ({{lat}}, {{lng}})',
+      startDate: 'Start Date',
+      endDate: 'End Date',
+      client: 'Client',
+      noClient: 'No client',
+      cancel: 'Cancel',
+      saveChanges: 'Save Changes',
+      createProject: 'Create Project',
+      errors: {
+        projectNameRequired: 'Project name is required',
+        tradeTypeRequired: 'Trade type is required',
+        saveFailed: 'Failed to save project',
+      },
+    },
+  },
 };

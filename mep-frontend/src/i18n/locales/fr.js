@@ -214,4 +214,58 @@ export default {
       updateFailed: "Échec de la mise à jour de l'employé",
     },
   },
+
+  projects: {
+    title: 'Projets',
+    subtitle: '{{count}} projets au total',
+    newButton: 'Nouveau projet',
+
+    searchPlaceholder: 'Rechercher des projets...',
+    allStatuses: 'Tous les statuts',
+
+    th: {
+      code: 'Code',
+      projectName: 'Nom du projet',
+      trade: 'Métier',
+      status: 'Statut',
+      dates: 'Dates',
+      address: 'Adresse',
+    },
+
+    empty: 'Aucun projet trouvé',
+    emptyFiltered: "Essayez d'ajuster vos filtres",
+    emptyDefault: 'Créez votre premier projet',
+    noAddress: 'Aucune adresse',
+
+    modal: {
+      titleNew: 'Nouveau projet',
+      titleEdit: 'Modifier le projet',
+      projectName: 'Nom du projet *',
+      projectNamePlaceholder: 'Entrer le nom du projet',
+      ccqSector: 'Secteur CCQ',
+      ccqSectorHint: "(pour le calcul de l'allocation de déplacement)",
+      ccqSectorIC: 'Institutionnel / Commercial (IC)',
+      ccqSectorIndustrial: 'Industriel (I)',
+      ccqSectorResidential: 'Résidentiel (R)',
+      tradeType: 'Type de métier *',
+      selectTrade: 'Sélectionner un métier',
+      status: 'Statut',
+      selectStatus: 'Sélectionner un statut',
+      siteAddress: 'Adresse du chantier',
+      addressPlaceholder: 'Rechercher une adresse...',
+      coordinatesSaved: 'Coordonnées enregistrées ({{lat}}, {{lng}})',
+      startDate: 'Date de début',
+      endDate: 'Date de fin',
+      client: 'Client',
+      noClient: 'Aucun client',
+      cancel: 'Annuler',
+      saveChanges: 'Enregistrer les modifications',
+      createProject: 'Créer le projet',
+      errors: {
+        projectNameRequired: 'Le nom du projet est requis',
+        tradeTypeRequired: 'Le type de métier est requis',
+        saveFailed: "Échec de l'enregistrement du projet",
+      },
+    },
+  },
 };

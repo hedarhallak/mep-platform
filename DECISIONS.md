@@ -5684,3 +5684,116 @@ Spot-checking the file is the only way to catch a missed feature merge.
 - **Web i18n total: 4/30 pages translated.**
 - **Section 50 is officially "shipped via Section 55."** The original commit on the feature branch is obsolete.
 - **Today closed at 13 sections.** Even higher water mark. Next session must be ≤2 sections by design — Hedar's call when fatigue catches up.
+
+---
+
+## Section 56 — ProjectsPage i18n + Tier 1 closeout (May 3, 2026, very late evening)
+
+This section closes Tier 1 i18n at 5/5. ProjectsPage is the last page in the program. After this lands, every authenticated screen a Quebec user sees on first login is bilingual.
+
+### What shipped
+
+- `projects.*` bucket added to en.js + fr.js (~50 keys).
+- `mep-frontend/src/pages/projects/ProjectsPage.jsx` rewired to use `t()` everywhere.
+
+### Coverage
+
+The page has 3 components — main page, `ProjectModal` (for create/edit), and `AddressInput` (Mapbox autocomplete). All three now translated.
+
+| Bucket | Key count |
+|---|---|
+| `projects` (top-level) | ~13 (title, subtitle, filters, table headers, empty states) |
+| `projects.modal` | ~22 (form fields, CCQ sector dropdown, errors) |
+| `projects.modal.errors` | 3 (project name required, trade type required, save failed) |
+
+Total: ~50 keys per locale.
+
+### CCQ sector strings — already French in source
+
+Three of the dropdown options are CCQ sector terms that are French-language acronyms used in both Quebec EN and FR contexts:
+
+- `Institutionnel / Commercial (IC)`
+- `Industriel (I)`
+- `Résidentiel (R)`
+
+The original source already used these French strings unchanged. So the i18n key just maps to the same string in both locales — but going through the translation layer keeps the option correctly tagged for future EN-only variants if they ever ship.
+
+### Localized date formatting
+
+The page renders project start/end dates. Original code used `toLocaleDateString('en-GB', ...)` — hardcoded UK English locale. Updated to switch on `i18n.language`:
+
+- `fr` → `'fr-CA'` (Quebec FR locale → "12 mai 2026")
+- otherwise → `'en-GB'` (international English → "12 May 2026")
+
+Same pattern can be reused on every other page that shows dates (DashboardPage, EmployeesPage, AssignmentsPage, etc.). Filing a follow-up to apply consistently.
+
+### Quebec FR conventions reinforced
+
+| EN | Quebec FR | Note |
+|---|---|---|
+| Project | Projet | (vs `Projet` in France — same here) |
+| Status | Statut | |
+| Trade Type | Type de métier | |
+| Site Address | Adresse du chantier | "chantier" specifically Quebec construction |
+| Start/End Date | Date de début / Date de fin | |
+| All Statuses | Tous les statuts | |
+| Coordinates saved | Coordonnées enregistrées | |
+| Travel allowance | Allocation de déplacement | CCQ-aligned |
+| New Project (button) | Nouveau projet | |
+| Save Changes | Enregistrer les modifications | matches employees.edit.saveChanges |
+| Create Project | Créer le projet | |
+
+### Tier 1 closed (5/5)
+
+| Page | Section shipped | Strings (approx) |
+|---|---|---|
+| Login | 45 | ~15 |
+| Dashboard | 49 | ~13 |
+| Layout (sidebar + nav + banners) | 50 (re-shipped via 55) | ~25 |
+| EmployeesPage (main + 2 modals) | 55 | ~90 |
+| **ProjectsPage (main + 1 modal)** | **56** | **~50** |
+| **Total** | | **~193 keys** |
+
+Every authenticated screen a Quebec admin/manager touches on a fresh login is now bilingual. The remaining 25 web pages (Tier 2 + Tier 3) are deeper-traffic flows: assignments, attendance, reports, hub, BI, settings, suppliers, materials, etc. They can go in batches of 3–5 over the coming weeks.
+
+### Known gap deferred — `MAPBOX_TOKEN` constant
+
+ProjectsPage still has a hardcoded `MAPBOX_TOKEN` constant at the top (line 11), even though it's not actually used in this file (the AddressInput uses the backend's `/geocode/suggest` proxy). Same token is also in `mep-frontend/.env` as `VITE_MAPBOX_TOKEN` since Section 52. Filing a follow-up to remove the dead constant — out of scope for this i18n PR.
+
+### Glossary file — actionable now that Tier 1 is done
+
+Hedar's running glossary across Sections 45/49/50/55/56:
+
+- **NIP** (not "PIN") — login
+- **Courriel** (not "e-mail" / "courriel électronique") — email
+- **Métier** (not "profession" / "secteur") — trade
+- **Bons d'achat** (not "Bons de commande") — purchase orders
+- **Réunion quotidienne** (not "Daily Standup") — daily standup
+- **Présences** (not "Assiduité") — attendance
+- **Intelligence d'affaires** (not "Business Intelligence" calque) — BI
+- **Contremaître** — foreman
+- **Compagnon** — journeyman
+- **Apprenti** (1–4) — apprentice
+- **Ouvrier** (not "Travailleur") — worker
+- **Chauffeur** — driver
+- **Gérant** (not "Manager" anglicism) — manager
+- **Allocation de déplacement** — travel allowance (CCQ)
+- **Tableau de bord** — dashboard
+- **Chantier** — construction site
+- **Affectation** — assignment
+- **Demande de tâche/matériel** — task/material request
+
+These should land in `docs/i18n/glossary.md` as the source of truth before Tier 2 starts. Filing as a P2 follow-up.
+
+### Backlog from this section
+
+- **(P2)** Create `docs/i18n/glossary.md` from the table above. Captures Quebec FR conventions enforced through Tier 1.
+- **(P3)** Remove dead `MAPBOX_TOKEN` constant from ProjectsPage.jsx.
+- **(P2)** Apply the localized `toLocaleDateString` pattern to all other date-rendering pages (DashboardPage's `recent projects`, AssignmentsPage, AttendancePage, etc.) when their i18n turn comes.
+- **(P1)** Pick the first **Tier 2** page. Suggested order based on user-traffic: AssignmentsPage → AttendancePage → SuppliersPage → MaterialRequestPage → PurchaseOrdersPage. (5 high-traffic pages = ~Tier 2.)
+
+### Pointer for next sessions
+
+- **Tier 1 i18n: 5/5 done. Closed. ✅**
+- **Web i18n total: 5/30 pages.** Tier 2 next.
+- **Today closed at 14 sections.** Hedar said multiple times he'll call the stop himself — no premature wrap. This section is the natural Tier-1 closeout but doesn't have to be the last.
