@@ -17,6 +17,22 @@ export default {
     fr: 'Français',
   },
 
+  dashboard: {
+    greetingMorning: 'Bonjour, {{username}} 👋',
+    greetingAfternoon: 'Bon après-midi, {{username}} 👋',
+    subtitle: "Voici l'activité de vos projets aujourd'hui.",
+    activeProjects: 'Projets actifs',
+    totalSuffix: '{{count}} au total',
+    employees: 'Employés',
+    employeesSub: 'avec profils',
+    activeAssignments: 'Affectations actives',
+    activeAssignmentsSub: 'sur le chantier',
+    utilization: 'Utilisation',
+    utilizationSub: 'employés affectés',
+    recentProjects: 'Projets actifs récents',
+    noProjects: 'Aucun projet pour le moment',
+  },
+
   login: {
     title: 'Connectez-vous à votre compte',
     username: "Nom d'utilisateur",

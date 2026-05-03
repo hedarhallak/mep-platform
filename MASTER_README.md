@@ -3,11 +3,11 @@
 > Production: https://app.constrai.ca
 > Website: https://www.constrai.ca (Coming Soon landing page)
 > Server: root@143.110.218.84
-> Latest DECISIONS section: **Section 48** (onboarding fixes 1+2+3 closeout — brand to Constrai, Mapbox token to env var, Fix 3 was already done)
-> Active program: **none** — feature work front-of-queue.
+> Latest DECISIONS section: **Section 49** (web i18n Tier 1 batch 1/4 — DashboardPage FR/EN)
+> Active program: **Web Tier 1 i18n** (4 pages: Dashboard ✅, layout, employees, projects).
 > **Customer #1 status:** unsigned (constraint per Section 46). Engineering rigor work is paused pending revenue.
 > **Server-side env update pending:** set `APP_NAME=Constrai` + `VITE_MAPBOX_TOKEN` on prod.
-> Coverage thresholds: 51 / 45 / 52 / 52. Backend tests: **553 / 65 suites**. Bug 9 — fixed. Web i18n: pipeline live, 1/30 pages translated.
+> Coverage thresholds: 51 / 45 / 52 / 52. Backend tests: **553 / 65 suites**. Bug 9 — fixed. Web i18n: **2/30 pages translated**.
 > Backend path on server: /var/www/mep
 > Landing page path on server: /var/www/constrai-landing
 > DB: mepdb / mepuser / MepSecure2026X

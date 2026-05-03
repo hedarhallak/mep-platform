@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import api from '@/lib/api'
 import { useAuth } from '@/hooks/useAuth'
 import { usePermissions } from '@/hooks/usePermissions.jsx'
@@ -20,6 +21,7 @@ function StatCard({ icon: Icon, label, value, color, sub }) {
 }
 
 export default function DashboardPage() {
+  const { t } = useTranslation()
   const { user } = useAuth()
   const { can, loading: permsLoading } = usePermissions()
 
@@ -50,44 +52,46 @@ export default function DashboardPage() {
   const totalAssigned   = assignments?.length ?? 0
   const totalEmployees  = employees?.length ?? 0
 
+  const greetingKey = new Date().getHours() < 12 ? 'dashboard.greetingMorning' : 'dashboard.greetingAfternoon'
+
   return (
     <div className="p-8">
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-slate-800">
-          Good {new Date().getHours() < 12 ? 'morning' : 'afternoon'}, {user?.username} 👋
+          {t(greetingKey, { username: user?.username || '' })}
         </h1>
-        <p className="text-slate-500 text-sm mt-1">Here's what's happening with your projects today.</p>
+        <p className="text-slate-500 text-sm mt-1">{t('dashboard.subtitle')}</p>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatCard
           icon={FolderKanban}
-          label="Active Projects"
+          label={t('dashboard.activeProjects')}
           value={activeProjects}
-          sub={`${totalProjects} total`}
+          sub={t('dashboard.totalSuffix', { count: totalProjects })}
           color="bg-primary-light"
         />
         <StatCard
           icon={Users}
-          label="Employees"
+          label={t('dashboard.employees')}
           value={totalEmployees}
-          sub="with profiles"
+          sub={t('dashboard.employeesSub')}
           color="bg-emerald-500"
         />
         <StatCard
           icon={ClipboardList}
-          label="Active Assignments"
+          label={t('dashboard.activeAssignments')}
           value={totalAssigned}
-          sub="currently on site"
+          sub={t('dashboard.activeAssignmentsSub')}
           color="bg-amber-500"
         />
         <StatCard
           icon={TrendingUp}
-          label="Utilization"
+          label={t('dashboard.utilization')}
           value={totalEmployees ? `${Math.round((totalAssigned / totalEmployees) * 100)}%` : '0%'}
-          sub="employees assigned"
+          sub={t('dashboard.utilizationSub')}
           color="bg-violet-500"
         />
       </div>
@@ -95,7 +99,7 @@ export default function DashboardPage() {
       {/* Recent Projects */}
       <div className="bg-white rounded-xl border border-slate-200">
         <div className="px-6 py-4 border-b border-slate-100">
-          <h2 className="font-semibold text-slate-800">Recent Active Projects</h2>
+          <h2 className="font-semibold text-slate-800">{t('dashboard.recentProjects')}</h2>
         </div>
         <div className="divide-y divide-slate-100">
           {projects?.filter(p => p.status_code === 'ACTIVE').slice(0, 5).map(p => (
@@ -108,7 +112,7 @@ export default function DashboardPage() {
             </div>
           ))}
           {!projects?.length && (
-            <div className="px-6 py-8 text-center text-slate-400 text-sm">No projects yet</div>
+            <div className="px-6 py-8 text-center text-slate-400 text-sm">{t('dashboard.noProjects')}</div>
           )}
         </div>
       </div>
