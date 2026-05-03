@@ -350,3 +350,319 @@ Record every production incident here. Short entries: date, what broke, what fix
 - [ ] Off-cloud backup copy — monthly dump downloaded to Hedar's laptop or second cloud provider.
 - [x] Uptime monitoring (UptimeRobot free tier). — Done Phase 64, May 2026.
 - [x] Error tracking (Sentry free tier). — Done Phase 64, May 2026.
+
+---
+
+## 11. Incident Response Runbooks (Phase 74, May 2026)
+
+> **Audience:** anyone (Hedar OR backup contact) responding to a live production incident.
+>
+> **Order of operations for any alert:** acknowledge → diagnose → fix → log in Section 9 → post-incident retro (Section 12).
+>
+> **Always prefer non-destructive diagnosis first.** Don't restart, drop, or delete anything until you've confirmed the symptom and read recent logs.
+
+### 11.1 Backend offline — `pm2` down or process crashing
+
+**Symptoms:** UptimeRobot alerts; `https://app.constrai.ca/api/health` returns 502/504; users report blank screen.
+
+**Diagnose:**
+```
+ssh root@143.110.218.84
+```
+```bash
+pm2 status
+pm2 logs mep-backend --err --lines 50 --nostream
+systemctl status nginx
+```
+
+**Common causes & fixes:**
+- Process crashed on startup (env var missing, syntax error from bad deploy):
+  ```bash
+  cd /var/www/mep
+  cat .env | grep -E "^(JWT_SECRET|DATABASE_URL|SENDGRID)"
+  pm2 restart mep-backend && pm2 logs mep-backend --lines 30
+  ```
+- Out of memory (Node OOM-killed):
+  ```bash
+  dmesg | tail -20    # Look for "Out of memory: Killed process"
+  free -h
+  pm2 restart mep-backend
+  ```
+  If recurring: bump Droplet RAM or add `--max-old-space-size` flag in pm2 config.
+- pm2 daemon itself crashed:
+  ```bash
+  pm2 resurrect    # restores from saved process list
+  ```
+
+**Escalate when:** restart loop continues after 3 attempts. Read Sentry for the underlying error before further action.
+
+### 11.2 Database connection errors (5xx everywhere, route-by-route)
+
+**Symptoms:** Sentry shows `ECONNREFUSED`, `Connection terminated unexpectedly`, or `password authentication failed`.
+
+**Diagnose:**
+```bash
+systemctl status postgresql
+sudo -u postgres psql -d mepdb -c "SELECT NOW();"
+sudo -u postgres psql -d mepdb -c "SELECT count(*) FROM pg_stat_activity;"
+```
+
+**Common causes & fixes:**
+- Postgres stopped:
+  ```bash
+  systemctl start postgresql
+  systemctl enable postgresql
+  ```
+- Connection pool exhausted (too many backends):
+  ```bash
+  sudo -u postgres psql -d mepdb \
+    -c "SELECT pid, state, query_start, query FROM pg_stat_activity \
+        WHERE datname='mepdb' ORDER BY query_start LIMIT 20;"
+  # Kill long-running idle transactions if found:
+  # sudo -u postgres psql -d mepdb -c "SELECT pg_terminate_backend(<PID>);"
+  pm2 restart mep-backend   # closes app-side pool
+  ```
+- Disk full (Postgres won't accept writes):
+  ```bash
+  df -h
+  du -sh /var/lib/postgresql/14/main/*  # find biggest dirs
+  # Common culprits: WAL accumulation, old log files
+  ```
+
+**Escalate when:** Postgres won't start. Check `journalctl -u postgresql -n 100`.
+
+### 11.3 Backup cron broken (no daily upload to Spaces)
+
+**Symptoms:** `s3cmd ls s3://constrai-backups/daily/` shows yesterday's dump missing; quarterly verification (Section 8) finds gap.
+
+**Diagnose:**
+```bash
+tail -100 /var/log/mep-backup.log
+ls -la /var/www/mep/scripts/backup/*.sh   # all must be 100755 (executable)
+git -C /var/www/mep ls-files --stage scripts/backup/
+crontab -l | grep backup
+cat /etc/mep-backup.env | grep -v PASSWORD   # without secrets
+```
+
+**Common causes & fixes:**
+- File-mode regression (CLAUDE.md / RECOVERY.md Section 3.5):
+  ```bash
+  cd /var/www/mep
+  chmod +x scripts/backup/*.sh
+  git update-index --chmod=+x scripts/backup/*.sh
+  git diff --stat   # should show no actual content changes
+  git commit -m "chore: re-mark backup scripts executable"
+  git push
+  ```
+- Spaces credentials rotated:
+  ```bash
+  cat /etc/mep-backup.env   # verify keys present + non-empty
+  # Test: AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=... s3cmd ls s3://constrai-backups/
+  ```
+- Cron stopped:
+  ```bash
+  systemctl status cron
+  systemctl start cron
+  ```
+
+**Manual one-shot recovery (if last good backup is ≥48h old):**
+```bash
+/var/www/mep/scripts/backup/backup_db.sh
+# verify it shows up:
+s3cmd ls s3://constrai-backups/daily/ | tail -3
+```
+
+**Escalate when:** S3 returns auth errors after rotating keys. May need a fresh DigitalOcean Spaces access key.
+
+### 11.4 SSL cert renewal failed
+
+**Symptoms:** browsers show "NET::ERR_CERT_DATE_INVALID"; `curl -I https://app.constrai.ca` returns SSL handshake errors.
+
+**Diagnose:**
+```bash
+certbot certificates
+journalctl -u certbot.timer -n 50
+nginx -t
+```
+
+**Common causes & fixes:**
+- Renewal blocked by Nginx config error:
+  ```bash
+  certbot renew --dry-run
+  # If it fails, fix Nginx first:
+  nginx -t                 # shows the syntax issue
+  systemctl reload nginx
+  certbot renew
+  ```
+- Port 80 blocked / DNS misrouted (challenge can't reach domain):
+  ```bash
+  curl -I http://app.constrai.ca/.well-known/acme-challenge/test
+  # Must NOT be redirected to HTTPS for ACME challenges
+  ```
+- Rate limit hit (Let's Encrypt: 5 duplicate certs/week):
+  - Wait 7 days, or use staging cert as workaround.
+
+**Hardening:** quarterly verification (Section 8) already includes `certbot renew --dry-run`. Don't skip it.
+
+### 11.5 High latency / slow responses (no outage but app feels broken)
+
+**Symptoms:** UptimeRobot still green, but users complain. Sentry may show `Performance` warnings.
+
+**Diagnose:**
+```bash
+pm2 monit                                   # CPU + memory live
+pm2 logs mep-backend --lines 100 | grep -i "slow\|timeout"
+sudo -u postgres psql -d mepdb \
+  -c "SELECT query, calls, total_exec_time, mean_exec_time \
+      FROM pg_stat_statements ORDER BY mean_exec_time DESC LIMIT 10;"
+top -b -n 1 | head -20
+df -h
+free -h
+```
+
+**Common causes & fixes:**
+- N+1 query on a hot endpoint:
+  - Identify via pg_stat_statements + Sentry breadcrumbs.
+  - Code-level fix; not a runbook action.
+- Postgres needs `VACUUM ANALYZE`:
+  ```bash
+  sudo -u postgres psql -d mepdb -c "VACUUM ANALYZE;"
+  # Schedule: should run automatically; one-shot is safe to run manually.
+  ```
+- Disk thrashing (high iowait):
+  - `iostat 1 5` (install via `apt install sysstat` if missing).
+  - If sustained iowait > 20%: Droplet too small, scale up or add caching.
+- PostGIS spatial index missing on a bi.js / workforce planner query:
+  ```sql
+  -- Check expected indexes exist:
+  SELECT tablename, indexname FROM pg_indexes WHERE schemaname='public' AND indexdef LIKE '%gist%';
+  ```
+
+**Escalate when:** mean_exec_time on the top query is >500 ms. That's a code/index fix, not a runbook fix.
+
+### 11.6 SendGrid email quota exceeded / not sending
+
+**Symptoms:** purchase orders emailed to suppliers don't arrive; admin invitations fail; Sentry shows `sgMail.send` returning false.
+
+**Diagnose:**
+```bash
+# Server-side log check
+pm2 logs mep-backend --lines 200 | grep -i "sendgrid\|sgmail"
+```
+
+Then on https://app.sendgrid.com → Activity Feed (search by recipient email) and Stats → Overview (look for "Bounces", "Drops", "Quota" headers).
+
+**Common causes & fixes:**
+- Free-tier daily quota hit (100 emails/day): wait until UTC midnight reset, or upgrade plan.
+- Recipient hard-bounced: their address is on SendGrid's suppression list. Remove from Suppressions tab if address was a typo, or update the user's email in the app.
+- API key revoked: rotate via SendGrid → Settings → API Keys, update `SENDGRID_API_KEY` in `/var/www/mep/.env`, then `pm2 restart mep-backend`.
+- Sender domain unverified after a DNS change: Settings → Sender Authentication, re-verify DKIM + SPF.
+
+**Note:** `lib/email.js` returns `false` on send failure rather than throwing. Routes log the error but don't expose it to the user. This is intentional (PO creation should succeed even if email fails) but means email failures can go unnoticed without checking SendGrid.
+
+### 11.7 Mobile push notifications not arriving
+
+**Symptoms:** worker doesn't see "New task" push when foreman sends one in the app; `lib/pushNotification.js` log shows error.
+
+**Diagnose:**
+```bash
+pm2 logs mep-backend --lines 200 | grep -i "expo\|push"
+# Check the user has a push token:
+sudo -u postgres psql -d mepdb \
+  -c "SELECT user_id, expo_push_token, last_seen_at FROM push_tokens \
+      WHERE user_id = <USER_ID>;"
+```
+
+**Common causes & fixes:**
+- User has not opened the mobile app since installing → no token registered. Ask them to open the app once.
+- Token expired (Expo invalidates after extended inactivity): the route catches `DeviceNotRegistered` errors and clears the token; user re-registers on next login.
+- iOS background notification disabled by user: phone-side setting; not fixable from server.
+- Expo project ID drift (after re-creating EAS project): verify `app.json` `extra.eas.projectId` matches the active Expo dashboard.
+
+**Escalate when:** every user is missing pushes simultaneously. That points at the Expo project credentials, not individual tokens.
+
+### 11.8 Sentry alert spam — same error firing hundreds of times/hour
+
+**Symptoms:** inbox fills with Sentry "high priority issue" emails for the same stack trace.
+
+**Diagnose:** open the issue in Sentry → check Events tab → look at the trigger frequency + user-affected count.
+
+**Decision tree:**
+- It's a real bug affecting many users → fix-branch + PR. Don't silence first.
+- It's a benign error (e.g., user sends bad input that should have been validated upfront):
+  - Mark Resolved in Sentry → silences future occurrences of the same fingerprint.
+  - File a follow-up ticket to add the missing 4xx validation, so it stops being treated as an error.
+- It's noise from an integration (e.g. a webhook calling our API with malformed data):
+  - Tag with `Ignore` rather than Resolve, so future variants of the same fingerprint stay quiet.
+
+**Don't:** disable the entire Sentry integration. The alert volume is the symptom, not the disease.
+
+### 11.9 UptimeRobot false positives (alerts when site is up)
+
+**Symptoms:** UptimeRobot alert fires; you check the URL and it loads fine.
+
+**Diagnose:** UptimeRobot dashboard → monitor → "Last events" → look at the response code + response time at the moment of failure. Common: a 30s timeout coinciding with a real but transient slow query.
+
+**Action:**
+- Single false positive in 7 days: ignore; this is the noise floor for a free tier.
+- Repeated false positives at the same time of day: usually a cron job (e.g. `weeklyReportJob` Sunday 23:00 UTC) holding event-loop work; tune the job or move to off-peak.
+- Increase UptimeRobot timeout from 30s default to 60s if the backend has known slow endpoints.
+
+**Don't:** lower the alert threshold to 1 failure — too noisy. Keep the 2-consecutive-failures rule from Section 8.5.
+
+### 11.10 Disk full
+
+**Symptoms:** Postgres refuses writes; Nginx logs full of "No space left on device"; backups silently truncate.
+
+**Diagnose:**
+```bash
+df -h
+du -sh /var/log/* | sort -h | tail
+du -sh /var/lib/postgresql/14/main/* | sort -h | tail
+du -sh /var/www/mep/uploads/* | sort -h | tail
+```
+
+**Common cleanup:**
+```bash
+# Truncate noisy logs (be conservative; investigate first):
+journalctl --vacuum-size=200M
+> /var/log/mep-backup.log     # if it ballooned past expected size
+
+# Old PM2 logs:
+pm2 flush
+
+# Stale uploads (hub.js attachments older than X days):
+# DO NOT delete blindly — confirm retention policy first.
+```
+
+**Escalate when:** disk is full from the Postgres data directory itself. That means real growth, not noise — bump Droplet volume size in DigitalOcean.
+
+### 11.11 Domain / DNS misconfiguration after a registrar change
+
+**Symptoms:** `app.constrai.ca` resolves to a different IP than `143.110.218.84`; or doesn't resolve at all.
+
+**Diagnose:**
+```bash
+dig +short app.constrai.ca
+dig +short www.constrai.ca
+dig +short constrai.ca
+```
+
+All three must return `143.110.218.84`. If they don't, log into Namecheap → Domain List → Manage → Advanced DNS, fix the A records (Section 5).
+
+DNS changes propagate in 1–60 minutes. Test from multiple resolvers (`dig @8.8.8.8 app.constrai.ca`).
+
+**Don't:** delete and re-add records — edit in place. Deletion can trigger a propagation delay that's longer than necessary.
+
+---
+
+## 12. Post-Incident Retro Template
+
+After every incident logged in Section 9, run a 10-minute retro and answer four questions. Add the results back into Section 9 + (when applicable) the relevant runbook in Section 11.
+
+1. **What happened?** One paragraph, time-stamped, what users experienced.
+2. **What was the root cause?** Not just the proximate trigger — the underlying invariant that broke.
+3. **What did we change in the moment to fix it?** Exact commands run.
+4. **What are we changing so this doesn't happen again?** A specific, named action item, owner, and deadline. If the answer is "nothing" — that's also a valid answer; write it down so the next incident retro can re-evaluate.
+
+Update Section 9's table with: **Date / Incident / Fix / Prevention**. Keep entries terse — the retro details live in `git log` of the fix PR or in DECISIONS.md, not in this table.
