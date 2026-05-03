@@ -5187,3 +5187,45 @@ First page of Section 45's Tier 1 list translated. **DashboardPage** (the first 
 
 - **Web i18n: 2/30 pages translated** (Login + Dashboard).
 - **Tier 1 next: layout** (top nav + sidebar) — affects every authenticated screen.
+
+---
+
+## Section 50 — Web i18n Tier 1 batch — Layout / AppLayout (May 3, 2026, late evening)
+
+Layout (sidebar + nav + offline / update / install banners) translated. This is **the highest-leverage single page in the app** — every authenticated screen renders inside it, so every authenticated user sees the FR strings the moment they sign in.
+
+### What shipped
+
+| File | Change |
+|---|---|
+| `mep-frontend/src/i18n/locales/en.js` | NEW `nav.*` bucket (19 strings) + NEW `layout.*` bucket (6 strings) |
+| `mep-frontend/src/i18n/locales/fr.js` | Same buckets in Quebec FR (`Tableau de bord`, `Bons d'achat`, `Intelligence d'affaires`, etc.) |
+| `mep-frontend/src/components/layout/AppLayout.jsx` | 15 edits. Switched `mainNav` + `biNav` arrays from inline `label:` strings to `labelKey:` i18n keys. Added `useTranslation()` hook. All 26 user-visible strings → `t()`. |
+
+### Translated strings (26 total)
+
+**Nav (19):** Dashboard, Employees, Projects, Suppliers, Assignments, Attendance, Reports, Daily Standup, Task Request, Material Request, Purchase Orders, My Hub, Business Intelligence, Workforce Planner, User Management, Permissions, Settings, Logout, Company (fallback when `user.company_name` is empty).
+
+**Layout (6):** offline banner, update-available banner + button, install-app prompt title + subtitle + button.
+
+**Brand (1):** sidebar header — `MEP Platform` was still hardcoded here even after Section 45 fixed the login page; now also via `t('common.appName')` → `Constrai`.
+
+### Pattern reused from Section 49
+
+The `labelKey: 'nav.foo'` indirection in nav arrays kept the JSX render path clean — `{t(labelKey)}` is the only call site. No need to translate at array-definition time, no `i18next.t()` outside React. Same pattern that made Dashboard cheap will make Employees / Projects cheap when their turn comes.
+
+### Tier 1 progress
+
+| Page | Status |
+|---|---|
+| Login | ✅ done (Section 45) |
+| Dashboard | ✅ done (Section 49) |
+| Layout (top nav + sidebar) | ✅ done (this section) |
+| Employees | ⏳ next |
+| Projects | ⏳ pending |
+
+### Pointer for next sessions
+
+- **Web i18n: 3/30 pages translated** (Login + Dashboard + Layout). Layout counts as one "page" but actually touches 100% of authenticated views.
+- **Tier 1 next: EmployeesPage** — biggest data-heavy page after Dashboard; will also be the first page where table column headers + action buttons get translated, so it's the template for Tier 2.
+- **Quebec FR conventions reinforced this section:** `Bons d'achat` (not `Bons de commande`), `Intelligence d'affaires` (not `Business Intelligence` calque), `Réunion quotidienne` (not `Daily Standup` calque), `Présences` (not `Assiduité`), `NIP` (already established Section 45). Capture these in a glossary file when Tier 1 closes.
