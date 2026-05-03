@@ -3,10 +3,10 @@
 > Production: https://app.constrai.ca
 > Website: https://www.constrai.ca (Coming Soon landing page)
 > Server: root@143.110.218.84
-> Latest DECISIONS section: **Section 44** (Bug 9 fixed + Phase 74 DR runbook — RECOVERY.md Sections 11–12 added, 11 incident-response playbooks)
-> Active program: **none** — Section 40 closed at 56.26% lines, Section 22 fully complete (Phase 74 done). No active rigor program.
-> Next phase: **TBD** — feature work returns to front of queue. Outstanding queued: web i18n (FR/EN parity), 2-week feature roadmap.
-> Coverage thresholds: 51 / 45 / 52 / 52. Backend tests: **553 / 65 suites**. Bug 9 — fixed (PR #72).
+> Latest DECISIONS section: **Section 45** (Web i18n pilot — i18next on mep-frontend, LoginPage FR/EN, ~29 pages queued for incremental translation)
+> Active program: **none** — Section 40 closed, Section 22 complete. Web i18n pilot shipped; remaining pages grind incrementally per Section 45 Tier 1-4 list.
+> Next phase: **TBD** — feature work / 2-week roadmap (Section 46) next.
+> Coverage thresholds: 51 / 45 / 52 / 52. Backend tests: **553 / 65 suites**. Bug 9 — fixed. Web i18n: pipeline live, FR/EN, default FR.
 > Backend path on server: /var/www/mep
 > Landing page path on server: /var/www/constrai-landing
 > DB: mepdb / mepuser / MepSecure2026X

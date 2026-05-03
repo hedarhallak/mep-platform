@@ -4774,3 +4774,115 @@ State after Section 44 merges:
 - **Bug 9 closed.** No more pinned bugs in the test suite.
 - **Open follow-ups:** (ج) Frontend (web) i18n + (د) 2-week feature roadmap. Both queued for tonight or next session.
 - **Operational posture:** RECOVERY.md is now both a continuity doc and an incident-response runbook. Update Section 9 (incident log) + the relevant Section 11 entry after every prod incident. Quarterly verification (Section 8) still applies.
+
+---
+
+## Section 45 — Web i18n pilot — May 3, 2026 evening
+
+Pilot scope ship: i18next infrastructure on `mep-frontend/` + LanguageSwitcher component + LoginPage translated to FR/EN. Remaining ~29 components queued for follow-up sessions, with the pattern + locale files now in place to grind through them as background work.
+
+### Why a pilot, not a full translation
+
+The frontend has 17+ page directories + 6 standalone pages = ~30 components, each holding 10–30 user-visible strings — call it ~500 strings total. Translating all of them in one PR would be 6–10 hours of mostly-mechanical work. The mid-stream proposal (in chat, before this section was written) was: ship the **plumbing** + a single translated page (`LoginPage` — most-visible first impression), and document the pattern so subsequent sessions can grind through pages incrementally without re-litigating the architecture.
+
+This decision aligns with **Section 4.5** (don't manually grind 30+ same-shape transformations — establish a pattern, then ship in batches) but also accepts that **the pattern itself is light enough that a generator/script isn't worth building** for a one-time conversion of static UI copy.
+
+### Architecture choices (made in execution per Section 2.3)
+
+| Choice | Decision | Why |
+|---|---|---|
+| Library | `i18next` + `react-i18next` + `i18next-browser-languagedetector` | Industry standard, matches mobile (`mep-mobile/src/i18n/index.ts` already uses i18next). Stable, well-maintained. |
+| Default language | **French** (`fallbackLng: 'fr'`) | Quebec construction market is FR-first. Matches mobile default. |
+| Storage | `localStorage` key `constrai_language` | Mirrors mobile's `mep_language` AsyncStorage key (named differently because the prefix `constrai_*` is the web convention; mobile's `mep_*` predates the rebrand). |
+| Detection order | `localStorage` → browser language → fallback | User's explicit pick wins. First-time visitor gets browser-language guess. |
+| String key namespacing | `common.*` / `language.*` / `<page>.*` | Page-scoped buckets mirror mobile's `auth/dashboard/modules/...` layout. |
+| Quebec French specifics | "NIP" not "PIN", "Nom d'utilisateur", Quebec spellings | Match mobile FR translations to keep terminology consistent across web + app. |
+
+### Files shipped
+
+| File | Status | Purpose |
+|---|---|---|
+| `mep-frontend/package.json` | edited | Added 3 deps: `i18next`, `react-i18next`, `i18next-browser-languagedetector` |
+| `mep-frontend/src/main.jsx` | edited | `import './i18n'` before `App` mounts |
+| `mep-frontend/src/i18n/index.js` | NEW | i18next init with detector + localStorage cache |
+| `mep-frontend/src/i18n/locales/en.js` | NEW | English strings — `common`, `language`, `login` buckets |
+| `mep-frontend/src/i18n/locales/fr.js` | NEW | French (Quebec) strings — same buckets, terminology matches mobile |
+| `mep-frontend/src/components/shared/LanguageSwitcher.jsx` | NEW | FR/EN pill toggle, persisted via `i18n.changeLanguage()` |
+| `mep-frontend/src/pages/auth/LoginPage.jsx` | translated | All 10 user-visible strings + error map → `t()` calls. LanguageSwitcher mounted top-right. |
+
+### Pattern for translating a new component (the convention)
+
+Step-by-step for the next session translating any of the 29 remaining pages:
+
+1. **Identify strings.** Open the component, grep for hardcoded strings in JSX, props (`placeholder`, `aria-label`, `title`), and JS (alerts, errors).
+2. **Add to locale files.** Pick a bucket (existing one if it fits, new top-level key otherwise). Add EN + FR side-by-side in both `en.js` and `fr.js`. **Both files must have the same key set** — missing keys fall back silently and you don't notice until a user does.
+3. **Wire in the component.** `import { useTranslation } from 'react-i18next';` then `const { t } = useTranslation();` at the top of the function. Replace every literal with `t('bucket.key')`.
+4. **Don't translate inside `<input value=...>` or React keys.** Only user-visible labels, placeholders, button text, error messages, headers.
+5. **Backend error codes:** map them via `t(\`bucket.errors.${code}\`)` with a fallback (`t('bucket.errors.GENERIC')`). See `LoginPage.jsx` for the pattern.
+6. **Test in dev:** `npm run dev`, click LanguageSwitcher, confirm both languages render without missing-key warnings in the console.
+
+### Remaining pages (TODO — grind incrementally)
+
+Sorted by user-visibility / customer-onboarding-importance:
+
+**Tier 1 — visible during a customer demo (do first):**
+- `pages/dashboard/*` — landing after login
+- `components/layout/*` — top nav, sidebar
+- `pages/employees/*` — initial seeding flow
+- `pages/projects/*` — first object a new customer creates
+
+**Tier 2 — hit in normal daily use:**
+- `pages/assignments/*`
+- `pages/attendance/*`
+- `pages/materials/*`
+- `pages/hub/*`
+
+**Tier 3 — admin / less-frequent:**
+- `pages/auth/*` (Login already done, others remain — onboarding/activate)
+- `pages/onboarding/*`
+- `pages/profile/*`
+- `pages/suppliers/*`
+- `pages/bi/*` (workforce planner — internal users mostly)
+
+**Tier 4 — rarely-visited / deferrable:**
+- `pages/PermissionsPage.jsx`
+- `pages/ReportsPage.jsx`
+- `pages/StandupPage.jsx`
+- `pages/TaskRequestPage.jsx`
+- `pages/UserManagementPage.jsx`
+
+### Hedar — local steps before commit
+
+```powershell
+cd C:\Users\Lenovo\Desktop\mep-site-backend-fixed\mep-fixed\mep-frontend
+npm install
+npm run dev
+```
+
+Then in browser: open the dev server (usually `http://localhost:5173`), navigate to `/login`, click the FR/EN toggle, confirm strings switch. Refresh — language choice should persist via localStorage. Open DevTools console — should see no `i18next::translator: missingKey` warnings.
+
+### Commit / push checklist
+
+```powershell
+cd C:\Users\Lenovo\Desktop\mep-site-backend-fixed\mep-fixed
+git checkout main
+git pull origin main
+git checkout -b feat/section45-web-i18n-pilot
+git add mep-frontend/package.json mep-frontend/package-lock.json `
+        mep-frontend/src/main.jsx `
+        mep-frontend/src/i18n/ `
+        mep-frontend/src/components/shared/LanguageSwitcher.jsx `
+        mep-frontend/src/pages/auth/LoginPage.jsx `
+        DECISIONS.md MASTER_README.md
+git commit -m "feat(i18n): web i18next pilot — infrastructure + LoginPage FR/EN (Section 45)"
+git push -u origin feat/section45-web-i18n-pilot
+```
+
+(Include `package-lock.json` if `npm install` produced one — it should be regenerated on first run.)
+
+### Pointer for next sessions
+
+State after Section 45 merges:
+- **Web i18n pipeline is live.** Any new page shipped going forward should use `t()` from day one (don't add new untranslated strings).
+- **29 pages still hold hardcoded English.** Grind through Tier 1 in the next session that has time; tier 2-4 can be background work spread across multiple sessions or deferred until first francophone customer onboarding.
+- **Mobile + web now share the FR/EN convention** (key naming, default language, Quebec spellings, "NIP"/"Nom d'utilisateur" terminology). Future translation choices should reference both files for consistency.
