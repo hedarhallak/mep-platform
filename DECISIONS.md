@@ -5151,3 +5151,39 @@ State after Section 48 merges:
 - **Server-side env update still pending:** Hedar to set `APP_NAME=Constrai` and `VITE_MAPBOX_TOKEN=pk.…` on prod (`/var/www/mep/.env` + Vite build env).
 - **Friction points 4–11 from Section 47 remain queued.** Triage when next session has bandwidth + customer signal.
 - **Convention added:** audits that say "needs to verify" must verify before the audit ships, not after.
+
+---
+
+## Section 49 — Web i18n Tier 1 batch — Dashboard (May 3, 2026, late evening)
+
+First page of Section 45's Tier 1 list translated. **DashboardPage** (the first page after login).
+
+### What shipped
+
+| File | Change |
+|---|---|
+| `mep-frontend/src/i18n/locales/en.js` | NEW `dashboard.*` bucket (13 strings) |
+| `mep-frontend/src/i18n/locales/fr.js` | NEW `dashboard.*` bucket (13 strings, Quebec FR) |
+| `mep-frontend/src/pages/dashboard/DashboardPage.jsx` | All 12 user-visible strings → `t()`. Uses i18next interpolation for `{{username}}` and `{{count}}`. |
+
+### Translated strings
+
+- Greeting: "Good morning/afternoon, {{username}} 👋" → "Bonjour / Bon après-midi, {{username}} 👋"
+- Subtitle: "Here's what's happening with your projects today." → "Voici l'activité de vos projets aujourd'hui."
+- StatCards: "Active Projects", "Employees", "Active Assignments", "Utilization" + sub-labels
+- Section heading: "Recent Active Projects" → "Projets actifs récents"
+- Empty state: "No projects yet" → "Aucun projet pour le moment"
+
+### Tier 1 progress
+
+| Page | Status |
+|---|---|
+| Dashboard | ✅ done (this section) |
+| Layout (top nav + sidebar) | ⏳ next |
+| Employees | ⏳ pending |
+| Projects | ⏳ pending |
+
+### Pointer for next sessions
+
+- **Web i18n: 2/30 pages translated** (Login + Dashboard).
+- **Tier 1 next: layout** (top nav + sidebar) — affects every authenticated screen.
