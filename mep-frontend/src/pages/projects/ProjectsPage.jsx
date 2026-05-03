@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
 import {
@@ -28,6 +29,7 @@ function StatusBadge({ code, name }) {
 
 // ── Address autocomplete ──────────────────────────────────────
 function AddressInput({ value, onChange, onCoords }) {
+  const { t } = useTranslation()
   const [suggestions, setSuggestions] = useState([])
   const [open, setOpen] = useState(false)
   const timer = useRef(null)
@@ -65,7 +67,7 @@ function AddressInput({ value, onChange, onCoords }) {
           onBlur={() => setTimeout(() => setOpen(false), 200)}
           onFocus={() => suggestions.length && setOpen(true)}
           className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light"
-          placeholder="Search address..."
+          placeholder={t('projects.modal.addressPlaceholder')}
         />
       </div>
       {open && suggestions.length > 0 && (
@@ -85,6 +87,7 @@ function AddressInput({ value, onChange, onCoords }) {
 
 // ── Project Modal ─────────────────────────────────────────────
 function ProjectModal({ project, meta, onClose, onSaved }) {
+  const { t } = useTranslation()
   const isEdit = !!project?.id
   const [form, setForm] = useState({
     project_name: project?.project_name || '',
@@ -114,15 +117,15 @@ function ProjectModal({ project, meta, onClose, onSaved }) {
       onSaved()
     },
     onError: (err) => {
-      setError(err.response?.data?.error || 'Failed to save project')
+      setError(err.response?.data?.error || t('projects.modal.errors.saveFailed'))
     }
   })
 
   const handleSubmit = (e) => {
     e.preventDefault()
     setError('')
-    if (!form.project_name.trim()) return setError('Project name is required')
-    if (!form.trade_type_id) return setError('Trade type is required')
+    if (!form.project_name.trim()) return setError(t('projects.modal.errors.projectNameRequired'))
+    if (!form.trade_type_id) return setError(t('projects.modal.errors.tradeTypeRequired'))
     mutation.mutate({ ...form, site_lat: coords?.lat, site_lng: coords?.lng })
   }
 
@@ -134,7 +137,7 @@ function ProjectModal({ project, meta, onClose, onSaved }) {
           <div className="flex items-center gap-2">
             <FolderKanban size={18} className="text-primary" />
             <h2 className="font-semibold text-slate-800">
-              {isEdit ? 'Edit Project' : 'New Project'}
+              {isEdit ? t('projects.modal.titleEdit') : t('projects.modal.titleNew')}
             </h2>
           </div>
           <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors">
@@ -146,30 +149,30 @@ function ProjectModal({ project, meta, onClose, onSaved }) {
           {/* Project Name */}
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
-              Project Name *
+              {t('projects.modal.projectName')}
             </label>
             <input
               type="text"
               value={form.project_name}
               onChange={e => set('project_name', e.target.value)}
               className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light"
-              placeholder="Enter project name"
+              placeholder={t('projects.modal.projectNamePlaceholder')}
             />
           </div>
 
           {/* CCQ Sector */}
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
-              CCQ Sector <span className="font-normal normal-case text-slate-400">(for travel allowance calculation)</span>
+              {t('projects.modal.ccqSector')} <span className="font-normal normal-case text-slate-400">{t('projects.modal.ccqSectorHint')}</span>
             </label>
             <select
               value={form.ccq_sector}
               onChange={e => set('ccq_sector', e.target.value)}
               className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light bg-white"
             >
-              <option value="IC">Institutionnel / Commercial (IC)</option>
-              <option value="INDUSTRIAL">Industriel (I)</option>
-              <option value="RESIDENTIAL">Résidentiel (R)</option>
+              <option value="IC">{t('projects.modal.ccqSectorIC')}</option>
+              <option value="INDUSTRIAL">{t('projects.modal.ccqSectorIndustrial')}</option>
+              <option value="RESIDENTIAL">{t('projects.modal.ccqSectorResidential')}</option>
             </select>
           </div>
 
@@ -177,29 +180,29 @@ function ProjectModal({ project, meta, onClose, onSaved }) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
-                Trade Type *
+                {t('projects.modal.tradeType')}
               </label>
               <select
                 value={form.trade_type_id}
                 onChange={e => set('trade_type_id', e.target.value)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light bg-white"
               >
-                <option value="">Select trade</option>
-                {meta?.trade_types?.map(t => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
+                <option value="">{t('projects.modal.selectTrade')}</option>
+                {meta?.trade_types?.map(tr => (
+                  <option key={tr.id} value={tr.id}>{tr.name}</option>
                 ))}
               </select>
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
-                Status
+                {t('projects.modal.status')}
               </label>
               <select
                 value={form.status_id}
                 onChange={e => set('status_id', e.target.value)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light bg-white"
               >
-                <option value="">Select status</option>
+                <option value="">{t('projects.modal.selectStatus')}</option>
                 {meta?.project_statuses?.map(s => (
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
@@ -210,7 +213,7 @@ function ProjectModal({ project, meta, onClose, onSaved }) {
           {/* Address */}
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
-              Site Address
+              {t('projects.modal.siteAddress')}
             </label>
             <AddressInput
               value={form.site_address}
@@ -219,7 +222,7 @@ function ProjectModal({ project, meta, onClose, onSaved }) {
             />
             {coords && (
               <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1">
-                <MapPin size={11} /> Coordinates saved ({coords.lat.toFixed(4)}, {coords.lng.toFixed(4)})
+                <MapPin size={11} /> {t('projects.modal.coordinatesSaved', { lat: coords.lat.toFixed(4), lng: coords.lng.toFixed(4) })}
               </p>
             )}
           </div>
@@ -228,7 +231,7 @@ function ProjectModal({ project, meta, onClose, onSaved }) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
-                Start Date
+                {t('projects.modal.startDate')}
               </label>
               <input
                 type="date"
@@ -239,7 +242,7 @@ function ProjectModal({ project, meta, onClose, onSaved }) {
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
-                End Date
+                {t('projects.modal.endDate')}
               </label>
               <input
                 type="date"
@@ -254,14 +257,14 @@ function ProjectModal({ project, meta, onClose, onSaved }) {
           {meta?.clients?.length > 0 && (
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
-                Client
+                {t('projects.modal.client')}
               </label>
               <select
                 value={form.client_id}
                 onChange={e => set('client_id', e.target.value)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light bg-white"
               >
-                <option value="">No client</option>
+                <option value="">{t('projects.modal.noClient')}</option>
                 {meta.clients.map(c => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
@@ -281,12 +284,12 @@ function ProjectModal({ project, meta, onClose, onSaved }) {
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={onClose}
               className="flex-1 px-4 py-2.5 border border-slate-200 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors">
-              Cancel
+              {t('projects.modal.cancel')}
             </button>
             <button type="submit" disabled={mutation.isPending}
               className="flex-1 px-4 py-2.5 bg-primary hover:bg-primary-dark disabled:opacity-60 text-white rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2">
               {mutation.isPending && <Loader2 size={14} className="animate-spin" />}
-              {isEdit ? 'Save Changes' : 'Create Project'}
+              {isEdit ? t('projects.modal.saveChanges') : t('projects.modal.createProject')}
             </button>
           </div>
         </form>
@@ -297,6 +300,7 @@ function ProjectModal({ project, meta, onClose, onSaved }) {
 
 // ── Main Page ─────────────────────────────────────────────────
 export default function ProjectsPage() {
+  const { t, i18n } = useTranslation()
   const [search, setSearch]     = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [modal, setModal]       = useState(null) // null | 'new' | project obj
@@ -322,22 +326,28 @@ export default function ProjectsPage() {
     return matchSearch && matchStatus
   })
 
-  const fmt = (d) => d ? new Date(d).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }) : '—'
+  // Section 56: localize the date format using the current i18n language.
+  // FR (Quebec): jj mmm aaaa (e.g. "12 mai 2026"); EN: dd Mmm yyyy.
+  const fmt = (d) => {
+    if (!d) return '—'
+    const locale = i18n.language === 'fr' ? 'fr-CA' : 'en-GB'
+    return new Date(d).toLocaleDateString(locale, { day: '2-digit', month: 'short', year: 'numeric' })
+  }
 
   return (
     <div className="p-8">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Projects</h1>
-          <p className="text-slate-500 text-sm mt-0.5">{projects.length} projects total</p>
+          <h1 className="text-2xl font-bold text-slate-800">{t('projects.title')}</h1>
+          <p className="text-slate-500 text-sm mt-0.5">{t('projects.subtitle', { count: projects.length })}</p>
         </div>
         <button
           onClick={() => setModal('new')}
           className="flex items-center gap-2 bg-primary hover:bg-primary-dark text-white px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors"
         >
           <Plus size={16} />
-          New Project
+          {t('projects.newButton')}
         </button>
       </div>
 
@@ -349,7 +359,7 @@ export default function ProjectsPage() {
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search projects..."
+            placeholder={t('projects.searchPlaceholder')}
             className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-light"
           />
         </div>
@@ -360,7 +370,7 @@ export default function ProjectsPage() {
             onChange={e => setFilterStatus(e.target.value)}
             className="pl-8 pr-8 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-light appearance-none"
           >
-            <option value="">All Statuses</option>
+            <option value="">{t('projects.allStatuses')}</option>
             {meta?.project_statuses?.map(s => (
               <option key={s.code} value={s.code}>{s.name}</option>
             ))}
@@ -377,21 +387,21 @@ export default function ProjectsPage() {
         ) : filtered.length === 0 ? (
           <div className="text-center py-16">
             <FolderKanban size={32} className="mx-auto text-slate-300 mb-3" />
-            <p className="text-slate-500 font-medium">No projects found</p>
+            <p className="text-slate-500 font-medium">{t('projects.empty')}</p>
             <p className="text-slate-400 text-sm mt-1">
-              {search || filterStatus ? 'Try adjusting your filters' : 'Create your first project'}
+              {search || filterStatus ? t('projects.emptyFiltered') : t('projects.emptyDefault')}
             </p>
           </div>
         ) : (
           <table className="w-full">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50">
-                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Code</th>
-                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Project Name</th>
-                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Trade</th>
-                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Status</th>
-                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Dates</th>
-                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Address</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{t('projects.th.code')}</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{t('projects.th.projectName')}</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{t('projects.th.trade')}</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{t('projects.th.status')}</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{t('projects.th.dates')}</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{t('projects.th.address')}</th>
                 <th className="px-5 py-3"></th>
               </tr>
             </thead>
@@ -425,7 +435,7 @@ export default function ProjectsPage() {
                         <MapPin size={11} className="text-slate-400 mt-0.5 flex-shrink-0" />
                         <span className="text-xs text-slate-500 truncate">{p.site_address}</span>
                       </div>
-                    ) : <span className="text-slate-300 text-xs">No address</span>}
+                    ) : <span className="text-slate-300 text-xs">{t('projects.noAddress')}</span>}
                   </td>
                   <td className="px-5 py-3.5">
                     <button
