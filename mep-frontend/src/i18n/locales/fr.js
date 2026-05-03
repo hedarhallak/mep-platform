@@ -17,6 +17,16 @@ export default {
     fr: 'Français',
   },
 
+  trades: {
+    all: 'Tous les métiers',
+    plumbing: 'Plomberie',
+    electrical: 'Électricité',
+    hvac: 'CVAC',
+    carpentry: 'Charpenterie',
+    elevatorTech: "Mécanicien d'ascenseur",
+    general: 'Général',
+  },
+
   nav: {
     dashboard: 'Tableau de bord',
     employees: 'Employés',

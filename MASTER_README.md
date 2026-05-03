@@ -3,8 +3,8 @@
 > Production: https://app.constrai.ca
 > Website: https://www.constrai.ca (Coming Soon landing page)
 > Server: root@143.110.218.84
-> Latest DECISIONS section: **Section 57** (SuppliersPage i18n — Tier 2 batch 1/5)
-> Active program: **Web Tier 2 i18n — 1/5 done** (Suppliers ✅, Attendance, MaterialRequest, PurchaseOrders, Assignments pending).
+> Latest DECISIONS section: **Section 58** (TRADES constants i18n — shared bucket for all trade dropdowns)
+> Active program: **Web Tier 2 i18n — 1/5 done** (Suppliers ✅, Attendance, MaterialRequest, PurchaseOrders, Assignments pending). Plus `trades.*` bucket for shared trade dropdowns.
 > **Customer #1 status:** unsigned (constraint per Section 46). Engineering rigor work is paused pending revenue.
 > **Prod is in sync with main**. `APP_NAME=Constrai` + `VITE_MAPBOX_TOKEN` live. Tab title "Constrai" everywhere.
 > **Deploy command** (after `ssh root@143.110.218.84`): `bash /var/www/mep/scripts/deploy.sh` — see Section 53/54 for behavior.

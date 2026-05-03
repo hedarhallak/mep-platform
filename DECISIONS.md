@@ -5877,3 +5877,58 @@ The page filters by trade code via the `TRADES` constants array (`mep-frontend/s
 - **Tier 2: 1/5 done.**
 - **Web i18n total: 6/30 pages.**
 - **Today: 15 sections.** New record. Hedar still going.
+
+---
+
+## Section 58 — TRADES constants i18n (May 3, 2026, very late evening)
+
+Quick polish section. Section 57 left `mep-frontend/src/constants/trades.js` with hardcoded EN labels (`'Plumbing'`, `'Electrical'`, etc.) which surfaced in SuppliersPage's filter buttons and modal trade selector. Even after Section 57 shipped, those buttons displayed in EN regardless of the user's chosen language.
+
+### What shipped
+
+- **`trades.*` bucket** added to `en.js` + `fr.js` (top-level, not nested under any page bucket — they're shared).
+- **`constants/trades.js`** refactored: `TRADES` array now stores `labelKey` (i18n key) instead of pre-translated `label`. Same indirection pattern as `mainNav` in `AppLayout.jsx`.
+- **`SuppliersPage.jsx`** updated in two places (filter buttons in header + trade selector in `SupplierModal`) to use `t(tr.labelKey)` instead of `tr.label`.
+
+### Quebec FR conventions
+
+| EN | Quebec FR | Note |
+|---|---|---|
+| All Trades | Tous les métiers | |
+| Plumbing | Plomberie | |
+| Electrical | Électricité | |
+| HVAC | CVAC | Quebec FR acronym for *Chauffage, Ventilation, Air Climatisé* — the standard CCQ trade designation |
+| Carpentry | Charpenterie | (vs France's "Menuiserie" which is finer woodworking — Quebec construction uses "Charpenterie") |
+| Elevator Technician | Mécanicien d'ascenseur | CCQ-aligned trade title |
+| General | Général | |
+
+`CVAC` is particularly important — it's the trade code that Quebec construction firms use on contracts, ROC permits, and CCQ payroll. Using "HVAC" in a French UI would look like an untranslated string to a Quebec foreman.
+
+### Why this is a separate section, not bundled into 57
+
+`constants/trades.js` is shared infrastructure (currently only consumed by SuppliersPage, but referenced in the Section 57 backlog as needing translation). Pulling it into 57's PR would have crossed the boundary between "page-level i18n" and "shared-constants i18n." Keeping it isolated here means:
+
+- Future sessions translating Materials / Employees filters can drop in this same `trades.*` bucket without diff conflicts.
+- The labelKey indirection pattern is documented as a deliberate choice, not a side-effect.
+
+### Refactoring detail — `labelKey` vs runtime helper
+
+Two valid approaches were considered:
+
+1. **`labelKey` in the array** (chosen) — array stores `{ value, labelKey }`, components resolve via `t(item.labelKey)`. Same as `mainNav` / `EmployeesPage.ALL_ROLES_KEYS`.
+2. **`getTradesLocalized(t)` helper** — array stores raw codes, helper returns `[{ value, label }]` with translated labels.
+
+Option 1 keeps the array static (readable in DevTools, no recomputation per render), and consumers control when they call `t()`. Option 2 hides the i18n call but pays a small cost: the array gets recomputed on every render unless memoized.
+
+Picked option 1 for consistency with prior i18n patterns in this codebase (Sections 50, 55).
+
+### Backlog from this section
+
+- **(P3)** When MaterialRequestPage / EmployeesPage filters get translated, the `trades.*` bucket already exists — drop in `t(tr.labelKey)` directly.
+- **(P3)** `TRADE_MAP` in `trades.js` still has `ELEVATOR_TECH` as a code but it's not in the public `TRADES` dropdown array. Either expose it or remove the orphan entry.
+
+### Pointer for next sessions
+
+- **Tier 2: 1/5** still (Section 58 was a horizontal polish, not a page).
+- **Web i18n total: 6/30 pages + shared `trades.*` bucket.**
+- **Today: 16 sections.** Hedar still going.

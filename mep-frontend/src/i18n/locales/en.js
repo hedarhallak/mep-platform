@@ -17,6 +17,16 @@ export default {
     fr: 'Français',
   },
 
+  trades: {
+    all: 'All Trades',
+    plumbing: 'Plumbing',
+    electrical: 'Electrical',
+    hvac: 'HVAC',
+    carpentry: 'Carpentry',
+    elevatorTech: 'Elevator Technician',
+    general: 'General',
+  },
+
   nav: {
     dashboard: 'Dashboard',
     employees: 'Employees',
