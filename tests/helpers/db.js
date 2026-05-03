@@ -113,7 +113,11 @@ async function ensureSeedData() {
        ('hub.receive_tasks',          'Receive hub tasks',       'hub'),
        ('materials.catalog_view',     'View materials catalog',  'materials'),
        ('materials.surplus_view',     'View materials surplus',  'materials'),
+       ('materials.surplus_declare',  'Declare surplus materials','materials'),
        ('hub.materials_inbox',        'Materials inbox',         'hub'),
+       ('hub.materials_merge_send',   'Merge & send materials',  'hub'),
+       ('purchase_orders.view',       'View purchase orders',    'purchase_orders'),
+       ('purchase_orders.print',      'Print PO PDF',            'purchase_orders'),
        ('employees.invite',           'Invite new employees',    'employees')
      ON CONFLICT (code) DO NOTHING`
   );
@@ -147,7 +151,11 @@ async function ensureSeedData() {
        ('COMPANY_ADMIN', 'hub.receive_tasks'),
        ('COMPANY_ADMIN', 'materials.catalog_view'),
        ('COMPANY_ADMIN', 'materials.surplus_view'),
+       ('COMPANY_ADMIN', 'materials.surplus_declare'),
        ('COMPANY_ADMIN', 'hub.materials_inbox'),
+       ('COMPANY_ADMIN', 'hub.materials_merge_send'),
+       ('COMPANY_ADMIN', 'purchase_orders.view'),
+       ('COMPANY_ADMIN', 'purchase_orders.print'),
        ('COMPANY_ADMIN', 'employees.invite')
      ON CONFLICT (role, permission_code) DO NOTHING`
   );
