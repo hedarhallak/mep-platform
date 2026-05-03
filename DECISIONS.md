@@ -4690,3 +4690,87 @@ State after Section 43 merges:
 - **Total backend tests:** 553 across 65 suites (was 245+ at start of Section 22; +6.04 pp lines from Phase 73d, +6.64 pp from 75a kickoff).
 - **Bug 9** still pinned, fix still deferred. Fold into the next `routes/assignments.js` change.
 - **Feature work returns to front of queue.** Section 39's calibration verdict is back in force: don't add new rigor without a proven failure mode.
+
+---
+
+## Section 44 — Bug 9 fix + Phase 74 (DR runbook) — May 3, 2026 evening
+
+Two short closeouts shipped after Section 43 closed. Both were on the post-Section-40 follow-up list and shipped same-day.
+
+### Bug 9 — fixed (PR #72)
+
+`routes/assignments.js:935` SAME_PROJECT guard was dead code: `r.project_id === Number(new_project_id)` strict-compared a node-pg string against a JS Number, always returning false. Fix coerces both sides:
+
+```js
+if (Number(r.project_id) === Number(new_project_id)) {
+  return res.status(400).json({ ok: false, error: 'SAME_PROJECT', ... });
+}
+```
+
+The pinned test in `assignments_phase75a.test.js` (line 241, originally `expect(200)` to document buggy behaviour) flipped to `expect(400) + SAME_PROJECT`. The accompanying comment block changed from "FIXME: pinned-bug" to "Bug 9 fix verified".
+
+**Codebase sweep for the same pattern:**
+```
+grep -nE '\.[a-z_]+_id\s*===\s*Number\(' routes/
+grep -nE 'Number\([^)]+\)\s*===\s*[a-z]+\.[a-z_]+_id' routes/
+```
+Both returned **zero matches** — Bug 9 was an isolated occurrence, not a systemic issue. The convention now established in code (coerce both sides when comparing pg-loaded ids) is documented; future routes follow the pattern by default.
+
+### Phase 74 — DR runbook (PR #73, this docs PR)
+
+Section 22 had Phase 74 marked as "DR runbook (operational docs, not test rigor)" but never specified what it would contain beyond the existing `RECOVERY.md`. Reviewing the existing file showed it was already strong on **strategic** continuity (system inventory, credential storage, DB / server / domain / mobile / GitHub recovery, quarterly verification, monitoring). The actual gap was **tactical** — per-failure-mode incident response.
+
+Phase 74 fills that gap by adding two new sections to `RECOVERY.md`:
+
+**Section 11 — Incident Response Runbooks.** Eleven specific failure modes, each with: symptoms → diagnose commands → common causes & fixes → escalation criteria. Covered:
+
+| § | Failure mode |
+|---|---|
+| 11.1 | Backend offline (pm2 / Node OOM / startup crash) |
+| 11.2 | Database connection errors (Postgres down / pool exhaustion / disk full) |
+| 11.3 | Backup cron broken (file-mode regression / Spaces credential rotation / cron stopped) |
+| 11.4 | SSL cert renewal failed (Nginx config / port 80 / rate limit) |
+| 11.5 | High latency (N+1 query / vacuum needed / disk thrashing / missing index) |
+| 11.6 | SendGrid email quota / bounces / API key revoked |
+| 11.7 | Mobile push notifications not arriving (token / Expo project drift) |
+| 11.8 | Sentry alert spam (real bug vs noise vs integration) |
+| 11.9 | UptimeRobot false positives (timeout tuning) |
+| 11.10 | Disk full (log truncation / pm2 flush / Postgres data growth) |
+| 11.11 | DNS misconfiguration after registrar change |
+
+Each runbook is ~10-25 lines with **runnable commands** (not pseudo-code) and **explicit escalate-when triggers**. Pattern matches Section 8.5's existing UptimeRobot/Sentry response structure.
+
+**Section 12 — Post-Incident Retro Template.** Four-question format (what / root cause / fix in moment / prevention) for every incident logged in Section 9. Keeps the retro under 10 minutes; details live in git history, not in the table.
+
+### Convention captured for next sessions
+
+- **For DR / runbook docs: extend `RECOVERY.md`, don't create new files.** Per CLAUDE.md Section 3.7 ("No new files unless necessary"). The strategic + tactical split is two sections of one document, not two files.
+- **Each new failure mode discovered in production should add a runbook entry.** Section 11 starts with 11 entries; Section 9's incident log will surface gaps, and each gap should backfill a Section 11 entry.
+- **Bug 9-style finds (pattern bugs surfaced by tests):** sweep with `grep` for the same pattern across `routes/`, `services/`, `lib/` before closing. Phase 75 test infra is now load-bearing on this — a test that pins a bug must also confirm the bug isn't elsewhere.
+
+### Files touched (Bug 9 + Phase 74)
+
+| File | Change | Where |
+|---|---|---|
+| `routes/assignments.js` | Bug 9 fix — line 935 SAME_PROJECT coerce both sides | merged via PR #72 |
+| `tests/integration/assignments_phase75a.test.js` | flip pinned test to expect 400 SAME_PROJECT | merged via PR #72 |
+| `RECOVERY.md` | new Sections 11 + 12 (incident runbooks + retro template) | pending in `docs/section44-phase74-dr-runbook` |
+| `DECISIONS.md` | Section 44 (this) | pending in same docs PR |
+| `MASTER_README.md` | header pointer refresh | pending in same docs PR |
+
+### Commit / push checklist
+
+```powershell
+git checkout -b docs/section44-phase74-dr-runbook
+git add RECOVERY.md DECISIONS.md MASTER_README.md
+git commit -m "docs(section44): Bug 9 closeout + Phase 74 DR runbook (Sections 11-12 in RECOVERY.md)"
+git push -u origin docs/section44-phase74-dr-runbook
+```
+
+### Pointer for next sessions
+
+State after Section 44 merges:
+- **Section 22 final outstanding item closed.** Phase 74 done.
+- **Bug 9 closed.** No more pinned bugs in the test suite.
+- **Open follow-ups:** (ج) Frontend (web) i18n + (د) 2-week feature roadmap. Both queued for tonight or next session.
+- **Operational posture:** RECOVERY.md is now both a continuity doc and an incident-response runbook. Update Section 9 (incident log) + the relevant Section 11 entry after every prod incident. Quarterly verification (Section 8) still applies.
