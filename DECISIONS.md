@@ -5427,3 +5427,86 @@ Recommendation: option 1 immediately (no work needed beyond editing CLAUDE.md), 
 - **Prod is now in sync with main** (commit `dd5cab6`). Future sessions should NOT see another 31-commit drift if the deploy convention from this section's "Lesson encoded" is followed.
 - **MASTER_README's "Server-side env update pending" note can now be removed.** Both `APP_NAME=Constrai` and `VITE_MAPBOX_TOKEN` are live.
 - **Today wrapped at 10 sections.** That's the new high-water mark for a single-day session. Next session should be ≤2 sections by design.
+
+---
+
+## Section 53 — `scripts/deploy.sh` (May 3, 2026, late evening)
+
+Section 52's "Lesson encoded" listed three options to fix the deploy-after-merge process: (1) manual discipline, (2) deploy script, (3) GitHub Action auto-deploy. Hedar picked option 2 the same evening. This section ships it.
+
+### What was built
+
+A single bash script: `scripts/deploy.sh`. Runs on the prod server (Linux), encodes the 10-step sequence from Section 52 verbatim. Idempotent — running twice in a row is safe; the second run is a no-op when main hasn't moved.
+
+### Usage
+
+After SSH'ing in:
+
+```
+ssh root@143.110.218.84
+```
+
+then on the server:
+
+```bash
+bash /var/www/mep/scripts/deploy.sh
+```
+
+That's it. The script handles backup, lockfile reset, pull, conditional install, build, rsync, pm2 restart, and health check.
+
+### What the script does
+
+1. Verifies it's on `main` and captures the starting commit SHA (aborts otherwise).
+2. Backs up `.env` to `.env.bak.YYYYMMDD-HHMMSS`.
+3. Resets `package-lock.json` and `mep-frontend/package-lock.json` to discard prior local drift.
+4. `git pull origin main`. If no commits pulled, restarts pm2 anyway (to pick up `.env` edits) and exits.
+5. Diffs the pulled commits to detect which areas changed: `backend` (routes, services, etc.), `frontend` (mep-frontend/src, public, etc.).
+6. Conditionally runs `npm install --production` on backend (tolerates the husky postinstall non-fatal error documented in Section 52).
+7. Conditionally runs `npm install` + `npm run build` + `rsync --delete dist/ → public/` on frontend.
+8. `pm2 restart mep-backend --update-env` (always — picks up env changes).
+9. Sleeps 3 seconds, then `curl /api/health/deep`. Aborts with non-zero exit if `ok:true` is missing in the response.
+10. Prints a summary line.
+
+### What the script does NOT do
+
+- **Does not run database migrations.** Migrations remain explicit; run `node scripts/migrate.js` separately when needed. Auto-running migrations as part of deploy is a foot-gun for prod databases.
+- **Does not roll back automatically.** On health-check failure, the script prints the manual rollback command (`git reset --hard ${BEFORE_SHA}`) and exits non-zero. Manual is intentional — automated rollback in a stateful system can make recovery harder, not easier.
+- **Does not touch the marketing landing page** (separate path: `/var/www/constrai-landing`). That deploy is its own thing.
+
+### `.gitattributes` added
+
+A new repo-root `.gitattributes` enforces LF line endings for `*.sh`, `*.sql`, `*.md`, `*.yml`, `*.yaml`, `*.json`. Reason: Hedar's laptop is Windows, where git's default `core.autocrlf=true` would convert LF → CRLF on commit. A `\r` at the end of the shebang (`#!/usr/bin/env bash\r`) makes Linux refuse to execute the script ("bad interpreter"). Without the gitattributes, `deploy.sh` could mysteriously fail on prod despite working in local testing. Cheap insurance — 8-line file, one-time fix.
+
+### Lesson encoded — gates this script absorbs
+
+Section 52 documented three pitfalls hit during the manual deploy. The script absorbs all three:
+
+| Pitfall (Section 52) | How the script handles it |
+|---|---|
+| `package-lock.json` drift blocks `git pull` | Runs `git checkout -- package-lock.json` before pull (Step 3) |
+| `npm install --production` fails on husky postinstall | Wraps with `\|\| log WARN`, treats as non-fatal (Step 6) |
+| Browser cache serves old bundle after deploy | Out of script scope — but flagged in Section 52 verification convention (use incognito post-deploy) |
+
+The first two are now invisible to the operator. The third remains a manual verification step.
+
+### Test plan
+
+This section's PR shouldn't merge without a self-test. After the PR merges:
+
+1. SSH to prod.
+2. Run `bash /var/www/mep/scripts/deploy.sh`.
+3. Expected: pulls 1 commit (the PR itself), no backend changes detected (it's docs + script), frontend unchanged, pm2 restarts, health probe passes, summary prints.
+
+If anything goes wrong, manual rollback is `git reset --hard <BEFORE_SHA>` on prod.
+
+### Backlog from this section
+
+- **(P3)** Add a `--dry-run` flag to `deploy.sh` (print actions without executing). Low priority; the current script is short enough to read end-to-end before running.
+- **(P2)** GitHub Action auto-deploy on merge to main. The Action would just SSH in and run this same script. Small wrapper, big leverage. Section 52 listed this as option 3.
+- **(P3)** Slack/email notification on deploy success/failure. Cosmetic; pm2 logs already capture state.
+
+### Pointer for next sessions
+
+- **Deploy convention is now `bash /var/www/mep/scripts/deploy.sh`.** Whenever a session merges PRs to main that touch runtime code, follow with one SSH session that runs this script. Sub-minute operation when nothing changed; ~3 minutes when frontend rebuild is needed.
+- **The script is the source of truth for the deploy sequence.** When the sequence needs to evolve (new env var, new build step, new health check), update this script — don't keep parallel docs in DECISIONS.md.
+- **Today wrapped at 11 sections (1 + 10).** Section 53 is small but ships a tool that makes every future session lighter. Worth ending on it.
