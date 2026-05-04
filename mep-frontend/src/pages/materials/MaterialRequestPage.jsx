@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import api from '@/lib/api'
 import { usePermissions } from '@/hooks/usePermissions.jsx'
 import {
@@ -17,14 +18,31 @@ const STATUS_STYLE = {
   CANCELLED: 'bg-slate-100 text-slate-400',
 }
 
+const STATUS_KEYS = ['PENDING', 'REVIEWED', 'MERGED', 'SENT', 'CANCELLED']
+
+// Section 61: status badge translates the code at render time.
+function StatusBadge({ status }) {
+  const { t } = useTranslation()
+  const style = STATUS_STYLE[status] || STATUS_STYLE.PENDING
+  const label = t(`materials.statusBadge.${status || 'PENDING'}`)
+  return (
+    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${style}`}>
+      {label}
+    </span>
+  )
+}
+
 // ── My Requests Tab ───────────────────────────────────────────
 function MyRequestsTab() {
+  const { t, i18n } = useTranslation()
   const [requests, setRequests] = useState([])
   const [loading, setLoading]   = useState(true)
   const [projects, setProjects] = useState([])
   const [filterProj, setFilterProj] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [selected, setSelected] = useState(null) // detail view
+
+  const locale = i18n.language === 'fr' ? 'fr-CA' : 'en-CA'
 
   const fetchRequests = async () => {
     setLoading(true)
@@ -55,7 +73,7 @@ function MyRequestsTab() {
     <div className="space-y-4">
       <button onClick={() => setSelected(null)}
         className="flex items-center gap-1.5 text-xs font-semibold text-primary hover:text-primary-dark transition-colors">
-        ← Back to My Requests
+        {t('materials.my.backToList')}
       </button>
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
@@ -63,12 +81,10 @@ function MyRequestsTab() {
             <div className="flex items-center gap-2">
               <span className="text-sm font-bold text-slate-800">{selected.project_code}</span>
               {selected.project_name && <span className="text-xs text-slate-400">— {selected.project_name}</span>}
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${STATUS_STYLE[selected.status] || STATUS_STYLE.PENDING}`}>
-                {selected.status}
-              </span>
+              <StatusBadge status={selected.status} />
             </div>
             <div className="text-[10px] text-slate-400 mt-1">
-              {new Date(selected.created_at).toLocaleString('en-CA', { dateStyle: 'medium', timeStyle: 'short' })}
+              {new Date(selected.created_at).toLocaleString(locale, { dateStyle: 'medium', timeStyle: 'short' })}
             </div>
           </div>
         </div>
@@ -80,11 +96,11 @@ function MyRequestsTab() {
         <table className="w-full">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-100">
-              <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-5 py-3">#</th>
-              <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-5 py-3">Item</th>
-              <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-5 py-3">Qty</th>
-              <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-5 py-3">Unit</th>
-              {selected.items?.some(i => i.note) && <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-5 py-3">Note</th>}
+              <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-5 py-3">{t('materials.my.th.index')}</th>
+              <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-5 py-3">{t('materials.my.th.item')}</th>
+              <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-5 py-3">{t('materials.my.th.qty')}</th>
+              <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-5 py-3">{t('materials.my.th.unit')}</th>
+              {selected.items?.some(i => i.note) && <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-5 py-3">{t('materials.my.th.note')}</th>}
             </tr>
           </thead>
           <tbody>
@@ -109,35 +125,35 @@ function MyRequestsTab() {
       <div className="flex items-center gap-3 flex-wrap">
         <select value={filterProj} onChange={e => setFilterProj(e.target.value)}
           className="px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary-light text-slate-600">
-          <option value="">All Projects</option>
+          <option value="">{t('materials.my.allProjects')}</option>
           {projects.map(p => <option key={p.id} value={p.id}>{p.code}{p.name ? ` — ${p.name}` : ''}</option>)}
         </select>
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
           className="px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary-light text-slate-600">
-          <option value="">All Statuses</option>
-          {['PENDING','REVIEWED','MERGED','SENT','CANCELLED'].map(s => <option key={s} value={s}>{s}</option>)}
+          <option value="">{t('materials.my.allStatuses')}</option>
+          {STATUS_KEYS.map(s => <option key={s} value={s}>{t(`materials.statusBadge.${s}`)}</option>)}
         </select>
         <button onClick={fetchRequests} className="p-2 text-slate-400 hover:bg-slate-100 rounded-lg transition-colors">
           <RefreshCw className="w-3.5 h-3.5" />
         </button>
-        <span className="text-xs text-slate-400 ml-auto">{filtered.length} requests</span>
+        <span className="text-xs text-slate-400 ml-auto">{t('materials.my.requestsCount', { count: filtered.length })}</span>
       </div>
 
       {/* Table */}
       {filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <ClipboardList className="w-10 h-10 text-slate-200 mb-3" />
-          <p className="text-sm font-semibold text-slate-400">No requests found</p>
+          <p className="text-sm font-semibold text-slate-400">{t('materials.my.empty')}</p>
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
           <table className="w-full">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-100">
-                <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">Date</th>
-                <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">Project</th>
-                <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">Items</th>
-                <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">Status</th>
+                <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">{t('materials.my.th.date')}</th>
+                <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">{t('materials.my.th.project')}</th>
+                <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">{t('materials.my.th.items')}</th>
+                <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">{t('materials.my.th.status')}</th>
                 <th className="px-4 py-2.5"></th>
               </tr>
             </thead>
@@ -146,7 +162,7 @@ function MyRequestsTab() {
                 <tr key={req.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60 transition-colors cursor-pointer"
                   onClick={() => setSelected(req)}>
                   <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
-                    {new Date(req.created_at).toLocaleString('en-CA', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    {new Date(req.created_at).toLocaleString(locale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                   </td>
                   <td className="px-4 py-3">
                     <span className="text-sm font-semibold text-slate-700">{req.project_code}</span>
@@ -154,12 +170,10 @@ function MyRequestsTab() {
                   </td>
                   <td className="px-4 py-3 text-xs text-slate-500">
                     {(req.items || []).slice(0, 2).map(it => it.item_name).join(', ')}
-                    {(req.items || []).length > 2 && <span className="text-slate-400"> +{req.items.length - 2} more</span>}
+                    {(req.items || []).length > 2 && <span className="text-slate-400"> {t('materials.my.moreSuffix', { count: req.items.length - 2 })}</span>}
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${STATUS_STYLE[req.status] || STATUS_STYLE.PENDING}`}>
-                      {req.status}
-                    </span>
+                    <StatusBadge status={req.status} />
                   </td>
                   <td className="px-4 py-3">
                     <ChevronRight className="w-4 h-4 text-slate-300" />
@@ -175,6 +189,7 @@ function MyRequestsTab() {
 }
 
 function ItemRow({ item, index, onChange, onRemove }) {
+  const { t } = useTranslation()
   const [suggestions, setSuggestions] = useState([])
   const [showSuggestions, setShowSuggestions] = useState(false)
   const debounceRef = useRef(null)
@@ -213,7 +228,7 @@ function ItemRow({ item, index, onChange, onRemove }) {
           onChange={e => handleNameChange(e.target.value)}
           onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
           onFocus={() => item.item_name.length >= 2 && suggestions.length && setShowSuggestions(true)}
-          placeholder="e.g. Copper pipe 3/4 inch"
+          placeholder={t('materials.new.itemNamePlaceholder')}
           className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light placeholder:text-slate-300"
         />
         {showSuggestions && suggestions.length > 0 && (
@@ -223,7 +238,7 @@ function ItemRow({ item, index, onChange, onRemove }) {
                 className="w-full flex items-center justify-between px-3 py-2 hover:bg-primary-pale transition-colors text-left">
                 <span className="text-sm text-slate-700">{s.item_name}</span>
                 <span className="text-[10px] text-slate-400 ml-2 flex-shrink-0">
-                  {s.default_unit} · used {s.use_count}×
+                  {s.default_unit} · {t('materials.new.catalogUsed', { count: s.use_count })}
                 </span>
               </button>
             ))}
@@ -234,7 +249,7 @@ function ItemRow({ item, index, onChange, onRemove }) {
             type="text"
             value={item.note}
             onChange={e => onChange(index, 'note', e.target.value)}
-            placeholder="Note (optional)"
+            placeholder={t('materials.new.itemNotePlaceholder')}
             className="w-full px-3 py-1.5 border border-slate-100 rounded-lg text-xs mt-1 focus:outline-none focus:ring-1 focus:ring-primary-pale placeholder:text-slate-300 bg-slate-50"
           />
         )}
@@ -246,7 +261,7 @@ function ItemRow({ item, index, onChange, onRemove }) {
         step="1"
         value={item.quantity}
         onChange={e => onChange(index, 'quantity', Math.floor(Math.abs(e.target.value)) || '')}
-        placeholder="Qty"
+        placeholder={t('materials.new.qtyPlaceholder')}
         className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light text-center"
       />
       {/* Unit */}
@@ -272,6 +287,7 @@ function ItemRow({ item, index, onChange, onRemove }) {
 }
 
 export default function MaterialRequestPage() {
+  const { t } = useTranslation()
   const { can, loading: permsLoading } = usePermissions()
   const [tab, setTab]               = useState('new')
   const [todayAssignment, setTodayAssignment] = useState(null)
@@ -325,10 +341,10 @@ export default function MaterialRequestPage() {
 
   const handleSubmit = async () => {
     setError('')
-    if (!selectedProj) return setError('Select a project')
+    if (!selectedProj) return setError(t('materials.new.errors.selectProject'))
 
     const validItems = items.filter(it => it.item_name.trim() && Number(it.quantity) >= 1)
-    if (!validItems.length) return setError('Add at least one item with name and quantity')
+    if (!validItems.length) return setError(t('materials.new.errors.addItem'))
 
     setSaving(true)
     try {
@@ -360,20 +376,22 @@ export default function MaterialRequestPage() {
       <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mb-4">
         <Check className="w-8 h-8 text-emerald-600" />
       </div>
-      <h2 className="text-lg font-bold text-slate-800 mb-2">Request Submitted!</h2>
-      <p className="text-sm text-slate-400 mb-6">Your foreman will review it shortly.</p>
+      <h2 className="text-lg font-bold text-slate-800 mb-2">{t('materials.success.title')}</h2>
+      <p className="text-sm text-slate-400 mb-6">{t('materials.success.body')}</p>
       <div className="flex gap-3">
         <button onClick={handleReset}
           className="px-6 py-2.5 bg-primary text-white text-sm font-bold rounded-xl hover:bg-primary-dark transition-colors">
-          New Request
+          {t('materials.success.newRequest')}
         </button>
         <button onClick={() => { handleReset(); setTab('my') }}
           className="px-6 py-2.5 bg-white border border-slate-200 text-slate-600 text-sm font-semibold rounded-xl hover:bg-slate-50 transition-colors">
-          My Requests
+          {t('materials.success.myRequests')}
         </button>
       </div>
     </div>
   )
+
+  const validItemCount = items.filter(i => i.item_name.trim()).length
 
   return (
     <div className="flex flex-col h-screen bg-slate-50 overflow-hidden">
@@ -385,20 +403,20 @@ export default function MaterialRequestPage() {
             <Package className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-slate-900">Material Request</h1>
-            <p className="text-xs text-slate-400 mt-0.5">Request materials for your project</p>
+            <h1 className="text-lg font-bold text-slate-900">{t('materials.title')}</h1>
+            <p className="text-xs text-slate-400 mt-0.5">{t('materials.subtitle')}</p>
           </div>
         </div>
         <div className="flex items-center gap-1">
           {[
-            { id: 'new', icon: Plus,          label: 'New Request'  },
-            { id: 'my',  icon: ClipboardList, label: 'My Requests'  },
-          ].map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)}
+            { id: 'new', icon: Plus,          labelKey: 'materials.tabs.new' },
+            { id: 'my',  icon: ClipboardList, labelKey: 'materials.tabs.my'  },
+          ].map(tabItem => (
+            <button key={tabItem.id} onClick={() => setTab(tabItem.id)}
               className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${
-                tab === t.id ? 'bg-primary text-white' : 'text-slate-500 hover:bg-slate-100'
+                tab === tabItem.id ? 'bg-primary text-white' : 'text-slate-500 hover:bg-slate-100'
               }`}>
-              <t.icon className="w-3.5 h-3.5" />{t.label}
+              <tabItem.icon className="w-3.5 h-3.5" />{t(tabItem.labelKey)}
             </button>
           ))}
         </div>
@@ -418,7 +436,7 @@ export default function MaterialRequestPage() {
 
         {/* Project */}
         <div>
-          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Project</label>
+          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">{t('materials.new.project')}</label>
           {todayAssignment ? (
             <div className="flex items-center gap-3 px-4 py-3 bg-primary-pale border border-primary-pale rounded-xl max-w-sm">
               <div className="w-2 h-2 rounded-full bg-primary-light flex-shrink-0" />
@@ -426,13 +444,13 @@ export default function MaterialRequestPage() {
                 <div className="text-sm font-bold text-primary-dark">
                   {todayAssignment.project_code}{todayAssignment.project_name ? ` — ${todayAssignment.project_name}` : ''}
                 </div>
-                <div className="text-[10px] text-primary-light mt-0.5">Today's assignment · {todayAssignment.assignment_role}</div>
+                <div className="text-[10px] text-primary-light mt-0.5">{t('materials.new.todayAssignmentSuffix')} · {todayAssignment.assignment_role}</div>
               </div>
             </div>
           ) : (
             <select value={selectedProj} onChange={e => setSelectedProj(e.target.value)}
               className="w-full max-w-sm px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-light">
-              <option value="">Select project...</option>
+              <option value="">{t('materials.new.selectProject')}</option>
               {projects.map(p => (
                 <option key={p.id} value={p.id}>
                   {p.project_code}{p.project_name ? ` — ${p.project_name}` : ''}
@@ -445,11 +463,11 @@ export default function MaterialRequestPage() {
         {/* Items */}
         <div>
           <div className="flex items-center justify-between mb-3">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Items</label>
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('materials.new.items')}</label>
             <div className="flex items-center gap-2 text-[10px] text-slate-400">
-              <span>Name</span>
-              <span className="w-[100px] text-center">Quantity</span>
-              <span className="w-[80px] text-center">Unit</span>
+              <span>{t('materials.new.colName')}</span>
+              <span className="w-[100px] text-center">{t('materials.new.colQty')}</span>
+              <span className="w-[80px] text-center">{t('materials.new.colUnit')}</span>
               <span className="w-8" />
             </div>
           </div>
@@ -467,7 +485,7 @@ export default function MaterialRequestPage() {
                 <button
                   onClick={() => toggleNote(i)}
                   className="text-[10px] text-primary-light hover:text-primary transition-colors font-semibold">
-                  {item.note === undefined ? '+ Add note' : '− Remove note'}
+                  {item.note === undefined ? t('materials.new.addNote') : t('materials.new.removeNote')}
                 </button>
               </div>
             ))}
@@ -475,20 +493,20 @@ export default function MaterialRequestPage() {
 
           <button onClick={addItem}
             className="mt-3 flex items-center gap-2 px-4 py-2 bg-white border border-dashed border-slate-300 text-slate-500 text-xs font-semibold rounded-xl hover:border-primary-light hover:text-primary transition-colors w-full justify-center">
-            <Plus className="w-3.5 h-3.5" />Add Item
+            <Plus className="w-3.5 h-3.5" />{t('materials.new.addItem')}
           </button>
         </div>
 
         {/* General note */}
         <div>
           <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
-            General Note (optional)
+            {t('materials.new.generalNote')}
           </label>
           <textarea
             value={note}
             onChange={e => setNote(e.target.value)}
             rows={2}
-            placeholder="Any additional context for the foreman..."
+            placeholder={t('materials.new.generalNotePlaceholder')}
             className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-light placeholder:text-slate-300 resize-none"
           />
         </div>
@@ -502,10 +520,10 @@ export default function MaterialRequestPage() {
 
       {/* Footer */}
       <div className="flex-shrink-0 px-6 py-4 bg-white border-t border-slate-100 flex items-center justify-between">
-        <span className="text-xs text-slate-400">{items.filter(i => i.item_name.trim()).length} item{items.filter(i => i.item_name.trim()).length !== 1 ? 's' : ''}</span>
+        <span className="text-xs text-slate-400">{t('materials.new.itemCount', { count: validItemCount })}</span>
         <button onClick={handleSubmit} disabled={saving}
           className="flex items-center gap-2 px-6 py-2.5 bg-primary text-white text-sm font-bold rounded-xl hover:bg-primary-dark transition-colors disabled:opacity-60">
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Send className="w-4 h-4" />Submit Request</>}
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Send className="w-4 h-4" />{t('materials.new.submit')}</>}
         </button>
       </div>
       </>)}

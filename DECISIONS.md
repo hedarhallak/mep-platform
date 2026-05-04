@@ -6082,3 +6082,91 @@ This is now encoded in Section 60. Future audits should track which findings shi
 
 - **Landing page FR is now Quebec-FR-correct.** Customer #1 first impression won't trip on "facon intelligente" anymore.
 - **Today: 18 sections.**
+
+---
+
+## Section 61 — MaterialRequestPage i18n (Tier 2 batch 3/5) — May 4, 2026, morning
+
+Worker-facing page for requesting materials from foreman. Two tabs (New Request / My Requests), modal-free, with catalog autocomplete on item names. ~60 strings.
+
+### What shipped
+
+- `materials.*` bucket added to en.js + fr.js (~60 keys with sub-buckets `tabs`, `statusBadge`, `new`, `success`, `my`).
+- `mep-frontend/src/pages/materials/MaterialRequestPage.jsx` rewired to use `t()` everywhere.
+- `STATUS_STYLE` refactored same as `attendance.STATUS_CONFIG` from Section 59 — colors stay at module scope, labels resolved per render.
+
+### Strings translated by section
+
+**Page:** title, subtitle, two tab labels (New Request / My Requests).
+
+**Status badges (5):** PENDING / REVIEWED / MERGED / SENT / CANCELLED → En attente / Examinée / Fusionnée / Envoyée / Annulée.
+
+**New Request tab:** Project label, today's-assignment tag, "Select project..." placeholder, Items header, column headers (Name / Quantity / Unit), Add note / Remove note toggle, "Add Item" button, General Note label + placeholder, item-name placeholder ("e.g. Copper pipe 3/4 inch" → "ex. Tuyau en cuivre 3/4 po"), Qty placeholder, "{{count}} item(s)" pluralized footer, Submit Request button.
+
+**Catalog autocomplete:** "used {{count}}×" suffix in suggestion dropdown.
+
+**Submit errors:** "Select a project" / "Add at least one item with name and quantity".
+
+**Success screen:** "Request Submitted!", "Your foreman will review it shortly.", New Request / My Requests buttons.
+
+**My Requests tab:** Back button, All Projects / All Statuses filters, "{{count}} request(s)" count, Empty state, Table headers (Date / Project / Items / Status), "+{{count}} more" suffix, Detail view headers (# / Item / Qty / Unit / Note).
+
+### Quebec FR conventions
+
+| EN | Quebec FR | Note |
+|---|---|---|
+| Material Request | Demande de matériel | (consistent with `nav.materialRequest` from Section 50) |
+| Items | Articles | (vs France's "Éléments" — Quebec construction uses "articles") |
+| Quantity | Quantité | |
+| Unit | Unité | |
+| Submit Request | Soumettre la demande | |
+| Pending | En attente | |
+| Reviewed | Examinée | (past participle, feminine — "demande" is feminine) |
+| Merged | Fusionnée | |
+| Sent | Envoyée | |
+| Cancelled | Annulée | |
+| Today's assignment | Affectation d'aujourd'hui | (consistent with attendance) |
+| Your foreman will review it shortly | Votre contremaître la révisera bientôt | |
+| Copper pipe 3/4 inch | Tuyau en cuivre 3/4 po | "po" = pouce (Quebec FR for inch) |
+
+### Pluralization with i18next
+
+Used i18next's `_one` / `_other` suffix convention for two pluralized counts:
+
+```js
+itemCount_one:  '{{count}} item',
+itemCount_other: '{{count}} items',
+
+requestsCount_one:  '{{count}} request',
+requestsCount_other: '{{count}} requests',
+```
+
+Render side just calls `t('materials.new.itemCount', { count: validItemCount })` — i18next picks `_one` when count===1, `_other` otherwise. Same key works in FR (`{{count}} article` / `{{count}} articles`).
+
+This is the first time we used i18next pluralization in the codebase. Previous sections used inline conditionals (`X !== 1 ? 's' : ''`). Worth migrating older sections to plurals when their next polish pass comes.
+
+### Localized date format
+
+Used the same pattern from Section 56 (ProjectsPage): `i18n.language === 'fr' ? 'fr-CA' : 'en-CA'` for `toLocaleString()` calls. Both the table row date column and the detail-view timestamp now switch correctly.
+
+### Tier 2 progress
+
+| Page | Status |
+|---|---|
+| Suppliers | ✅ S57 |
+| Attendance | ✅ S59 |
+| **MaterialRequest** | **✅ this section** |
+| PurchaseOrders | ⏳ next |
+| Assignments | ⏳ pending |
+
+### Backlog from this section
+
+- **(P3)** Migrate older sections (employees subtitle, projects subtitle, suppliers count) to use i18next `_one`/`_other` plural pattern instead of inline conditionals.
+- **(P3)** The `UNITS` constants array (`pcs, m, ft, kg, lb, box, roll, bag, set, pair, L, gal`) is currently raw codes. Could go through i18n if Quebec FR prefers different abbreviations — but most are already universal (kg, lb, m, ft are global).
+- **(P2)** Tier 2 next: PurchaseOrdersPage.
+
+### Pointer for next sessions
+
+- **Tier 2: 3/5 done.**
+- **Web i18n total: 8/30 pages.**
+- **Today: 21 sections.**
