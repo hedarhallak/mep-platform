@@ -558,7 +558,6 @@ async function cleanupTestRows() {
 }
 
 module.exports = {
-  dbAvailable,
   getPool,
   closePool,
   describeIfDb,
