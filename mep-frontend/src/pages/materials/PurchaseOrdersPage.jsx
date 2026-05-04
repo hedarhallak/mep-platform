@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import api from '@/lib/api'
 import {
   FileText, Loader2, AlertCircle, Search,
@@ -6,16 +7,18 @@ import {
   Printer, X
 } from 'lucide-react'
 
-function fmtDate(ts) {
-  return new Date(ts).toLocaleDateString('en-CA', { year: 'numeric', month: 'short', day: 'numeric' })
+function fmtDate(ts, locale = 'en-CA') {
+  return new Date(ts).toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
-function fmtDateTime(ts) {
-  return new Date(ts).toLocaleString('en-CA', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+function fmtDateTime(ts, locale = 'en-CA') {
+  return new Date(ts).toLocaleString(locale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-// Reuse the same PDF generator from MyHub
-function generatePOHtml(d) {
+// Section 62: PDF generator now takes `t` and `locale` so the rendered
+// HTML respects the user's chosen language. Same template structure as
+// before — only the labels go through i18n.
+function generatePOHtml(d, t, locale) {
   const itemRows = (d.items || []).map((it, i) => `
     <tr style="background:${i % 2 === 0 ? '#f8fafc' : '#fff'}">
       <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#1e293b">${i + 1}</td>
@@ -27,24 +30,24 @@ function generatePOHtml(d) {
 
   const toSection = !d.is_procurement && d.supplier_name
     ? `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin-bottom:16px">
-        <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">To — Supplier</div>
+        <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">${t('purchaseOrders.pdf.toSupplier')}</div>
         <div style="font-size:14px;font-weight:700;color:#1e293b">${d.supplier_name}</div>
         ${d.supplier_email   ? `<div style="font-size:12px;color:#64748b;margin-top:2px">✉ ${d.supplier_email}</div>` : ''}
         ${d.supplier_phone   ? `<div style="font-size:12px;color:#64748b">📞 ${d.supplier_phone}</div>` : ''}
         ${d.supplier_address ? `<div style="font-size:12px;color:#64748b">📍 ${d.supplier_address}</div>` : ''}
       </div>`
     : `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px;margin-bottom:16px">
-        <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">To — Internal</div>
-        <div style="font-size:14px;font-weight:700;color:#1e293b">Procurement Department</div>
+        <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">${t('purchaseOrders.pdf.toInternal')}</div>
+        <div style="font-size:14px;font-weight:700;color:#1e293b">${t('purchaseOrders.pdf.procurementDept')}</div>
       </div>`
 
-  const sentDate = fmtDate(d.sent_at || d.created_at)
+  const sentDate = fmtDate(d.sent_at || d.created_at, locale)
 
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Purchase Order ${d.ref}</title>
+  <title>${t('purchaseOrders.pdf.heading')} ${d.ref}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #fff; color: #1e293b; }
@@ -57,7 +60,7 @@ function generatePOHtml(d) {
 <body style="padding:40px;max-width:800px;margin:0 auto">
   <div class="no-print" style="margin-bottom:20px;text-align:right">
     <button onclick="window.print()" style="background:#162d4a;color:#fff;border:none;padding:10px 24px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">
-      🖨 Print / Save as PDF
+      ${t('purchaseOrders.pdf.printButton')}
     </button>
   </div>
 
@@ -69,24 +72,24 @@ function generatePOHtml(d) {
       ${d.company_phone   ? `<div style="font-size:12px;color:#64748b">📞 ${d.company_phone}</div>` : ''}
     </div>
     <div style="text-align:right">
-      <div style="font-size:20px;font-weight:800;color:#1e293b">Purchase Order</div>
-      <div style="font-size:13px;color:#64748b;margin-top:4px">Ref: <strong>${d.ref}</strong></div>
-      <div style="font-size:13px;color:#64748b">Date: ${sentDate}</div>
-      ${d.po_number ? `<div style="font-size:15px;font-weight:800;color:#162d4a;margin-top:6px">PO # ${d.po_number}</div>` : ''}
+      <div style="font-size:20px;font-weight:800;color:#1e293b">${t('purchaseOrders.pdf.heading')}</div>
+      <div style="font-size:13px;color:#64748b;margin-top:4px">${t('purchaseOrders.pdf.refLabel')} <strong>${d.ref}</strong></div>
+      <div style="font-size:13px;color:#64748b">${t('purchaseOrders.pdf.dateLabel')} ${sentDate}</div>
+      ${d.po_number ? `<div style="font-size:15px;font-weight:800;color:#162d4a;margin-top:6px">${t('purchaseOrders.pdf.poNumber')} ${d.po_number}</div>` : ''}
     </div>
   </div>
 
   <!-- Delivery Location (most important for driver) -->
   <div style="background:#fefce8;border:2px solid #fbbf24;border-radius:10px;padding:16px;margin-bottom:16px">
-    <div style="font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">📦 Delivery Location</div>
+    <div style="font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">${t('purchaseOrders.pdf.deliveryLocation')}</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
       <div>
-        <div style="font-size:11px;font-weight:600;color:#92400e;margin-bottom:4px">Project</div>
+        <div style="font-size:11px;font-weight:600;color:#92400e;margin-bottom:4px">${t('purchaseOrders.pdf.project')}</div>
         <div style="font-size:15px;font-weight:800;color:#1e293b">${d.project_code}${d.project_name ? ' — ' + d.project_name : ''}</div>
-        ${d.site_address ? `<div style="font-size:13px;color:#64748b;margin-top:6px">📍 ${d.site_address}</div>` : '<div style="font-size:12px;color:#94a3b8;margin-top:4px">No site address on file</div>'}
+        ${d.site_address ? `<div style="font-size:13px;color:#64748b;margin-top:6px">📍 ${d.site_address}</div>` : `<div style="font-size:12px;color:#94a3b8;margin-top:4px">${t('purchaseOrders.pdf.noSiteAddress')}</div>`}
       </div>
       <div>
-        <div style="font-size:11px;font-weight:600;color:#92400e;margin-bottom:4px">On-Site Contact (Foreman)</div>
+        <div style="font-size:11px;font-weight:600;color:#92400e;margin-bottom:4px">${t('purchaseOrders.pdf.onSiteContact')}</div>
         <div style="font-size:15px;font-weight:800;color:#1e293b">${d.foreman_name || '—'}</div>
         ${d.foreman_phone ? `<div style="font-size:14px;font-weight:700;color:#162d4a;margin-top:6px">📞 ${d.foreman_phone}</div>` : ''}
         ${d.foreman_email ? `<div style="font-size:12px;color:#64748b;margin-top:2px">✉ ${d.foreman_email}</div>` : ''}
@@ -102,21 +105,21 @@ function generatePOHtml(d) {
     <thead>
       <tr style="background:#162d4a">
         <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:1px;width:40px">#</th>
-        <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:1px">Item Description</th>
-        <th style="padding:10px 14px;text-align:center;font-size:11px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:1px;width:80px">Qty</th>
-        <th style="padding:10px 14px;text-align:center;font-size:11px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:1px;width:80px">Unit</th>
+        <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:1px">${t('purchaseOrders.pdf.itemDescription')}</th>
+        <th style="padding:10px 14px;text-align:center;font-size:11px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:1px;width:80px">${t('purchaseOrders.pdf.qty')}</th>
+        <th style="padding:10px 14px;text-align:center;font-size:11px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:1px;width:80px">${t('purchaseOrders.pdf.unit')}</th>
       </tr>
     </thead>
     <tbody>${itemRows}</tbody>
   </table>
 
   ${d.note ? `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:14px;margin-bottom:24px">
-    <div style="font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Notes</div>
+    <div style="font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">${t('purchaseOrders.pdf.notes')}</div>
     <div style="font-size:13px;color:#78350f">${d.note}</div>
   </div>` : ''}
 
   <div style="border-top:1px solid #e2e8f0;padding-top:16px;display:flex;justify-content:space-between;align-items:center">
-    <div style="font-size:11px;color:#94a3b8">Generated by MEP Platform · ${sentDate}</div>
+    <div style="font-size:11px;color:#94a3b8">${t('purchaseOrders.pdf.generatedBy')} · ${sentDate}</div>
     <div style="font-size:11px;color:#94a3b8">${d.ref}</div>
   </div>
 </body>
@@ -124,11 +127,14 @@ function generatePOHtml(d) {
 }
 
 export default function PurchaseOrdersPage() {
+  const { t, i18n } = useTranslation()
   const [orders, setOrders]   = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch]   = useState('')
   const [error, setError]     = useState('')
   const [printing, setPrinting] = useState(null)
+
+  const locale = i18n.language === 'fr' ? 'fr-CA' : 'en-CA'
 
   useEffect(() => {
     api.get('/materials/purchase-orders')
@@ -142,7 +148,7 @@ export default function PurchaseOrdersPage() {
     try {
       const r = await api.get(`/materials/purchase-orders/${id}`)
       const po = r.data.purchase_order
-      const html = generatePOHtml(po)
+      const html = generatePOHtml(po, t, locale)
       const win = window.open('', '_blank', 'width=900,height=700')
       win.document.write(html)
       win.document.close()
@@ -171,15 +177,15 @@ export default function PurchaseOrdersPage() {
               <FileText className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-slate-900">Purchase Orders</h1>
-              <p className="text-xs text-slate-400 mt-0.5">History of all sent material requests</p>
+              <h1 className="text-lg font-bold text-slate-900">{t('purchaseOrders.title')}</h1>
+              <p className="text-xs text-slate-400 mt-0.5">{t('purchaseOrders.subtitle')}</p>
             </div>
           </div>
         </div>
         <div className="relative max-w-sm">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
           <input value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search by ref, project, foreman..."
+            placeholder={t('purchaseOrders.searchPlaceholder')}
             className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary-light placeholder:text-slate-400" />
         </div>
       </div>
@@ -197,8 +203,8 @@ export default function PurchaseOrdersPage() {
         {!loading && filtered.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <FileText className="w-10 h-10 text-slate-200 mb-3" />
-            <p className="text-sm font-semibold text-slate-400">No purchase orders yet</p>
-            <p className="text-xs text-slate-300 mt-1">Sent requests will appear here</p>
+            <p className="text-sm font-semibold text-slate-400">{t('purchaseOrders.empty')}</p>
+            <p className="text-xs text-slate-300 mt-1">{t('purchaseOrders.emptyHint')}</p>
           </div>
         )}
 
@@ -207,13 +213,13 @@ export default function PurchaseOrdersPage() {
             <table className="w-full">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-100">
-                  <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">Ref</th>
-                  <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">PO #</th>
-                  <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">Date</th>
-                  <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">Project</th>
-                  <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">Foreman</th>
-                  <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">Sent To</th>
-                  <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">Items</th>
+                  <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">{t('purchaseOrders.th.ref')}</th>
+                  <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">{t('purchaseOrders.th.poNumber')}</th>
+                  <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">{t('purchaseOrders.th.date')}</th>
+                  <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">{t('purchaseOrders.th.project')}</th>
+                  <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">{t('purchaseOrders.th.foreman')}</th>
+                  <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">{t('purchaseOrders.th.sentTo')}</th>
+                  <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">{t('purchaseOrders.th.items')}</th>
                   <th className="px-4 py-2.5"></th>
                 </tr>
               </thead>
@@ -228,7 +234,7 @@ export default function PurchaseOrdersPage() {
                         ? <span className="text-xs font-bold text-slate-700">{o.po_number}</span>
                         : <span className="text-xs text-slate-300">—</span>}
                     </td>
-                    <td className="px-4 py-3 text-xs text-slate-500">{fmtDateTime(o.sent_at)}</td>
+                    <td className="px-4 py-3 text-xs text-slate-500">{fmtDateTime(o.sent_at, locale)}</td>
                     <td className="px-4 py-3">
                       <span className="text-xs font-semibold text-slate-700">{o.project_code}</span>
                       {o.project_name && <span className="text-xs text-slate-400 ml-1">— {o.project_name}</span>}
@@ -236,18 +242,18 @@ export default function PurchaseOrdersPage() {
                     <td className="px-4 py-3 text-xs text-slate-600">{o.foreman_name}</td>
                     <td className="px-4 py-3">
                       {o.is_procurement
-                        ? <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">Procurement</span>
+                        ? <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">{t('purchaseOrders.procurement')}</span>
                         : <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{o.supplier_name}</span>
                       }
                     </td>
                     <td className="px-4 py-3 text-xs text-slate-400">
-                      {Array.isArray(o.items) ? o.items.length : 0} items
+                      {t('purchaseOrders.itemsCount', { count: Array.isArray(o.items) ? o.items.length : 0 })}
                     </td>
                     <td className="px-4 py-3">
                       <button onClick={() => handleReprint(o.id)} disabled={printing === o.id}
                         className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-primary border border-primary-pale hover:bg-primary-pale rounded-lg transition-colors disabled:opacity-50">
                         {printing === o.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Printer className="w-3 h-3" />}
-                        Reprint
+                        {t('purchaseOrders.reprint')}
                       </button>
                     </td>
                   </tr>

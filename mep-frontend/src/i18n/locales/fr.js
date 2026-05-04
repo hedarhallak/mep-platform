@@ -225,6 +225,49 @@ export default {
     },
   },
 
+  purchaseOrders: {
+    title: "Bons d'achat",
+    subtitle: 'Historique de toutes les demandes envoyées',
+    searchPlaceholder: 'Rechercher par référence, projet, contremaître…',
+
+    empty: "Aucun bon d'achat",
+    emptyHint: 'Les demandes envoyées apparaîtront ici',
+
+    th: {
+      ref: 'Réf.',
+      poNumber: 'N° BC',
+      date: 'Date',
+      project: 'Projet',
+      foreman: 'Contremaître',
+      sentTo: 'Envoyé à',
+      items: 'Articles',
+    },
+
+    procurement: 'Approvisionnement',
+    itemsCount: '{{count}} articles',
+    reprint: 'Réimprimer',
+
+    pdf: {
+      printButton: '🖨 Imprimer / Sauvegarder en PDF',
+      heading: "Bon d'achat",
+      refLabel: 'Réf. :',
+      dateLabel: 'Date :',
+      poNumber: 'N° BC',
+      deliveryLocation: '📦 Lieu de livraison',
+      project: 'Projet',
+      noSiteAddress: "Pas d'adresse de chantier au dossier",
+      onSiteContact: 'Contact sur le chantier (contremaître)',
+      toSupplier: 'À — Fournisseur',
+      toInternal: 'À — Interne',
+      procurementDept: "Département d'approvisionnement",
+      itemDescription: "Description de l'article",
+      qty: 'Qté',
+      unit: 'Unité',
+      notes: 'Notes',
+      generatedBy: 'Généré par Constrai',
+    },
+  },
+
   materials: {
     title: 'Demande de matériel',
     subtitle: 'Demandez du matériel pour votre projet',
