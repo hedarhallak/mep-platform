@@ -225,6 +225,86 @@ export default {
     },
   },
 
+  materials: {
+    title: 'Demande de matériel',
+    subtitle: 'Demandez du matériel pour votre projet',
+
+    tabs: {
+      new: 'Nouvelle demande',
+      my: 'Mes demandes',
+    },
+
+    statusBadge: {
+      PENDING: 'En attente',
+      REVIEWED: 'Examinée',
+      MERGED: 'Fusionnée',
+      SENT: 'Envoyée',
+      CANCELLED: 'Annulée',
+    },
+
+    new: {
+      project: 'Projet',
+      todayAssignmentSuffix: "Affectation d'aujourd'hui",
+      selectProject: 'Sélectionner un projet…',
+
+      items: 'Articles',
+      colName: 'Nom',
+      colQty: 'Quantité',
+      colUnit: 'Unité',
+      addNote: '+ Ajouter une note',
+      removeNote: '− Retirer la note',
+      addItem: 'Ajouter un article',
+
+      generalNote: 'Note générale (optionnel)',
+      generalNotePlaceholder: 'Contexte additionnel pour le contremaître…',
+
+      itemNamePlaceholder: 'ex. Tuyau en cuivre 3/4 po',
+      itemNotePlaceholder: 'Note (optionnel)',
+      qtyPlaceholder: 'Qté',
+      catalogUsed: 'utilisé {{count}}×',
+
+      itemCount_one: '{{count}} article',
+      itemCount_other: '{{count}} articles',
+
+      submit: 'Soumettre la demande',
+
+      errors: {
+        selectProject: 'Sélectionnez un projet',
+        addItem: 'Ajoutez au moins un article avec un nom et une quantité',
+      },
+    },
+
+    success: {
+      title: 'Demande soumise !',
+      body: 'Votre contremaître la révisera bientôt.',
+      newRequest: 'Nouvelle demande',
+      myRequests: 'Mes demandes',
+    },
+
+    my: {
+      backToList: '← Retour à Mes demandes',
+      allProjects: 'Tous les projets',
+      allStatuses: 'Tous les statuts',
+      requestsCount_one: '{{count}} demande',
+      requestsCount_other: '{{count}} demandes',
+      empty: 'Aucune demande trouvée',
+
+      th: {
+        date: 'Date',
+        project: 'Projet',
+        items: 'Articles',
+        status: 'Statut',
+        index: 'N°',
+        item: 'Article',
+        qty: 'Qté',
+        unit: 'Unité',
+        note: 'Note',
+      },
+
+      moreSuffix: '+{{count}} de plus',
+    },
+  },
+
   attendance: {
     title: 'Présences',
     subtitle: 'Suivez les pointages quotidiens de votre équipe',

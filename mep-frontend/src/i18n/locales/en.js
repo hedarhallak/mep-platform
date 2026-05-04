@@ -225,6 +225,86 @@ export default {
     },
   },
 
+  materials: {
+    title: 'Material Request',
+    subtitle: 'Request materials for your project',
+
+    tabs: {
+      new: 'New Request',
+      my: 'My Requests',
+    },
+
+    statusBadge: {
+      PENDING: 'Pending',
+      REVIEWED: 'Reviewed',
+      MERGED: 'Merged',
+      SENT: 'Sent',
+      CANCELLED: 'Cancelled',
+    },
+
+    new: {
+      project: 'Project',
+      todayAssignmentSuffix: "Today's assignment",
+      selectProject: 'Select project...',
+
+      items: 'Items',
+      colName: 'Name',
+      colQty: 'Quantity',
+      colUnit: 'Unit',
+      addNote: '+ Add note',
+      removeNote: '− Remove note',
+      addItem: 'Add Item',
+
+      generalNote: 'General Note (optional)',
+      generalNotePlaceholder: 'Any additional context for the foreman...',
+
+      itemNamePlaceholder: 'e.g. Copper pipe 3/4 inch',
+      itemNotePlaceholder: 'Note (optional)',
+      qtyPlaceholder: 'Qty',
+      catalogUsed: 'used {{count}}×',
+
+      itemCount_one: '{{count}} item',
+      itemCount_other: '{{count}} items',
+
+      submit: 'Submit Request',
+
+      errors: {
+        selectProject: 'Select a project',
+        addItem: 'Add at least one item with name and quantity',
+      },
+    },
+
+    success: {
+      title: 'Request Submitted!',
+      body: 'Your foreman will review it shortly.',
+      newRequest: 'New Request',
+      myRequests: 'My Requests',
+    },
+
+    my: {
+      backToList: '← Back to My Requests',
+      allProjects: 'All Projects',
+      allStatuses: 'All Statuses',
+      requestsCount_one: '{{count}} request',
+      requestsCount_other: '{{count}} requests',
+      empty: 'No requests found',
+
+      th: {
+        date: 'Date',
+        project: 'Project',
+        items: 'Items',
+        status: 'Status',
+        index: '#',
+        item: 'Item',
+        qty: 'Qty',
+        unit: 'Unit',
+        note: 'Note',
+      },
+
+      moreSuffix: '+{{count}} more',
+    },
+  },
+
   attendance: {
     title: 'Attendance',
     subtitle: 'Track daily check-in / check-out for your team',
