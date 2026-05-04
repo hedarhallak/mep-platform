@@ -6973,3 +6973,62 @@ Migration: `migrations/002_project_foremen_cleanup.sql`.
   - **C6 (new, was implicit in C2)** — write integration tests for `routes/project_foremen.js` once the migration ships. Should restore the coverage ratchet that Section 65 paused.
 - Recommended order for next session: C3 (split into 2-3 PRs by category) → C4 → C6 → C5.
 - **Today: 28 sections.** (Section 68 added.)
+
+---
+
+## Section 69 — Schema sprint Task C6: project_foremen integration tests + secondary route fix (May 4, 2026, late afternoon)
+
+Follow-up PR after Section 68 shipped migration 002. Closes the coverage gap left open since Section 65 Phase 2a (where the test file was lost before being committed).
+
+### Secondary route bugs fixed (3 in total)
+
+The GET handler turned out to have three latent bugs, all in the same SELECT statement. None could surface in production because the route was never wired to the frontend (`grep mep-frontend mep-mobile` for `project-foremen` → 0 hits), so the bugs sat dormant until the tests forced them out.
+
+1. **`SELECT pf.id` — Section 19 had flagged this** ("schema mismatch (no `pf.id`)"). The `project_foremen` table has no `id` column; after migration 002 the natural key is the composite `(project_id, trade_code)`. Fix: replaced `pf.id` with `pf.project_id` in the SELECT.
+
+2. **`au.phone` from `app_users`** — discovered when the first PR push showed all 3 GET tests failing with 500 in CI. `app_users` has no `phone` column; `phone character varying(30)` lives on `employee_profiles` instead. Fix: changed `au.phone AS phone` to `ep.phone AS phone`.
+
+3. **LEFT JOIN to `app_users`** — only existed to provide the (broken) `au.phone`. Once `phone` moves to `ep`, the JOIN is dead weight. Fix: dropped the `LEFT JOIN public.app_users au` entirely.
+
+The first two are real bugs (SELECT fails). The third is a cleanup that the second bug exposed.
+
+**Lesson for the audit playbook:** the Section 67 Task C1 generalized NOT-NULL detector only catches *INSERT* violations. SELECT statements that reference non-existent columns survive until the route is exercised. A separate "SELECT column existence" detector would have caught all three of these without running tests. Filed as a follow-up engineering task in Section 67's tooling backlog.
+
+### Tests added — `tests/integration/project_foremen.test.js`
+
+12 tests across the three endpoints:
+
+**GET /api/project-foremen/:project_id** (3 tests)
+- Empty list on a fresh project returns `200` with `foremen: []`.
+- Populated foremen show up with the joined `employee_profiles` fields (`foreman_name`, `foreman_trade`, etc.).
+- Tenant-scoped: requesting another company's project returns `200` with empty foremen (the route filters via `WHERE pf.company_id = $caller`, so it's "no rows visible" not "404").
+
+**POST /api/project-foremen/:project_id** (7 tests)
+- Happy path: assigns a new foreman, returns `201`, normalizes `trade_code` to upper-case, response body matches the inserted row.
+- Validation: missing `employee_id` → `400 EMPLOYEE_REQUIRED`.
+- Validation: missing `trade_code` → `400 TRADE_REQUIRED`.
+- Project tenancy: non-existent project → `404 PROJECT_NOT_FOUND`.
+- Employee tenancy: an employee from a different company → `404 EMPLOYEE_NOT_FOUND`.
+- RBAC: a `WORKER` (no `projects.edit`) → `403`.
+- Upsert semantics: a second POST on the same `(project_id, trade_code)` REPLACES the first foreman (validates the migration's `(project_id, trade_code)` PK + the route's `ON CONFLICT (project_id, trade_code) DO UPDATE` clause work together).
+
+**DELETE /api/project-foremen/:project_id/:trade** (2 tests)
+- Happy path: removes the row, returns `200`, and the table no longer has the `(project_id, trade_code)` row.
+- Non-existent assignment → `404 NOT_FOUND`.
+- RBAC: `WORKER` → `403`.
+
+### Helper added in-test (not in `tests/helpers/db.js`)
+
+`seedForemanCandidate(companyId, opts)` — composes `seedEmployee` + `seedEmployeeProfile` + `seedUser` so the candidate satisfies all 3 conditions the route checks: the `app_users` row links them to the company, the `employee_profiles` row makes the GET join return data, and the `employees` row makes the project-foremen FK valid. Inline rather than promoted to `tests/helpers/db.js` because no other test file needs this exact triple-fixture combination yet.
+
+### Files modified or generated this session
+
+- **Modified:** `routes/project_foremen.js` (1 line — replaced `pf.id` with `pf.project_id`)
+- **New:** `tests/integration/project_foremen.test.js`
+- **Modified:** `DECISIONS.md` (this section)
+
+### Pointer for next sessions
+
+- Section 67 schema sprint remaining: **C3** (drop dead tables, 2-3 PRs by category), **C4** (drop dead columns), **C5** (baseline consolidation). Order recommendation unchanged from Section 68: C3 → C4 → C5.
+- Coverage delta: +12 tests, all DB-backed. Should bump backend coverage by 1-2 pp once it lands; the threshold ratchet from Section 65 (51/45/52/52) has ~9 pp of headroom so it's safe but worth the bump.
+- **Today: 29 sections.** (Section 69 added.)
