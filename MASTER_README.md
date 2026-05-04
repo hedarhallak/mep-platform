@@ -1,11 +1,11 @@
 # MEP Platform — Master Project README
-> Last updated: May 3, 2026 | Maintainer: Hedar Hallak
+> Last updated: May 4, 2026 | Maintainer: Hedar Hallak
 > Production: https://app.constrai.ca
 > Website: https://www.constrai.ca (Coming Soon landing page)
 > Server: root@143.110.218.84
-> Latest DECISIONS section: **Section 65 Phase 1** (coverage program: scripts/ excluded → 56.61% → 61.5% lines)
-> Active program: **Coverage push to 80%** (Phase 2 + 3 pending — 6-8 hours estimated). Multi-session.
-> Web Tier 1 + Tier 2 DONE (10/10). ~509 i18n keys live. Tier 3 i18n deferred during coverage push.
+> Latest DECISIONS section: **Section 65 closeout** (coverage push STOPPED at 61.5% lines — Phase 2/3 deferred behind schema migration sprint; project_foremen schema bug discovered + filed P1)
+> Active program: **4 codebase audits** (Knip / DB columns / DB tables / bundle analyzer) — back at top of queue now that coverage push is paused.
+> Web Tier 1 + Tier 2 DONE (10/10). ~509 i18n keys live. Tier 3 i18n deferred.
 > **Customer #1 status:** unsigned (constraint per Section 46). Engineering rigor work is paused pending revenue.
 > **Prod is in sync with main**. `APP_NAME=Constrai` + `VITE_MAPBOX_TOKEN` live. Tab title "Constrai" everywhere.
 > **Deploy command** (after `ssh root@143.110.218.84`): `bash /var/www/mep/scripts/deploy.sh` — see Section 53/54 for behavior.
