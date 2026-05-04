@@ -5932,3 +5932,153 @@ Picked option 1 for consistency with prior i18n patterns in this codebase (Secti
 - **Tier 2: 1/5** still (Section 58 was a horizontal polish, not a page).
 - **Web i18n total: 6/30 pages + shared `trades.*` bucket.**
 - **Today: 16 sections.** Hedar still going.
+
+---
+
+## Section 59 — AttendancePage i18n (Tier 2 batch 2/5) — May 3, 2026, very late evening
+
+Daily-use page for foremen and workers — clock in/out, hour confirmation. ~50 strings across 3 components (main page, `AttendanceRow`, `ConfirmModal`, `StatusBadge`).
+
+### What shipped
+
+- `attendance.*` bucket added to en.js + fr.js (~50 keys).
+- `mep-frontend/src/pages/attendance/AttendancePage.jsx` rewired to use `t()` everywhere.
+- `STATUS_CONFIG` refactored: status colors stay at module scope, but `label` removed in favor of i18n key lookup at render time (`t(\`attendance.statusBadge.${status}\`)`).
+
+### Strings translated by section
+
+**Main page header:** title, subtitle, "Today's assignment" tag, "No active projects for this date", "No assignment today".
+
+**Summary stats:** Total, On Site, Checked Out, Confirmed.
+
+**Table headers:** Employee, Status, Check In, Check Out, Regular, Overtime, Confirmed By, Actions.
+
+**Status badges (5 statuses):** OPEN/CHECKED_IN/CHECKED_OUT/CONFIRMED/ADJUSTED → Absent / Sur place / En attente / Confirmé / Ajusté.
+
+**Row buttons:** Check In, Check Out, Confirm, Adjust + "shift" suffix + "Pending" placeholder for unconfirmed.
+
+**ConfirmModal:** title, summary fields, "Final Hours (Foreman Decision)", Regular/Overtime hours selectors, note placeholder, Cancel/Confirm.
+
+**Success messages:** Checked in / Checked out / Hours confirmed.
+
+**Empty states:** No assignments for this date / Select a different date or project.
+
+### Quebec FR conventions reinforced
+
+| EN | Quebec FR | Note |
+|---|---|---|
+| Attendance | Présences | (consistent with `nav.attendance` from Section 50) |
+| Track daily check-in/out | Suivez les pointages quotidiens | "pointage" = the act of clocking in/out |
+| shift | quart | Quebec FR for "shift" (e.g. "quart de jour") |
+| Check In (button) | Pointer entrée | "to punch in" |
+| Check Out (button) | Pointer sortie | "to punch out" |
+| Overtime | Heures supp. (or supplémentaires) | CCQ standard |
+| Foreman Decision | Décision du contremaître | |
+| On Site (status) | Sur place | (different from "Sur le chantier" used elsewhere — both Quebec FR, "Sur place" fits the badge length better) |
+| Pending (status) | En attente | |
+| Confirmed by | Confirmé par | |
+
+`Pointer entrée` / `Pointer sortie` are the construction-site idiomatic verbs in Quebec — "se pointer" means "to clock in." Workers use these phrases verbally on site.
+
+`Heures supp.` (the badge label) is the colloquial short form; `Heures supplémentaires` (full form, in the modal) is the formal payroll term. Both are correct Quebec FR — using each in its appropriate UI context.
+
+### Refactoring detail — STATUS_CONFIG split
+
+Original code:
+```js
+const STATUS_CONFIG = {
+  OPEN: { label: 'Absent', color: 'bg-slate-100 text-slate-500' },
+  ...
+}
+```
+
+Refactored to keep colors at module scope (they don't change with locale) but drop labels (resolved per render via `t()`):
+
+```js
+const STATUS_COLORS = { OPEN: 'bg-slate-100 ...', ... }
+
+function StatusBadge({ status }) {
+  const { t } = useTranslation()
+  const color = STATUS_COLORS[status] || STATUS_COLORS.OPEN
+  const label = t(`attendance.statusBadge.${status || 'OPEN'}`)
+  // ...
+}
+```
+
+This splits "what's static" (colors) from "what's per-render" (labels). Same pattern that worked for `roleColors` + `t('employees.roleShort.${role}')` in EmployeesPage.
+
+### Tier 2 progress
+
+| Page | Status |
+|---|---|
+| Suppliers | ✅ Section 57 |
+| **Attendance** | **✅ this section** |
+| MaterialRequest | ⏳ next |
+| PurchaseOrders | ⏳ pending |
+| Assignments | ⏳ pending (largest, 867 lines) |
+
+### Backlog from this section
+
+- **(P3)** Apply localized date format to the date picker — currently uses HTML `<input type="date">` which auto-localizes per browser locale, but the underlying `todayStr()` from `formatters.js` may not be locale-aware. Worth a check.
+- **(P3)** The "trade_code" displayed in the row subtitle (e.g. "PLUMBING · 7:00 quart") is the raw code. Could pipe through `t(\`trades.${code.toLowerCase()}\`)` for consistency. Defer to a polish pass.
+- **(P2)** Tier 2 next: MaterialRequestPage (478 lines).
+
+### Pointer for next sessions
+
+- **Tier 2: 2/5 done.**
+- **Web i18n total: 7/30 pages.**
+- **Today: 17 sections.** Hedar still going through tiredness.
+
+---
+
+## Section 60 — Landing page FR typo fixes (May 3, 2026, very late evening)
+
+Bundled into Section 59's PR. Hedar caught FR accent typos on `https://www.constrai.ca` (the marketing landing page — separate from the webapp at `app.constrai.ca`). I had noticed these in Section 47 backlog but never actually shipped a fix. Today: shipped.
+
+### Typos fixed
+
+`constrai-landing/index.html` and `constrai-landing/preview.html`, both files:
+
+| Before | After | Issue |
+|---|---|---|
+| Bientot disponible | **Bientôt** disponible | missing circumflex on "ô" |
+| La facon intelligente | La **façon** intelligente | missing cedilla on "ç" |
+| de gerer votre | de **gérer** votre | missing acute on "é" |
+| main-d'oeuvre | main-d'**œuvre** | "œ" ligature (Quebec FR formal preferred) |
+
+Quebec FR construction industry expects the œ ligature in `main-d'œuvre` (workforce) since the term comes from CCQ regulatory terminology. Using `oeuvre` is acceptable but reads as "anglophone-typed-on-EN-keyboard" — a tell that hurts brand credibility with francophone foremen.
+
+### Why this is in Section 59's PR (not its own PR)
+
+- **Same session, same deploy day.** Bundling avoids a third "manual deploy" round-trip.
+- **Different deploy path.** Webapp goes via `bash /var/www/mep/scripts/deploy.sh` to `/var/www/mep/public/`. Landing page is in `constrai-landing/` source → deployed to `/var/www/constrai-landing/` separately. Combined PR doesn't combine deploys; just combines reviews.
+
+### Landing-page deploy procedure (followup)
+
+The webapp `deploy.sh` doesn't touch `/var/www/constrai-landing/`. After this PR merges, prod-side deploy is manual:
+
+```
+ssh root@143.110.218.84
+cd /var/www/constrai-landing
+git pull origin main
+```
+
+Or if `/var/www/constrai-landing/` is set up to symlink directly to the repo's `constrai-landing/` folder, no pull needed — the webapp's `git pull` (inside `deploy.sh`) is enough. Worth confirming the prod setup.
+
+### Lesson encoded — "audit issues without verifying are theatre"
+
+Section 47 was the onboarding audit. It listed FR typos on the landing page as a known issue but never produced a fix PR. The audit ended up theatrical: it documented problems but didn't close them.
+
+**Convention for audits:** when an audit identifies a P0/P1 issue, the same session that produces the audit must produce the fix PR (or an explicit "deferred to Section X" record). "Surfaced for visibility" without a fix is just a TODO list, not engineering output.
+
+This is now encoded in Section 60. Future audits should track which findings shipped fixes (with PR # or section #) and which are explicitly deferred.
+
+### Backlog from this section
+
+- **(P3)** Audit any other FR text in `constrai-landing/` for accent issues (probably none beyond these — but a 2-min grep for common bad-accent patterns would confirm).
+- **(P2)** Confirm prod deploy procedure for `/var/www/constrai-landing/` — is it git-pulled separately? Symlinked? Document in `MASTER_README.md` or `RECOVERY.md`.
+
+### Pointer for next sessions
+
+- **Landing page FR is now Quebec-FR-correct.** Customer #1 first impression won't trip on "facon intelligente" anymore.
+- **Today: 18 sections.**

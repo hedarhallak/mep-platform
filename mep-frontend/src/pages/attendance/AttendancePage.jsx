@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import api from '@/lib/api'
 import { usePermissions } from '@/hooks/usePermissions.jsx'
 import { todayStr, fmtTime, fmtHours } from '@/utils/formatters'
@@ -19,25 +20,29 @@ function buildHoursOptions(max) {
 const REGULAR_OPTIONS = buildHoursOptions(16)
 const OT_OPTIONS      = buildHoursOptions(12)
 
-const STATUS_CONFIG = {
-  OPEN:        { label: 'Absent',     color: 'bg-slate-100 text-slate-500' },
-  CHECKED_IN:  { label: 'On Site',    color: 'bg-emerald-100 text-emerald-700' },
-  CHECKED_OUT: { label: 'Pending',    color: 'bg-amber-100 text-amber-700' },
-  CONFIRMED:   { label: 'Confirmed',  color: 'bg-primary-pale text-primary-dark' },
-  ADJUSTED:    { label: 'Adjusted',   color: 'bg-purple-100 text-purple-700' },
+// Section 59: status colors stay at module scope; labels resolved per render via t().
+const STATUS_COLORS = {
+  OPEN:        'bg-slate-100 text-slate-500',
+  CHECKED_IN:  'bg-emerald-100 text-emerald-700',
+  CHECKED_OUT: 'bg-amber-100 text-amber-700',
+  CONFIRMED:   'bg-primary-pale text-primary-dark',
+  ADJUSTED:    'bg-purple-100 text-purple-700',
 }
 
 function StatusBadge({ status }) {
-  const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.OPEN
+  const { t } = useTranslation()
+  const color = STATUS_COLORS[status] || STATUS_COLORS.OPEN
+  const label = t(`attendance.statusBadge.${status || 'OPEN'}`)
   return (
-    <span className={`inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full ${cfg.color}`}>
-      {cfg.label}
+    <span className={`inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full ${color}`}>
+      {label}
     </span>
   )
 }
 
 // ── Adjust / Confirm Modal ───────────────────────────────────
 function ConfirmModal({ record, onClose, onSaved }) {
+  const { t } = useTranslation()
   const initReg = roundHalf(record.confirmed_regular_hours  ?? record.regular_hours  ?? 8)
   const initOT  = roundHalf(record.confirmed_overtime_hours ?? record.overtime_hours ?? 0)
 
@@ -68,8 +73,8 @@ function ConfirmModal({ record, onClose, onSaved }) {
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-bold text-slate-800">Confirm Hours</h3>
-            <p className="text-xs text-slate-400 mt-0.5">{record.full_name} — {fmtTime(record.check_in_time)} to {fmtTime(record.check_out_time)}</p>
+            <h3 className="text-sm font-bold text-slate-800">{t('attendance.modal.title')}</h3>
+            <p className="text-xs text-slate-400 mt-0.5">{record.full_name} — {fmtTime(record.check_in_time)} → {fmtTime(record.check_out_time)}</p>
           </div>
           <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
             <X className="w-4 h-4" />
@@ -80,28 +85,28 @@ function ConfirmModal({ record, onClose, onSaved }) {
           {/* Calculated summary */}
           <div className="p-3 bg-slate-50 rounded-xl text-xs text-slate-500 space-y-1">
             <div className="flex justify-between">
-              <span>Check In</span>
+              <span>{t('attendance.modal.checkIn')}</span>
               <span className="font-semibold text-slate-700">{fmtTime(record.check_in_time)}</span>
             </div>
             <div className="flex justify-between">
-              <span>Check Out</span>
+              <span>{t('attendance.modal.checkOut')}</span>
               <span className="font-semibold text-slate-700">{fmtTime(record.check_out_time)}</span>
             </div>
             <div className="flex justify-between border-t border-slate-200 pt-1 mt-1">
-              <span>System Calculated</span>
+              <span>{t('attendance.modal.systemCalculated')}</span>
               <span className="font-bold text-slate-500">
                 {fmtHours(record.regular_hours)}
-                {parseFloat(record.overtime_hours) > 0 && <span className="ml-2 text-amber-600">+{fmtHours(record.overtime_hours)} OT</span>}
+                {parseFloat(record.overtime_hours) > 0 && <span className="ml-2 text-amber-600">+{fmtHours(record.overtime_hours)} {t('attendance.modal.otSuffix')}</span>}
               </span>
             </div>
           </div>
 
           {/* Foreman final values */}
           <div>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Final Hours (Foreman Decision)</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">{t('attendance.modal.finalHours')}</p>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-[10px] font-semibold text-primary-light mb-1.5">Regular Hours</label>
+                <label className="block text-[10px] font-semibold text-primary-light mb-1.5">{t('attendance.modal.regularHours')}</label>
                 <select value={regularHours} onChange={e => setRegularHours(parseFloat(e.target.value))}
                   className={selectCls('border-primary-pale focus:ring-primary-light bg-white text-primary-dark')}>
                   {REGULAR_OPTIONS.map(v => (
@@ -110,7 +115,7 @@ function ConfirmModal({ record, onClose, onSaved }) {
                 </select>
               </div>
               <div>
-                <label className="block text-[10px] font-semibold text-amber-500 mb-1.5">Overtime Hours</label>
+                <label className="block text-[10px] font-semibold text-amber-500 mb-1.5">{t('attendance.modal.overtimeHours')}</label>
                 <select value={overtimeHours} onChange={e => setOvertimeHours(parseFloat(e.target.value))}
                   className={selectCls('border-amber-200 focus:ring-amber-400 bg-white text-amber-700')}>
                   {OT_OPTIONS.map(v => (
@@ -122,9 +127,9 @@ function ConfirmModal({ record, onClose, onSaved }) {
           </div>
 
           <div>
-            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Note (optional)</label>
+            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">{t('attendance.modal.note')}</label>
             <textarea value={note} onChange={e => setNote(e.target.value)} rows={2}
-              placeholder="e.g. Road conditions caused 15min delay..."
+              placeholder={t('attendance.modal.notePlaceholder')}
               className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs resize-none focus:outline-none focus:ring-2 focus:ring-primary-light placeholder:text-slate-300" />
           </div>
 
@@ -137,11 +142,11 @@ function ConfirmModal({ record, onClose, onSaved }) {
 
         <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-end gap-3">
           <button onClick={onClose} className="px-4 py-2 text-xs font-semibold text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors">
-            Cancel
+            {t('attendance.modal.cancel')}
           </button>
           <button onClick={handleSave} disabled={saving}
             className="flex items-center gap-2 px-5 py-2 bg-primary text-white text-xs font-bold rounded-xl hover:bg-primary-dark transition-colors disabled:opacity-60">
-            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><Check className="w-3.5 h-3.5" />Confirm</>}
+            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><Check className="w-3.5 h-3.5" />{t('attendance.modal.confirm')}</>}
           </button>
         </div>
       </div>
@@ -151,6 +156,7 @@ function ConfirmModal({ record, onClose, onSaved }) {
 
 // ── Employee Row ─────────────────────────────────────────────
 function AttendanceRow({ record, canApprove, onCheckin, onCheckout, onConfirm, actionLoading }) {
+  const { t } = useTranslation()
   const status   = record.attendance_status || 'OPEN'
   const isLoading = actionLoading === record.assignment_request_id
 
@@ -167,7 +173,7 @@ function AttendanceRow({ record, canApprove, onCheckin, onCheckout, onConfirm, a
         </div>
         <div className="min-w-0">
           <div className="text-sm font-semibold text-slate-700 truncate">{record.full_name}</div>
-          <div className="text-[10px] text-slate-400">{record.trade_code} · {fmtTime(record.shift_start)} shift</div>
+          <div className="text-[10px] text-slate-400">{record.trade_code} · {fmtTime(record.shift_start)} {t('attendance.row.shiftSuffix')}</div>
         </div>
       </div>
 
@@ -203,7 +209,7 @@ function AttendanceRow({ record, canApprove, onCheckin, onCheckout, onConfirm, a
       <div className="text-[10px] text-slate-400 truncate">
         {record.confirmed_by_name
           ? <span className="text-primary font-semibold">{record.confirmed_by_name}</span>
-          : status === 'CHECKED_OUT' ? <span className="text-amber-500">Pending</span> : '—'}
+          : status === 'CHECKED_OUT' ? <span className="text-amber-500">{t('attendance.row.pending')}</span> : '—'}
       </div>
 
       {/* Actions */}
@@ -216,28 +222,28 @@ function AttendanceRow({ record, canApprove, onCheckin, onCheckout, onConfirm, a
               {record.is_mine && status === 'OPEN' && (
                 <button onClick={() => onCheckin(record)}
                   className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 text-white text-[11px] font-bold rounded-lg hover:bg-emerald-700 transition-colors whitespace-nowrap">
-                  <Check className="w-3 h-3" />Check In
+                  <Check className="w-3 h-3" />{t('attendance.row.checkIn')}
                 </button>
               )}
               {/* Worker: Check Out */}
               {record.is_mine && status === 'CHECKED_IN' && (
                 <button onClick={() => onCheckout(record)}
                   className="flex items-center gap-1 px-3 py-1.5 bg-slate-700 text-white text-[11px] font-bold rounded-lg hover:bg-slate-800 transition-colors whitespace-nowrap">
-                  <X className="w-3 h-3" />Check Out
+                  <X className="w-3 h-3" />{t('attendance.row.checkOut')}
                 </button>
               )}
               {/* Foreman/Admin: Confirm */}
               {canApprove && status === 'CHECKED_OUT' && (
                 <button onClick={() => onConfirm(record)}
                   className="flex items-center gap-1 px-3 py-1.5 bg-primary text-white text-[11px] font-bold rounded-lg hover:bg-primary-dark transition-colors whitespace-nowrap">
-                  <Check className="w-3 h-3" />Confirm
+                  <Check className="w-3 h-3" />{t('attendance.row.confirm')}
                 </button>
               )}
               {/* Foreman/Admin: Re-adjust */}
               {canApprove && (status === 'CONFIRMED' || status === 'ADJUSTED') && (
                 <button onClick={() => onConfirm(record)}
                   className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-slate-500 hover:bg-slate-100 rounded-lg transition-colors border border-slate-200 whitespace-nowrap">
-                  <Edit2 className="w-3 h-3" />Adjust
+                  <Edit2 className="w-3 h-3" />{t('attendance.row.adjust')}
                 </button>
               )}
             </>
@@ -250,6 +256,7 @@ function AttendanceRow({ record, canApprove, onCheckin, onCheckout, onConfirm, a
 
 // ── Main Page ────────────────────────────────────────────────
 export default function AttendancePage() {
+  const { t } = useTranslation()
   const { can } = usePermissions()
   const [date,            setDate]            = useState(todayStr())
   const [projects,        setProjects]        = useState([])
@@ -318,7 +325,7 @@ export default function AttendancePage() {
     try {
       await api.post('/attendance/checkin', { assignment_request_id: record.assignment_request_id })
       fetchRecords()
-      showSuccess('Checked in successfully!')
+      showSuccess(t('attendance.success.checkedIn'))
     } catch (e) {
       const err = e.response?.data
       if (err?.error === 'SHIFT_ENDED') {
@@ -335,7 +342,7 @@ export default function AttendancePage() {
     try {
       await api.patch(`/attendance/${record.attendance_id}/checkout`)
       fetchRecords()
-      showSuccess('Checked out successfully!')
+      showSuccess(t('attendance.success.checkedOut'))
     } catch (e) { alert(e.response?.data?.message || e.message) }
     finally { setActionLoading(null) }
   }
@@ -343,8 +350,15 @@ export default function AttendancePage() {
   const handleConfirmSaved = () => {
     setConfirmModal(null)
     fetchRecords()
-    showSuccess('Hours confirmed!')
+    showSuccess(t('attendance.success.hoursConfirmed'))
   }
+
+  const summaryStats = [
+    { key: 'total',      label: t('attendance.summary.total'),      value: summary.total,       color: 'bg-slate-100 text-slate-600'   },
+    { key: 'onSite',     label: t('attendance.summary.onSite'),     value: summary.checked_in,  color: 'bg-emerald-100 text-emerald-700' },
+    { key: 'checkedOut', label: t('attendance.summary.checkedOut'), value: summary.checked_out, color: 'bg-amber-100 text-amber-700'   },
+    { key: 'confirmed',  label: t('attendance.summary.confirmed'),  value: summary.confirmed,   color: 'bg-primary-pale text-primary-dark' },
+  ]
 
   return (
     <div className="flex flex-col h-screen bg-slate-50 overflow-hidden">
@@ -356,8 +370,8 @@ export default function AttendancePage() {
               <CheckCircle className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-slate-900">Attendance</h1>
-              <p className="text-xs text-slate-400 mt-0.5">Track daily check-in / check-out for your team</p>
+              <h1 className="text-lg font-bold text-slate-900">{t('attendance.title')}</h1>
+              <p className="text-xs text-slate-400 mt-0.5">{t('attendance.subtitle')}</p>
             </div>
           </div>
           {/* Date picker */}
@@ -381,7 +395,7 @@ export default function AttendancePage() {
                 <span className="text-xs font-bold text-primary-dark">
                   {todayAssignment.project_code}{todayAssignment.project_name ? ` — ${todayAssignment.project_name}` : ''}
                 </span>
-                <span className="text-[10px] text-primary-light ml-2">Today's assignment</span>
+                <span className="text-[10px] text-primary-light ml-2">{t('attendance.todaysAssignment')}</span>
               </div>
             </div>
           ) : canApprove ? (
@@ -397,24 +411,19 @@ export default function AttendancePage() {
                 </button>
               ))}
               {projects.length === 0 && !loading && (
-                <span className="text-xs text-slate-400 px-2">No active projects for this date</span>
+                <span className="text-xs text-slate-400 px-2">{t('attendance.noProjects')}</span>
               )}
             </>
           ) : (
-            <span className="text-xs text-slate-400 px-2">No assignment today</span>
+            <span className="text-xs text-slate-400 px-2">{t('attendance.noAssignmentToday')}</span>
           )}
         </div>
       </div>
 
       {/* Summary stats */}
       <div className="flex-shrink-0 px-6 pt-4 pb-2 flex items-center gap-3">
-        {[
-          { label: 'Total',       value: summary.total,       color: 'bg-slate-100 text-slate-600'   },
-          { label: 'On Site',     value: summary.checked_in,  color: 'bg-emerald-100 text-emerald-700' },
-          { label: 'Checked Out', value: summary.checked_out, color: 'bg-amber-100 text-amber-700'   },
-          { label: 'Confirmed',   value: summary.confirmed,   color: 'bg-primary-pale text-primary-dark' },
-        ].map(s => (
-          <div key={s.label} className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold ${s.color}`}>
+        {summaryStats.map(s => (
+          <div key={s.key} className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold ${s.color}`}>
             <span className="text-base font-extrabold">{s.value}</span>
             <span className="font-semibold opacity-80">{s.label}</span>
           </div>
@@ -431,14 +440,14 @@ export default function AttendancePage() {
       <div className="flex-1 overflow-hidden mx-6 mb-6 bg-white rounded-xl border border-slate-200 flex flex-col min-h-0">
         {/* Table header */}
         <div className="flex-shrink-0 grid grid-cols-[1.5fr_80px_90px_90px_70px_70px_90px_auto] px-4 py-2.5 bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-          <span>Employee</span>
-          <span>Status</span>
-          <span>Check In</span>
-          <span>Check Out</span>
-          <span>Regular</span>
-          <span>Overtime</span>
-          <span>Confirmed By</span>
-          <span className="text-right">Actions</span>
+          <span>{t('attendance.th.employee')}</span>
+          <span>{t('attendance.th.status')}</span>
+          <span>{t('attendance.th.checkIn')}</span>
+          <span>{t('attendance.th.checkOut')}</span>
+          <span>{t('attendance.th.regular')}</span>
+          <span>{t('attendance.th.overtime')}</span>
+          <span>{t('attendance.th.confirmedBy')}</span>
+          <span className="text-right">{t('attendance.th.actions')}</span>
         </div>
 
         {/* Rows */}
@@ -450,8 +459,8 @@ export default function AttendancePage() {
             : records.length === 0
               ? <div className="flex flex-col items-center justify-center py-16 text-center">
                   <Users className="w-10 h-10 text-slate-200 mb-3" />
-                  <p className="text-sm font-semibold text-slate-400">No assignments for this date</p>
-                  <p className="text-xs text-slate-300 mt-1">Select a different date or project</p>
+                  <p className="text-sm font-semibold text-slate-400">{t('attendance.empty')}</p>
+                  <p className="text-xs text-slate-300 mt-1">{t('attendance.emptyHint')}</p>
                 </div>
               : records.map(record => (
                   <AttendanceRow
