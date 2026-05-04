@@ -19,9 +19,11 @@ router.get('/:project_id', async (req, res) => {
     const companyId = req.user.company_id;
     const projectId = Number(req.params.project_id);
 
+    // Natural key is (project_id, trade_code) — matches the composite PK
+    // shipped in migration 002. The table has no `id` column.
     const { rows } = await pool.query(
       `SELECT
-         pf.id,
+         pf.project_id,
          pf.trade_code,
          pf.employee_id,
          ep.full_name   AS foreman_name,

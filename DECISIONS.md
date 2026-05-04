@@ -6973,3 +6973,52 @@ Migration: `migrations/002_project_foremen_cleanup.sql`.
   - **C6 (new, was implicit in C2)** — write integration tests for `routes/project_foremen.js` once the migration ships. Should restore the coverage ratchet that Section 65 paused.
 - Recommended order for next session: C3 (split into 2-3 PRs by category) → C4 → C6 → C5.
 - **Today: 28 sections.** (Section 68 added.)
+
+---
+
+## Section 69 — Schema sprint Task C6: project_foremen integration tests + secondary route fix (May 4, 2026, late afternoon)
+
+Follow-up PR after Section 68 shipped migration 002. Closes the coverage gap left open since Section 65 Phase 2a (where the test file was lost before being committed).
+
+### Secondary route bug fixed
+
+While drafting the tests, found a second bug in `routes/project_foremen.js` that Section 19 had also flagged ("schema mismatch (no `pf.id`)"): the GET handler did `SELECT pf.id` from a table that has no `id` column. After migration 002, the natural key is the composite `(project_id, trade_code)`. Replaced `pf.id` with `pf.project_id` in the SELECT (the project_id is already known to the caller from the URL, but including it keeps the response shape consistent with what the join produces and lets the frontend group rows by trade if it ever consumes this endpoint). Frontend currently doesn't call this endpoint at all (`grep mep-frontend mep-mobile` for `project-foremen` → 0 hits), so the response-shape change is risk-free.
+
+### Tests added — `tests/integration/project_foremen.test.js`
+
+12 tests across the three endpoints:
+
+**GET /api/project-foremen/:project_id** (3 tests)
+- Empty list on a fresh project returns `200` with `foremen: []`.
+- Populated foremen show up with the joined `employee_profiles` fields (`foreman_name`, `foreman_trade`, etc.).
+- Tenant-scoped: requesting another company's project returns `200` with empty foremen (the route filters via `WHERE pf.company_id = $caller`, so it's "no rows visible" not "404").
+
+**POST /api/project-foremen/:project_id** (7 tests)
+- Happy path: assigns a new foreman, returns `201`, normalizes `trade_code` to upper-case, response body matches the inserted row.
+- Validation: missing `employee_id` → `400 EMPLOYEE_REQUIRED`.
+- Validation: missing `trade_code` → `400 TRADE_REQUIRED`.
+- Project tenancy: non-existent project → `404 PROJECT_NOT_FOUND`.
+- Employee tenancy: an employee from a different company → `404 EMPLOYEE_NOT_FOUND`.
+- RBAC: a `WORKER` (no `projects.edit`) → `403`.
+- Upsert semantics: a second POST on the same `(project_id, trade_code)` REPLACES the first foreman (validates the migration's `(project_id, trade_code)` PK + the route's `ON CONFLICT (project_id, trade_code) DO UPDATE` clause work together).
+
+**DELETE /api/project-foremen/:project_id/:trade** (2 tests)
+- Happy path: removes the row, returns `200`, and the table no longer has the `(project_id, trade_code)` row.
+- Non-existent assignment → `404 NOT_FOUND`.
+- RBAC: `WORKER` → `403`.
+
+### Helper added in-test (not in `tests/helpers/db.js`)
+
+`seedForemanCandidate(companyId, opts)` — composes `seedEmployee` + `seedEmployeeProfile` + `seedUser` so the candidate satisfies all 3 conditions the route checks: the `app_users` row links them to the company, the `employee_profiles` row makes the GET join return data, and the `employees` row makes the project-foremen FK valid. Inline rather than promoted to `tests/helpers/db.js` because no other test file needs this exact triple-fixture combination yet.
+
+### Files modified or generated this session
+
+- **Modified:** `routes/project_foremen.js` (1 line — replaced `pf.id` with `pf.project_id`)
+- **New:** `tests/integration/project_foremen.test.js`
+- **Modified:** `DECISIONS.md` (this section)
+
+### Pointer for next sessions
+
+- Section 67 schema sprint remaining: **C3** (drop dead tables, 2-3 PRs by category), **C4** (drop dead columns), **C5** (baseline consolidation). Order recommendation unchanged from Section 68: C3 → C4 → C5.
+- Coverage delta: +12 tests, all DB-backed. Should bump backend coverage by 1-2 pp once it lands; the threshold ratchet from Section 65 (51/45/52/52) has ~9 pp of headroom so it's safe but worth the bump.
+- **Today: 29 sections.** (Section 69 added.)
