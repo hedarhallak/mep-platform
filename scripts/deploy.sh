@@ -21,19 +21,20 @@
 #   4. Pulls latest from origin/main
 #   5. Reads .last-deployed-sha; compares to current HEAD
 #   6. If unchanged → restart pm2 (for env) and exit
-#   7. Otherwise: detects which areas changed (backend / frontend)
+#   7. Otherwise: detects which areas changed (backend / frontend / landing)
 #   8. Runs `npm install --production` on backend if backend touched
 #   9. Runs `npm install` + `npm run build` + `rsync` on frontend if frontend touched
-#  10. Restarts pm2 mep-backend with --update-env
-#  11. Verifies https://app.constrai.ca/api/health/deep returns ok=true
-#  12. Writes new SHA to `.last-deployed-sha` on success
+#  10. Rsyncs constrai-landing/ → /var/www/constrai-landing/ if landing touched
+#       (Section 64: replaces the manual step from Section 60)
+#  11. Restarts pm2 mep-backend with --update-env
+#  12. Verifies https://app.constrai.ca/api/health/deep returns ok=true
+#  13. Writes new SHA to `.last-deployed-sha` on success
 #
 # What it does NOT do:
 #   - Run database migrations (intentional — migrations should be explicit;
 #     run `node scripts/migrate.js` separately when needed)
 #   - Roll back on failure (manual rollback: `git reset --hard <SHA>`
 #     then re-run this script)
-#   - Touch the marketing landing page (separate path: /var/www/constrai-landing)
 
 set -euo pipefail
 
@@ -43,6 +44,8 @@ set -euo pipefail
 REPO_DIR="/var/www/mep"
 FRONTEND_DIR="${REPO_DIR}/mep-frontend"
 PUBLIC_DIR="${REPO_DIR}/public"
+LANDING_SRC_DIR="${REPO_DIR}/constrai-landing"
+LANDING_PUBLIC_DIR="/var/www/constrai-landing"
 PM2_APP="mep-backend"
 HEALTH_URL="https://app.constrai.ca/api/health/deep"
 DEPLOYED_SHA_FILE="${REPO_DIR}/.last-deployed-sha"
@@ -61,6 +64,7 @@ log "=== Constrai prod deploy ==="
 log "Repo:     ${REPO_DIR}"
 log "Frontend: ${FRONTEND_DIR}"
 log "Public:   ${PUBLIC_DIR}"
+log "Landing:  ${LANDING_SRC_DIR} → ${LANDING_PUBLIC_DIR}"
 log "PM2 app:  ${PM2_APP}"
 echo
 
@@ -133,9 +137,10 @@ fi
 # Step 5: detect what changed since last deploy
 # ──────────────────────────────────────────────────────────────────────────────
 if [ -z "${LAST_DEPLOYED}" ]; then
-  log "First run via this script — forcing full backend + frontend deploy."
+  log "First run via this script — forcing full backend + frontend + landing deploy."
   BACKEND_CHANGED="(initial)"
   FRONTEND_CHANGED="(initial)"
+  LANDING_CHANGED="(initial)"
 else
   log "Diffing ${LAST_DEPLOYED}..${CURRENT_SHA}"
   CHANGED=$(git diff --name-only "${LAST_DEPLOYED}..${CURRENT_SHA}" 2>/dev/null || echo "(diff-failed)")
@@ -145,15 +150,18 @@ else
     log "Falling back to full deploy."
     BACKEND_CHANGED="(diff-failed)"
     FRONTEND_CHANGED="(diff-failed)"
+    LANDING_CHANGED="(diff-failed)"
   else
     BACKEND_CHANGED=$(echo "${CHANGED}" | grep -E "^(routes/|services/|middleware/|lib/|jobs/|migrations/|index\.js|app\.js|db\.js|seed\.js|package\.json|package-lock\.json)" || true)
     FRONTEND_CHANGED=$(echo "${CHANGED}" | grep -E "^mep-frontend/(src/|public/|index\.html|package\.json|package-lock\.json|vite\.config|tailwind\.config)" || true)
+    LANDING_CHANGED=$(echo "${CHANGED}" | grep -E "^constrai-landing/" || true)
   fi
 fi
 
 log "Changed areas:"
 [ -n "${BACKEND_CHANGED}" ]  && log "  backend:  yes" || log "  backend:  no"
 [ -n "${FRONTEND_CHANGED}" ] && log "  frontend: yes" || log "  frontend: no"
+[ -n "${LANDING_CHANGED}" ]  && log "  landing:  yes" || log "  landing:  no"
 echo
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -188,6 +196,32 @@ if [ -n "${FRONTEND_CHANGED}" ]; then
   cd "${REPO_DIR}"
 else
   log "Frontend unchanged — skipping build + rsync"
+fi
+echo
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Step 7b: landing-page rsync (Section 64)
+#
+# /var/www/constrai-landing/ is NOT a git repo on prod (per Section 60). It's
+# served by nginx for https://www.constrai.ca. Source files live in
+# constrai-landing/ inside this repo. When those source files change, sync
+# them to the nginx-served path. No build step — pure static.
+#
+# rsync without --delete: keeps any prod-only files (e.g., manually-uploaded
+# assets that aren't in the repo). If we ever need to remove orphans, switch
+# to --delete in a controlled section.
+# ──────────────────────────────────────────────────────────────────────────────
+if [ -n "${LANDING_CHANGED}" ]; then
+  log "Landing page changed — syncing ${LANDING_SRC_DIR}/ → ${LANDING_PUBLIC_DIR}/..."
+  if [ ! -d "${LANDING_PUBLIC_DIR}" ]; then
+    err "Landing public dir ${LANDING_PUBLIC_DIR} does not exist — skipping landing sync."
+    err "Create it manually if this is the first deploy of the landing page."
+  else
+    rsync -av "${LANDING_SRC_DIR}/" "${LANDING_PUBLIC_DIR}/" | tail -5
+    log "Landing page deployed ✓"
+  fi
+else
+  log "Landing page unchanged — skipping rsync"
 fi
 echo
 
