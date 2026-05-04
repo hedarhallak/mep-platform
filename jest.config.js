@@ -28,6 +28,13 @@ module.exports = {
 
   // Coverage: which source files to track. Excludes node_modules + frontend
   // + mobile + archived migrations + the test files themselves.
+  //
+  // Section 65 (May 4, 2026): scripts/**/*.js excluded entirely. These are
+  // CLI utilities (check-db.js, geocode_projects.js, seed scripts) that are
+  // run manually by an operator, not exercised by tests. They were dragging
+  // overall coverage down ~10pp because they all reported 0%. Excluding them
+  // gives a more honest "application code" coverage number. The CLI tools
+  // can have their own test suite later if needed.
   collectCoverageFrom: [
     'index.js',
     'db.js',
@@ -37,8 +44,6 @@ module.exports = {
     'lib/**/*.js',
     'services/**/*.js',
     'jobs/**/*.js',
-    'scripts/**/*.js',
-    '!scripts/migrate.js', // migration runner — exercised separately by Atlas job
     '!**/node_modules/**',
     '!**/coverage/**',
   ],
