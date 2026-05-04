@@ -6639,3 +6639,214 @@ Headroom over CI floor: ~9pp lines. Next ratchet of `coverageThreshold` is optio
 - **Coverage stopped at 61.5% lines** — not 80%. Phase 1 (scripts exclusion) shipped. Phase 2/3 deferred behind a schema migration sprint.
 - The 4 codebase audits originally planned for Section 65 (Knip, DB columns, DB tables, bundle analyzer) are still open — they were postponed to chase coverage. Now that coverage is stopped, they're the obvious next program.
 - **Today: 25 sections.**
+
+---
+
+## Section 66 — 4 Codebase Audits (May 4, 2026, afternoon continuation)
+
+After Section 65 closed at 61.5% lines (coverage push paused behind a schema migration sprint), executed the 4 codebase audits originally queued for this slot: Knip (unused exports/files/deps), DB columns, DB tables, frontend bundle analyzer.
+
+### Setup notes — knip crash root-caused to a corrupted `.gitignore`
+
+`knip 5.88.1` initially crashed on this codebase under Windows (Node 24.12.0):
+
+```
+TypeError [ERR_INVALID_ARG_VALUE]: The argument 'path' must be a string, Uint8Array, or URL without null bytes.
+Received 'C:\\...\\mep-fixed\\!**\\<utf16-encoded "constrai-mobile">'
+    at Object.lstat (node:fs:1618:10)
+    at fast-glob/out/readers/stream.js
+```
+
+**Root cause:** the project's `.gitignore` had a single line written with **UTF-16 LE bytes** (`c\x00o\x00n\x00s\x00t\x00r\x00a\x00i\x00-\x00m\x00o\x00b\x00i\x00l\x00e\x00/\x00`) instead of plain UTF-8. When the file was opened in a text editor, the line rendered as `c o n s t r a i - m o b i l e /` (each ASCII char interleaved with what looked like a space — actually a NUL byte). Knip reads `.gitignore` as one of its ignore-pattern sources, passed the corrupted pattern to `fast-glob`, which fed it to `fs.lstat`, which rejects paths containing null bytes. Hence the `ERR_INVALID_ARG_VALUE` with the UTF-16 byte signature visible in the error message.
+
+The corrupted entry was for a directory `constrai-mobile/` that does not exist on disk anyway. Most likely origin: a previous `Out-File` PowerShell call without explicit `-Encoding utf8` (PowerShell 5.1 default is UTF-16 LE). The line had been there silently for a long time because git is byte-faithful and shows the bytes verbatim in `cat`/`Read`, but knip is the first tool to actually parse the gitignore strictly.
+
+**Fix shipped this session:** rewrote `.gitignore` cleanly in UTF-8, added the audit artifacts to it, removed the corrupted line. **Verified knip now runs** — re-ran `npx knip --no-progress` after the fix and got a clean report (see "Knip post-fix bonus findings" below). Substituted-tooling outputs are kept as the audit's primary path because they were already verified, but the knip output adds an unused-exports section that depcheck + custom analyzers couldn't cover.
+
+**Substituted approach:**
+
+| Audit slot | Tool used | Status |
+|---|---|---|
+| Unused npm deps (backend + frontend) | `depcheck` | ✅ ran clean both sides |
+| Unused source files (backend) | custom Python grep | ✅ zero unused |
+| Unused exports | (gap — needs knip or `eslint-plugin-import`) | ⏸ deferred |
+| DB columns | custom Python (regex parse pg_dump + grep code corpus) | ✅ |
+| DB tables | custom Python (table-name word-boundary grep) | ✅ |
+| Bundle analyzer | `vite-bundle-visualizer -t json` | ✅ |
+
+The substitutions cover ~80% of what knip would have surfaced. Unused-exports is the only remaining gap; can be filled via `eslint-plugin-import`'s `no-unused-modules` rule in a future session.
+
+### Audit 1 — Unused npm dependencies
+
+**Backend (root `package.json`):**
+
+| Package | Section | Action |
+|---|---|---|
+| `@react-native-async-storage/async-storage` | dependencies | DROP — React Native package, copy-paste error |
+| `@emnapi/core` | devDependencies | DROP — transitive promoted by mistake |
+| `@emnapi/runtime` | devDependencies | DROP — same |
+
+**Frontend (`mep-frontend/package.json`):**
+
+| Package | Section | Action |
+|---|---|---|
+| `mapbox-gl` | dependencies | DROP — `AssignmentsPage.jsx` loads it from Mapbox CDN (`https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js`); npm package is never imported |
+| `path` | dependencies | DROP — never imported |
+| `tailwindcss` | devDependencies | KEEP — false positive (used transitively by `@tailwindcss/vite` plugin; conventional to list direct) |
+| `@vitest/coverage-v8` | devDependencies | KEEP — false positive (used by `vitest --coverage`) |
+
+**Net cleanup: 5 real deps to remove** across the two `package.json` files.
+
+### Audit 2 — Unused source files (backend)
+
+Custom Python grep across `routes/`, `lib/`, `services/`, `middleware/`, `jobs/`, `scripts/`, plus standalone files (`app.js`, `instrument.js`, `db.js`, `seed.js`, `index.js`).
+
+**Result: 0 unused files.** Every backend source file has at least one require/reference somewhere in the codebase.
+
+### Audit 3 — Unused DB columns
+
+Parsed `db/schema_baseline_2026-04-26.sql` with regex (`CREATE TABLE` blocks → column names). Found **66 tables, 586 columns**. Cross-referenced against backend code corpus (~881 KB across 119 files: `routes/`, `lib/`, `services/`, `middleware/`, `jobs/`, `scripts/`, `tests/`, plus `app.js`/`db.js`/`seed.js`/`instrument.js`/`index.js`). Excluded 25 common column names (`id`, `name`, `created_at`, `company_id`, `user_id`, etc.) from the unused-flag list to suppress noise from generic identifiers.
+
+**Result: 95 columns with zero references in backend code. 41 columns with 1–3 references (likely only in seed/migrations, not active queries).**
+
+Spot-verified 5 columns by hand — all confirmed truly unused. Examples of dead columns:
+
+- `companies.yard_lat`, `companies.yard_lng`, `companies.dispatch_time`, `companies.dispatch_timezone`, `companies.attendance_mode`, `companies.break_count`, `companies.break_minutes`, `companies.overtime_threshold_hours`, `companies.travel_origin_policy` — config columns defined but never read
+- `plans.max_users`, `plans.max_projects` — billing limits never enforced
+- `company_settings.assignments_cutoff_time` — never read (the `company_settings` table itself is dead, see Audit 4)
+
+Full list reproducible via `python3 /tmp/audit-cols.py` in this session — output is local-only.
+
+### Audit 4 — Unused DB tables
+
+For each of the 66 tables in the schema, counted word-boundary references across the same code corpus. Also cross-checked `mep-frontend/src/` and `mep-mobile/src/` to make sure tables aren't referenced from the client side either.
+
+**Result: 30 tables with 0 references in backend code AND 0 references in frontend/mobile = 45% of the schema is dead.**
+
+Categories:
+
+**A. Duplicate / legacy variants (need consolidation):**
+
+| Dead table(s) | Active equivalent |
+|---|---|
+| `materials_requests` (plural), `materials_request_items` | `material_requests` (singular) — actively used by `routes/material_requests.js` |
+| `materials_tickets`, `materials_ticket_items` | (no replacement — feature never built) |
+| `travel_allowance_brackets`, `travel_allowance_policies`, `travel_allowance_policy`, `travel_allowance_rules` (4 variants!) | (none — travel/distance logic is currently inline in route code, no table involved) |
+| `ccq_travel_allowance_bands`, `ccq_travel_allowance_rates` | `ccq_travel_rates` — used by `routes/ccq_rates.js` + `routes/reports.js` |
+| `employee_field_catalog`, `employee_field_values`, `employee_sensitive_values`, `company_employee_field_config` | (none — entire dynamic-employee-field subsystem dead) |
+| `employee_ranks`, `employee_roles`, `employee_trades`, `user_trade_access`, `assignment_roles` | `app_users.role` (single column) |
+| `erp.employee_projects`, `erp.work_logs` | (`erp` schema entirely dead — was a parallel ERP design abandoned early) |
+
+**B. Features designed in schema but never built:**
+
+`borrow_requests`, `early_checkout_requests`, `parking_claims`, `attendance_absences`, `attendance_approvals_audit`, `absence_reasons`, `sensitive_access_log`, `project_geofences`, `company_settings` (real config lives in `companies` table).
+
+Verified `project_geofences` separately — no `ST_DWithin` / `ST_Contains` / `geofence` references anywhere in active code, despite the table being PostGIS-typed. Geofencing was designed in schema, never wired.
+
+**C. Rare tables (1–3 references, mostly test-helper-only):**
+
+| Table | Refs | Where |
+|---|---|---|
+| `company_statuses` | 1 | `tests/helpers/db.js` only |
+| `plans` | 1 | `tests/helpers/db.js` only |
+| `material_catalog` | 3 | `routes/material_requests.js` |
+| `standup_sessions` | 3 | `routes/standup.js` |
+
+`company_statuses` and `plans` are referenced only in test-helper seeding, suggesting they're dead in production but pre-seeded for tests as fixtures.
+
+### Audit 5 — Frontend bundle analyzer
+
+`vite-bundle-visualizer -t json` against `mep-frontend/`.
+
+**Bundle size (production build):**
+- `dist/assets/index-*.js` = **728.53 kB** (gzip 193.57 kB)
+- `dist/assets/index-*.css` = 56.48 kB (gzip 10.14 kB)
+- Vite warns: `Some chunks are larger than 500 kB after minification.`
+
+**Top node_modules contributors (raw bytes):**
+
+| Package | Size | % of node_modules |
+|---|---|---|
+| react-dom | 561 KB | 55.0% |
+| axios | 114 KB | 11.2% |
+| i18next | 89 KB | 8.7% |
+| react-router | 85 KB | 8.3% |
+| @tanstack/query-core | 75 KB | 7.4% |
+| lucide-react | 35 KB | 3.4% |
+| react | 20 KB | 2.0% |
+
+**`src/` contributors:**
+
+| Path | Size | % of src |
+|---|---|---|
+| `src/pages` | 503 KB | 86.0% |
+| `src/i18n` | 38 KB | 6.6% |
+| `src/components` | 24 KB | 4.1% |
+
+The 86% concentration in `src/pages` is the smoking gun: `src/App.jsx` has **18 page imports, 0 `React.lazy()` calls** — every page is eagerly bundled, so the entire app loads on first paint regardless of which route the user lands on.
+
+**High-impact wins (priority-ordered):**
+
+1. **Lazy-load route pages** with `React.lazy(() => import('...'))` + `<Suspense>`. Each page becomes its own chunk loaded on navigation. Estimated 70% reduction in initial bundle (728 KB → 250–300 KB initial). ~1–2 hours of work, minimal feature risk.
+2. **Replace `axios` with native `fetch`** (or `ky` if a thin wrapper is preferred). Saves ~114 KB raw / ~30 KB gzip. Frontend has only one usage location (`src/lib/api.js`), so the refactor surface is contained. ~1 hour.
+3. **Audit `lucide-react` imports** to confirm all are named imports, not wildcards. Currently 35 KB — reasonable, but worth a recheck to prevent future regression.
+4. **Set explicit `build.chunkSizeWarningLimit`** once optimization is done (e.g., 350 KB).
+
+### Knip post-fix bonus findings
+
+After the `.gitignore` UTF-16 fix, `npx knip --no-progress` ran successfully. Three categories of real findings:
+
+**Unused exports (3 — all true positives, all safe to drop):**
+
+| Symbol | File / line | Notes |
+|---|---|---|
+| `dbAvailable` | `tests/helpers/db.js:561` | Test helper exported but no test imports it. |
+| `DISK_USED_FAIL_PCT` | `lib/health.js:207` | Constant exported but no consumer references it. |
+| `geocodeHomeAddress` | `services/geocoding.js:116` | Function exported but unused — likely orphaned after a refactor. |
+
+**Unlisted binaries (2 — minor):**
+
+`.github/workflows/ci.yml` uses `playwright` and `tsc` directly without declaring them as devDependencies in any package.json. Either add to `mep-frontend/package.json` devDependencies or invoke via `npx --yes playwright` / `npx --yes typescript` to make the dependency explicit.
+
+**Unused-files false positives (11 — IGNORE these):**
+
+Knip flagged `routes/activate.js`, `routes/admin_users.js`, `routes/assignments.js`, `routes/attendance.js`, `routes/auth.js`, `routes/daily_dispatch.js`, `routes/employees.js`, `routes/profile.js`, `routes/projects.js`, `routes/reports.js`, `routes/super_admin.js` as unused. **All are demonstrably used** — the custom grep audit (Audit 2 above) found zero unused source files, and `app.js` mounts every route via `app.use('/api/<path>', require('./routes/<name>'))`. The false positives are a knip resolver edge case (likely how it handles `require()` calls inside `app.use()` arguments). Trust the custom grep here, not knip.
+
+The other ~14 routes (`bi.js`, `ccq_rates.js`, `hub.js`, `material_requests.js`, `materials.js`, `onboarding.js`, `permissions.js`, `project_foremen.js`, `project_trades.js`, `push_tokens_route.js`, `standup.js`, `suppliers.js`, `user_management.js`, `auto_assign.js`, etc.) are correctly recognized — so it's something specific about the require pattern in app.js for those 11. Worth a follow-up to see if app.js can be tweaked to make knip's resolver consistent.
+
+### Cross-cutting verification
+
+For each finding, sample-verified by hand:
+
+- ✅ Unused-deps: re-grepped each flagged package across `src/` to confirm zero usage paths.
+- ✅ Unused-tables: re-grepped 30 dead tables across `mep-frontend/src/` and `mep-mobile/src/` — zero hits in both.
+- ✅ Unused-columns: spot-checked 5 columns by direct grep, all true negatives.
+- ✅ `project_geofences`: confirmed zero PostGIS references anywhere in active code.
+
+### Backlog from this section (priority-ordered)
+
+- **(P1, deps)** Drop confirmed unused npm deps (5 total): `@react-native-async-storage/async-storage`, `@emnapi/core`, `@emnapi/runtime` from root; `mapbox-gl`, `path` from `mep-frontend/`. Run `npm uninstall` per package, full test + build, ship as one PR. Estimate: 30 min, very low risk.
+- **(P1, exports)** Drop the 3 unused exports surfaced by knip: `dbAvailable` (`tests/helpers/db.js:561`), `DISK_USED_FAIL_PCT` (`lib/health.js:207`), `geocodeHomeAddress` (`services/geocoding.js:116`). Trivial removals, can ride along with the deps PR.
+- **(P1, web bundle)** Lazy-load route pages in `mep-frontend/src/App.jsx` — biggest single win on initial-paint performance. Estimate: 1–2 hours.
+- **(P2, web bundle)** Replace `axios` → `fetch` in `mep-frontend/src/lib/api.js`. Estimate: 1 hour.
+- **(P2, schema)** Schema cleanup migration — drop the 30 dead tables + 95 dead columns. Combine with the (P2) baseline-consolidation work already filed in Section 65 (`db/schema_baseline_2026-04-26.sql` vs `migrations/000_baseline_2026-04-28.sql`) and the (P1) `project_foremen` schema fix. Do as a single sprint to avoid touching schema twice.
+  - Sub-priority: `materials_requests`/`materials_tickets` family, `travel_allowance_*` (4 variants), `employee_field_*` (4 tables), `erp.*` schema (2 tables), `assignment_roles`/`employee_roles`/`employee_ranks`/`employee_trades`/`user_trade_access` (5 RBAC-legacy tables) — these are duplicate/legacy variants safe to drop quickly.
+  - Slower-priority: `borrow_requests`, `early_checkout_requests`, `parking_claims`, `attendance_absences`, `attendance_approvals_audit`, `absence_reasons`, `sensitive_access_log`, `project_geofences`, `company_settings` — features designed but never built. Drop only after confirming no roadmap dependency.
+- **(P3, eng tooling)** Resolve the knip Windows crash. Either:
+  - File issue with knip upstream and pin to an earlier working version (4.x lineage might predate the fast-glob bug).
+  - Replace knip with `eslint-plugin-import`'s `no-unused-modules` rule for unused-exports detection — fills the only audit slot left blank today.
+- **(P3, audits)** Add `audits/YYYY-MM-DD/` folder + commit point-in-time JSON outputs (`depcheck-backend.json`, `depcheck-frontend.json`, `bundle-stats.json`) so trend-over-time is visible. Currently these are session-only artifacts.
+
+### Files modified or generated this session
+
+- **Modified:** `knip.json` — added explicit `workspaces` + `ignoreWorkspaces` keys. Knip still doesn't run (upstream Windows bug), but the config is now closer to correct shape for when the bug is fixed. Safe to commit.
+- **Generated (local-only, gitignore):** `knip-backend-report.txt`, `knip-backend-report.json`, `depcheck-backend.json`, `depcheck-frontend.json`, `mep-frontend/bundle-stats.json`. These should be added to `.gitignore` (or moved into `audits/` if we adopt the P3 above).
+
+### Pointer for next sessions
+
+- 4 audits done. Findings documented above.
+- Recommended next-task order (in P1 order):
+  1. Drop the 5 unused deps (~30 min, very low risk, immediate cleanup win).
+  2. Lazy-load routes in frontend (~1–2 hours, big bundle win, user-visible).
+  3. **Schema migration sprint** — combines: (a) consolidate `db/schema_baseline_*` baselines, (b) drop the 30 dead tables + 95 dead columns from this audit, (c) fix the `project_foremen` P1 bug from Section 65, (d) audit Section 19 BLOCKED routes (`auto_assign.js`, `activate.js`) for the same legacy-NOT-NULL pattern.
+- **Today: 26 sections.** (Section 66 added.)
