@@ -348,6 +348,121 @@ export default {
     },
   },
 
+  assignments: {
+    title: 'Assignments',
+    subtitle: 'Manage workforce assignments across all projects',
+
+    assignButton: 'Assign Employee',
+    repeatButton: 'Assign Tomorrow as Today',
+
+    tabs: {
+      list: 'Assignments List',
+      map: 'Geographical Assignment',
+    },
+
+    success: {
+      assigned: 'Assigned successfully!',
+      moved: 'Moved successfully!',
+      repeated: 'Repeated successfully!',
+    },
+
+    role: {
+      WORKER: 'Worker',
+      FOREMAN: 'Foreman',
+      JOURNEYMAN: 'Journeyman',
+    },
+
+    list: {
+      filterProject: 'Filter by project...',
+      filterEmployee: 'Filter by employee...',
+      clear: 'Clear',
+      countSuffix: '{{count}} assignments',
+      countSuffix_one: '{{count}} assignment',
+      countOf: ' of {{total}}',
+      empty: 'No assignments found',
+      emptyHintFiltered: 'Try adjusting the filters',
+      emptyHintDefault: 'Use Map View to assign employees',
+      assignedSuffix: '{{count}} assigned',
+      onSiteSuffix: '{{count}} on site',
+      th: {
+        employee: 'Employee',
+        trade: 'Trade',
+        role: 'Role',
+        period: 'Period',
+        actions: 'Actions',
+      },
+      todayBadge: 'TODAY',
+      move: 'Move',
+    },
+
+    map: {
+      tokenMissing: 'Mapbox token not configured',
+      loading: 'Loading...',
+      selectProjectHint: 'Select a project to view the map',
+      legend: 'Legend',
+      legendProjectSite: 'Project site',
+      legendAvailable: 'Available · Click to assign',
+      legendBusy: 'Busy this period',
+      hoverHint: 'Click to assign',
+      sidebarHeader: 'Available to Assign',
+      countOfTotal: '{{available}} of {{total}}',
+      assign: 'Assign',
+      noAvailable: 'No available employees for this period',
+      assignedSection: 'Assigned',
+      modify: 'Modify',
+      // For inline Mapbox marker popup HTML
+      popupAvailable: '✓ Available',
+      popupBusy: '✗ Busy this period',
+      // Sidebar project list
+      selectProject: 'Select Project',
+      dateStart: 'Start',
+      dateEnd: 'End',
+    },
+
+    repeat: {
+      title: 'Repeat Today',
+      targetDate: 'Target Date',
+      preview: 'Preview',
+      willBeAssigned: 'Will be assigned',
+      alreadyAssigned: 'Already assigned — skipped',
+      allDone: 'All employees already have assignments for this date.',
+      willCreate: '{{count}} assignments will be created',
+      confirm: 'Confirm',
+      doneTitle: 'Done!',
+      doneBody: "Today's assignments repeated for {{date}}",
+      close: 'Close',
+    },
+
+    newModal: {
+      title: 'New Assignment',
+      project: 'Project',
+      selectProject: 'Select project...',
+      employee: 'Employee',
+      employeeSearchPlaceholder: 'Type to search for an employee...',
+      roleOnProject: 'Role on Project',
+      startDate: 'Start Date',
+      endDate: 'End Date',
+      shiftStart: 'Shift Start',
+      shiftEnd: 'Shift End',
+      notes: 'Notes (optional)',
+      notesPlaceholder: 'Any special instructions...',
+      cancel: 'Cancel',
+      assign: 'Assign',
+      errors: {
+        selectProject: 'Select a project',
+        selectEmployee: 'Select an employee',
+        startDate: 'Set start date',
+        endDate: 'Set end date',
+      },
+    },
+
+    moveModal: {
+      title: 'Move to Project',
+      subtitle: 'Moving {{employee}} from {{project}}',
+      empty: 'No other active projects',
+    },
+  },
+
   attendance: {
     title: 'Attendance',
     subtitle: 'Track daily check-in / check-out for your team',
