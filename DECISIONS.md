@@ -7309,3 +7309,82 @@ Only one inter-batch FK: `attendance_absences.reason_code → absence_reasons(co
   - **(P3) tooling** — make the unused-tables/columns detector schema-qualified AND FK-aware. The two bugs uncovered in C3 batches 4-5 would have changed both the count and the safety profile of the original audit.
   - **(P3) follow-up migration** — convert `companies.status` / `companies.plan` FKs to `CHECK` constraints, then drop `company_statuses` and `plans`. Optional cleanup.
 - **Today: 34 sections.** (Section 74 added.)
+
+---
+
+## Section 75 — C3 retroactive batch 6 + C4 batch 1: 2 missed tables + 13 dead columns (May 4, 2026, evening)
+
+Combined PR for two related discoveries that surfaced during the C4 prep audit.
+
+### Audit-detector improvements applied this session
+
+Per the Section 73-74 tooling backlog, re-ran the unused-objects audit with three improvements over Section 66's version:
+
+1. **Filter out columns whose tables were dropped in C3.** Of the original 95 dead columns, ~80 lived on tables already gone — they died with the table. Only 15 remained candidates for C4.
+2. **Schema-qualified grep.** For each remaining candidate column, count both bare-name word-boundary refs AND `<table>.<col>` schema-qualified refs. Either > 0 = "used".
+3. **FK awareness.** For each column, check whether it's the source of a FK constraint (its value is constrained against another table) OR a target (other tables reference it). FK-attached columns are never "truly dead" even if code never queries them — dropping them removes a constraint.
+
+### Discovery 1 — 2 missed tables from the C3 audit
+
+The improved detector flagged `ccq_travel_allowance_bands` and `ccq_travel_allowance_rates` as still present in the schema with zero refs in either grep mode and zero FK relationships. They were in Section 66's original 30-table list but slipped through the C3 batch boundaries. **Migration 008 drops them** as a retroactive batch 6 of C3.
+
+### Discovery 2 — Most "rare" cols (1-3 refs) are FK source columns, not dead
+
+Section 66 ranked 41 columns as "rare" (1-3 references). Re-audit reveals **most of them are FK source columns** — their value is bound to another table via FK constraint, but code rarely queries them directly because the FK does the integrity work. Examples: `material_requests.merged_into_id` (1 ref, FK src), `daily_dispatch_runs.triggered_by_user_id` (3 refs, FK src), `app_users.role` (601 refs, FK src — clearly used).
+
+These are NOT droppable. Section 66's audit conflated "rarely queried" with "dead" — same shape of bug as the schema-qualification miss in Section 73 and the FK-target miss in Section 74. The detector's noise filter excluded common names like `id`/`name`/`created_at` but didn't account for FK-constraint-only-usage.
+
+### Discovery 3 — `roles.role_id` is a PK, not a dead column
+
+Section 66 listed `public.roles.role_id` as having 0 references. True for code, but it's the PRIMARY KEY of the `roles` table — so dropping it would destroy the table. Section 66's noise filter excluded `id` but `role_id` slipped through.
+
+**Filed as a tooling improvement:** the detector should exclude any column that's part of a PRIMARY KEY constraint, not just columns named `id`.
+
+### C4 batch 1 — 13 truly-dead columns dropped (migration 009)
+
+After applying all three filters (FK source, FK target, PK), 13 columns remain that are truly dead:
+
+| Table | Column | Notes |
+|---|---|---|
+| `public.app_users` | `profile_completed` | Superseded by `profile_status` (string ENUM) |
+| `public.companies` | `travel_origin_policy` | Travel mode never wired |
+| `public.companies` | `yard_lat`, `yard_lng` | Yard geofencing never built |
+| `public.companies` | `dispatch_time`, `dispatch_timezone` | Dispatch scheduling never wired |
+| `public.companies` | `attendance_mode` | Attendance config never read |
+| `public.companies` | `break_count`, `break_minutes` | Break-time config never read |
+| `public.companies` | `overtime_threshold_hours` | OT threshold never enforced |
+| `public.employee_profiles` | `home_distance_km` | Distance computed at query time, not stored |
+| `public.plans` | `max_users`, `max_projects` | Billing limits never enforced |
+| `public.user_permissions` | `granted_by` | Never populated by any route |
+
+All 13:
+- 0 word-boundary refs
+- 0 schema-qualified refs
+- Not FK source/target
+- Not PK
+
+### Migrations
+
+- **`migrations/008_drop_dead_ccq_travel_allowance_tables.sql`** — single `BEGIN/COMMIT`, two `DROP TABLE IF EXISTS`.
+- **`migrations/009_drop_dead_columns_batch_1.sql`** — single `BEGIN/COMMIT`, 5 `ALTER TABLE` statements with bundled `DROP COLUMN IF EXISTS` clauses (one per affected table).
+
+### Files modified or generated this session
+
+- **New:** `migrations/008_drop_dead_ccq_travel_allowance_tables.sql`
+- **New:** `migrations/009_drop_dead_columns_batch_1.sql`
+- **Modified:** `DECISIONS.md` (this section)
+
+### Pointer for next sessions
+
+- C3 sprint truly complete now: **32 of 32 originally-dead tables dropped** (after migration 008). The 2 lookup tables `company_statuses` and `plans` are intentionally preserved (Section 74 — live FK targets).
+- C4 progress: **batch 1 = 13 columns dropped.** Original "95 dead columns" claim revised down significantly:
+  - ~80 died with their tables in C3.
+  - ~15 remained on still-existing tables.
+  - 1 was a PK (`roles.role_id`) — preserved.
+  - 1 was a FK source/target — preserved (need to verify the exact count when re-auditing the rare-cols list).
+  - **13 truly droppable** = 1.4 pp of the original 95% claim.
+- Remaining schema work for the sprint:
+  - **C4 batch 2** (optional) — re-audit the "rare cols" (1-3 refs) list with FK-awareness. Most are FK source columns and NOT dead. The truly-dead ones in that list are likely a small handful.
+  - **C5** — consolidate `db/schema_baseline_2026-04-26.sql` and `migrations/000_baseline_2026-04-28.sql` into a single canonical baseline that captures all the C3+C4 cleanup. Should be done LAST.
+  - **(P3) tooling commit** — formalize the improved audit detector (schema-qualified + FK-aware + PK-aware) into a checked-in script under `scripts/audit-schema.py` or similar. Currently the logic only exists ephemerally as `/tmp/audit-cols.py` + `/tmp/c4-prep.py` from this session.
+- **Today: 35 sections.** (Section 75 added.)
