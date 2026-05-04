@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import api from '@/lib/api'
 import WorkerPicker from '@/components/shared/WorkerPicker'
 import { todayStr, tomorrowStr, fmtTime } from '@/utils/formatters'
@@ -9,9 +10,9 @@ import {
   Map as MapIcon, Search, RefreshCw, ArrowLeftRight
 } from 'lucide-react'
 
-function fmt(d, opts = { month: 'short', day: 'numeric' }) {
+function fmt(d, locale = 'en-CA', opts = { month: 'short', day: 'numeric' }) {
   if (!d) return '—'
-  return new Date(d).toLocaleDateString('en-CA', opts)
+  return new Date(d).toLocaleDateString(locale, opts)
 }
 
 const SHIFTS = ['05:00','06:00','07:00','08:00','09:00','12:00',
@@ -30,6 +31,7 @@ function TradePill({ code }) {
 
 
 function MapTab({ selectedProj, form, onAssign, onModify, assigning, modifying, assignments, successMsg }) {
+  const { t } = useTranslation()
   const mapRef = useRef(null)
   const mapboxRef = useRef(null)
   const markersRef = useRef([])
@@ -95,18 +97,22 @@ function MapTab({ selectedProj, form, onAssign, onModify, assigning, modifying, 
         el.firstChild.onmouseleave = () => { el.firstChild.style.transform = 'scale(1)'; setHoveredEmp(null) }
         el.firstChild.onclick = () => onAssign(emp.id)
       }
+      const popupAvail = t('assignments.map.popupAvailable')
+      const popupBusy  = t('assignments.map.popupBusy')
       const popup = new window.mapboxgl.Popup({ offset: 20, closeButton: false })
-        .setHTML(`<div style="font-family:system-ui;padding:4px"><div style="font-weight:700;font-size:13px">${emp.full_name}</div><div style="color:#64748b;font-size:11px">${emp.trade_code || ''} · ${emp.rank_code || ''}</div><div style="margin-top:4px;font-size:11px;color:${emp.is_available ? '#10b981' : '#ef4444'};font-weight:600">${emp.is_available ? '✓ Available' : '✗ Busy this period'}</div></div>`)
+        .setHTML(`<div style="font-family:system-ui;padding:4px"><div style="font-weight:700;font-size:13px">${emp.full_name}</div><div style="color:#64748b;font-size:11px">${emp.trade_code || ''} · ${emp.rank_code || ''}</div><div style="margin-top:4px;font-size:11px;color:${emp.is_available ? '#10b981' : '#ef4444'};font-weight:600">${emp.is_available ? popupAvail : popupBusy}</div></div>`)
       const m = new window.mapboxgl.Marker({ element: el, anchor: 'left' }).setLngLat([emp.home_lng, emp.home_lat]).setPopup(popup).addTo(map)
       markersRef.current.push(m)
     })
-  }, [empMap, selectedProj, onAssign])
+  }, [empMap, selectedProj, onAssign, t])
 
   if (!token) return (
     <div className="flex-1 flex items-center justify-center bg-slate-100 rounded-xl">
-      <div className="text-center"><MapIcon className="w-10 h-10 text-slate-300 mx-auto mb-2" /><p className="text-sm text-slate-400">Mapbox token not configured</p></div>
+      <div className="text-center"><MapIcon className="w-10 h-10 text-slate-300 mx-auto mb-2" /><p className="text-sm text-slate-400">{t('assignments.map.tokenMissing')}</p></div>
     </div>
   )
+
+  const availableCount = empMap.filter(e => e.is_available).length
 
   return (
     <div className="flex-1 flex gap-4 min-h-0">
@@ -114,28 +120,28 @@ function MapTab({ selectedProj, form, onAssign, onModify, assigning, modifying, 
         <div ref={mapRef} className="w-full h-full" />
         {loading && (
           <div className="absolute top-3 left-3 bg-white rounded-lg px-3 py-2 shadow-md flex items-center gap-2">
-            <Loader2 className="w-3.5 h-3.5 animate-spin text-primary-light" /><span className="text-xs text-slate-600">Loading...</span>
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-primary-light" /><span className="text-xs text-slate-600">{t('assignments.map.loading')}</span>
           </div>
         )}
         {!selectedProj && (
           <div className="absolute inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center rounded-xl">
             <div className="bg-white rounded-2xl px-8 py-6 text-center shadow-xl">
               <MapPin className="w-8 h-8 text-primary-light mx-auto mb-2" />
-              <p className="text-sm font-semibold text-slate-700">Select a project to view the map</p>
+              <p className="text-sm font-semibold text-slate-700">{t('assignments.map.selectProjectHint')}</p>
             </div>
           </div>
         )}
         <div className="absolute bottom-4 left-4 bg-white rounded-xl shadow-lg px-4 py-3 space-y-1.5 border border-slate-100">
-          <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-2">Legend</div>
-          <div className="flex items-center gap-2 text-xs text-slate-600"><div className="w-4 h-4 rounded bg-primary border-2 border-white shadow" />Project site</div>
-          <div className="flex items-center gap-2 text-xs text-slate-600"><div className="w-4 h-4 rounded-full bg-emerald-500 border-2 border-white shadow" />Available · Click to assign</div>
-          <div className="flex items-center gap-2 text-xs text-slate-400"><div className="w-4 h-4 rounded-full bg-slate-400 border-2 border-white shadow" />Busy this period</div>
+          <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-2">{t('assignments.map.legend')}</div>
+          <div className="flex items-center gap-2 text-xs text-slate-600"><div className="w-4 h-4 rounded bg-primary border-2 border-white shadow" />{t('assignments.map.legendProjectSite')}</div>
+          <div className="flex items-center gap-2 text-xs text-slate-600"><div className="w-4 h-4 rounded-full bg-emerald-500 border-2 border-white shadow" />{t('assignments.map.legendAvailable')}</div>
+          <div className="flex items-center gap-2 text-xs text-slate-400"><div className="w-4 h-4 rounded-full bg-slate-400 border-2 border-white shadow" />{t('assignments.map.legendBusy')}</div>
         </div>
         {hoveredEmp && (
           <div className="absolute top-4 left-4 bg-white rounded-xl shadow-xl px-4 py-3 border border-slate-100 pointer-events-none">
             <div className="font-bold text-sm text-slate-800">{hoveredEmp.full_name}</div>
             <TradePill code={hoveredEmp.trade_code} />
-            <div className="text-xs text-emerald-600 font-semibold mt-1">Click to assign</div>
+            <div className="text-xs text-emerald-600 font-semibold mt-1">{t('assignments.map.hoverHint')}</div>
           </div>
         )}
         {successMsg && (
@@ -146,8 +152,8 @@ function MapTab({ selectedProj, form, onAssign, onModify, assigning, modifying, 
       </div>
       <div className="w-56 flex-shrink-0 bg-white rounded-xl border border-slate-200 flex flex-col overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-100">
-          <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">Available to Assign</div>
-          <div className="text-xs text-slate-400 mt-0.5">{empMap.filter(e => e.is_available).length} of {empMap.length}</div>
+          <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">{t('assignments.map.sidebarHeader')}</div>
+          <div className="text-xs text-slate-400 mt-0.5">{t('assignments.map.countOfTotal', { available: availableCount, total: empMap.length })}</div>
         </div>
         <div className="flex-1 overflow-y-auto divide-y divide-slate-50">
           {empMap.filter(e => e.is_available).map(emp => {
@@ -164,7 +170,7 @@ function MapTab({ selectedProj, form, onAssign, onModify, assigning, modifying, 
                     ? <button disabled className="flex-shrink-0 px-2.5 py-1 bg-primary text-white rounded-lg opacity-50 text-xs font-semibold"><Loader2 className="w-3 h-3 animate-spin" /></button>
                     : <button onClick={() => onAssign(emp.id)}
                         className="flex-shrink-0 px-2.5 py-1 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors text-xs font-semibold whitespace-nowrap">
-                        Assign
+                        {t('assignments.map.assign')}
                       </button>
                   }
                 </div>
@@ -172,12 +178,12 @@ function MapTab({ selectedProj, form, onAssign, onModify, assigning, modifying, 
             )
           })}
           {empMap.filter(e => e.is_available).length === 0 && !loading && selectedProj && (
-            <div className="px-4 py-6 text-center text-xs text-slate-400">No available employees for this period</div>
+            <div className="px-4 py-6 text-center text-xs text-slate-400">{t('assignments.map.noAvailable')}</div>
           )}
           {assignments.filter(a => a.project_id === selectedProj?.id).length > 0 && (
             <>
               <div className="px-3 py-2 bg-slate-50 border-t border-slate-200">
-                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Assigned</div>
+                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('assignments.map.assignedSection')}</div>
               </div>
               {assignments.filter(a => a.project_id === selectedProj?.id).map(a => {
                 const c = trade(a.trade_code)
@@ -191,7 +197,7 @@ function MapTab({ selectedProj, form, onAssign, onModify, assigning, modifying, 
                       </div>
                       <button onClick={() => onModify(a)} disabled={modifying === a.id}
                         className="flex-shrink-0 flex items-center gap-1 px-2 py-1 text-[10px] font-semibold text-primary-light hover:bg-primary-pale rounded-lg transition-colors border border-primary-pale whitespace-nowrap">
-                        {modifying === a.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <><ArrowLeftRight className="w-3 h-3" />Modify</>}
+                        {modifying === a.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <><ArrowLeftRight className="w-3 h-3" />{t('assignments.map.modify')}</>}
                       </button>
                     </div>
                   </div>
@@ -210,6 +216,7 @@ function MapTab({ selectedProj, form, onAssign, onModify, assigning, modifying, 
 // RepeatTodayModal
 // ─────────────────────────────────────────────────────────────
 function RepeatTodayModal({ onClose, onSaved }) {
+  const { t } = useTranslation()
   const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1)
   const tomorrowStr = tomorrow.toISOString().split('T')[0]
 
@@ -246,9 +253,9 @@ function RepeatTodayModal({ onClose, onSaved }) {
         <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
           <Check className="w-6 h-6 text-emerald-600" />
         </div>
-        <h3 className="text-base font-bold text-slate-800 mb-1">Done!</h3>
-        <p className="text-xs text-slate-400 mb-6">Today's assignments repeated for {targetDate}</p>
-        <button onClick={onClose} className="px-5 py-2 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary-dark transition-colors">Close</button>
+        <h3 className="text-base font-bold text-slate-800 mb-1">{t('assignments.repeat.doneTitle')}</h3>
+        <p className="text-xs text-slate-400 mb-6">{t('assignments.repeat.doneBody', { date: targetDate })}</p>
+        <button onClick={onClose} className="px-5 py-2 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary-dark transition-colors">{t('assignments.repeat.close')}</button>
       </div>
     </div>
   )
@@ -261,7 +268,7 @@ function RepeatTodayModal({ onClose, onSaved }) {
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <RefreshCw className="w-4 h-4 text-primary" />
-            <h3 className="text-sm font-bold text-slate-800">Repeat Today</h3>
+            <h3 className="text-sm font-bold text-slate-800">{t('assignments.repeat.title')}</h3>
           </div>
           <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
             <X className="w-4 h-4" />
@@ -271,14 +278,14 @@ function RepeatTodayModal({ onClose, onSaved }) {
         <div className="px-6 py-4 space-y-4">
           {/* Date */}
           <div>
-            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Target Date</label>
+            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">{t('assignments.repeat.targetDate')}</label>
             <div className="flex gap-2">
               <input type="date" value={targetDate} min={tomorrowStr}
                 onChange={e => { setTargetDate(e.target.value); setPreview(null) }}
                 className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-light" />
               <button onClick={handlePreview} disabled={loading}
                 className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-200 transition-colors disabled:opacity-60">
-                {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Preview'}
+                {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : t('assignments.repeat.preview')}
               </button>
             </div>
           </div>
@@ -296,7 +303,7 @@ function RepeatTodayModal({ onClose, onSaved }) {
               {preview.to_assign?.length > 0 && (
                 <div>
                   <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-                    Will be assigned ({preview.to_assign.length})
+                    {t('assignments.repeat.willBeAssigned')} ({preview.to_assign.length})
                   </div>
                   <div className="border border-slate-200 rounded-xl overflow-hidden max-h-48 overflow-y-auto divide-y divide-slate-50">
                     {preview.to_assign.map((a, i) => {
@@ -322,7 +329,7 @@ function RepeatTodayModal({ onClose, onSaved }) {
               {preview.already_set?.length > 0 && (
                 <div>
                   <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-                    Already assigned — skipped ({preview.already_set.length})
+                    {t('assignments.repeat.alreadyAssigned')} ({preview.already_set.length})
                   </div>
                   <div className="border border-slate-100 rounded-xl overflow-hidden max-h-32 overflow-y-auto divide-y divide-slate-50 bg-slate-50/50">
                     {preview.already_set.map((a, i) => (
@@ -338,7 +345,7 @@ function RepeatTodayModal({ onClose, onSaved }) {
               )}
 
               {preview.to_assign?.length === 0 && (
-                <p className="text-sm text-center text-slate-400 py-4">All employees already have assignments for this date.</p>
+                <p className="text-sm text-center text-slate-400 py-4">{t('assignments.repeat.allDone')}</p>
               )}
             </div>
           )}
@@ -347,10 +354,10 @@ function RepeatTodayModal({ onClose, onSaved }) {
         {/* Footer */}
         {preview && preview.to_assign?.length > 0 && (
           <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between gap-3">
-            <span className="text-xs text-slate-400">{preview.to_assign.length} assignments will be created</span>
+            <span className="text-xs text-slate-400">{t('assignments.repeat.willCreate', { count: preview.to_assign.length })}</span>
             <button onClick={handleConfirm} disabled={confirming}
               className="flex items-center gap-2 px-5 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition-colors disabled:opacity-60">
-              {confirming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><Check className="w-3.5 h-3.5" />Confirm</>}
+              {confirming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><Check className="w-3.5 h-3.5" />{t('assignments.repeat.confirm')}</>}
             </button>
           </div>
         )}
@@ -359,18 +366,23 @@ function RepeatTodayModal({ onClose, onSaved }) {
   )
 }
 
-const ROLES = [
-  { value: 'WORKER',     label: 'Worker',     color: 'bg-slate-100 text-slate-700' },
-  { value: 'FOREMAN',    label: 'Foreman',    color: 'bg-primary-pale text-primary-dark' },
-  { value: 'JOURNEYMAN', label: 'Journeyman', color: 'bg-amber-100 text-amber-700' },
-]
+// Role keys at module scope; labels resolved at render time via t().
+const ROLE_KEYS = ['WORKER', 'FOREMAN', 'JOURNEYMAN']
+const ROLE_COLORS = {
+  WORKER:     'bg-slate-100 text-slate-700',
+  FOREMAN:    'bg-primary-pale text-primary-dark',
+  JOURNEYMAN: 'bg-amber-100 text-amber-700',
+}
 
 function RoleBadge({ role }) {
-  const r = ROLES.find(x => x.value === role) || ROLES[0]
-  return <span className={`inline-flex text-[10px] font-bold px-2 py-0.5 rounded-full ${r.color}`}>{r.label}</span>
+  const { t } = useTranslation()
+  const color = ROLE_COLORS[role] || ROLE_COLORS.WORKER
+  const label = t(`assignments.role.${role || 'WORKER'}`)
+  return <span className={`inline-flex text-[10px] font-bold px-2 py-0.5 rounded-full ${color}`}>{label}</span>
 }
 
 function NewAssignmentModal({ projects, onClose, onSaved }) {
+  const { t } = useTranslation()
   const [employees, setEmployees] = useState([])
   const [loadingEmp, setLoadingEmp] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -406,10 +418,10 @@ function NewAssignmentModal({ projects, onClose, onSaved }) {
 
   const handleSave = async () => {
     setError('')
-    if (!form.project_id)  return setError('Select a project')
-    if (!form.employee_id) return setError('Select an employee')
-    if (!form.start_date)  return setError('Set start date')
-    if (!form.end_date)    return setError('Set end date')
+    if (!form.project_id)  return setError(t('assignments.newModal.errors.selectProject'))
+    if (!form.employee_id) return setError(t('assignments.newModal.errors.selectEmployee'))
+    if (!form.start_date)  return setError(t('assignments.newModal.errors.startDate'))
+    if (!form.end_date)    return setError(t('assignments.newModal.errors.endDate'))
     setSaving(true)
     try {
       await api.post('/assignments/requests', {
@@ -435,7 +447,7 @@ function NewAssignmentModal({ projects, onClose, onSaved }) {
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Plus className="w-4 h-4 text-primary" />
-            <h3 className="text-sm font-bold text-slate-800">New Assignment</h3>
+            <h3 className="text-sm font-bold text-slate-800">{t('assignments.newModal.title')}</h3>
           </div>
           <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
             <X className="w-4 h-4" />
@@ -446,10 +458,10 @@ function NewAssignmentModal({ projects, onClose, onSaved }) {
 
           {/* Project */}
           <div>
-            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Project</label>
+            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">{t('assignments.newModal.project')}</label>
             <select value={form.project_id} onChange={e => set('project_id', e.target.value)}
               className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-light">
-              <option value="">Select project...</option>
+              <option value="">{t('assignments.newModal.selectProject')}</option>
               {projects.map(p => (
                 <option key={p.id} value={p.id}>{p.project_code}{p.project_name ? ` — ${p.project_name}` : ''}</option>
               ))}
@@ -458,7 +470,7 @@ function NewAssignmentModal({ projects, onClose, onSaved }) {
 
           {/* Employee */}
           <div>
-            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Employee</label>
+            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">{t('assignments.newModal.employee')}</label>
             {loadingEmp
               ? <div className="flex justify-center py-4"><Loader2 className="w-4 h-4 animate-spin text-slate-300" /></div>
               : <WorkerPicker
@@ -481,19 +493,19 @@ function NewAssignmentModal({ projects, onClose, onSaved }) {
                     : null
                   }
                   onChange={w => set('employee_id', w ? w.id : '')}
-                  placeholder="Type to search for an employee..."
+                  placeholder={t('assignments.newModal.employeeSearchPlaceholder')}
                 />
             }
           </div>
 
           {/* Role */}
           <div>
-            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Role on Project</label>
+            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">{t('assignments.newModal.roleOnProject')}</label>
             <div className="flex gap-2">
-              {ROLES.map(r => (
-                <button key={r.value} onClick={() => set('assignment_role', r.value)}
-                  className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-colors ${form.assignment_role === r.value ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
-                  {r.label}
+              {ROLE_KEYS.map(roleKey => (
+                <button key={roleKey} onClick={() => set('assignment_role', roleKey)}
+                  className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-colors ${form.assignment_role === roleKey ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
+                  {t(`assignments.role.${roleKey}`)}
                 </button>
               ))}
             </div>
@@ -502,12 +514,12 @@ function NewAssignmentModal({ projects, onClose, onSaved }) {
           {/* Dates */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Start Date</label>
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">{t('assignments.newModal.startDate')}</label>
               <input type="date" value={form.start_date} onChange={e => set('start_date', e.target.value)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-light" />
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">End Date</label>
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">{t('assignments.newModal.endDate')}</label>
               <input type="date" value={form.end_date} min={form.start_date} onChange={e => set('end_date', e.target.value)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-light" />
             </div>
@@ -515,9 +527,12 @@ function NewAssignmentModal({ projects, onClose, onSaved }) {
 
           {/* Shift */}
           <div className="grid grid-cols-2 gap-3">
-            {[['Shift Start','shift_start'],['Shift End','shift_end']].map(([label, key]) => (
+            {[
+              { labelKey: 'assignments.newModal.shiftStart', key: 'shift_start' },
+              { labelKey: 'assignments.newModal.shiftEnd',   key: 'shift_end' },
+            ].map(({ labelKey, key }) => (
               <div key={key}>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">{label}</label>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">{t(labelKey)}</label>
                 <select value={form[key]} onChange={e => set(key, e.target.value)}
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-light">
                   {SHIFTS.map(s => <option key={s} value={s}>{fmtTime(s)}</option>)}
@@ -528,9 +543,9 @@ function NewAssignmentModal({ projects, onClose, onSaved }) {
 
           {/* Notes */}
           <div>
-            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Notes (optional)</label>
+            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">{t('assignments.newModal.notes')}</label>
             <input type="text" value={form.notes} onChange={e => set('notes', e.target.value)}
-              placeholder="Any special instructions..."
+              placeholder={t('assignments.newModal.notesPlaceholder')}
               className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-light placeholder:text-slate-300" />
           </div>
 
@@ -544,11 +559,11 @@ function NewAssignmentModal({ projects, onClose, onSaved }) {
         {/* Footer */}
         <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-end gap-3">
           <button onClick={onClose} className="px-4 py-2 text-xs font-semibold text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors">
-            Cancel
+            {t('assignments.newModal.cancel')}
           </button>
           <button onClick={handleSave} disabled={saving}
             className="flex items-center gap-2 px-5 py-2 bg-primary text-white text-xs font-bold rounded-xl hover:bg-primary-dark transition-colors disabled:opacity-60">
-            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><Check className="w-3.5 h-3.5" />Assign</>}
+            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><Check className="w-3.5 h-3.5" />{t('assignments.newModal.assign')}</>}
           </button>
         </div>
       </div>
@@ -557,7 +572,9 @@ function NewAssignmentModal({ projects, onClose, onSaved }) {
 }
 
 function ListTab({ projects, assignments, loadingAsgn, onModify, modifying, successMsg, onRefresh }) {
+  const { t, i18n } = useTranslation()
   const today = todayStr()
+  const locale = i18n.language === 'fr' ? 'fr-CA' : 'en-CA'
 
   // Filters
   const [filterProject,  setFilterProject]  = useState('')
@@ -591,6 +608,8 @@ function ListTab({ projects, assignments, loadingAsgn, onModify, modifying, succ
 
   const groupList = Object.values(grouped).sort((a, b) => a.project_code.localeCompare(b.project_code))
 
+  const hasFilter = filterProject || filterEmployee || filterDate
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden min-h-0 bg-slate-50">
       {/* Success message */}
@@ -604,12 +623,12 @@ function ListTab({ projects, assignments, loadingAsgn, onModify, modifying, succ
       <div className="flex-shrink-0 px-5 pt-4 pb-3 flex items-center gap-2">
         <div className="relative flex-1 max-w-[200px]">
           <Briefcase className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
-          <input value={filterProject} onChange={e => setFilterProject(e.target.value)} placeholder="Filter by project..."
+          <input value={filterProject} onChange={e => setFilterProject(e.target.value)} placeholder={t('assignments.list.filterProject')}
             className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary-light placeholder:text-slate-400" />
         </div>
         <div className="relative flex-1 max-w-[200px]">
           <User className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
-          <input value={filterEmployee} onChange={e => setFilterEmployee(e.target.value)} placeholder="Filter by employee..."
+          <input value={filterEmployee} onChange={e => setFilterEmployee(e.target.value)} placeholder={t('assignments.list.filterEmployee')}
             className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary-light placeholder:text-slate-400" />
         </div>
         <div className="relative">
@@ -617,15 +636,15 @@ function ListTab({ projects, assignments, loadingAsgn, onModify, modifying, succ
           <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)}
             className="pl-8 pr-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary-light" />
         </div>
-        {(filterProject || filterEmployee || filterDate) && (
+        {hasFilter && (
           <button onClick={() => { setFilterProject(''); setFilterEmployee(''); setFilterDate('') }}
             className="flex items-center gap-1 px-3 py-2 text-xs text-slate-500 hover:text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors">
-            <X className="w-3 h-3" />Clear
+            <X className="w-3 h-3" />{t('assignments.list.clear')}
           </button>
         )}
         <div className="ml-auto text-[11px] text-slate-400 font-medium">
-          {filtered.length} assignment{filtered.length !== 1 ? 's' : ''}
-          {(filterProject || filterEmployee || filterDate) ? ` of ${assignments.length}` : ''}
+          {t('assignments.list.countSuffix', { count: filtered.length })}
+          {hasFilter ? t('assignments.list.countOf', { total: assignments.length }) : ''}
         </div>
       </div>
 
@@ -636,9 +655,9 @@ function ListTab({ projects, assignments, loadingAsgn, onModify, modifying, succ
           : groupList.length === 0
             ? <div className="flex flex-col items-center justify-center py-16 text-center">
                 <Briefcase className="w-10 h-10 text-slate-200 mb-3" />
-                <p className="text-sm font-semibold text-slate-400">No assignments found</p>
+                <p className="text-sm font-semibold text-slate-400">{t('assignments.list.empty')}</p>
                 <p className="text-xs text-slate-300 mt-1">
-                  {(filterProject || filterEmployee || filterDate) ? 'Try adjusting the filters' : 'Use Map View to assign employees'}
+                  {hasFilter ? t('assignments.list.emptyHintFiltered') : t('assignments.list.emptyHintDefault')}
                 </p>
               </div>
             : groupList.map(group => {
@@ -664,8 +683,8 @@ function ListTab({ projects, assignments, loadingAsgn, onModify, modifying, succ
                         )}
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className="text-[10px] font-semibold px-2 py-1 bg-primary-pale text-primary rounded-lg">{group.employees.length} assigned</span>
-                        {onSiteNow > 0 && <span className="text-[10px] font-semibold px-2 py-1 bg-emerald-50 text-emerald-600 rounded-lg">{onSiteNow} on site</span>}
+                        <span className="text-[10px] font-semibold px-2 py-1 bg-primary-pale text-primary rounded-lg">{t('assignments.list.assignedSuffix', { count: group.employees.length })}</span>
+                        {onSiteNow > 0 && <span className="text-[10px] font-semibold px-2 py-1 bg-emerald-50 text-emerald-600 rounded-lg">{t('assignments.list.onSiteSuffix', { count: onSiteNow })}</span>}
                         <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
                       </div>
                     </button>
@@ -674,11 +693,11 @@ function ListTab({ projects, assignments, loadingAsgn, onModify, modifying, succ
                     {isOpen && (
                       <>
                         <div className="border-t border-slate-100 grid grid-cols-[1fr_120px_80px_160px_auto] text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2 bg-slate-50">
-                          <span>Employee</span>
-                          <span>Trade</span>
-                          <span>Role</span>
-                          <span>Period</span>
-                          <span>Actions</span>
+                          <span>{t('assignments.list.th.employee')}</span>
+                          <span>{t('assignments.list.th.trade')}</span>
+                          <span>{t('assignments.list.th.role')}</span>
+                          <span>{t('assignments.list.th.period')}</span>
+                          <span>{t('assignments.list.th.actions')}</span>
                         </div>
                         {group.employees.map(a => {
                           const isToday = (a.start_date || '').slice(0,10) <= today && (a.end_date || '').slice(0,10) >= today
@@ -701,14 +720,14 @@ function ListTab({ projects, assignments, loadingAsgn, onModify, modifying, succ
                               <div><RoleBadge role={a.assignment_role} /></div>
                               {/* Period */}
                               <div className="flex items-center gap-1.5">
-                                <div className="text-xs text-slate-600 font-medium">{fmt(a.start_date)} → {fmt(a.end_date)}</div>
-                                {isToday && <span className="text-[9px] font-bold px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded-full">TODAY</span>}
+                                <div className="text-xs text-slate-600 font-medium">{fmt(a.start_date, locale)} → {fmt(a.end_date, locale)}</div>
+                                {isToday && <span className="text-[9px] font-bold px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded-full">{t('assignments.list.todayBadge')}</span>}
                               </div>
                               {/* Actions */}
                               <div className="flex items-center gap-1.5">
                                 <button onClick={() => onModify(a)} disabled={modifying === a.id}
                                   className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-primary-light hover:bg-primary-pale rounded-lg transition-colors border border-primary-pale whitespace-nowrap disabled:opacity-50">
-                                  {modifying === a.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <><ArrowLeftRight className="w-3 h-3" />Move</>}
+                                  {modifying === a.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <><ArrowLeftRight className="w-3 h-3" />{t('assignments.list.move')}</>}
                                 </button>
                               </div>
                             </div>
@@ -726,6 +745,7 @@ function ListTab({ projects, assignments, loadingAsgn, onModify, modifying, succ
 }
 
 export default function AssignmentsPage() {
+  const { t } = useTranslation()
   const [tab, setTab] = useState('list')
   const [projects, setProjects] = useState([])
   const [assignments, setAssignments] = useState([])
@@ -762,7 +782,7 @@ export default function AssignmentsPage() {
     try {
       await api.post('/assignments/requests', { project_id: projectId, employee_id: empId, ...form })
       fetchAssignments()
-      setSuccessMsg('Assigned successfully!')
+      setSuccessMsg(t('assignments.success.assigned'))
       setTimeout(() => setSuccessMsg(''), 4000)
       return true
     } catch (e) { alert(e.response?.data?.message || e.message); return false }
@@ -781,7 +801,7 @@ export default function AssignmentsPage() {
       await api.patch(`/assignments/requests/${assignment.id}/move`, { new_project_id: newProjectId })
       fetchAssignments()
       setReassignModal(null)
-      setSuccessMsg('Moved successfully!')
+      setSuccessMsg(t('assignments.success.moved'))
       setTimeout(() => setSuccessMsg(''), 4000)
     } catch (e) { alert(e.response?.data?.message || e.message) }
     finally { setModifying(null) }
@@ -792,27 +812,27 @@ export default function AssignmentsPage() {
       <div className="bg-white border-b border-slate-200 px-6 py-4 flex-shrink-0">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-lg font-bold text-slate-900">Assignments</h1>
-            <p className="text-xs text-slate-400 mt-0.5">Manage workforce assignments across all projects</p>
+            <h1 className="text-lg font-bold text-slate-900">{t('assignments.title')}</h1>
+            <p className="text-xs text-slate-400 mt-0.5">{t('assignments.subtitle')}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => setNewAssignModal(true)}
             className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-xs font-bold rounded-lg hover:bg-primary-dark transition-colors shadow-sm">
-            <Plus className="w-3.5 h-3.5" />Assign Employee
+            <Plus className="w-3.5 h-3.5" />{t('assignments.assignButton')}
           </button>
           <button onClick={() => setRepeatModal(true)}
             className="flex items-center gap-2 px-4 py-2 bg-white text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-50 transition-colors border border-slate-200">
-            <RefreshCw className="w-3.5 h-3.5" />Assign Tomorrow as Today
+            <RefreshCw className="w-3.5 h-3.5" />{t('assignments.repeatButton')}
           </button>
           <div className="w-px h-5 bg-slate-200 mx-1" />
           {[
-            { id: 'list', icon: List,    label: 'Assignments List' },
-            { id: 'map',  icon: MapIcon, label: 'Geographical Assignment' },
-          ].map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${tab === t.id ? 'bg-primary text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'}`}>
-              <t.icon className="w-3.5 h-3.5" />{t.label}
+            { id: 'list', icon: List,    labelKey: 'assignments.tabs.list' },
+            { id: 'map',  icon: MapIcon, labelKey: 'assignments.tabs.map'  },
+          ].map(tabItem => (
+            <button key={tabItem.id} onClick={() => setTab(tabItem.id)}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${tab === tabItem.id ? 'bg-primary text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'}`}>
+              <tabItem.icon className="w-3.5 h-3.5" />{t(tabItem.labelKey)}
             </button>
           ))}
         </div>
@@ -831,7 +851,7 @@ export default function AssignmentsPage() {
           <div className="flex-1 flex gap-4 min-h-0">
             <div className="w-52 flex-shrink-0 bg-white rounded-xl border border-slate-200 flex flex-col overflow-hidden">
               <div className="px-4 py-3 border-b border-slate-100">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Select Project</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('assignments.map.selectProject')}</p>
               </div>
               <div className="flex-1 overflow-y-auto">
                 {projects.map(p => (
@@ -844,7 +864,7 @@ export default function AssignmentsPage() {
               </div>
               <div className="px-4 py-3 border-t border-slate-100 space-y-2">
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Start</label>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">{t('assignments.map.dateStart')}</label>
                   <input type="date" value={mapForm.start_date}
                     onChange={e => {
                       const v = e.target.value
@@ -853,7 +873,7 @@ export default function AssignmentsPage() {
                     className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary-light" />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">End</label>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">{t('assignments.map.dateEnd')}</label>
                   <input type="date" value={mapForm.end_date} min={mapForm.start_date}
                     onChange={e => {
                       const v = e.target.value
@@ -874,7 +894,7 @@ export default function AssignmentsPage() {
       {repeatModal && (
         <RepeatTodayModal
           onClose={() => setRepeatModal(false)}
-          onSaved={() => { fetchAssignments(); setSuccessMsg('Repeated successfully!'); setTimeout(() => setSuccessMsg(''), 4000) }}
+          onSaved={() => { fetchAssignments(); setSuccessMsg(t('assignments.success.repeated')); setTimeout(() => setSuccessMsg(''), 4000) }}
         />
       )}
       {newAssignModal && (
@@ -884,7 +904,7 @@ export default function AssignmentsPage() {
           onSaved={() => {
             setNewAssignModal(false)
             fetchAssignments()
-            setSuccessMsg('Assigned successfully!')
+            setSuccessMsg(t('assignments.success.assigned'))
             setTimeout(() => setSuccessMsg(''), 4000)
           }}
         />
@@ -895,10 +915,15 @@ export default function AssignmentsPage() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-bold text-slate-800">Move to Project</h3>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Moving <span className="font-semibold text-slate-600">{reassignModal.assignment.employee_name}</span> from <span className="font-semibold text-primary">{reassignModal.assignment.project_code}</span>
-                </p>
+                <h3 className="text-sm font-bold text-slate-800">{t('assignments.moveModal.title')}</h3>
+                <p className="text-xs text-slate-400 mt-0.5"
+                  dangerouslySetInnerHTML={{
+                    __html: t('assignments.moveModal.subtitle', {
+                      employee: `<span class="font-semibold text-slate-600">${reassignModal.assignment.employee_name}</span>`,
+                      project:  `<span class="font-semibold text-primary">${reassignModal.assignment.project_code}</span>`,
+                    })
+                  }}
+                />
               </div>
               <button onClick={() => setReassignModal(null)} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
                 <X className="w-4 h-4" />
@@ -906,7 +931,7 @@ export default function AssignmentsPage() {
             </div>
             <div className="max-h-72 overflow-y-auto divide-y divide-slate-50">
               {reassignModal.otherProjects.length === 0
-                ? <div className="py-8 text-center text-xs text-slate-400">No other active projects</div>
+                ? <div className="py-8 text-center text-xs text-slate-400">{t('assignments.moveModal.empty')}</div>
                 : reassignModal.otherProjects.map(proj => (
                     <button key={proj.id} onClick={() => handleModifyConfirm(proj.id)}
                       disabled={modifying === proj.id}

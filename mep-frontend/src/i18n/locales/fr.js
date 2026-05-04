@@ -348,6 +348,119 @@ export default {
     },
   },
 
+  assignments: {
+    title: 'Affectations',
+    subtitle: "Gérer les affectations de la main-d'œuvre sur tous les projets",
+
+    assignButton: 'Affecter un employé',
+    repeatButton: "Répéter aujourd'hui sur demain",
+
+    tabs: {
+      list: 'Liste des affectations',
+      map: 'Affectation géographique',
+    },
+
+    success: {
+      assigned: 'Affectation réussie !',
+      moved: 'Déplacement réussi !',
+      repeated: 'Répétition réussie !',
+    },
+
+    role: {
+      WORKER: 'Ouvrier',
+      FOREMAN: 'Contremaître',
+      JOURNEYMAN: 'Compagnon',
+    },
+
+    list: {
+      filterProject: 'Filtrer par projet…',
+      filterEmployee: 'Filtrer par employé…',
+      clear: 'Effacer',
+      countSuffix: '{{count}} affectations',
+      countSuffix_one: '{{count}} affectation',
+      countOf: ' sur {{total}}',
+      empty: 'Aucune affectation trouvée',
+      emptyHintFiltered: "Essayez d'ajuster les filtres",
+      emptyHintDefault: 'Utilisez la vue carte pour affecter des employés',
+      assignedSuffix: '{{count}} affectés',
+      onSiteSuffix: '{{count}} sur le chantier',
+      th: {
+        employee: 'Employé',
+        trade: 'Métier',
+        role: 'Rôle',
+        period: 'Période',
+        actions: 'Actions',
+      },
+      todayBadge: "AUJOURD'HUI",
+      move: 'Déplacer',
+    },
+
+    map: {
+      tokenMissing: 'Jeton Mapbox non configuré',
+      loading: 'Chargement…',
+      selectProjectHint: 'Sélectionnez un projet pour voir la carte',
+      legend: 'Légende',
+      legendProjectSite: 'Site du chantier',
+      legendAvailable: 'Disponible · Cliquer pour affecter',
+      legendBusy: 'Occupé cette période',
+      hoverHint: 'Cliquer pour affecter',
+      sidebarHeader: 'Disponibles à affecter',
+      countOfTotal: '{{available}} sur {{total}}',
+      assign: 'Affecter',
+      noAvailable: 'Aucun employé disponible pour cette période',
+      assignedSection: 'Affectés',
+      modify: 'Modifier',
+      popupAvailable: '✓ Disponible',
+      popupBusy: '✗ Occupé cette période',
+      selectProject: 'Sélectionner un projet',
+      dateStart: 'Début',
+      dateEnd: 'Fin',
+    },
+
+    repeat: {
+      title: "Répéter aujourd'hui",
+      targetDate: 'Date cible',
+      preview: 'Aperçu',
+      willBeAssigned: 'Sera affecté',
+      alreadyAssigned: 'Déjà affecté — ignoré',
+      allDone: 'Tous les employés ont déjà des affectations pour cette date.',
+      willCreate: '{{count}} affectations seront créées',
+      confirm: 'Confirmer',
+      doneTitle: 'Terminé !',
+      doneBody: "Affectations d'aujourd'hui répétées pour {{date}}",
+      close: 'Fermer',
+    },
+
+    newModal: {
+      title: 'Nouvelle affectation',
+      project: 'Projet',
+      selectProject: 'Sélectionner un projet…',
+      employee: 'Employé',
+      employeeSearchPlaceholder: 'Tapez pour rechercher un employé…',
+      roleOnProject: 'Rôle sur le projet',
+      startDate: 'Date de début',
+      endDate: 'Date de fin',
+      shiftStart: 'Début du quart',
+      shiftEnd: 'Fin du quart',
+      notes: 'Notes (optionnel)',
+      notesPlaceholder: 'Instructions spéciales…',
+      cancel: 'Annuler',
+      assign: 'Affecter',
+      errors: {
+        selectProject: 'Sélectionnez un projet',
+        selectEmployee: 'Sélectionnez un employé',
+        startDate: 'Indiquez la date de début',
+        endDate: 'Indiquez la date de fin',
+      },
+    },
+
+    moveModal: {
+      title: 'Déplacer vers un projet',
+      subtitle: 'Déplacement de {{employee}} depuis {{project}}',
+      empty: "Aucun autre projet actif",
+    },
+  },
+
   attendance: {
     title: 'Présences',
     subtitle: 'Suivez les pointages quotidiens de votre équipe',

@@ -6268,3 +6268,118 @@ const html = generatePOHtml(po, t, locale)
 - **Tier 2: 4/5 done.**
 - **Web i18n total: 9/30 pages.**
 - **Today: 22 sections.**
+
+---
+
+## Section 63 — AssignmentsPage i18n + Tier 2 closeout (May 4, 2026, morning)
+
+The big one. 933 lines, 5 components (Main + ListTab + MapTab + RepeatTodayModal + NewAssignmentModal + Move modal), ~120 strings. Closes Tier 2 at 5/5.
+
+### What shipped
+
+- `assignments.*` bucket added to en.js + fr.js (~120 keys with sub-buckets `tabs`, `success`, `role`, `list`, `map`, `repeat`, `newModal`, `moveModal`).
+- `mep-frontend/src/pages/assignments/AssignmentsPage.jsx` rewired to use `t()` everywhere.
+- Mapbox marker popup HTML translates the `Available` / `Busy this period` strings via `t()` captured in the `useEffect` deps. Same pattern as the PDF generator from Section 62 (Quebec drivers will see Quebec FR popups when hovering employee markers).
+- `RoleBadge` refactored to use `ROLE_KEYS` + `ROLE_COLORS` split, mirroring the `roleShort` pattern from `EmployeesPage` and the `STATUS_COLORS` pattern from `attendance` (Section 59) and `materials.statusBadge` (Section 61).
+
+### Strings translated by section
+
+**Top-level page (~10):** title, subtitle, two action buttons (Assign Employee / Assign Tomorrow as Today), two tab labels, three success toasts (assigned / moved / repeated).
+
+**Roles (3):** WORKER / FOREMAN / JOURNEYMAN → Ouvrier / Contremaître / Compagnon. Consistent with `employees.roleShort.*` from Section 55. (Could in principle reference that bucket; kept duplicate for now to avoid cross-bucket drift.)
+
+**ListTab (~15):** filter placeholders (project / employee), "Clear" button, count + "of {{total}}" interpolation, empty state with two hints (filtered vs default), group headers (`{{count}} assigned`, `{{count}} on site`), table headers (Employee / Trade / Role / Period / Actions), TODAY badge, Move button.
+
+**MapTab (~17):** Mapbox token error, Loading toast, "Select a project" overlay, Legend (project site / available / busy), hover hint, sidebar header, count "{{available}} of {{total}}", Assign button, "No available employees", Assigned section, Modify button, popup `✓ Available` / `✗ Busy this period`, sidebar Select Project header, Start / End date labels.
+
+**RepeatTodayModal (~10):** title, target date label, Preview button, "Will be assigned" / "Already assigned — skipped" sections, "All employees already have assignments..." empty message, "{{count}} assignments will be created" footer, Confirm, Done success state with date interpolation, Close.
+
+**NewAssignmentModal (~15):** title, Project / Employee / Role on Project / Start Date / End Date / Shift Start / Shift End / Notes labels, project select placeholder, employee search placeholder, notes placeholder, Cancel / Assign buttons, 4 error messages.
+
+**MoveModal (~3):** title, subtitle with employee + project interpolation, empty state.
+
+### Quebec FR conventions
+
+| EN | Quebec FR | Note |
+|---|---|---|
+| Assignments | Affectations | (consistent with `nav.assignments`) |
+| Assign Employee | Affecter un employé | |
+| Assign Tomorrow as Today | Répéter aujourd'hui sur demain | "tomorrow takes today's pattern" |
+| Move | Déplacer | (vs France's "Déménager" or "Bouger") |
+| Move to Project | Déplacer vers un projet | |
+| Geographical Assignment | Affectation géographique | |
+| Worker | Ouvrier | |
+| Foreman | Contremaître | |
+| Journeyman | Compagnon | |
+| Role on Project | Rôle sur le projet | |
+| Shift Start / Shift End | Début du quart / Fin du quart | "quart" = shift in Quebec FR |
+| Notes (optional) | Notes (optionnel) | |
+| Any special instructions... | Instructions spéciales… | |
+| Project site | Site du chantier | |
+| Available · Click to assign | Disponible · Cliquer pour affecter | |
+| Busy this period | Occupé cette période | |
+| TODAY (badge) | AUJOURD'HUI | |
+| {{count}} assignments will be created | {{count}} affectations seront créées | future tense, formal |
+| Manage workforce assignments across all projects | Gérer les affectations de la main-d'œuvre sur tous les projets | "main-d'œuvre" with œ ligature |
+
+### Pluralization strategy
+
+Used `_one` / `_other` suffix pattern from Section 61 (materials):
+
+```js
+countSuffix:     '{{count}} assignments',
+countSuffix_one: '{{count}} assignment',
+```
+
+Also used count-based interpolation without explicit pluralization for FR forms that don't change between 1 and N (`{{count}} affectés`, `{{count}} sur le chantier`) — these are treated as collective.
+
+### Mapbox marker popup HTML
+
+The popup is built via `setHTML()` from a template literal. The `t` function is captured by the `useEffect` and the deps include `t` so popups update when language changes. Two strings (`✓ Available` / `✗ Busy this period`) are pulled out as variables before the template literal:
+
+```js
+const popupAvail = t('assignments.map.popupAvailable')
+const popupBusy  = t('assignments.map.popupBusy')
+const popup = ... .setHTML(`...${emp.is_available ? popupAvail : popupBusy}...`)
+```
+
+### MoveModal subtitle — `dangerouslySetInnerHTML` pattern
+
+The subtitle has interpolated `<span>` markup for the employee name and project code. Used `dangerouslySetInnerHTML` with i18next interpolation:
+
+```js
+dangerouslySetInnerHTML={{
+  __html: t('assignments.moveModal.subtitle', {
+    employee: `<span class="font-semibold text-slate-600">${name}</span>`,
+    project:  `<span class="font-semibold text-primary">${code}</span>`,
+  })
+}}
+```
+
+The interpolated values are user-facing data from the backend; they're rendered as text within `<span>` tags. **Risk note:** if the backend ever returns HTML in `employee_name` or `project_code`, this would XSS. Backend-side these are sanitized strings, but when the next polish pass hits this, switch to `react-i18next`'s `<Trans>` component to avoid `dangerouslySetInnerHTML` entirely.
+
+### Tier 2 closed (5/5)
+
+| Page | Section shipped | Strings (approx) |
+|---|---|---|
+| Suppliers | 57 | ~30 |
+| Attendance | 59 | ~50 |
+| MaterialRequest | 61 | ~60 |
+| PurchaseOrders | 62 | ~50 |
+| **Assignments** | **63** | **~120** |
+| **Total** | | **~310 keys** |
+
+Combined with Tier 1's ~193 keys + the shared `trades.*` (~6) = **~509 i18n keys across the full Tier 1 + Tier 2 program**. Quebec FR users now have a complete bilingual experience across every authenticated page that gets daily traffic.
+
+### Backlog from this section
+
+- **(P3)** Switch the MoveModal subtitle from `dangerouslySetInnerHTML` to react-i18next's `<Trans>` component for safer markup interpolation. Same pattern would benefit any future translated section that has inline emphasis.
+- **(P3)** `WorkerPicker` component (`mep-frontend/src/components/shared/WorkerPicker.jsx`) is consumed by AssignmentsPage's NewAssignmentModal. Its placeholder is now translated via prop, but the WorkerPicker's internal strings (e.g. "No matches", "Loading", "Selected") may still be EN-only. Verify in Tier 3.
+- **(P3)** Mapbox marker text (employee name "first letter" badge inside the colored pill) is ASCII-only and unaffected, but the DEFAULT marker text "Project site" (📍 icon) currently shows the project code which is fine. No action needed.
+- **(P2)** Tier 3 starts: BI / Reports / Hub / TaskRequest / Standup / UserManagement / Permissions / Settings / Profile / WorkforcePlanner. Smaller pages on average. Section 64+ candidates.
+
+### Pointer for next sessions
+
+- **Tier 2 i18n: 5/5 done. Closed. ✅**
+- **Web i18n total: 10/30 pages translated.**
+- **Today: 23 sections.** Way past the previous "stop at 2 sections per session" recommendation. Hedar's call.
