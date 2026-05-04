@@ -6856,3 +6856,67 @@ For each finding, sample-verified by hand:
   2. Lazy-load routes in frontend (~1–2 hours, big bundle win, user-visible).
   3. **Schema migration sprint** — combines: (a) consolidate `db/schema_baseline_*` baselines, (b) drop the 30 dead tables + 95 dead columns from this audit, (c) fix the `project_foremen` P1 bug from Section 65, (d) audit Section 19 BLOCKED routes (`auto_assign.js`, `activate.js`) for the same legacy-NOT-NULL pattern.
 - **Today: 26 sections.** (Section 66 added.)
+
+---
+
+## Section 67 — Section 66 P1 cleanup: deps + lazy-load (May 4, 2026, afternoon)
+
+Executing the Section 66 backlog. Two PRs back-to-back.
+
+### Task A — drop unused deps + exports (PR #102, merged)
+
+Final scope after the `@emnapi/*` rollback:
+
+- **3 npm deps removed** (was 5; `@emnapi/core` + `@emnapi/runtime` reverted after CI re-discovered the cross-platform lockfile issue documented in Section 18 Phase 7.5):
+  - `@react-native-async-storage/async-storage` (root)
+  - `mep-frontend/`: `mapbox-gl`, `path`
+- **2 unused exports removed** (definitions kept, only the `module.exports` lines edited):
+  - `tests/helpers/db.js`: `dbAvailable` (used only internally)
+  - `lib/health.js`: `DISK_USED_FAIL_PCT` (used only internally)
+- **`.gitignore`:** added `jest-cov-*.txt` + `jest-foremen-debug.txt` patterns to stop Section 65 leftover artifacts from polluting `git status`.
+
+The 3rd export from Section 66 (`geocodeHomeAddress` in `services/geocoding.js`) was kept — knip false-positive, the test imports it via dynamic `require()` inside a `load()` helper which knip's static analyzer misses.
+
+**Verification:** frontend build identical bundle size (728 KB / 194 KB gzip — confirms the dropped deps were never in the bundle). Frontend tests 25/25. Backend tests 551/553 (the 2 failures are the pre-existing Section 65 email-mock issues, out-of-scope).
+
+**Net diff:** 7 files changed, 277 insertions, 2301 deletions (the deletion is mostly `package-lock.json` shrinking from 144 + 32 transitive packages disappearing).
+
+### Task B — lazy-load frontend routes (this PR)
+
+Converted 16 of 17 page imports in `mep-frontend/src/App.jsx` to `React.lazy(() => import(...))`. Kept `LoginPage` eager (first paint UX for unauthenticated users) and `AppLayout` eager (layout shell). Wrapped `<Routes>` in a single `<Suspense fallback={<PageLoading />}>` boundary. Introduced a tiny `PageLoading` component that reuses the existing `Loading...` pattern already used inline by `ProtectedRoute` and `RequirePermission` (DRY).
+
+**Bundle impact (vite v7.3.2 production build):**
+
+| | Before | After | Δ |
+|---|---|---|---|
+| Initial JS (raw) | 728.53 kB | **414.61 kB** | **−43%** |
+| Initial JS (gzip) | 193.57 kB | **133.17 kB** | **−31%** |
+| Vite 500 kB warning | ⚠️ tripped | ✅ cleared | resolved |
+| # of chunks | 1 | 18 (1 entry + 17 page chunks) | code-split |
+
+Per-page chunks range from 3.10 kB (`DashboardPage`) to 39.13 kB (`AssignmentsPage`), with a median around 14 kB. Each is fetched only on first navigation to that route — meaning a user who logs in and stays on the dashboard never pays the cost of the other 16 pages.
+
+**Verification:** frontend tests 25/25 passing. PWA precache regenerated (49 entries / 781 KiB total, vs 6 entries / 769 KiB before — same total, distributed across the new chunks).
+
+**Note on next bundle wins** (deferred, not in this PR):
+
+- Replacing `axios` (114 KB raw / 30 KB gzip) with native `fetch` is still on the table. Single usage location (`src/lib/api.js`), but it's a real refactor with API surface changes — keeping separate from this lazy-load PR to keep the diff small.
+- `react-dom` is now 561 KB raw → 134 KB gzip (in the entry chunk). That's expected for React 19 production. No easy reduction without a different framework choice.
+
+### Files modified this session
+
+- `mep-frontend/src/App.jsx` — Task B
+- (PR #102 already merged: `package.json`, `package-lock.json`, `mep-frontend/package.json`, `mep-frontend/package-lock.json`, `lib/health.js`, `tests/helpers/db.js`, `.gitignore`)
+- `DECISIONS.md` — this section
+
+### Pointer for next sessions
+
+- Sections 66 P1 (deps + lazy-load) DONE.
+- Next P1 from Section 66 backlog: **schema migration sprint** (Task C). Combines:
+  1. Fix `project_foremen` schema bug from Section 65 (drop legacy `foreman_employee_id NOT NULL`, set PK to `(project_id, trade_code)`).
+  2. Drop the 30 dead tables identified in Section 66.
+  3. Drop the 95 dead columns identified in Section 66.
+  4. Audit Section 19 BLOCKED routes (`auto_assign.js`, `activate.js`) for the same legacy-NOT-NULL pattern.
+  5. Consolidate `db/schema_baseline_2026-04-26.sql` and `migrations/000_baseline_2026-04-28.sql` into a single canonical baseline.
+- Should be planned as a **multi-PR sprint** — each chunk is independently shippable and verifiable. Order matters: bug fixes (1, 4) first, then dead-data removal (2, 3), then baseline consolidation (5).
+- **Today: 27 sections.** (Section 67 added.)
