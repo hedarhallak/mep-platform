@@ -6581,7 +6581,61 @@ New numerator: 2267 / 3686 = 61.5% lines. **+4.89 pp from a 5-line config change
 - **(P3)** Investigate the 2 failing tests (`user_management.test.js:144` + `daily_dispatch.test.js:152`). Likely test setup mismatch with prod email config behavior.
 - **(P3)** Run `migrations/000_baseline_2026-04-28.sql` (newer than the `db/schema_baseline_2026-04-26.sql` we used). Might add 2-3 missing tables that smoke a few more tests.
 
+### Phase 2a attempt — `routes/project_foremen.js` tests (ABANDONED, schema bug discovered)
+
+After Phase 1 shipped, attempted Phase 2a: write integration tests for the lowest-coverage small file (`project_foremen.js`, 18.42% lines, ~116 LOC). Created `tests/integration/project_foremen.test.js` with 10 tests covering GET / POST / DELETE happy paths + validation branches.
+
+**Result:** 5 / 10 tests failed with HTTP 500 errors on the POST endpoint.
+
+**Diagnosis (real prod bug, not test bug):**
+
+- Schema (`db/schema_baseline_2026-04-26.sql` lines 2411-2419, also present in `migrations/000_baseline_2026-04-28.sql`) defines `public.project_foremen` with:
+  - `foreman_employee_id bigint NOT NULL` — legacy column, still required
+  - `employee_id integer` — newer nullable column
+  - PRIMARY KEY on `project_id` alone (incompatible with multi-trade-per-project semantics)
+- Route `routes/project_foremen.js` POST handler INSERTs only `(project_id, employee_id, trade_code, company_id)` — never sets `foreman_employee_id`.
+- Postgres rejects the INSERT with `null value in column "foreman_employee_id" violates not-null constraint` → 500 to client.
+
+**This means the feature is broken in production too** — assigning a foreman from the UI will hit the same NOT NULL violation. Confirmed via `routes/project_foremen.js` source: no code path writes `foreman_employee_id`. Filed as Section 19 BLOCKED route + new P1 backlog item below.
+
+**Decision (Hedar):** stop the coverage push at 61.5% rather than chase route bugs that need schema migrations to fix. Quote: *"طيب اذا شايف انه الاختبارات كافية لحد هون ف منوقف, وممكن نعمل اختبارات تانية بعد ما نطور بالبرنامج لاحقا"*.
+
+**Cleanup:** `tests/integration/project_foremen.test.js` deleted (lives in git history; revive after schema fix).
+
+### Phase 2 + Phase 3 — DEFERRED
+
+Both phases require route+DB integration tests. Of the 4 small files originally planned for Phase 2:
+
+- `project_foremen.js` — BLOCKED by `foreman_employee_id NOT NULL` schema bug (above)
+- `auto_assign.js` (15.71%) — already in Section 19 BLOCKED list (assignment_role enum gaps, missing helper tables)
+- `activate.js` (17.24%) — needs invite-token + email mock setup; medium risk of finding similar prod bugs
+- `ccq_rates.js` (23.61%) — needs `ccq_rates` reference data seed; should be safe but small payoff (~159 LOC × 56pp gain ≈ +2.4pp)
+- `bi.js` (25.53%) — needs cross-table fixture data (employees + attendance + projects); medium effort
+
+The math says: even if all 4 small files reached 80%, gain is ~10pp → ~71%. To hit 80% we'd still need `profile.js` OR `auto_assign.js` (Phase 3 heavy hitter) — and `auto_assign.js` is itself blocked. **80% is not reachable without schema migrations.** Better to do those migrations as a dedicated sprint, then re-attempt the coverage push with a clean foundation.
+
+### Stop point — final state
+
+| Metric | Pre-Phase-1 | Post-Phase-1 (final) | CI threshold |
+|---|---|---|---|
+| Statements | 55.40% | **60.16%** | 51% |
+| Branches | 49.16% | **51.49%** | 45% |
+| Functions | 55.39% | **59.78%** | 52% |
+| **Lines** | **56.61%** | **61.5%** | **52%** |
+
+Headroom over CI floor: ~9pp lines. Next ratchet of `coverageThreshold` is optional — current floor still has plenty of margin. Defer the ratchet until Phase 2/3 land (avoid flapping CI on tiny build drift).
+
+### New backlog (priority-ordered)
+
+- **(P1)** Fix `routes/project_foremen.js` schema gap: drop the legacy `foreman_employee_id` column (or backfill + alter NOT NULL → NULL), set PRIMARY KEY to `(project_id, trade_code)` to match multi-trade semantics. Migration file: `migrations/00X_project_foremen_cleanup.sql`. Once shipped, restore the deleted test file from git and add to coverage ratchet.
+- **(P1)** Audit other Section 19 BLOCKED routes for the same pattern (legacy NOT NULL columns the route doesn't populate). Candidates: `auto_assign.js`, `activate.js`, anything touching `assignment_role` enum.
+- **(P2)** Schema migration sprint — consolidate baseline (`db/schema_baseline_2026-04-26.sql` vs `migrations/000_baseline_2026-04-28.sql`) so there's one canonical source. Both currently carry the same legacy columns.
+- **(P2)** After schema sprint, re-open Phase 2 + Phase 3 of Section 65. Realistic target then: 75-80% lines.
+- **(P3)** Add `tests/helpers/setup-db.sh` / `.ps1` automating Docker + schema + migrations bring-up.
+- **(P3)** Investigate the 2 failing email tests (`user_management.test.js:144` + `daily_dispatch.test.js:152`).
+
 ### Pointer for next sessions
 
-- **Coverage now at 61.5% lines.** Phase 2 + Phase 3 of Section 65 still pending.
+- **Coverage stopped at 61.5% lines** — not 80%. Phase 1 (scripts exclusion) shipped. Phase 2/3 deferred behind a schema migration sprint.
+- The 4 codebase audits originally planned for Section 65 (Knip, DB columns, DB tables, bundle analyzer) are still open — they were postponed to chase coverage. Now that coverage is stopped, they're the obvious next program.
 - **Today: 25 sections.**
