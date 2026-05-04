@@ -1,18 +1,33 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
-  "entry": ["index.js", "scripts/*.js", "jobs/*.js", "seed.js", "tests/**/*.test.js"],
-  "project": [
-    "index.js",
-    "db.js",
-    "seed.js",
-    "routes/**/*.js",
-    "lib/**/*.js",
-    "middleware/**/*.js",
-    "services/**/*.js",
-    "scripts/**/*.js",
-    "jobs/**/*.js",
-    "tests/**/*.js"
-  ],
+  "workspaces": {
+    ".": {
+      "entry": [
+        "index.js",
+        "instrument.js",
+        "app.js",
+        "scripts/*.js",
+        "jobs/*.js",
+        "seed.js",
+        "tests/**/*.test.js"
+      ],
+      "project": [
+        "index.js",
+        "instrument.js",
+        "app.js",
+        "db.js",
+        "seed.js",
+        "routes/**/*.js",
+        "lib/**/*.js",
+        "middleware/**/*.js",
+        "services/**/*.js",
+        "scripts/**/*.js",
+        "jobs/**/*.js",
+        "tests/**/*.js"
+      ]
+    }
+  },
+  "ignoreWorkspaces": ["mep-frontend", "mep-mobile", "uploads", "constrai-landing"],
   "ignore": [
     "node_modules/**",
     "mep-frontend/**",
@@ -27,6 +42,9 @@
     "db/**",
     "docs/**",
     "tools/**",
-    ".expo/**"
+    ".expo/**",
+    "**/*.md",
+    "**/*.txt",
+    "**/*.json"
   ]
 }
