@@ -7032,3 +7032,59 @@ The first two are real bugs (SELECT fails). The third is a cleanup that the seco
 - Section 67 schema sprint remaining: **C3** (drop dead tables, 2-3 PRs by category), **C4** (drop dead columns), **C5** (baseline consolidation). Order recommendation unchanged from Section 68: C3 → C4 → C5.
 - Coverage delta: +12 tests, all DB-backed. Should bump backend coverage by 1-2 pp once it lands; the threshold ratchet from Section 65 (51/45/52/52) has ~9 pp of headroom so it's safe but worth the bump.
 - **Today: 29 sections.** (Section 69 added.)
+
+---
+
+## Section 70 — Schema sprint Task C3 batch 1: drop 4 dead `materials_*` tables (May 4, 2026, evening)
+
+First batch of the Section 67 Task C3 sprint. Targeting the lowest-risk subset: 4 tables that share a duplicate/never-built family ("plural" naming variants superseded by the active singular `material_*` family).
+
+### Tables dropped (migration 003)
+
+| Table | Reason | Outside FKs | Risk |
+|---|---|---|---|
+| `public.materials_requests` (plural) | Duplicate of `material_requests` (singular, used by `routes/material_requests.js` + `routes/standup.js`) | none | low |
+| `public.materials_request_items` | Children of the dead `materials_requests` | none | low |
+| `public.materials_tickets` | Separate "ticket" feature, never built | none | low |
+| `public.materials_ticket_items` | Children of the dead `materials_tickets` | none | low |
+
+### Verification (final pass before drop)
+
+For each of the 4 tables:
+
+1. **Schema cross-check.** Re-read the `CREATE TABLE` block for each to confirm column lists. Confirmed: all 4 share the legacy "plural" naming convention; none has columns referenced by active code.
+2. **Code-corpus grep.** Section 66's word-boundary grep across `routes/ lib/ services/ jobs/ middleware/ scripts/ tests/` reported zero hits for each table name (excluding the schema dump and migration files).
+3. **Frontend / mobile grep.** Verified zero references in `mep-frontend/src/` and `mep-mobile/src/`.
+4. **FK topology.** Pulled the full set of `ALTER TABLE ... REFERENCES` lines mentioning these tables. Result:
+   - `materials_request_items.request_id → materials_requests(id)` (CASCADE)
+   - `materials_ticket_items.ticket_id → materials_tickets(id)` (CASCADE)
+   - `materials_ticket_items.source_request_id → materials_requests(id)` (SET NULL)
+   - **Zero FKs reference these 4 tables from any other table.** Confirms the family is fully self-contained and drop order matters only within the group, not externally.
+
+### Migration `migrations/003_drop_dead_materials_tables.sql`
+
+Single `BEGIN/COMMIT` transaction with `DROP TABLE IF EXISTS` for each, ordered children-before-parents so the operation is safe even without `CASCADE`:
+
+```
+DROP TABLE IF EXISTS public.materials_ticket_items;
+DROP TABLE IF EXISTS public.materials_request_items;
+DROP TABLE IF EXISTS public.materials_tickets;
+DROP TABLE IF EXISTS public.materials_requests;
+```
+
+`IF EXISTS` keeps it idempotent — if a fresh test DB never had the table (because it was created from a baseline file that already excludes them), the migration succeeds silently. Atlas CI applies migrations against a fresh PostGIS database on every PR, which is the strongest validation that the drop doesn't break anything else (since Atlas would fail if any migration after 003 still tried to reference the dropped tables, and any existing schema-baseline test would also fail if it expected them to be there).
+
+### Files modified or generated this session
+
+- **New:** `migrations/003_drop_dead_materials_tables.sql`
+- **Modified:** `DECISIONS.md` (this section)
+
+### Pointer for next sessions
+
+- C3 batch 1 → 4 tables dropped here. **26 dead tables remain** for future C3 batches. Suggested next batches:
+  - **C3 batch 2** (next safe target): `travel_allowance_*` family — 4 dead variants (`travel_allowance_brackets`, `travel_allowance_policies`, `travel_allowance_policy`, `travel_allowance_rules`). Same self-contained pattern as this batch.
+  - **C3 batch 3**: `employee_field_*` family + `employee_ranks` / `employee_roles` / `employee_trades` / `user_trade_access` / `assignment_roles` (legacy RBAC tables, all unused).
+  - **C3 batch 4**: `erp.*` schema (2 tables, abandoned parallel ERP design).
+  - **C3 batch 5** (highest risk, most caution): `borrow_requests`, `early_checkout_requests`, `parking_claims`, `attendance_absences`, `attendance_approvals_audit`, `absence_reasons`, `sensitive_access_log`, `project_geofences`, `company_settings` — features designed but never built. Drop only after one more pass to confirm no roadmap dependency.
+- After all C3 batches: C4 (drop 95 dead columns, can be batched by table) → C5 (baseline consolidation captures the cumulative cleanup).
+- **Today: 30 sections.** (Section 70 added.)
