@@ -6980,9 +6980,19 @@ Migration: `migrations/002_project_foremen_cleanup.sql`.
 
 Follow-up PR after Section 68 shipped migration 002. Closes the coverage gap left open since Section 65 Phase 2a (where the test file was lost before being committed).
 
-### Secondary route bug fixed
+### Secondary route bugs fixed (3 in total)
 
-While drafting the tests, found a second bug in `routes/project_foremen.js` that Section 19 had also flagged ("schema mismatch (no `pf.id`)"): the GET handler did `SELECT pf.id` from a table that has no `id` column. After migration 002, the natural key is the composite `(project_id, trade_code)`. Replaced `pf.id` with `pf.project_id` in the SELECT (the project_id is already known to the caller from the URL, but including it keeps the response shape consistent with what the join produces and lets the frontend group rows by trade if it ever consumes this endpoint). Frontend currently doesn't call this endpoint at all (`grep mep-frontend mep-mobile` for `project-foremen` → 0 hits), so the response-shape change is risk-free.
+The GET handler turned out to have three latent bugs, all in the same SELECT statement. None could surface in production because the route was never wired to the frontend (`grep mep-frontend mep-mobile` for `project-foremen` → 0 hits), so the bugs sat dormant until the tests forced them out.
+
+1. **`SELECT pf.id` — Section 19 had flagged this** ("schema mismatch (no `pf.id`)"). The `project_foremen` table has no `id` column; after migration 002 the natural key is the composite `(project_id, trade_code)`. Fix: replaced `pf.id` with `pf.project_id` in the SELECT.
+
+2. **`au.phone` from `app_users`** — discovered when the first PR push showed all 3 GET tests failing with 500 in CI. `app_users` has no `phone` column; `phone character varying(30)` lives on `employee_profiles` instead. Fix: changed `au.phone AS phone` to `ep.phone AS phone`.
+
+3. **LEFT JOIN to `app_users`** — only existed to provide the (broken) `au.phone`. Once `phone` moves to `ep`, the JOIN is dead weight. Fix: dropped the `LEFT JOIN public.app_users au` entirely.
+
+The first two are real bugs (SELECT fails). The third is a cleanup that the second bug exposed.
+
+**Lesson for the audit playbook:** the Section 67 Task C1 generalized NOT-NULL detector only catches *INSERT* violations. SELECT statements that reference non-existent columns survive until the route is exercised. A separate "SELECT column existence" detector would have caught all three of these without running tests. Filed as a follow-up engineering task in Section 67's tooling backlog.
 
 ### Tests added — `tests/integration/project_foremen.test.js`
 

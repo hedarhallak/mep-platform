@@ -21,6 +21,9 @@ router.get('/:project_id', async (req, res) => {
 
     // Natural key is (project_id, trade_code) — matches the composite PK
     // shipped in migration 002. The table has no `id` column.
+    // `phone` lives on employee_profiles (Section 19 schema audit: there is
+    // no `app_users.phone` column despite the legacy SELECT alias suggesting
+    // otherwise — that was the third bug uncovered while restoring this test).
     const { rows } = await pool.query(
       `SELECT
          pf.project_id,
@@ -30,10 +33,9 @@ router.get('/:project_id', async (req, res) => {
          ep.trade_code  AS foreman_trade,
          ep.rank_code,
          ep.contact_email,
-         au.phone       AS phone
+         ep.phone       AS phone
        FROM public.project_foremen pf
        JOIN public.employee_profiles ep ON ep.employee_id = pf.employee_id
-       LEFT JOIN public.app_users au    ON au.employee_id = pf.employee_id
        WHERE pf.project_id = $1 AND pf.company_id = $2
        ORDER BY pf.trade_code`,
       [projectId, companyId]
