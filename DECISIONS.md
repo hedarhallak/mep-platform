@@ -7246,3 +7246,66 @@ Cleaner and safer than dropping each object separately because PostgreSQL handle
 - **Audit tooling backlog (added this section):** make the unused-tables detector schema-qualified so `erp.X` and `public.X` aren't conflated. One-line script change but would have caught the 2 missed tables in Section 66.
 - After batch 5: C4 (95 dead columns — same column-name conflation risk to fix in the detector first) → C5 (baseline consolidation).
 - **Today: 33 sections.** (Section 73 added.)
+
+---
+
+## Section 74 — Schema sprint Task C3 batch 5 (FINAL): drop 8 feature-never-built tables (May 4, 2026, evening)
+
+Closes the C3 sprint. 8 tables of designed-but-never-built features dropped. 2 tables originally on the list (`company_statuses`, `plans`) **deliberately preserved** — schema audit caught a constraint-only usage that grep missed.
+
+### Critical finding — `company_statuses` and `plans` are NOT dead
+
+Section 66's audit ranked these as "rare" (1 reference each, both in `tests/helpers/db.js`). The audit's word-boundary grep saw application code never SELECTing from them and concluded they were dead.
+
+**The schema disagreed.** Two FK constraints on the live `companies` table:
+
+```
+ALTER TABLE companies ADD CONSTRAINT fk_companies_status
+  FOREIGN KEY (status) REFERENCES public.company_statuses(code);
+ALTER TABLE companies ADD CONSTRAINT fk_companies_plan
+  FOREIGN KEY (plan)   REFERENCES public.plans(code);
+```
+
+Both are pure lookup tables enforcing ENUM-like constraints on `companies`. Application code never queries them directly because the constrained columns are read straight off `companies.*`, but every `INSERT`/`UPDATE` on `companies` that touches `status` or `plan` validates against these tables.
+
+**Lesson for the audit playbook:** the unused-table detector currently checks code references but not schema-side FK references. A second detector pass should flag any table that's the target of an `ALTER TABLE … FOREIGN KEY` statement, even if no code touches it. Filed as a Section 67 tooling backlog item alongside the schema-qualification fix from Section 73.
+
+Dropping these two tables would require either (a) converting the FK constraints into inline `CHECK (status IN (...))` constraints on `companies`, or (b) accepting that the columns become unconstrained free text. (a) is cleaner but a separate migration; (b) is a schema-integrity downgrade. Neither belongs in this batch.
+
+### Tables dropped (migration 007) — 8 total
+
+| Table | Feature |
+|---|---|
+| `public.borrow_requests` | Between-project employee borrowing — never built |
+| `public.early_checkout_requests` | Early-leave-from-shift workflow — never built |
+| `public.parking_claims` | Employee parking reimbursement — never built |
+| `public.attendance_absences` | Absence tracking — never built |
+| `public.attendance_approvals_audit` | Audit trail for the never-built absence approvals |
+| `public.absence_reasons` | Lookup for absence reason codes (child of `attendance_absences`) |
+| `public.project_geofences` | PostGIS geofence per project — never built (no `ST_DWithin`/`ST_Contains` anywhere) |
+| `public.company_settings` | Per-company config — real config lives on `companies.*` |
+
+### FK topology
+
+Only one inter-batch FK: `attendance_absences.reason_code → absence_reasons(code)`. Drop order: `attendance_absences` first (child), then `absence_reasons` (parent), then the rest in any order. Wrapped in a single `BEGIN/COMMIT` so a partial failure rolls back atomically.
+
+`project_geofences` was specifically re-verified for PostGIS-related dead code: `grep -rE "ST_DWithin|ST_Contains|geofence"` across routes/services/lib turned up zero hits. The PostGIS geometry type lives on `public.employee_profiles.home_location` (used) but nowhere queries any geofence column.
+
+### Files modified or generated this session
+
+- **New:** `migrations/007_drop_dead_feature_never_built_tables.sql`
+- **Modified:** `DECISIONS.md` (this section)
+
+### Pointer for next sessions
+
+- **C3 sprint complete.** 30 of 32 originally-flagged tables dropped (4 + 4 + 10 + 4 + 8). 2 preserved (`company_statuses`, `plans` — live FK targets).
+- Net schema reduction this session:
+  - Tables: ~66 → ~36 (**−30 tables, 45% of the schema removed**)
+  - Plus 2 functions (`erp.haversine_km`, `erp.tg_set_updated_at`)
+  - Plus the entire `erp` schema
+- Next:
+  - **C4** — drop 95 dead columns from Section 66's column audit. **MUST** first re-run the audit with a schema-qualified detector + an FK-aware detector (same blind spots that hit C3 batches 4 and 5 will hit C4 too — possibly multiple "dead" columns are actually live FK targets).
+  - **C5** — consolidate `db/schema_baseline_2026-04-26.sql` and `migrations/000_baseline_2026-04-28.sql` into a single canonical baseline that captures all the C3 cleanup. Should be done LAST.
+  - **(P3) tooling** — make the unused-tables/columns detector schema-qualified AND FK-aware. The two bugs uncovered in C3 batches 4-5 would have changed both the count and the safety profile of the original audit.
+  - **(P3) follow-up migration** — convert `companies.status` / `companies.plan` FKs to `CHECK` constraints, then drop `company_statuses` and `plans`. Optional cleanup.
+- **Today: 34 sections.** (Section 74 added.)
