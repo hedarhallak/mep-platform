@@ -7134,3 +7134,63 @@ Single `BEGIN/COMMIT` with four `DROP TABLE IF EXISTS` statements. Atlas CI appl
   - **C3 batch 5** (highest caution) — `borrow_requests`, `early_checkout_requests`, `parking_claims`, `attendance_absences`, `attendance_approvals_audit`, `absence_reasons`, `sensitive_access_log`, `project_geofences`, `company_settings`, `company_employee_field_config` = ~10 tables. These are "feature designed but never built" — drop only after confirming no roadmap dependency.
 - After C3 batches: C4 (drop 95 dead columns) → C5 (baseline consolidation).
 - **Today: 31 sections.** (Section 71 added.)
+
+---
+
+## Section 72 — Schema sprint Task C3 batch 3: drop 10 dead tables (employee_field_* + legacy RBAC) (May 4, 2026, evening)
+
+Bigger batch than 1+2 because two unrelated dead families landed cleanly in one migration. Also pulled in `sensitive_access_log` from the planned batch 5 because of an FK coupling that would have broken if dropped separately.
+
+### Tables dropped (migration 005) — 10 total
+
+**Family A — `employee_field_*` (5 tables, internally coupled):**
+
+| Table | Role |
+|---|---|
+| `public.employee_field_catalog` | Parent (defines field keys) |
+| `public.company_employee_field_config` | Child — references `catalog.field_key` |
+| `public.employee_field_values` | Child — references `catalog.field_key` |
+| `public.employee_sensitive_values` | Child — references `catalog.field_key` |
+| `public.sensitive_access_log` | Child — references `catalog.field_key` |
+
+This was a "dynamic employee fields" subsystem — never built. The actual employee profile fields live as static columns on `public.employee_profiles`.
+
+**`sensitive_access_log` was originally slotted for batch 5** ("features designed but never built"). Pulled forward because its `field_key` FK to `employee_field_catalog` means dropping the parent without it would leave an orphan FK constraint. Cleanest move: take the whole field_key dependency tree in one transaction.
+
+**Family B — legacy RBAC (5 tables, fully isolated):**
+
+| Table | Replaced by |
+|---|---|
+| `public.assignment_roles` | `app_users.role` (single column) |
+| `public.employee_ranks` | `employee_profiles.rank_code` |
+| `public.employee_roles` | `app_users.role` |
+| `public.employee_trades` | `employee_profiles.trade_code` |
+| `public.user_trade_access` | implicit via `app_users.role` + `employee_profiles.trade_code` |
+
+All 5 have zero FKs in or out and zero code references. Fully isolated from the rest of the schema.
+
+### Verification
+
+For every table in both families:
+
+1. **FK references TO** (other tables that reference this one): grep'd `REFERENCES public.X` for every X. Family A's only inbound refs are from within the family itself; Family B has none.
+2. **FK references FROM** (this table's own constraints): `ALTER TABLE … fkey` per table. Family A children have one FK each (to the catalog parent); Family B has zero.
+3. **Code-corpus grep**: `routes/ lib/ services/ jobs/ middleware/ scripts/ tests/ seed.js + mep-frontend/src + mep-mobile/src` → 0 hits per table for all 10.
+
+### Migration `migrations/005_drop_dead_employee_field_and_rbac_tables.sql`
+
+Single `BEGIN/COMMIT` transaction. Family A children dropped first to satisfy FK ordering without `CASCADE`; Family A parent next; Family B last (independent so any order works). `IF EXISTS` everywhere keeps the migration idempotent.
+
+### Files modified or generated this session
+
+- **New:** `migrations/005_drop_dead_employee_field_and_rbac_tables.sql`
+- **Modified:** `DECISIONS.md` (this section)
+
+### Pointer for next sessions
+
+- C3 progress: **18 of 30 dead tables dropped** (4 + 4 + 10).
+- **12 dead tables remain** for C3 batches 4-5:
+  - **Batch 4** — `erp.*` schema (2 tables): `erp.employee_projects`, `erp.work_logs`. Easiest remaining batch — abandoned parallel ERP design.
+  - **Batch 5** — feature-never-built (10 tables, was 9 before pulling sensitive_access_log into batch 3): `borrow_requests`, `early_checkout_requests`, `parking_claims`, `attendance_absences`, `attendance_approvals_audit`, `absence_reasons`, `project_geofences`, `company_settings`, `company_statuses`, `plans`. Highest caution — drop only after one more pass to confirm no roadmap dependency. (`company_statuses` and `plans` only have refs from `tests/helpers/db.js` so they're test-fixture-only — likely safe.)
+- After C3: C4 (95 dead columns) → C5 (baseline consolidation).
+- **Today: 32 sections.** (Section 72 added.)
