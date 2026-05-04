@@ -6920,3 +6920,56 @@ Per-page chunks range from 3.10 kB (`DashboardPage`) to 39.13 kB (`AssignmentsPa
   5. Consolidate `db/schema_baseline_2026-04-26.sql` and `migrations/000_baseline_2026-04-28.sql` into a single canonical baseline.
 - Should be planned as a **multi-PR sprint** — each chunk is independently shippable and verifiable. Order matters: bug fixes (1, 4) first, then dead-data removal (2, 3), then baseline consolidation (5).
 - **Today: 27 sections.** (Section 67 added.)
+
+---
+
+## Section 68 — Schema sprint Task C1 + C2: NOT-NULL audit + project_foremen migration (May 4, 2026, late afternoon)
+
+First two sub-tasks of the Section 67 schema migration sprint.
+
+### Task C1 — Section 19 BLOCKED routes audit (read-only investigation)
+
+Built a generalized NOT-NULL detector to find all schema bugs of the same shape as `project_foremen`. The detector parses the schema baseline (66 tables → NOT NULL columns minus those with separate `ALTER TABLE … SET DEFAULT` clauses, since pg_dump emits SERIAL defaults that way), then scans every `routes/*.js` file for `INSERT INTO X (cols…)` statements and flags any required column missing from the inserted set.
+
+Initial run had 34 false positives — every `id` column was flagged because pg_dump separates the SERIAL `nextval()` default into its own `ALTER TABLE` statement, and the first detector pass only looked at inline definitions. After joining the two parses, the false-positive rate dropped to zero.
+
+**Final findings (after the fix): 1 real bug, 1 false positive.**
+
+| Route | Table | Missing column | Verdict |
+|---|---|---|---|
+| `project_foremen.js` | `public.project_foremen` | `foreman_employee_id` | ✅ real bug, already filed P1 in Section 65 |
+| `profile.js` | `public.employee_profiles` | `employee_id` | ❌ false positive — INSERT is built dynamically (`${insertCols.join(', ')}`); the static parser can't expand the template, but `insertCols` is initialized as `['employee_id']` so it's always present |
+
+Also checked `user_invites` (Section 19's separate "table missing" entry): the table exists in `migrations/001_user_invites.sql` (Phase 59 fix) but isn't in either schema baseline file (`db/schema_baseline_2026-04-26.sql` nor `migrations/000_baseline_2026-04-28.sql`). That's a baseline-consolidation issue, not a code bug — already covered by Section 67 Task C5.
+
+**Conclusion:** the codebase has **only one** outstanding NOT-NULL schema bug. Writing the fix now (Task C2 below).
+
+### Task C2 — `project_foremen` schema migration (this PR)
+
+Migration: `migrations/002_project_foremen_cleanup.sql`.
+
+**Strategy:**
+
+1. **Backfill before lock-down.** Three `UPDATE` passes ensure every existing row has the new model's columns populated — `employee_id` from the legacy `foreman_employee_id`, `trade_code` from a synthetic `'LEGACY-' || ctid` (ctid is always unique within a table → no PK collision), `company_id` from the joined `projects.company_id`. Production likely has zero rows here (the route POST always 500'd before this PR), but the backfill is defensive for seed/manual data.
+2. **Drop the legacy column safely.** Drop the FK constraint first (`project_foremen_foreman_employee_id_fkey`), then the two indexes that reference it (`idx_project_foremen_foreman` + `idx_project_foremen_foreman_active`), then the column itself. `IF EXISTS` everywhere so the migration is idempotent.
+3. **Lock the new model.** `SET NOT NULL` on `employee_id`, `trade_code`, `company_id` — backfill in step 1 guaranteed they're populated.
+4. **Swap the primary key.** Drop the old `project_foremen_pkey` (on `project_id` alone), drop the redundant `project_foremen_project_id_trade_code_key` UNIQUE (the new PK supersedes it), and add the new composite PK on `(project_id, trade_code)`. This matches the route's existing `ON CONFLICT (project_id, trade_code) DO UPDATE` semantics, which currently rely on the UNIQUE constraint. After this migration, the constraint is the PK itself.
+
+**Wrapped in a single `BEGIN/COMMIT`** so partial failures roll back cleanly. Atlas CI applies this against a fresh PostGIS database on every PR — syntax issues or constraint conflicts surface immediately.
+
+**Integration test status:** the test file Hedar wrote during the Section 65 Phase 2a attempt (10 tests covering GET/POST/DELETE happy paths + validation) was deleted in working tree before any commit captured it. Section 65 said "lives in git history; revive after schema fix" — that turned out to be inaccurate. `git log` confirms the file was never committed. We'll rewrite the integration tests as a follow-up PR after this migration ships and the baseline is regenerated.
+
+### Files modified or generated this session
+
+- **New:** `migrations/002_project_foremen_cleanup.sql` (this PR)
+- **Modified:** `DECISIONS.md` (Section 68)
+
+### Pointer for next sessions
+
+- Section 67 schema sprint sub-tasks remaining:
+  - **C3** — drop the 30 dead tables from Section 66. Should be split into 2-3 PRs by category (duplicate/legacy variants first; then "features designed but never built" with explicit verification per table).
+  - **C4** — drop the 95 dead columns from Section 66. Best done after C3 since some columns belong to tables we'll drop in C3 (no point in two-step drop).
+  - **C5** — consolidate `db/schema_baseline_2026-04-26.sql` and `migrations/000_baseline_2026-04-28.sql` into a single canonical baseline file. Should be done LAST so it captures all the post-C2/C3/C4 cleanup.
+  - **C6 (new, was implicit in C2)** — write integration tests for `routes/project_foremen.js` once the migration ships. Should restore the coverage ratchet that Section 65 paused.
+- Recommended order for next session: C3 (split into 2-3 PRs by category) → C4 → C6 → C5.
+- **Today: 28 sections.** (Section 68 added.)
