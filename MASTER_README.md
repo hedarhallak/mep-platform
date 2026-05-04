@@ -3,7 +3,7 @@
 > Production: https://app.constrai.ca
 > Website: https://www.constrai.ca (Coming Soon landing page)
 > Server: root@143.110.218.84
-> Latest DECISIONS section: **Section 63** (AssignmentsPage i18n — Tier 2 closed at 5/5)
+> Latest DECISIONS section: **Section 64** (`scripts/deploy.sh` now auto-rsyncs landing page — manual step from S60 obsolete)
 > Active program: **Web Tier 1 + Tier 2 DONE (10/10).** ~509 i18n keys live. Tier 3 next: BI / Reports / Hub / TaskRequest / Standup / UserManagement / Permissions / Settings / Profile.
 > **Customer #1 status:** unsigned (constraint per Section 46). Engineering rigor work is paused pending revenue.
 > **Prod is in sync with main**. `APP_NAME=Constrai` + `VITE_MAPBOX_TOKEN` live. Tab title "Constrai" everywhere.

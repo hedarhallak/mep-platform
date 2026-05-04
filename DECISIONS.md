@@ -6383,3 +6383,78 @@ Combined with Tier 1's ~193 keys + the shared `trades.*` (~6) = **~509 i18n keys
 - **Tier 2 i18n: 5/5 done. Closed. ✅**
 - **Web i18n total: 10/30 pages translated.**
 - **Today: 23 sections.** Way past the previous "stop at 2 sections per session" recommendation. Hedar's call.
+
+---
+
+## Section 64 — `scripts/deploy.sh`: landing-page rsync integration (May 4, 2026, morning)
+
+Encodes the manual rsync step from Section 60 (landing FR typo fixes) directly into `deploy.sh` so future landing-page changes ship without manual ops.
+
+### What changed in the script
+
+1. **New config vars** (after `PUBLIC_DIR`):
+   ```bash
+   LANDING_SRC_DIR="${REPO_DIR}/constrai-landing"
+   LANDING_PUBLIC_DIR="/var/www/constrai-landing"
+   ```
+
+2. **New change detector** alongside `BACKEND_CHANGED` and `FRONTEND_CHANGED`:
+   ```bash
+   LANDING_CHANGED=$(echo "${CHANGED}" | grep -E "^constrai-landing/" || true)
+   ```
+
+3. **First-run / diff-failed paths** force `LANDING_CHANGED="(initial)"` to trigger sync.
+
+4. **New deploy step** (Step 7b) inserted between frontend rsync and pm2 restart:
+   ```bash
+   if [ -n "${LANDING_CHANGED}" ]; then
+     rsync -av "${LANDING_SRC_DIR}/" "${LANDING_PUBLIC_DIR}/"
+   fi
+   ```
+
+5. **Defensive check**: if `/var/www/constrai-landing/` doesn't exist, log an error and skip rather than failing the whole deploy. (First-time landing setups would need to create the dir manually first.)
+
+### Why no `--delete`
+
+`/var/www/constrai-landing/` may contain prod-only files that aren't in the repo (e.g., manually-uploaded marketing PDFs, vendor assets). Using `rsync --delete` would wipe those. So we deliberately keep additive sync — repo files overwrite their counterparts on prod, but extras on prod survive.
+
+If a future situation requires orphan cleanup, that's a separate, intentional operation — not a default of the deploy script.
+
+### What this fixes
+
+After Section 60, the workflow for shipping a landing-page change was:
+
+```
+ssh root@143.110.218.84
+bash /var/www/mep/scripts/deploy.sh   # (skipped landing entirely)
+rsync -av /var/www/mep/constrai-landing/ /var/www/constrai-landing/   # manual
+```
+
+The manual rsync is a footgun: easy to forget, and the script's "Deploy complete" message would imply success even when the landing was stale. After Section 64:
+
+```
+bash /var/www/mep/scripts/deploy.sh   # detects + rsyncs landing automatically
+```
+
+One command, both webapp + landing in sync.
+
+### Idempotency preserved
+
+The "Already deployed at <SHA> — true no-op" early-exit path is untouched. If `LAST_DEPLOYED == CURRENT_SHA`, nothing changed including landing, so no rsync is needed. The script still exits cleanly at that point with just a pm2 restart for env changes.
+
+### Test plan after this section ships
+
+After this PR merges and the next deploy runs:
+
+1. Run `bash deploy.sh` → expect `landing: no` in changed areas (this PR doesn't change `constrai-landing/` files), `Landing page unchanged — skipping rsync` log line.
+2. Optional dry test: edit a landing file, push, run deploy — expect `landing: yes` + rsync output + Section 60-style file fixes appearing on prod.
+
+### Backlog from this section
+
+- **(P3)** When the landing page eventually has its own build step (Webpack / Vite for the marketing site), the simple rsync becomes insufficient. Add a `landing-build` toggle then.
+- **(P3)** Document the `/var/www/constrai-landing/` provenance in `MASTER_README.md` or `RECOVERY.md`: who created the dir, what nginx config serves it, how it was originally seeded. Right now this is undocumented tribal knowledge from the prod box.
+
+### Pointer for next sessions
+
+- **Deploy is now one command for both webapp and landing.** Section 60-style manual rsync ops are obsolete.
+- **Today: 24 sections.**
