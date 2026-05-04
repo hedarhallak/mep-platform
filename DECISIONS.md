@@ -6683,8 +6683,14 @@ The substitutions cover ~80% of what knip would have surfaced. Unused-exports is
 | Package | Section | Action |
 |---|---|---|
 | `@react-native-async-storage/async-storage` | dependencies | DROP — React Native package, copy-paste error |
-| `@emnapi/core` | devDependencies | DROP — transitive promoted by mistake |
-| `@emnapi/runtime` | devDependencies | DROP — same |
+| `@emnapi/core` | devDependencies | KEEP — Linux CI guard (see "depcheck false positive" note below) |
+| `@emnapi/runtime` | devDependencies | KEEP — same |
+
+**`@emnapi/*` depcheck false-positive — re-discovered May 4 afternoon:**
+
+depcheck flagged `@emnapi/core` and `@emnapi/runtime` as unused devDeps because nothing in our code imports them directly. We initially shipped a removal commit, then CI failed on `npm ci` with `Missing: @emnapi/core@1.10.0 from lock file`. **This is exactly the cross-platform lockfile issue already documented in Section 18 Phase 7.5** — knip → oxc-resolver, on Linux falls back to a WebAssembly build that needs `@emnapi/core` + `@emnapi/runtime`. They MUST stay pinned as direct devDependencies; otherwise npm 11's platform-conditional optional-dep handling drops them from a Windows-generated lockfile, and Linux CI's `npm ci` fails.
+
+**Lesson re-encoded:** any future depcheck/knip run on this repo will keep flagging `@emnapi/*` as unused. They are NOT unused — they are a cross-platform CI guard. Don't drop them. Add an inline comment to `package.json` is impractical (JSON has no comments), but flagging here in DECISIONS.md is the durable record.
 
 **Frontend (`mep-frontend/package.json`):**
 
@@ -6695,7 +6701,7 @@ The substitutions cover ~80% of what knip would have surfaced. Unused-exports is
 | `tailwindcss` | devDependencies | KEEP — false positive (used transitively by `@tailwindcss/vite` plugin; conventional to list direct) |
 | `@vitest/coverage-v8` | devDependencies | KEEP — false positive (used by `vitest --coverage`) |
 
-**Net cleanup: 5 real deps to remove** across the two `package.json` files.
+**Net cleanup: 3 real deps to remove** across the two `package.json` files (`@react-native-async-storage/async-storage` from root; `mapbox-gl` and `path` from `mep-frontend/`). The 2 originally-flagged backend devDeps (`@emnapi/*`) were rolled back after the CI revealed they're a cross-platform guard.
 
 ### Audit 2 — Unused source files (backend)
 
@@ -6825,7 +6831,7 @@ For each finding, sample-verified by hand:
 
 ### Backlog from this section (priority-ordered)
 
-- **(P1, deps)** Drop confirmed unused npm deps (5 total): `@react-native-async-storage/async-storage`, `@emnapi/core`, `@emnapi/runtime` from root; `mapbox-gl`, `path` from `mep-frontend/`. Run `npm uninstall` per package, full test + build, ship as one PR. Estimate: 30 min, very low risk.
+- **(P1, deps)** Drop confirmed unused npm deps (3 total, after the `@emnapi/*` false-positive walked back): `@react-native-async-storage/async-storage` from root; `mapbox-gl`, `path` from `mep-frontend/`. Run `npm uninstall` per package, full test + build, ship as one PR. Estimate: 30 min, very low risk.
 - **(P1, exports)** Drop the 3 unused exports surfaced by knip: `dbAvailable` (`tests/helpers/db.js:561`), `DISK_USED_FAIL_PCT` (`lib/health.js:207`), `geocodeHomeAddress` (`services/geocoding.js:116`). Trivial removals, can ride along with the deps PR.
 - **(P1, web bundle)** Lazy-load route pages in `mep-frontend/src/App.jsx` — biggest single win on initial-paint performance. Estimate: 1–2 hours.
 - **(P2, web bundle)** Replace `axios` → `fetch` in `mep-frontend/src/lib/api.js`. Estimate: 1 hour.

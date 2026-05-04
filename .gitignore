@@ -42,3 +42,7 @@ mep-frontend/dist/
 # Coverage reports (jest + vitest)
 coverage/
 mep-frontend/coverage/
+
+# Local-only debug/coverage logs (Section 65 leftovers; regeneratable)
+jest-cov-*.txt
+jest-foremen-debug.txt
