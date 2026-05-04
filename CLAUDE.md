@@ -66,7 +66,7 @@ Then provide:
 
 ### Step 4 — Read additional files only when the task requires them
 
-- DB / migration / query work → also read `SCHEMA.md` AND `db/schema_baseline_2026-04-26.sql` (the canonical live schema)
+- DB / migration / query work → also read `SCHEMA.md` AND `db/schema_baseline_2026-05-04.sql` (the canonical live schema — replaces the older 04-26 / 04-28 baselines after the Section 76 consolidation, which captures the post-C3+C4 cleanup).
 - Backend / route / endpoint work → also read `API.md`
 - Setup / new env var / config debugging → also read `.env.example`
 - Backup operations → also read `scripts/backup/SETUP.md`

@@ -7388,3 +7388,85 @@ All 13:
   - **C5** — consolidate `db/schema_baseline_2026-04-26.sql` and `migrations/000_baseline_2026-04-28.sql` into a single canonical baseline that captures all the C3+C4 cleanup. Should be done LAST.
   - **(P3) tooling commit** — formalize the improved audit detector (schema-qualified + FK-aware + PK-aware) into a checked-in script under `scripts/audit-schema.py` or similar. Currently the logic only exists ephemerally as `/tmp/audit-cols.py` + `/tmp/c4-prep.py` from this session.
 - **Today: 35 sections.** (Section 75 added.)
+
+---
+
+## Section 76 — Schema sprint Task C5 (FINAL): baseline consolidation (May 4, 2026, late evening)
+
+Closes the schema migration sprint. Single canonical `db/schema_baseline_2026-05-04.sql` replaces the older `04-26` / `04-28` files (which now diverge from prod after the C3+C4 cleanup). Old baselines deleted. CLAUDE.md updated.
+
+### Process
+
+1. Spun up a fresh `postgis/postgis:16-3.4` Docker container (the older `14-3.4` choked on `\restrict` — pg_dump 17+ syntax).
+2. Created `mepuser` and `postgres` roles as `SUPERUSER` so the dump's `ALTER ... OWNER TO` and `OWNER TO postgres` statements wouldn't error.
+3. Applied all 10 migrations in order (`migrations/000_baseline_2026-04-28.sql` + `001` through `009`), stripping `\restrict`/`\unrestrict` lines on the fly with PowerShell regex (security guard, harmless to skip).
+4. `pg_dump --no-owner --no-acl --schema=public` to skip role/permission bloat and the `tiger`, `tiger_data`, `topology` schemas (PostGIS extensions installed by the image but not present in prod).
+5. Output redirected via `Out-File -Encoding utf8` rather than `>` (the `>` operator defaults to UTF-16 LE in PowerShell, which silently produces an "empty" 0-line file with the size doubled — same encoding bug as the `.gitignore` UTF-16 corruption from Section 66).
+
+### Verification
+
+The new baseline contains exactly **35 `CREATE TABLE`** statements:
+
+```
+public.app_users                public.material_returns
+public.assignment_requests      public.permissions
+public.attendance_records       public.plans
+public.audit_logs               public.project_foremen
+public.ccq_travel_rates         public.project_statuses
+public.clients                  public.project_trades
+public.companies                public.projects
+public.company_statuses         public.purchase_orders
+public.daily_dispatch_runs      public.push_tokens
+public.employee_daily_dispatch_state  public.refresh_tokens
+public.employee_profiles        public.role_permissions
+public.employees                public.roles
+public.material_catalog         public.standup_sessions
+public.material_request_items   public.suppliers
+public.material_requests        public.task_messages
+public.material_return_items    public.task_recipients
+                                public.trade_types
+                                public.user_invites
+                                public.user_permissions
+```
+
+Math checks out: 66 (original 04-26 baseline tables) − 32 (dropped in C3 across 6 batches incl. retroactive batch 6) + 1 (`user_invites` from migration 001) = 35. The `project_foremen` table has the post-migration 002 schema (composite `(project_id, trade_code)` PK, no `foreman_employee_id`). `company_statuses` and `plans` preserved as live FK targets.
+
+### Files changed
+
+- **New:** `db/schema_baseline_2026-05-04.sql` (2907 lines / 230 KB — vs the old 04-26's 5837 lines / 600 KB)
+- **Deleted:** `db/schema_baseline_2026-04-26.sql`, `db/schema_baseline_2026-04-28.sql`
+- **Kept:** `migrations/000_baseline_2026-04-28.sql` (Atlas's historical migration starting point — don't touch; CI applies it then layers 001-009 on top)
+- **Modified:** `CLAUDE.md` reference, `DECISIONS.md` (this section)
+
+### Setup gotchas captured for future regenerations
+
+When this baseline goes stale (next time we ship a migration that changes the schema), the regen process needs to repeat the steps above. The non-obvious gotchas to remember:
+
+1. **PG version match.** Use a `postgis/postgis:16-3.4` image — matches prod's PG16. The `14-3.4` image will choke on `\restrict` lines from the prod dump.
+2. **Roles must exist before applying the baseline.** Create `mepuser` and `postgres` as `SUPERUSER` in the test DB before running migration 000, otherwise `OWNER TO mepuser` / `OWNER TO postgres` lines fail.
+3. **Strip `\restrict` / `\unrestrict`.** PG 17+ pg_dump emits these as session security guards. PG 16 client doesn't recognize them — strip with `-replace '(?m)^\\(restrict|unrestrict).*$', ''`.
+4. **Use `--schema=public` and `--no-owner --no-acl`.** Skips the PostGIS extension schemas (`tiger`, `tiger_data`, `topology`) that the image installs by default but prod doesn't have, and skips role/permission bloat.
+5. **Use `Out-File -Encoding utf8`, NOT `>`.** PowerShell's `>` operator defaults to UTF-16 LE. The resulting file looks like the right size in bytes but `Measure-Object -Line` returns 0 and tools that expect UTF-8 silently fail. Same root cause as the `.gitignore` `constrai-mobile/` UTF-16 corruption from earlier in Section 66.
+
+### Tooling backlog (deferred)
+
+- **(P3)** Promote the baseline regen process into `scripts/regen-baseline.ps1` (PowerShell) so future regenerations are a single command. The 5 gotchas above each cost 5-15 min of debug time on first encounter.
+- **(P3)** Same for the schema-qualified + FK-aware audit detector — currently only exists ephemerally as `/tmp/audit-cols.py` and `/tmp/c4-prep.py` (mentioned in Section 75).
+- **(P3)** Convert `companies.status` and `companies.plan` FKs to inline `CHECK (… IN (…))` constraints, then drop `company_statuses` and `plans`. Optional final cleanup; currently they're ENUM-style lookup tables doing real work even though no code SELECTs from them.
+
+### Pointer for next sessions
+
+- **Schema migration sprint COMPLETE.** All 5 sub-tasks (C1 audit, C2 project_foremen fix, C3 dead-table drops in 6 batches, C4 dead-column drop, C5 baseline consolidation) plus the C6 follow-up tests are done.
+- Net change from this whole sprint:
+  - **−32 tables** (66 → 35, with one new addition `user_invites`)
+  - **+1 table** (`user_invites` from migration 001 — already in prod, just now reflected in the canonical baseline file)
+  - **−13 dead columns** on still-existing tables
+  - **`erp` schema entirely gone** (4 tables, 2 functions, 8 internal FKs, 4 triggers)
+  - **`project_foremen` schema fixed** (legacy `foreman_employee_id NOT NULL` removed, composite PK `(project_id, trade_code)` set)
+  - **Bonus route fixes:** `routes/project_foremen.js` GET handler (3 separate bugs from Section 19's BLOCKED list — `pf.id`, `au.phone`, dead `LEFT JOIN`)
+  - **+12 new integration tests** for `routes/project_foremen.js`
+- Open Section 67 backlog (deferred):
+  - **(P3) tooling commits** — formalize the 5 baseline-regen gotchas + the schema-qualified/FK-aware audit detector into checked-in scripts.
+  - **(P3) optional cleanup** — drop `company_statuses` + `plans` after converting their FKs to CHECK constraints.
+- All other Section 66 P1/P2 items DONE this session: 5 unused npm deps removed, 16 frontend pages lazy-loaded (initial bundle −43%), 2 unused exports removed.
+- **Today: 36 sections.** (Section 76 added.)
