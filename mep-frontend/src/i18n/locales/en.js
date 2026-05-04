@@ -225,6 +225,74 @@ export default {
     },
   },
 
+  attendance: {
+    title: 'Attendance',
+    subtitle: 'Track daily check-in / check-out for your team',
+
+    todaysAssignment: "Today's assignment",
+    noProjects: 'No active projects for this date',
+    noAssignmentToday: 'No assignment today',
+
+    summary: {
+      total: 'Total',
+      onSite: 'On Site',
+      checkedOut: 'Checked Out',
+      confirmed: 'Confirmed',
+    },
+
+    th: {
+      employee: 'Employee',
+      status: 'Status',
+      checkIn: 'Check In',
+      checkOut: 'Check Out',
+      regular: 'Regular',
+      overtime: 'Overtime',
+      confirmedBy: 'Confirmed By',
+      actions: 'Actions',
+    },
+
+    statusBadge: {
+      OPEN: 'Absent',
+      CHECKED_IN: 'On Site',
+      CHECKED_OUT: 'Pending',
+      CONFIRMED: 'Confirmed',
+      ADJUSTED: 'Adjusted',
+    },
+
+    row: {
+      shiftSuffix: 'shift',
+      pending: 'Pending',
+      checkIn: 'Check In',
+      checkOut: 'Check Out',
+      confirm: 'Confirm',
+      adjust: 'Adjust',
+    },
+
+    empty: 'No assignments for this date',
+    emptyHint: 'Select a different date or project',
+
+    success: {
+      checkedIn: 'Checked in successfully!',
+      checkedOut: 'Checked out successfully!',
+      hoursConfirmed: 'Hours confirmed!',
+    },
+
+    modal: {
+      title: 'Confirm Hours',
+      checkIn: 'Check In',
+      checkOut: 'Check Out',
+      systemCalculated: 'System Calculated',
+      otSuffix: 'OT',
+      finalHours: 'Final Hours (Foreman Decision)',
+      regularHours: 'Regular Hours',
+      overtimeHours: 'Overtime Hours',
+      note: 'Note (optional)',
+      notePlaceholder: 'e.g. Road conditions caused 15min delay...',
+      cancel: 'Cancel',
+      confirm: 'Confirm',
+    },
+  },
+
   suppliers: {
     title: 'Suppliers',
     subtitle: 'Manage your supplier directory',

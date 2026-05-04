@@ -225,6 +225,74 @@ export default {
     },
   },
 
+  attendance: {
+    title: 'Présences',
+    subtitle: 'Suivez les pointages quotidiens de votre équipe',
+
+    todaysAssignment: "Affectation d'aujourd'hui",
+    noProjects: 'Aucun projet actif pour cette date',
+    noAssignmentToday: "Aucune affectation aujourd'hui",
+
+    summary: {
+      total: 'Total',
+      onSite: 'Sur le chantier',
+      checkedOut: 'Sortis',
+      confirmed: 'Confirmés',
+    },
+
+    th: {
+      employee: 'Employé',
+      status: 'Statut',
+      checkIn: 'Entrée',
+      checkOut: 'Sortie',
+      regular: 'Régulières',
+      overtime: 'Heures supp.',
+      confirmedBy: 'Confirmé par',
+      actions: 'Actions',
+    },
+
+    statusBadge: {
+      OPEN: 'Absent',
+      CHECKED_IN: 'Sur place',
+      CHECKED_OUT: 'En attente',
+      CONFIRMED: 'Confirmé',
+      ADJUSTED: 'Ajusté',
+    },
+
+    row: {
+      shiftSuffix: 'quart',
+      pending: 'En attente',
+      checkIn: 'Pointer entrée',
+      checkOut: 'Pointer sortie',
+      confirm: 'Confirmer',
+      adjust: 'Ajuster',
+    },
+
+    empty: 'Aucune affectation pour cette date',
+    emptyHint: 'Choisissez une autre date ou un autre projet',
+
+    success: {
+      checkedIn: 'Pointage entrée enregistré !',
+      checkedOut: 'Pointage sortie enregistré !',
+      hoursConfirmed: 'Heures confirmées !',
+    },
+
+    modal: {
+      title: 'Confirmer les heures',
+      checkIn: 'Entrée',
+      checkOut: 'Sortie',
+      systemCalculated: 'Calculé par le système',
+      otSuffix: 'supp.',
+      finalHours: 'Heures finales (décision du contremaître)',
+      regularHours: 'Heures régulières',
+      overtimeHours: 'Heures supplémentaires',
+      note: 'Note (optionnel)',
+      notePlaceholder: 'ex. Conditions routières ont causé un retard de 15 min…',
+      cancel: 'Annuler',
+      confirm: 'Confirmer',
+    },
+  },
+
   suppliers: {
     title: 'Fournisseurs',
     subtitle: 'Gérez votre répertoire de fournisseurs',
