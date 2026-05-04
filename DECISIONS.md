@@ -7194,3 +7194,55 @@ Single `BEGIN/COMMIT` transaction. Family A children dropped first to satisfy FK
   - **Batch 5** — feature-never-built (10 tables, was 9 before pulling sensitive_access_log into batch 3): `borrow_requests`, `early_checkout_requests`, `parking_claims`, `attendance_absences`, `attendance_approvals_audit`, `absence_reasons`, `project_geofences`, `company_settings`, `company_statuses`, `plans`. Highest caution — drop only after one more pass to confirm no roadmap dependency. (`company_statuses` and `plans` only have refs from `tests/helpers/db.js` so they're test-fixture-only — likely safe.)
 - After C3: C4 (95 dead columns) → C5 (baseline consolidation).
 - **Today: 32 sections.** (Section 72 added.)
+
+---
+
+## Section 73 — Schema sprint Task C3 batch 4: drop entire `erp` schema (May 4, 2026, evening)
+
+Cleanest batch yet — single `DROP SCHEMA erp CASCADE` drops everything in one shot. Also surfaced an audit-tooling bug.
+
+### Audit-tooling bug discovered
+
+The Section 66 audit flagged **2** `erp.*` tables (`erp.employee_projects`, `erp.work_logs`) but missed two more (`erp.employees`, `erp.projects`). Root cause: the word-boundary grep for unused tables couldn't distinguish between `public.employees` and `erp.employees` — the heavy public-schema usage caused the erp version to be classified as "used" by accident. Same for `projects`.
+
+This is a schema-naming-collision blind spot. Filed as a Section 67 tooling follow-up: the audit detector should be **schema-qualified** (`public.X` and `erp.X` are distinct logical objects) and the false-negative rate is exactly the count of `erp.*` tables that share a name with anything in `public`.
+
+### Reality of the `erp` schema
+
+Schema-qualified re-grep (`erp\.<name>`) against the entire codebase including frontend + mobile turned up:
+
+| Object | Type | Refs |
+|---|---|---|
+| `erp.employees` | table | 0 |
+| `erp.projects` | table | 0 |
+| `erp.employee_projects` | table | 0 |
+| `erp.work_logs` | table | 0 |
+| `erp.haversine_km` | function | 0 |
+| `erp.tg_set_updated_at` | function | 0 (used internally by erp's own triggers only) |
+
+All inter-`erp` FKs go between erp tables only; no cross-schema FK either way. The two functions are referenced exclusively by erp's BEFORE UPDATE triggers. **Nothing in `public` touches `erp` at all.**
+
+### Migration `migrations/006_drop_dead_erp_schema.sql`
+
+Single `DROP SCHEMA IF EXISTS erp CASCADE` inside a transaction. CASCADE removes everything atomically:
+
+- 4 tables (`employees`, `projects`, `employee_projects`, `work_logs`)
+- 2 functions (`haversine_km`, `tg_set_updated_at`)
+- All sequences (`employees_id_seq`, etc.)
+- 8 internal FK constraints
+- 4 BEFORE UPDATE triggers wired to `tg_set_updated_at`
+
+Cleaner and safer than dropping each object separately because PostgreSQL handles dependency order automatically inside CASCADE. Atlas CI applies it on a fresh PostGIS database.
+
+### Files modified or generated this session
+
+- **New:** `migrations/006_drop_dead_erp_schema.sql`
+- **Modified:** `DECISIONS.md` (this section)
+
+### Pointer for next sessions
+
+- C3 progress: **22 of 32 dead tables dropped** (4 + 4 + 10 + 4). The total grew from 30 to 32 because batch 4 surfaced the 2 missed `erp.*` tables.
+- **10 dead tables remain** for batch 5: `borrow_requests`, `early_checkout_requests`, `parking_claims`, `attendance_absences`, `attendance_approvals_audit`, `absence_reasons`, `project_geofences`, `company_settings`, `company_statuses`, `plans`. All "feature designed but never built". `company_statuses` and `plans` are referenced only in `tests/helpers/db.js` (test fixtures) — likely safe but worth confirming.
+- **Audit tooling backlog (added this section):** make the unused-tables detector schema-qualified so `erp.X` and `public.X` aren't conflated. One-line script change but would have caught the 2 missed tables in Section 66.
+- After batch 5: C4 (95 dead columns — same column-name conflation risk to fix in the detector first) → C5 (baseline consolidation).
+- **Today: 33 sections.** (Section 73 added.)
