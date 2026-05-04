@@ -7088,3 +7088,49 @@ DROP TABLE IF EXISTS public.materials_requests;
   - **C3 batch 5** (highest risk, most caution): `borrow_requests`, `early_checkout_requests`, `parking_claims`, `attendance_absences`, `attendance_approvals_audit`, `absence_reasons`, `sensitive_access_log`, `project_geofences`, `company_settings` — features designed but never built. Drop only after one more pass to confirm no roadmap dependency.
 - After all C3 batches: C4 (drop 95 dead columns, can be batched by table) → C5 (baseline consolidation captures the cumulative cleanup).
 - **Today: 30 sections.** (Section 70 added.)
+
+---
+
+## Section 71 — Schema sprint Task C3 batch 2: drop 4 dead `travel_allowance_*` tables (May 4, 2026, evening)
+
+Continuation of Section 70. Same pattern, simpler verification because these 4 tables are fully isolated (no FKs in or out).
+
+### Tables dropped (migration 004)
+
+| Table | Reason |
+|---|---|
+| `public.travel_allowance_brackets` | Variant of a per-diem feature design that was never built |
+| `public.travel_allowance_policies` | Same — alternate design |
+| `public.travel_allowance_policy` | Same — singular naming, third variant |
+| `public.travel_allowance_rules` | Same — fourth variant |
+
+The travel/distance logic that DOES exist in the codebase lives inline in route handlers (no dedicated table); the most direct evidence is the `reports.js` route's `Distance 41km+` handling and the `ccq_travel_rates` table (singular, in-use, NOT in this drop list).
+
+### Verification
+
+For each of the 4 tables:
+
+1. **FK references TO** (anything in the schema that REFERENCES these): zero rows in `grep -E "REFERENCES public.travel_allowance_*"`.
+2. **FK references FROM** (these tables' own FK constraints to others): zero (their own ALTER TABLE blocks have no `fkey`).
+3. **Code-corpus grep** (`routes/ lib/ services/ jobs/ middleware/ scripts/ tests/ seed.js mep-frontend/src mep-mobile/src`): zero hits per table.
+
+This makes the drop the cleanest possible: each table is fully isolated, so order doesn't matter and `IF EXISTS` keeps the migration idempotent.
+
+### Migration `migrations/004_drop_dead_travel_allowance_tables.sql`
+
+Single `BEGIN/COMMIT` with four `DROP TABLE IF EXISTS` statements. Atlas CI applies it on a fresh PostGIS database, which validates that no later migration tries to reference the dropped tables.
+
+### Files modified or generated this session
+
+- **New:** `migrations/004_drop_dead_travel_allowance_tables.sql`
+- **Modified:** `DECISIONS.md` (this section)
+
+### Pointer for next sessions
+
+- C3 progress: 8 of 30 dead tables dropped (4 in batch 1, 4 in batch 2). **22 dead tables remain.**
+- Next batches (Section 70 plan unchanged):
+  - **C3 batch 3** — `employee_field_*` family (4 tables) + legacy RBAC (`employee_ranks`, `employee_roles`, `employee_trades`, `user_trade_access`, `assignment_roles`) = ~9 tables. Need careful FK check because legacy RBAC tables may have outside FKs.
+  - **C3 batch 4** — `erp.*` schema (`erp.employee_projects`, `erp.work_logs`) = 2 tables.
+  - **C3 batch 5** (highest caution) — `borrow_requests`, `early_checkout_requests`, `parking_claims`, `attendance_absences`, `attendance_approvals_audit`, `absence_reasons`, `sensitive_access_log`, `project_geofences`, `company_settings`, `company_employee_field_config` = ~10 tables. These are "feature designed but never built" — drop only after confirming no roadmap dependency.
+- After C3 batches: C4 (drop 95 dead columns) → C5 (baseline consolidation).
+- **Today: 31 sections.** (Section 71 added.)
