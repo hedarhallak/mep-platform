@@ -571,6 +571,171 @@ export default {
     },
   },
 
+  reports: {
+    title: 'Reports',
+    subtitle: 'Workforce analytics — hours, attendance, travel & assignments',
+
+    tabs: {
+      my: 'My Report',
+      hours: 'Work Hours',
+      attendance: 'Attendance',
+      assignments: 'Assignments',
+      travel: 'Travel Allowance',
+      distance: 'Distance 41km+',
+    },
+
+    filterBar: {
+      thisWeek: 'This Week',
+      thisMonth: 'This Month',
+      from: 'From',
+      to: 'To',
+      run: 'Run',
+    },
+
+    empty: {
+      adjustFilters: 'Adjust the filters and run the report',
+    },
+
+    exportCsv: 'Export CSV',
+    recordsCount: '{{count}} records',
+
+    hours: {
+      stats: {
+        daysWorked: 'Days Worked',
+        regular: 'Regular Hours',
+        overtime: 'Overtime',
+        total: 'Total Hours',
+      },
+      th: {
+        employee: 'Employee',
+        trade: 'Trade',
+        project: 'Project',
+        days: 'Days',
+        regular: 'Regular',
+        overtime: 'Overtime',
+        total: 'Total',
+        confirmed: 'Confirmed',
+        late: 'Late',
+      },
+      lateSuffix: '{{count}}x late',
+      empty: 'No hours data for this period',
+    },
+
+    attendance: {
+      summary: '{{records}} assignments · {{groups}} projects',
+      groupCount: '{{count}} employees',
+      th: {
+        employee: 'Employee',
+        trade: 'Trade',
+        role: 'Role',
+        scheduled: 'Scheduled',
+        present: 'Present',
+        absent: 'Absent',
+        late: 'Late',
+      },
+      empty: 'No attendance data for this period',
+    },
+
+    travel: {
+      totalLabel: 'Total Allowance: {{amount}}',
+      zoneLegendTitle: 'CCQ Zone Reference (ACQ Schedule)',
+      th: {
+        employee: 'Employee',
+        trade: 'Trade',
+        project: 'Project',
+        distance: 'Distance',
+        zone: 'Zone',
+        ratePerDay: 'Rate/Day',
+        days: 'Days',
+        total: 'Total',
+      },
+      formOnly: 'Form only',
+      zonePrefix: 'Zone {{zone}}',
+      empty: 'No travel allowance data',
+      emptyHint: 'Only assignments with calculated distance will appear here',
+    },
+
+    assignments: {
+      summary: '{{records}} assignments · {{groups}} projects',
+      th: {
+        employee: 'Employee',
+        trade: 'Trade',
+        role: 'Role',
+        period: 'Period',
+        shift: 'Shift',
+        distance: 'Distance',
+      },
+      empty: 'No assignments for this period',
+    },
+
+    distance: {
+      stats: {
+        needsT2200: 'Needs T2200 Form',
+        needsT2200Sub: '41–65 km employees',
+        companyAllowance: 'Company Allowance',
+        companyAllowanceSub: '65km+ employees',
+        totalAllowance: 'Total Allowance',
+        totalAllowanceSub: 'this period',
+      },
+      filter: {
+        allEmployees: 'All Employees',
+        allProjects: 'All Projects',
+        clearFilters: 'Clear filters',
+      },
+      summarySuffix: '{{count}} employees 41km+',
+      th: {
+        employee: 'Employee',
+        trade: 'Trade',
+        project: 'Project',
+        distance: 'Distance',
+        actionRequired: 'Action Required',
+        ratePerDay: 'Rate/Day',
+        days: 'Days',
+        total: 'Total',
+      },
+      action: {
+        t2200Form: 'T2200 Form',
+        payAllowance: 'Pay Allowance',
+      },
+      empty: 'No employees at 41km+ for this period',
+      emptyHint: 'Distance is calculated at assignment time via Mapbox',
+    },
+
+    my: {
+      filter: {
+        allDays: 'All Days',
+        only41plus: '🚗 41km+ (T2200)',
+      },
+      banner41plus: 'Showing only days where your worksite was 41km+ from home — eligible for T2200 tax declaration or company travel allowance.',
+      stats: {
+        daysWorked: 'Days Worked',
+        regular: 'Regular Hours',
+        overtime: 'Overtime',
+        travelAllowance: 'Travel Allowance',
+      },
+      th: {
+        date: 'Date',
+        project: 'Project',
+        checkIn: 'Check In',
+        checkOut: 'Check Out',
+        regular: 'Regular',
+        overtime: 'Overtime',
+        status: 'Status',
+        distance: 'Distance',
+        travelAllowance: 'Travel Allowance',
+      },
+      status: {
+        confirmed: '✓ Confirmed',
+        adjusted: '✓ Adjusted',
+        pending: 'Pending',
+      },
+      empty41plus: 'No days with 41km+ distance for this period',
+      emptyAll: 'No attendance records for this period',
+      promptRun: 'Select a date range and press Run',
+      disclaimer: 'This report is generated from your confirmed attendance records. Hours marked as "Pending" may still be adjusted by your foreman. For official documentation, please contact your HR department.',
+    },
+  },
+
   standup: {
     title: 'Daily Standup',
     subtitlePrefix: "Review tomorrow's plan —",

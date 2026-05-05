@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import api from '@/lib/api'
 import { usePermissions } from '@/hooks/usePermissions.jsx'
 import { todayStr, tomorrowStr, fmtTime, fmtHours, fmtDate } from '@/utils/formatters'
@@ -49,32 +50,33 @@ function exportCSV(rows, columns, filename) {
 
 // ── Shared: Date filter bar ───────────────────────────────────
 function FilterBar({ from, to, setFrom, setTo, onRun, loading, extra }) {
+  const { t } = useTranslation()
   const setRange = (r) => { setFrom(r.from); setTo(r.to) }
   return (
     <div className="flex items-center gap-2 flex-wrap">
       <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
         {[
-          { label: 'This Week',  fn: weekRange  },
-          { label: 'This Month', fn: monthRange  },
+          { key: 'thisWeek',  fn: weekRange  },
+          { key: 'thisMonth', fn: monthRange },
         ].map(q => (
-          <button key={q.label} onClick={() => setRange(q.fn())}
+          <button key={q.key} onClick={() => setRange(q.fn())}
             className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-white hover:text-slate-900 rounded-md transition-colors">
-            {q.label}
+            {t(`reports.filterBar.${q.key}`)}
           </button>
         ))}
       </div>
       <div className="flex items-center gap-1.5">
-        <span className="text-xs text-slate-400">From</span>
+        <span className="text-xs text-slate-400">{t('reports.filterBar.from')}</span>
         <input type="date" value={from} onChange={e => setFrom(e.target.value)}
           className="px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary-light" />
-        <span className="text-xs text-slate-400">To</span>
+        <span className="text-xs text-slate-400">{t('reports.filterBar.to')}</span>
         <input type="date" value={to} min={from} onChange={e => setTo(e.target.value)}
           className="px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary-light" />
       </div>
       {extra}
       <button onClick={onRun} disabled={loading}
         className="flex items-center gap-2 px-4 py-1.5 bg-primary text-white text-xs font-bold rounded-lg hover:bg-primary-dark transition-colors disabled:opacity-60">
-        {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><BarChart2 className="w-3.5 h-3.5" />Run</>}
+        {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><BarChart2 className="w-3.5 h-3.5" />{t('reports.filterBar.run')}</>}
       </button>
     </div>
   )
@@ -82,11 +84,12 @@ function FilterBar({ from, to, setFrom, setTo, onRun, loading, extra }) {
 
 // ── Shared: empty + error states ─────────────────────────────
 function Empty({ icon: Icon, text }) {
+  const { t } = useTranslation()
   return (
     <div className="flex flex-col items-center justify-center py-20 text-center">
       <Icon className="w-10 h-10 text-slate-200 mb-3" />
       <p className="text-sm font-semibold text-slate-400">{text}</p>
-      <p className="text-xs text-slate-300 mt-1">Adjust the filters and run the report</p>
+      <p className="text-xs text-slate-300 mt-1">{t('reports.empty.adjustFilters')}</p>
     </div>
   )
 }
@@ -95,6 +98,7 @@ function Empty({ icon: Icon, text }) {
 // 1. Hours Report
 // ─────────────────────────────────────────────────────────────
 function HoursReport() {
+  const { t } = useTranslation()
   const wr = weekRange()
   const [from, setFrom] = useState(wr.from)
   const [to,   setTo]   = useState(wr.to)
@@ -114,20 +118,27 @@ function HoursReport() {
   const handleExport = () => {
     if (!data?.records?.length) return
     exportCSV(data.records, [
-      { label: 'Employee',       value: r => r.full_name },
-      { label: 'Trade',          value: r => r.trade_code },
-      { label: 'Project',        value: r => r.project_code },
-      { label: 'Project Name',   value: r => r.project_name },
-      { label: 'Days Worked',    value: r => r.days_worked },
-      { label: 'Regular Hours',  value: r => r.total_regular },
-      { label: 'Overtime Hours', value: r => r.total_overtime },
-      { label: 'Total Hours',    value: r => r.total_hours },
-      { label: 'Confirmed Days', value: r => r.confirmed_days },
-      { label: 'Late Days',      value: r => r.late_days },
+      { label: t('reports.hours.th.employee'),    value: r => r.full_name },
+      { label: t('reports.hours.th.trade'),       value: r => r.trade_code },
+      { label: t('reports.hours.th.project'),     value: r => r.project_code },
+      { label: 'Project Name',                    value: r => r.project_name },
+      { label: t('reports.hours.th.days'),        value: r => r.days_worked },
+      { label: t('reports.hours.th.regular'),     value: r => r.total_regular },
+      { label: t('reports.hours.th.overtime'),    value: r => r.total_overtime },
+      { label: t('reports.hours.th.total'),       value: r => r.total_hours },
+      { label: t('reports.hours.th.confirmed'),   value: r => r.confirmed_days },
+      { label: t('reports.hours.th.late'),        value: r => r.late_days },
     ], `hours_${from}_${to}.csv`)
   }
 
   const totals = data?.totals
+  const statCards = [
+    { key: 'daysWorked', value: totals?.days_worked,                  color: 'bg-slate-100 text-slate-700' },
+    { key: 'regular',    value: fmtHours(totals?.total_regular),      color: 'bg-primary-pale text-primary-dark' },
+    { key: 'overtime',   value: fmtHours(totals?.total_overtime),     color: 'bg-amber-100 text-amber-700' },
+    { key: 'total',      value: fmtHours(totals?.total_hours),        color: 'bg-emerald-100 text-emerald-700' },
+  ]
+  const tableHeaders = ['employee','trade','project','days','regular','overtime','total','confirmed','late']
 
   return (
     <div className="space-y-4">
@@ -141,14 +152,9 @@ function HoursReport() {
 
       {totals && (
         <div className="grid grid-cols-4 gap-3">
-          {[
-            { label: 'Days Worked',   value: totals.days_worked,                   color: 'bg-slate-100 text-slate-700' },
-            { label: 'Regular Hours', value: fmtHours(totals.total_regular),       color: 'bg-primary-pale text-primary-dark' },
-            { label: 'Overtime',      value: fmtHours(totals.total_overtime),      color: 'bg-amber-100 text-amber-700' },
-            { label: 'Total Hours',   value: fmtHours(totals.total_hours),         color: 'bg-emerald-100 text-emerald-700' },
-          ].map(s => (
-            <div key={s.label} className={`flex flex-col px-4 py-3 rounded-xl ${s.color}`}>
-              <span className="text-xs font-semibold opacity-70">{s.label}</span>
+          {statCards.map(s => (
+            <div key={s.key} className={`flex flex-col px-4 py-3 rounded-xl ${s.color}`}>
+              <span className="text-xs font-semibold opacity-70">{t(`reports.hours.stats.${s.key}`)}</span>
               <span className="text-2xl font-extrabold mt-1">{s.value}</span>
             </div>
           ))}
@@ -158,18 +164,18 @@ function HoursReport() {
       {data?.records?.length > 0 && (
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-200">
-            <span className="text-xs font-bold text-slate-500">{data.records.length} records</span>
+            <span className="text-xs font-bold text-slate-500">{t('reports.recordsCount', { count: data.records.length })}</span>
             <button onClick={handleExport}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 border border-slate-200 bg-white hover:bg-slate-50 rounded-lg transition-colors">
-              <Download className="w-3.5 h-3.5" />Export CSV
+              <Download className="w-3.5 h-3.5" />{t('reports.exportCsv')}
             </button>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-slate-100">
-                  {['Employee','Trade','Project','Days','Regular','Overtime','Total','Confirmed','Late'].map(h => (
-                    <th key={h} className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">{h}</th>
+                  {tableHeaders.map(h => (
+                    <th key={h} className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">{t(`reports.hours.th.${h}`)}</th>
                   ))}
                 </tr>
               </thead>
@@ -196,7 +202,7 @@ function HoursReport() {
                     </td>
                     <td className="px-4 py-2.5">
                       {r.late_days > 0
-                        ? <span className="text-[10px] font-semibold text-red-500">{r.late_days}x late</span>
+                        ? <span className="text-[10px] font-semibold text-red-500">{t('reports.hours.lateSuffix', { count: r.late_days })}</span>
                         : <span className="text-[10px] text-slate-300">—</span>}
                     </td>
                   </tr>
@@ -208,7 +214,7 @@ function HoursReport() {
       )}
 
       {!loading && !error && data && data.records.length === 0 && (
-        <Empty icon={Clock} text="No hours data for this period" />
+        <Empty icon={Clock} text={t('reports.hours.empty')} />
       )}
     </div>
   )
@@ -218,6 +224,7 @@ function HoursReport() {
 // 2. Attendance Summary
 // ─────────────────────────────────────────────────────────────
 function AttendanceReport() {
+  const { t } = useTranslation()
   const wr = weekRange()
   const [from, setFrom] = useState(wr.from)
   const [to,   setTo]   = useState(wr.to)
@@ -237,14 +244,14 @@ function AttendanceReport() {
   const handleExport = () => {
     if (!data?.records?.length) return
     exportCSV(data.records, [
-      { label: 'Employee',        value: r => r.full_name },
-      { label: 'Trade',           value: r => r.trade_code },
-      { label: 'Role',            value: r => r.assignment_role },
-      { label: 'Project',         value: r => r.project_code },
-      { label: 'Scheduled Days',  value: r => r.scheduled_days },
-      { label: 'Present Days',    value: r => r.present_days },
-      { label: 'Absent Days',     value: r => r.absent_days },
-      { label: 'Late Days',       value: r => r.late_days },
+      { label: t('reports.attendance.th.employee'),  value: r => r.full_name },
+      { label: t('reports.attendance.th.trade'),     value: r => r.trade_code },
+      { label: t('reports.attendance.th.role'),      value: r => r.assignment_role },
+      { label: 'Project',                            value: r => r.project_code },
+      { label: t('reports.attendance.th.scheduled'), value: r => r.scheduled_days },
+      { label: t('reports.attendance.th.present'),   value: r => r.present_days },
+      { label: t('reports.attendance.th.absent'),    value: r => r.absent_days },
+      { label: t('reports.attendance.th.late'),      value: r => r.late_days },
     ], `attendance_${from}_${to}.csv`)
   }
 
@@ -255,6 +262,8 @@ function AttendanceReport() {
     acc[k].rows.push(r)
     return acc
   }, {})) : []
+
+  const headers = ['employee','trade','role','scheduled','present','absent','late']
 
   return (
     <div className="space-y-4">
@@ -269,10 +278,10 @@ function AttendanceReport() {
       {data?.records?.length > 0 && (
         <>
           <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-400">{data.records.length} assignments · {grouped.length} projects</span>
+            <span className="text-xs text-slate-400">{t('reports.attendance.summary', { records: data.records.length, groups: grouped.length })}</span>
             <button onClick={handleExport}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 border border-slate-200 bg-white hover:bg-slate-50 rounded-lg transition-colors">
-              <Download className="w-3.5 h-3.5" />Export CSV
+              <Download className="w-3.5 h-3.5" />{t('reports.exportCsv')}
             </button>
           </div>
           {grouped.map(group => (
@@ -280,13 +289,13 @@ function AttendanceReport() {
               <div className="px-4 py-2.5 bg-primary-pale border-b border-primary-pale flex items-center gap-2">
                 <span className="text-sm font-bold text-primary-dark">{group.project_code}</span>
                 {group.project_name && <span className="text-xs text-primary-light">{group.project_name}</span>}
-                <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 bg-primary-pale text-primary-dark rounded-lg">{group.rows.length} employees</span>
+                <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 bg-primary-pale text-primary-dark rounded-lg">{t('reports.attendance.groupCount', { count: group.rows.length })}</span>
               </div>
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-slate-100">
-                    {['Employee','Trade','Role','Scheduled','Present','Absent','Late'].map(h => (
-                      <th key={h} className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2">{h}</th>
+                    {headers.map(h => (
+                      <th key={h} className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2">{t(`reports.attendance.th.${h}`)}</th>
                     ))}
                   </tr>
                 </thead>
@@ -329,7 +338,7 @@ function AttendanceReport() {
       )}
 
       {!loading && !error && data && data.records.length === 0 && (
-        <Empty icon={CalendarCheck} text="No attendance data for this period" />
+        <Empty icon={CalendarCheck} text={t('reports.attendance.empty')} />
       )}
     </div>
   )
@@ -339,6 +348,7 @@ function AttendanceReport() {
 // 3. CCQ Travel Allowance
 // ─────────────────────────────────────────────────────────────
 function TravelReport() {
+  const { t } = useTranslation()
   const mr = monthRange()
   const [from, setFrom] = useState(mr.from)
   const [to,   setTo]   = useState(mr.to)
@@ -358,14 +368,14 @@ function TravelReport() {
   const handleExport = () => {
     if (!data?.records?.length) return
     exportCSV(data.records, [
-      { label: 'Employee',       value: r => r.full_name },
-      { label: 'Trade',          value: r => r.trade_code },
-      { label: 'Project',        value: r => r.project_code },
-      { label: 'Distance (km)',  value: r => r.distance_km },
-      { label: 'Zone',           value: r => r.zone_label },
-      { label: 'Rate/Day (CAD)', value: r => r.rate_per_day },
-      { label: 'Days Worked',    value: r => r.days_worked },
-      { label: 'Total (CAD)',    value: r => r.total_allowance },
+      { label: t('reports.travel.th.employee'),   value: r => r.full_name },
+      { label: t('reports.travel.th.trade'),      value: r => r.trade_code },
+      { label: t('reports.travel.th.project'),    value: r => r.project_code },
+      { label: 'Distance (km)',                   value: r => r.distance_km },
+      { label: t('reports.travel.th.zone'),       value: r => r.zone_label },
+      { label: 'Rate/Day (CAD)',                  value: r => r.rate_per_day },
+      { label: t('reports.travel.th.days'),       value: r => r.days_worked },
+      { label: 'Total (CAD)',                     value: r => r.total_allowance },
     ], `travel_allowance_${from}_${to}.csv`)
   }
 
@@ -379,6 +389,8 @@ function TravelReport() {
     'F': 'bg-red-100 text-red-700',
     'G': 'bg-red-100 text-red-700',
   }
+
+  const headers = ['employee','trade','project','distance','zone','ratePerDay','days','total']
 
   return (
     <div className="space-y-4">
@@ -394,22 +406,22 @@ function TravelReport() {
         <>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <span className="text-xs text-slate-400">{data.records.length} records</span>
+              <span className="text-xs text-slate-400">{t('reports.recordsCount', { count: data.records.length })}</span>
               {data.grand_total > 0 && (
                 <span className="text-sm font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200">
-                  Total Allowance: {fmtCAD(data.grand_total)}
+                  {t('reports.travel.totalLabel', { amount: fmtCAD(data.grand_total) })}
                 </span>
               )}
             </div>
             <button onClick={handleExport}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 border border-slate-200 bg-white hover:bg-slate-50 rounded-lg transition-colors">
-              <Download className="w-3.5 h-3.5" />Export CSV
+              <Download className="w-3.5 h-3.5" />{t('reports.exportCsv')}
             </button>
           </div>
 
           {/* CCQ zone legend */}
           <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl">
-            <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mb-2">CCQ Zone Reference (ACQ Schedule)</p>
+            <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mb-2">{t('reports.travel.zoneLegendTitle')}</p>
             <div className="flex flex-wrap gap-2 text-[10px]">
               {[
                 { zone: 'T2200', label: '41–65 km — T2200 tax form only' },
@@ -429,8 +441,8 @@ function TravelReport() {
             <table className="w-full">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200">
-                  {['Employee','Trade','Project','Distance','Zone','Rate/Day','Days','Total'].map(h => (
-                    <th key={h} className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">{h}</th>
+                  {headers.map(h => (
+                    <th key={h} className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">{t(`reports.travel.th.${h}`)}</th>
                   ))}
                 </tr>
               </thead>
@@ -443,11 +455,11 @@ function TravelReport() {
                     <td className="px-4 py-2.5 text-xs font-bold text-slate-700">{fmtKm(r.distance_km)}</td>
                     <td className="px-4 py-2.5">
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${ZONE_COLOR[r.zone] || 'bg-slate-100 text-slate-500'}`}>
-                        {r.zone === 'T2200' ? 'T2200' : `Zone ${r.zone}`}
+                        {r.zone === 'T2200' ? 'T2200' : t('reports.travel.zonePrefix', { zone: r.zone })}
                       </span>
                     </td>
                     <td className="px-4 py-2.5 text-xs text-slate-600">
-                      {r.rate_per_day > 0 ? fmtCAD(r.rate_per_day) : <span className="text-slate-400">Form only</span>}
+                      {r.rate_per_day > 0 ? fmtCAD(r.rate_per_day) : <span className="text-slate-400">{t('reports.travel.formOnly')}</span>}
                     </td>
                     <td className="px-4 py-2.5 text-xs font-semibold text-slate-700">{r.days_worked}d</td>
                     <td className="px-4 py-2.5 text-sm font-bold text-emerald-700">
@@ -464,8 +476,8 @@ function TravelReport() {
       {!loading && !error && data && data.records.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <MapPin className="w-10 h-10 text-slate-200 mb-3" />
-          <p className="text-sm font-semibold text-slate-400">No travel allowance data</p>
-          <p className="text-xs text-slate-300 mt-1">Only assignments with calculated distance will appear here</p>
+          <p className="text-sm font-semibold text-slate-400">{t('reports.travel.empty')}</p>
+          <p className="text-xs text-slate-300 mt-1">{t('reports.travel.emptyHint')}</p>
         </div>
       )}
     </div>
@@ -476,6 +488,7 @@ function TravelReport() {
 // 4. Assignments Report
 // ─────────────────────────────────────────────────────────────
 function AssignmentsReport() {
+  const { t } = useTranslation()
   const mr = monthRange()
   const [from, setFrom] = useState(mr.from)
   const [to,   setTo]   = useState(mr.to)
@@ -495,16 +508,16 @@ function AssignmentsReport() {
   const handleExport = () => {
     if (!data?.records?.length) return
     exportCSV(data.records, [
-      { label: 'Employee',    value: r => r.full_name },
-      { label: 'Trade',       value: r => r.trade_code },
-      { label: 'Role',        value: r => r.assignment_role },
-      { label: 'Project',     value: r => r.project_code },
-      { label: 'Site Address',value: r => r.site_address },
-      { label: 'Start Date',  value: r => r.start_date },
-      { label: 'End Date',    value: r => r.end_date },
-      { label: 'Shift Start', value: r => r.shift_start },
-      { label: 'Shift End',   value: r => r.shift_end },
-      { label: 'Distance km', value: r => r.distance_km },
+      { label: t('reports.assignments.th.employee'), value: r => r.full_name },
+      { label: t('reports.assignments.th.trade'),    value: r => r.trade_code },
+      { label: t('reports.assignments.th.role'),     value: r => r.assignment_role },
+      { label: 'Project',                            value: r => r.project_code },
+      { label: 'Site Address',                       value: r => r.site_address },
+      { label: 'Start Date',                         value: r => r.start_date },
+      { label: 'End Date',                           value: r => r.end_date },
+      { label: 'Shift Start',                        value: r => r.shift_start },
+      { label: 'Shift End',                          value: r => r.shift_end },
+      { label: 'Distance km',                        value: r => r.distance_km },
     ], `assignments_${from}_${to}.csv`)
   }
 
@@ -514,6 +527,8 @@ function AssignmentsReport() {
     acc[k].rows.push(r)
     return acc
   }, {})) : []
+
+  const headers = ['employee','trade','role','period','shift','distance']
 
   return (
     <div className="space-y-4">
@@ -528,10 +543,10 @@ function AssignmentsReport() {
       {data?.records?.length > 0 && (
         <>
           <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-400">{data.records.length} assignments · {grouped.length} projects</span>
+            <span className="text-xs text-slate-400">{t('reports.assignments.summary', { records: data.records.length, groups: grouped.length })}</span>
             <button onClick={handleExport}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 border border-slate-200 bg-white hover:bg-slate-50 rounded-lg transition-colors">
-              <Download className="w-3.5 h-3.5" />Export CSV
+              <Download className="w-3.5 h-3.5" />{t('reports.exportCsv')}
             </button>
           </div>
           {grouped.map(group => (
@@ -545,8 +560,8 @@ function AssignmentsReport() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-slate-100">
-                    {['Employee','Trade','Role','Period','Shift','Distance'].map(h => (
-                      <th key={h} className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2">{h}</th>
+                    {headers.map(h => (
+                      <th key={h} className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2">{t(`reports.assignments.th.${h}`)}</th>
                     ))}
                   </tr>
                 </thead>
@@ -569,7 +584,7 @@ function AssignmentsReport() {
       )}
 
       {!loading && !error && data && data.records.length === 0 && (
-        <Empty icon={Users} text="No assignments for this period" />
+        <Empty icon={Users} text={t('reports.assignments.empty')} />
       )}
     </div>
   )
@@ -579,6 +594,7 @@ function AssignmentsReport() {
 // 5. Distance Report (41km+)
 // ─────────────────────────────────────────────────────────────
 function DistanceReport() {
+  const { t } = useTranslation()
   const mr = monthRange()
   const [from, setFrom]       = useState(mr.from)
   const [to,   setTo]         = useState(mr.to)
@@ -612,30 +628,27 @@ function DistanceReport() {
   const handleExport = () => {
     if (!data?.records?.length) return
     exportCSV(sortedRecords, [
-      { label: 'Employee',     value: r => r.full_name },
-      { label: 'Trade',        value: r => r.trade_code },
-      { label: 'Project',      value: r => r.project_code },
-      { label: 'Distance km',  value: r => r.distance_km },
-      { label: 'Zone',         value: r => r.zone_label },
-      { label: 'Needs T2200',  value: r => r.needs_t2200 ? 'YES' : '' },
-      { label: 'Allowance/Day',value: r => r.rate_per_day },
-      { label: 'Days Worked',  value: r => r.days_worked },
-      { label: 'Total (CAD)',  value: r => r.total_allowance },
+      { label: t('reports.distance.th.employee'),   value: r => r.full_name },
+      { label: t('reports.distance.th.trade'),      value: r => r.trade_code },
+      { label: t('reports.distance.th.project'),    value: r => r.project_code },
+      { label: 'Distance km',                       value: r => r.distance_km },
+      { label: 'Zone',                              value: r => r.zone_label },
+      { label: 'Needs T2200',                       value: r => r.needs_t2200 ? 'YES' : '' },
+      { label: 'Allowance/Day',                     value: r => r.rate_per_day },
+      { label: t('reports.distance.th.days'),       value: r => r.days_worked },
+      { label: 'Total (CAD)',                       value: r => r.total_allowance },
     ], `distance_report_${from}_${to}.csv`)
   }
 
-  // Get unique employees and projects for filter dropdowns
   const employees = [...new Set((data?.records || []).map(r => r.full_name))].sort()
   const projects  = [...new Set((data?.records || []).map(r => r.project_code))].sort()
 
-  // Apply filters
   const filtered = (data?.records || []).filter(r => {
     if (filterEmp  && r.full_name    !== filterEmp)  return false
     if (filterProj && r.project_code !== filterProj) return false
     return true
   })
 
-  // Apply sort
   const sortedRecords = [...filtered].sort((a, b) => {
     let va = a[sortCol], vb = b[sortCol]
     if (typeof va === 'string') va = va.toLowerCase()
@@ -663,19 +676,19 @@ function DistanceReport() {
         <>
           <div className="grid grid-cols-3 gap-3">
             <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
-              <p className="text-xs font-semibold text-blue-500">Needs T2200 Form</p>
+              <p className="text-xs font-semibold text-blue-500">{t('reports.distance.stats.needsT2200')}</p>
               <p className="text-2xl font-extrabold text-blue-700 mt-1">{t2200Count}</p>
-              <p className="text-[10px] text-blue-400 mt-0.5">41–65 km employees</p>
+              <p className="text-[10px] text-blue-400 mt-0.5">{t('reports.distance.stats.needsT2200Sub')}</p>
             </div>
             <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
-              <p className="text-xs font-semibold text-amber-500">Company Allowance</p>
+              <p className="text-xs font-semibold text-amber-500">{t('reports.distance.stats.companyAllowance')}</p>
               <p className="text-2xl font-extrabold text-amber-700 mt-1">{allowanceRecs.length}</p>
-              <p className="text-[10px] text-amber-400 mt-0.5">65km+ employees</p>
+              <p className="text-[10px] text-amber-400 mt-0.5">{t('reports.distance.stats.companyAllowanceSub')}</p>
             </div>
             <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3">
-              <p className="text-xs font-semibold text-emerald-500">Total Allowance</p>
+              <p className="text-xs font-semibold text-emerald-500">{t('reports.distance.stats.totalAllowance')}</p>
               <p className="text-2xl font-extrabold text-emerald-700 mt-1">{fmtCAD(totalAllowance)}</p>
-              <p className="text-[10px] text-emerald-400 mt-0.5">this period</p>
+              <p className="text-[10px] text-emerald-400 mt-0.5">{t('reports.distance.stats.totalAllowanceSub')}</p>
             </div>
           </div>
 
@@ -683,24 +696,24 @@ function DistanceReport() {
           <div className="flex items-center gap-2 flex-wrap">
             <select value={filterEmp} onChange={e => setFilterEmp(e.target.value)}
               className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary-light">
-              <option value="">All Employees</option>
+              <option value="">{t('reports.distance.filter.allEmployees')}</option>
               {employees.map(e => <option key={e} value={e}>{e}</option>)}
             </select>
             <select value={filterProj} onChange={e => setFilterProj(e.target.value)}
               className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary-light">
-              <option value="">All Projects</option>
+              <option value="">{t('reports.distance.filter.allProjects')}</option>
               {projects.map(p => <option key={p} value={p}>{p}</option>)}
             </select>
             {(filterEmp || filterProj) && (
               <button onClick={() => { setFilterEmp(''); setFilterProj('') }}
                 className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-700 border border-slate-200 rounded-lg bg-white">
-                Clear filters
+                {t('reports.distance.filter.clearFilters')}
               </button>
             )}
-            <span className="text-xs text-slate-400 ml-auto">{sortedRecords.length} employees 41km+</span>
+            <span className="text-xs text-slate-400 ml-auto">{t('reports.distance.summarySuffix', { count: sortedRecords.length })}</span>
             <button onClick={handleExport}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 border border-slate-200 bg-white hover:bg-slate-50 rounded-lg transition-colors">
-              <Download className="w-3.5 h-3.5" />Export CSV
+              <Download className="w-3.5 h-3.5" />{t('reports.exportCsv')}
             </button>
           </div>
 
@@ -709,19 +722,19 @@ function DistanceReport() {
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200">
                   {[
-                    { label: 'Employee',        col: 'full_name' },
-                    { label: 'Trade',           col: 'trade_code' },
-                    { label: 'Project',         col: 'project_code' },
-                    { label: 'Distance',        col: 'distance_km' },
-                    { label: 'Action Required', col: null },
-                    { label: 'Rate/Day',        col: 'rate_per_day' },
-                    { label: 'Days',            col: 'days_worked' },
-                    { label: 'Total',           col: 'total_allowance' },
+                    { key: 'employee',       col: 'full_name' },
+                    { key: 'trade',          col: 'trade_code' },
+                    { key: 'project',        col: 'project_code' },
+                    { key: 'distance',       col: 'distance_km' },
+                    { key: 'actionRequired', col: null },
+                    { key: 'ratePerDay',     col: 'rate_per_day' },
+                    { key: 'days',           col: 'days_worked' },
+                    { key: 'total',          col: 'total_allowance' },
                   ].map(h => (
-                    <th key={h.label}
+                    <th key={h.key}
                       onClick={() => h.col && handleSort(h.col)}
                       className={`text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5 ${h.col ? 'cursor-pointer hover:text-slate-600 select-none' : ''}`}>
-                      {h.label}{h.col && <SortIcon col={h.col} />}
+                      {t(`reports.distance.th.${h.key}`)}{h.col && <SortIcon col={h.col} />}
                     </th>
                   ))}
                 </tr>
@@ -735,8 +748,8 @@ function DistanceReport() {
                     <td className="px-4 py-2.5 text-xs font-bold text-slate-700">{fmtKm(r.distance_km)}</td>
                     <td className="px-4 py-2.5">
                       {r.needs_t2200
-                        ? <span className="flex items-center gap-1 text-[10px] font-bold text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full w-fit"><AlertTriangle className="w-3 h-3" />T2200 Form</span>
-                        : <span className="flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full w-fit"><TrendingUp className="w-3 h-3" />Pay Allowance</span>
+                        ? <span className="flex items-center gap-1 text-[10px] font-bold text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full w-fit"><AlertTriangle className="w-3 h-3" />{t('reports.distance.action.t2200Form')}</span>
+                        : <span className="flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full w-fit"><TrendingUp className="w-3 h-3" />{t('reports.distance.action.payAllowance')}</span>
                       }
                     </td>
                     <td className="px-4 py-2.5 text-xs text-slate-600">
@@ -757,8 +770,8 @@ function DistanceReport() {
       {!loading && !error && data && data.records.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <MapPin className="w-10 h-10 text-slate-200 mb-3" />
-          <p className="text-sm font-semibold text-slate-400">No employees at 41km+ for this period</p>
-          <p className="text-xs text-slate-300 mt-1">Distance is calculated at assignment time via Mapbox</p>
+          <p className="text-sm font-semibold text-slate-400">{t('reports.distance.empty')}</p>
+          <p className="text-xs text-slate-300 mt-1">{t('reports.distance.emptyHint')}</p>
         </div>
       )}
     </div>
@@ -774,6 +787,7 @@ function yearRange() {
 // My Report — Employee self-service weekly report
 // ─────────────────────────────────────────────────────────────
 function MyReport() {
+  const { t, i18n } = useTranslation()
   const wr = weekRange()
   const [from, setFrom]             = useState(wr.from)
   const [to,   setTo]               = useState(wr.to)
@@ -809,25 +823,27 @@ function MyReport() {
     ADJUSTED:    'bg-purple-100 text-purple-700',
   }
 
-  // Apply distance filter on frontend
   const visibleRecords = distFilter === '41plus'
     ? (data?.records || []).filter(r => parseFloat(r.distance_km || 0) >= 41)
     : (data?.records || [])
 
-  const t = data?.totals
+  const totals = data?.totals
+  const dateLocale = i18n.language === 'fr' ? 'fr-CA' : 'en-CA'
 
   const distFilterExtra = (
     <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
       <button onClick={() => setDistFilter('all')}
         className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${distFilter === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:bg-white hover:text-slate-900'}`}>
-        All Days
+        {t('reports.my.filter.allDays')}
       </button>
       <button onClick={() => { setDistFilter('41plus'); setFrom(yearRange().from); setTo(yearRange().to) }}
         className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${distFilter === '41plus' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:bg-white hover:text-slate-900'}`}>
-        🚗 41km+ (T2200)
+        {t('reports.my.filter.only41plus')}
       </button>
     </div>
   )
+
+  const headers = ['date','project','checkIn','checkOut','regular','overtime','status','distance','travelAllowance']
 
   return (
     <div className="space-y-4">
@@ -836,7 +852,7 @@ function MyReport() {
       {distFilter === '41plus' && (
         <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-100 rounded-xl text-xs text-blue-700">
           <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-          Showing only days where your worksite was 41km+ from home — eligible for T2200 tax declaration or company travel allowance.
+          {t('reports.my.banner41plus')}
         </div>
       )}
 
@@ -846,24 +862,24 @@ function MyReport() {
         </div>
       )}
 
-      {t && (
+      {totals && (
         <div className="grid grid-cols-4 gap-3">
           <div className="bg-white border border-slate-200 rounded-xl px-4 py-3">
-            <p className="text-xs font-semibold text-slate-400">Days Worked</p>
-            <p className="text-2xl font-extrabold text-slate-700 mt-1">{distFilter === '41plus' ? visibleRecords.length : t.days_worked}</p>
+            <p className="text-xs font-semibold text-slate-400">{t('reports.my.stats.daysWorked')}</p>
+            <p className="text-2xl font-extrabold text-slate-700 mt-1">{distFilter === '41plus' ? visibleRecords.length : totals.days_worked}</p>
           </div>
           <div className="bg-primary-pale border border-primary-pale rounded-xl px-4 py-3">
-            <p className="text-xs font-semibold text-primary-light">Regular Hours</p>
-            <p className="text-2xl font-extrabold text-primary-dark mt-1">{fmtHours(t.total_regular)}</p>
+            <p className="text-xs font-semibold text-primary-light">{t('reports.my.stats.regular')}</p>
+            <p className="text-2xl font-extrabold text-primary-dark mt-1">{fmtHours(totals.total_regular)}</p>
           </div>
-          <div className={`border rounded-xl px-4 py-3 ${t.total_overtime > 0 ? 'bg-amber-50 border-amber-100' : 'bg-slate-50 border-slate-200'}`}>
-            <p className={`text-xs font-semibold ${t.total_overtime > 0 ? 'text-amber-400' : 'text-slate-400'}`}>Overtime</p>
-            <p className={`text-2xl font-extrabold mt-1 ${t.total_overtime > 0 ? 'text-amber-700' : 'text-slate-400'}`}>{fmtHours(t.total_overtime)}</p>
+          <div className={`border rounded-xl px-4 py-3 ${totals.total_overtime > 0 ? 'bg-amber-50 border-amber-100' : 'bg-slate-50 border-slate-200'}`}>
+            <p className={`text-xs font-semibold ${totals.total_overtime > 0 ? 'text-amber-400' : 'text-slate-400'}`}>{t('reports.my.stats.overtime')}</p>
+            <p className={`text-2xl font-extrabold mt-1 ${totals.total_overtime > 0 ? 'text-amber-700' : 'text-slate-400'}`}>{fmtHours(totals.total_overtime)}</p>
           </div>
-          <div className={`border rounded-xl px-4 py-3 ${t.total_allowance > 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-200'}`}>
-            <p className={`text-xs font-semibold ${t.total_allowance > 0 ? 'text-emerald-500' : 'text-slate-400'}`}>Travel Allowance</p>
-            <p className={`text-2xl font-extrabold mt-1 ${t.total_allowance > 0 ? 'text-emerald-700' : 'text-slate-400'}`}>
-              {t.total_allowance > 0 ? fmtCAD(t.total_allowance) : '—'}
+          <div className={`border rounded-xl px-4 py-3 ${totals.total_allowance > 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-200'}`}>
+            <p className={`text-xs font-semibold ${totals.total_allowance > 0 ? 'text-emerald-500' : 'text-slate-400'}`}>{t('reports.my.stats.travelAllowance')}</p>
+            <p className={`text-2xl font-extrabold mt-1 ${totals.total_allowance > 0 ? 'text-emerald-700' : 'text-slate-400'}`}>
+              {totals.total_allowance > 0 ? fmtCAD(totals.total_allowance) : '—'}
             </p>
           </div>
         </div>
@@ -874,8 +890,8 @@ function MyReport() {
           <table className="w-full">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200">
-                {['Date','Project','Check In','Check Out','Regular','Overtime','Status','Distance','Travel Allowance'].map(h => (
-                  <th key={h} className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5 whitespace-nowrap">{h}</th>
+                {headers.map(h => (
+                  <th key={h} className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5 whitespace-nowrap">{t(`reports.my.th.${h}`)}</th>
                 ))}
               </tr>
             </thead>
@@ -883,7 +899,7 @@ function MyReport() {
               {visibleRecords.map((r, i) => (
                 <tr key={i} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
                   <td className="px-4 py-2.5 text-xs font-semibold text-slate-700 whitespace-nowrap">
-                    {new Date(r.attendance_date + 'T00:00:00').toLocaleDateString('en-CA', { weekday: 'short', month: 'short', day: 'numeric' })}
+                    {new Date(r.attendance_date + 'T00:00:00').toLocaleDateString(dateLocale, { weekday: 'short', month: 'short', day: 'numeric' })}
                   </td>
                   <td className="px-4 py-2.5">
                     <div className="text-xs font-semibold text-slate-700">{r.project_code}</div>
@@ -899,7 +915,10 @@ function MyReport() {
                   </td>
                   <td className="px-4 py-2.5">
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${STATUS_BADGE[r.status] || 'bg-slate-100 text-slate-500'}`}>
-                      {r.status === 'CONFIRMED' ? '✓ Confirmed' : r.status === 'ADJUSTED' ? '✓ Adjusted' : r.status === 'CHECKED_OUT' ? 'Pending' : r.status}
+                      {r.status === 'CONFIRMED' ? t('reports.my.status.confirmed')
+                        : r.status === 'ADJUSTED' ? t('reports.my.status.adjusted')
+                        : r.status === 'CHECKED_OUT' ? t('reports.my.status.pending')
+                        : r.status}
                     </span>
                   </td>
                   <td className="px-4 py-2.5 text-xs font-semibold text-slate-600">
@@ -923,7 +942,7 @@ function MyReport() {
         <div className="flex flex-col items-center justify-center py-16 text-center bg-white rounded-xl border border-slate-200">
           <Clock className="w-10 h-10 text-slate-200 mb-3" />
           <p className="text-sm font-semibold text-slate-400">
-            {distFilter === '41plus' ? 'No days with 41km+ distance for this period' : 'No attendance records for this period'}
+            {distFilter === '41plus' ? t('reports.my.empty41plus') : t('reports.my.emptyAll')}
           </p>
         </div>
       )}
@@ -931,14 +950,13 @@ function MyReport() {
       {!loading && !error && !data && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <User className="w-10 h-10 text-slate-200 mb-3" />
-          <p className="text-sm font-semibold text-slate-400">Select a date range and press Run</p>
+          <p className="text-sm font-semibold text-slate-400">{t('reports.my.promptRun')}</p>
         </div>
       )}
 
       {visibleRecords.length > 0 && (
         <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[10px] text-slate-400">
-          This report is generated from your confirmed attendance records. Hours marked as "Pending" may still be adjusted by your foreman.
-          For official documentation, please contact your HR department.
+          {t('reports.my.disclaimer')}
         </div>
       )}
     </div>
@@ -948,19 +966,20 @@ function MyReport() {
 // ─────────────────────────────────────────────────────────────
 // Main Page
 // ─────────────────────────────────────────────────────────────
-const ADMIN_TABS = [
-  { id: 'hours',       icon: Clock,         label: 'Work Hours'     },
-  { id: 'attendance',  icon: CalendarCheck, label: 'Attendance'     },
-  { id: 'assignments', icon: Users,         label: 'Assignments'    },
-  { id: 'distance',    icon: TrendingUp,    label: 'Distance 41km+' },
+const ADMIN_TAB_KEYS = [
+  { id: 'hours',       icon: Clock,         labelKey: 'hours' },
+  { id: 'attendance',  icon: CalendarCheck, labelKey: 'attendance' },
+  { id: 'assignments', icon: Users,         labelKey: 'assignments' },
+  { id: 'distance',    icon: TrendingUp,    labelKey: 'distance' },
 ]
 
 export default function ReportsPage() {
+  const { t } = useTranslation()
   const { can, loading: permsLoading } = usePermissions()
   const canViewAll = !permsLoading && can('reports', 'view')
   const TABS = canViewAll
-    ? [{ id: 'my', icon: User, label: 'My Report' }, ...ADMIN_TABS]
-    : [{ id: 'my', icon: User, label: 'My Report' }]
+    ? [{ id: 'my', icon: User, labelKey: 'my' }, ...ADMIN_TAB_KEYS]
+    : [{ id: 'my', icon: User, labelKey: 'my' }]
 
   const [tab, setTab] = useState('my')
 
@@ -973,17 +992,17 @@ export default function ReportsPage() {
             <BarChart2 className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-slate-900">Reports</h1>
-            <p className="text-xs text-slate-400 mt-0.5">Workforce analytics — hours, attendance, travel &amp; assignments</p>
+            <h1 className="text-lg font-bold text-slate-900">{t('reports.title')}</h1>
+            <p className="text-xs text-slate-400 mt-0.5">{t('reports.subtitle')}</p>
           </div>
         </div>
         <div className="flex items-center gap-1 overflow-x-auto">
-          {TABS.map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)}
+          {TABS.map(tt => (
+            <button key={tt.id} onClick={() => setTab(tt.id)}
               className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap ${
-                tab === t.id ? 'bg-primary text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
+                tab === tt.id ? 'bg-primary text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
               }`}>
-              <t.icon className="w-3.5 h-3.5" />{t.label}
+              <tt.icon className="w-3.5 h-3.5" />{t(`reports.tabs.${tt.labelKey}`)}
             </button>
           ))}
         </div>

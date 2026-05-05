@@ -569,6 +569,171 @@ export default {
     },
   },
 
+  reports: {
+    title: 'Rapports',
+    subtitle: 'Analyses RH — heures, présence, déplacements et affectations',
+
+    tabs: {
+      my: 'Mon rapport',
+      hours: 'Heures travaillées',
+      attendance: 'Présence',
+      assignments: 'Affectations',
+      travel: 'Indemnité de déplacement',
+      distance: 'Distance 41 km+',
+    },
+
+    filterBar: {
+      thisWeek: 'Cette semaine',
+      thisMonth: 'Ce mois-ci',
+      from: 'Du',
+      to: 'Au',
+      run: 'Exécuter',
+    },
+
+    empty: {
+      adjustFilters: 'Ajustez les filtres puis exécutez le rapport',
+    },
+
+    exportCsv: 'Exporter en CSV',
+    recordsCount: '{{count}} enregistrements',
+
+    hours: {
+      stats: {
+        daysWorked: 'Jours travaillés',
+        regular: 'Heures régulières',
+        overtime: 'Heures supp.',
+        total: 'Total des heures',
+      },
+      th: {
+        employee: 'Employé',
+        trade: 'Métier',
+        project: 'Projet',
+        days: 'Jours',
+        regular: 'Régulier',
+        overtime: 'Supp.',
+        total: 'Total',
+        confirmed: 'Confirmés',
+        late: 'Retards',
+      },
+      lateSuffix: '{{count}}x en retard',
+      empty: "Aucune donnée d'heures pour cette période",
+    },
+
+    attendance: {
+      summary: '{{records}} affectations · {{groups}} projets',
+      groupCount: '{{count}} employés',
+      th: {
+        employee: 'Employé',
+        trade: 'Métier',
+        role: 'Rôle',
+        scheduled: 'Prévus',
+        present: 'Présents',
+        absent: 'Absents',
+        late: 'Retards',
+      },
+      empty: 'Aucune donnée de présence pour cette période',
+    },
+
+    travel: {
+      totalLabel: 'Indemnité totale : {{amount}}',
+      zoneLegendTitle: 'Référence des zones CCQ (barème ACQ)',
+      th: {
+        employee: 'Employé',
+        trade: 'Métier',
+        project: 'Projet',
+        distance: 'Distance',
+        zone: 'Zone',
+        ratePerDay: 'Taux/Jour',
+        days: 'Jours',
+        total: 'Total',
+      },
+      formOnly: 'Formulaire seulement',
+      zonePrefix: 'Zone {{zone}}',
+      empty: "Aucune donnée d'indemnité de déplacement",
+      emptyHint: 'Seules les affectations avec une distance calculée apparaissent ici',
+    },
+
+    assignments: {
+      summary: '{{records}} affectations · {{groups}} projets',
+      th: {
+        employee: 'Employé',
+        trade: 'Métier',
+        role: 'Rôle',
+        period: 'Période',
+        shift: 'Quart',
+        distance: 'Distance',
+      },
+      empty: 'Aucune affectation pour cette période',
+    },
+
+    distance: {
+      stats: {
+        needsT2200: 'Formulaire T2200 requis',
+        needsT2200Sub: 'Employés 41–65 km',
+        companyAllowance: "Indemnité d'entreprise",
+        companyAllowanceSub: 'Employés 65 km+',
+        totalAllowance: 'Indemnité totale',
+        totalAllowanceSub: 'cette période',
+      },
+      filter: {
+        allEmployees: 'Tous les employés',
+        allProjects: 'Tous les projets',
+        clearFilters: 'Effacer les filtres',
+      },
+      summarySuffix: '{{count}} employés 41 km+',
+      th: {
+        employee: 'Employé',
+        trade: 'Métier',
+        project: 'Projet',
+        distance: 'Distance',
+        actionRequired: 'Action requise',
+        ratePerDay: 'Taux/Jour',
+        days: 'Jours',
+        total: 'Total',
+      },
+      action: {
+        t2200Form: 'Formulaire T2200',
+        payAllowance: "Verser l'indemnité",
+      },
+      empty: "Aucun employé à 41 km+ pour cette période",
+      emptyHint: "La distance est calculée au moment de l'affectation via Mapbox",
+    },
+
+    my: {
+      filter: {
+        allDays: 'Tous les jours',
+        only41plus: '🚗 41 km+ (T2200)',
+      },
+      banner41plus: "Affichage uniquement des jours où votre chantier était à 41 km+ de votre domicile — éligibles à la déclaration fiscale T2200 ou à l'indemnité de déplacement de l'entreprise.",
+      stats: {
+        daysWorked: 'Jours travaillés',
+        regular: 'Heures régulières',
+        overtime: 'Heures supp.',
+        travelAllowance: 'Indemnité de déplacement',
+      },
+      th: {
+        date: 'Date',
+        project: 'Projet',
+        checkIn: 'Arrivée',
+        checkOut: 'Départ',
+        regular: 'Régulier',
+        overtime: 'Supp.',
+        status: 'Statut',
+        distance: 'Distance',
+        travelAllowance: 'Indemnité',
+      },
+      status: {
+        confirmed: '✓ Confirmé',
+        adjusted: '✓ Ajusté',
+        pending: 'En attente',
+      },
+      empty41plus: "Aucun jour à 41 km+ pour cette période",
+      emptyAll: 'Aucune présence enregistrée pour cette période',
+      promptRun: 'Sélectionnez une période puis cliquez sur Exécuter',
+      disclaimer: 'Ce rapport est généré à partir de vos présences confirmées. Les heures marquées "En attente" peuvent encore être ajustées par votre contremaître. Pour la documentation officielle, contactez votre service RH.',
+    },
+  },
+
   standup: {
     title: 'Réunion quotidienne',
     subtitlePrefix: 'Révision du plan de demain —',
