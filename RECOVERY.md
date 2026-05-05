@@ -73,6 +73,40 @@ If you are the backup contact and Hedar is unreachable:
 - 1Password Emergency Kit or Bitwarden Emergency Access is set up for the backup contact.
 - Sealed envelope alternative: printed recovery codes + master password in a physical safe or with lawyer.
 
+### 2.3 In-app PIN reset (when locked out of Constrai itself)
+
+If the password manager doesn't have your Constrai login PIN (or the PIN was forgotten / never stored), reset it directly in the prod DB. This procedure was validated May 5, 2026 (DECISIONS.md Section 84):
+
+```bash
+ssh root@143.110.218.84
+cd /var/www/mep
+node -e "require('bcrypt').hash('YOUR_NEW_PIN_HERE', 10).then(h => console.log(h))"
+```
+
+Copy the resulting `$2b$10$...` hash. Then reset via heredoc (single-quoted EOF prevents bash from eating the `$2b/$10` characters):
+
+```bash
+sudo -u postgres psql -d mepdb << 'EOF'
+UPDATE public.app_users SET pin_hash = 'PASTE_HASH_HERE', must_change_pin = FALSE WHERE id = <user_id>;
+EOF
+```
+
+Find your `<user_id>` first if needed:
+
+```bash
+sudo -u postgres psql -d mepdb -c "SELECT id, username, role FROM public.app_users WHERE role = 'SUPER_ADMIN';"
+```
+
+**Conventions:**
+- `SUPER_ADMIN` PIN must be ≥ 8 characters (frontend validation, no backend constraint).
+- Always reset by `id`, not `username` — avoids `UPDATE 0` from case mismatches.
+- **Never run prod DB UPDATEs from pgAdmin** — pgAdmin is connected to your local PostgreSQL, not prod. Use SSH terminal only.
+- After reset, store the new PIN in the password manager immediately so we don't repeat the dance.
+
+**Pitfalls observed during the May 5 reset:**
+- `auth_utils.js` cannot be imported standalone (it throws on missing `JWT_SECRET` at require-time). Use `bcrypt` directly for one-shot hash generation, never `require('./lib/auth_utils')`.
+- A bare `<<EOF` (without quotes around `EOF`) lets bash expand `$2b`, `$10` etc. as variables — they become empty strings and the UPDATE silently stores garbage. The single quotes around `'EOF'` are mandatory.
+
 ---
 
 ## 3. Database Recovery

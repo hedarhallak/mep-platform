@@ -7806,3 +7806,53 @@ Both pairs are the same prefix used at two different layers — rate limiting th
 **Cost:** zero engineering risk. The warnings were never blocking commits (only ERRORS block); they were just visual noise on every push that trained the eye to ignore the audit output. Cleaning them out makes future real warnings visible.
 
 - **Today: 51 sections.** (Section 83 added.)
+
+---
+
+## Section 84 — Operational: SUPER_ADMIN PIN reset procedure (May 5, 2026)
+
+After the long S65–S83 engineering hygiene chapter, when starting the planned UI smoke test (P0 — verify i18n / map / MyHubPage / axios→fetch survived in production), Hedar realized he didn't have his Constrai prod login PIN. RECOVERY.md correctly notes: "All credentials live in Hedar's password manager" — but in this case, no entry existed yet, so the PIN had to be reset directly in the prod DB.
+
+This section captures the procedure for next time so we don't relearn it.
+
+### The PIN length convention
+
+`SUPER_ADMIN` role requires PIN length ≥ 8 characters (validated frontend-side; backend stores any bcrypt hash). Lower roles allow shorter PINs (default seed uses '1234' for tests). Source of truth: the login form's client-side validation, not a backend constraint.
+
+### Reset procedure (one-liner that worked)
+
+Generate the bcrypt hash + apply the UPDATE in a single SSH session:
+
+```bash
+ssh root@143.110.218.84
+cd /var/www/mep
+node -e "require('bcrypt').hash('YOUR_NEW_PIN_HERE', 10).then(h => console.log(h))"
+# copy the resulting $2b$10$... hash, then:
+sudo -u postgres psql -d mepdb << 'EOF'
+UPDATE public.app_users SET pin_hash = 'PASTE_HASH_HERE', must_change_pin = FALSE WHERE id = 259;
+EOF
+# Expected output: UPDATE 1
+```
+
+The `<< 'EOF'` heredoc with the **single-quoted** delimiter is critical — it stops bash from expanding the `$2b$10$...` characters in the hash as variables. Without the quotes around `EOF`, bash will eat the `$2b`, `$10`, etc. and produce an empty string, and the UPDATE will silently store garbage.
+
+### Pitfalls hit on the way (so we don't hit them again)
+
+1. **`auth_utils` cannot be imported standalone.** It checks `JWT_SECRET` at require-time (line 10) and throws if missing. Always use `bcrypt` directly — never `require('./lib/auth_utils')` for one-shot hash generation.
+
+2. **pgAdmin ≠ prod psql.** Hedar ran several queries against his **local** PostgreSQL 18 (database: `erp` / `mep_erp`) instead of the **prod** PostgreSQL 16 (database: `mepdb` on 143.110.218.84). UPDATEs returned `UPDATE 0` because the rows didn't exist there. **Convention:** for any production data change, only use SSH terminal — never pgAdmin. pgAdmin shows "Query returned successfully" suffix; psql doesn't. That suffix is the first clue you're in the wrong tool.
+
+3. **Pasting bash commands inside psql.** When the prompt shows `mepdb-#` (with `-#` not `=#`), psql is mid-query waiting for `;`. Pasting `ssh root@...` or `cd /var/www/mep` here just appends to the open query buffer. Use `Ctrl+C` to clear, then `\q` to exit.
+
+4. **Username case mismatch is possible** — always reset by `id`, not `username`. We confirmed the row by ID (259) before running UPDATE; this avoids `UPDATE 0` from a `username = 'Hedar'` vs stored `'hedar'` mismatch.
+
+### What's next
+
+Session ending here. The actual UI smoke test (P0 priority) was not started — that's the **first task in the next session**. Plan:
+
+1. Login successful → test FR/EN i18n on the 19 translated pages (especially MyHubPage and Reports — biggest rewrites)
+2. Test the `/api/projects/map` fix (S82) by visiting the Map page with projects that have coords
+3. Test MyHubPage (S89): all 4 tabs render, attendance approve flow, send task form, worker inbox completion, materials merge & PO send
+4. Test axios→fetch (S78): file upload, refresh-token rotation after 1 hour idle
+
+- **Today: 52 sections.** (Section 84 added — final entry for this engineering hygiene chapter.)
