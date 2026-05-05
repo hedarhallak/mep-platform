@@ -569,6 +569,86 @@ export default {
     },
   },
 
+  profile: {
+    title: 'Mon profil',
+    addressPlaceholder: 'Commencez à saisir votre adresse...',
+
+    errors: {
+      saveFailed: 'Échec de la mise à jour du profil',
+      pinChangeFailed: 'Échec du changement de NIP',
+      tradeRequired: 'Le métier est requis',
+      levelRequired: 'Le niveau est requis',
+      phoneRequired: 'Le téléphone est requis',
+      addressRequired: "L'adresse du domicile est requise",
+      cityRequired: 'La ville est requise',
+      postalCodeRequired: 'Le code postal est requis',
+      currentPinRequired: 'Le NIP actuel est requis',
+      newPinRequired: 'Le nouveau NIP est requis',
+      pinTooShort: 'Le NIP doit contenir au moins 4 caractères',
+      pinsMismatch: 'Les NIP ne correspondent pas',
+    },
+
+    success: {
+      profileUpdated: 'Profil mis à jour avec succès',
+      pinChanged: 'NIP changé avec succès',
+    },
+
+    incompleteBanner: {
+      title: 'Compléter votre profil',
+      body: "Veuillez remplir tous les champs obligatoires ci-dessous pour compléter votre profil. Votre administrateur a besoin de ces informations.",
+    },
+
+    admin: {
+      accountInfo: 'Informations du compte',
+      username: "Nom d'utilisateur",
+      role: 'Rôle',
+      adminAccountTitle: 'Compte administrateur',
+      adminAccountBody: "Ceci est un compte administrateur sans profil employé. Vous pouvez gérer les employés depuis la page {{employeesLink}}.",
+      employees: 'Employés',
+    },
+
+    pinSection: {
+      heading: 'Changer le NIP',
+      currentPin: 'NIP actuel',
+      newPin: 'Nouveau NIP',
+      confirmNewPin: 'Confirmer le nouveau NIP',
+      updateButton: 'Mettre à jour le NIP',
+    },
+
+    tradeInfo: {
+      heading: 'Informations du métier',
+      trade: 'Métier *',
+      selectTrade: 'Sélectionner un métier',
+      level: 'Niveau *',
+      selectLevel: 'Sélectionner un niveau',
+    },
+
+    contact: {
+      heading: 'Contact',
+      phone: 'Téléphone *',
+      phonePlaceholder: '+1 514 000 0000',
+    },
+
+    address: {
+      heading: 'Adresse du domicile',
+      street: 'Adresse *',
+      unit: 'Appt/Unité',
+      city: 'Ville *',
+      postalCode: 'Code postal *',
+      postalCodePlaceholder: 'H2X 1Y4',
+    },
+
+    emergency: {
+      heading: "Contact d'urgence",
+      name: 'Nom',
+      phone: 'Téléphone',
+      relationship: 'Relation',
+      relationshipPlaceholder: 'ex. Conjoint, Parent',
+    },
+
+    save: 'Enregistrer le profil',
+  },
+
   onboarding: {
     accountSetup: 'Configuration du compte',
     welcome: 'Bienvenue',

@@ -571,6 +571,86 @@ export default {
     },
   },
 
+  profile: {
+    title: 'My Profile',
+    addressPlaceholder: 'Start typing your home address...',
+
+    errors: {
+      saveFailed: 'Failed to update profile',
+      pinChangeFailed: 'Failed to change PIN',
+      tradeRequired: 'Trade is required',
+      levelRequired: 'Level is required',
+      phoneRequired: 'Phone is required',
+      addressRequired: 'Home address is required',
+      cityRequired: 'City is required',
+      postalCodeRequired: 'Postal code is required',
+      currentPinRequired: 'Current PIN is required',
+      newPinRequired: 'New PIN is required',
+      pinTooShort: 'PIN must be at least 4 characters',
+      pinsMismatch: 'PINs do not match',
+    },
+
+    success: {
+      profileUpdated: 'Profile updated successfully',
+      pinChanged: 'PIN changed successfully',
+    },
+
+    incompleteBanner: {
+      title: 'Complete Your Profile',
+      body: 'Please fill in all required fields below to complete your employee profile. Your administrator needs this information on file.',
+    },
+
+    admin: {
+      accountInfo: 'Account Info',
+      username: 'Username',
+      role: 'Role',
+      adminAccountTitle: 'Admin Account',
+      adminAccountBody: 'This is an admin account without an employee profile. You can manage employees from the {{employeesLink}} page.',
+      employees: 'Employees',
+    },
+
+    pinSection: {
+      heading: 'Change PIN',
+      currentPin: 'Current PIN',
+      newPin: 'New PIN',
+      confirmNewPin: 'Confirm New PIN',
+      updateButton: 'Update PIN',
+    },
+
+    tradeInfo: {
+      heading: 'Trade Info',
+      trade: 'Trade *',
+      selectTrade: 'Select trade',
+      level: 'Level *',
+      selectLevel: 'Select level',
+    },
+
+    contact: {
+      heading: 'Contact',
+      phone: 'Phone *',
+      phonePlaceholder: '+1 514 000 0000',
+    },
+
+    address: {
+      heading: 'Home Address',
+      street: 'Street Address *',
+      unit: 'Unit/Apt',
+      city: 'City *',
+      postalCode: 'Postal Code *',
+      postalCodePlaceholder: 'H2X 1Y4',
+    },
+
+    emergency: {
+      heading: 'Emergency Contact',
+      name: 'Name',
+      phone: 'Phone',
+      relationship: 'Relationship',
+      relationshipPlaceholder: 'e.g. Spouse, Parent',
+    },
+
+    save: 'Save Profile',
+  },
+
   onboarding: {
     accountSetup: 'Account Setup',
     welcome: 'Welcome',
