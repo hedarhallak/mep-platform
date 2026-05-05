@@ -571,6 +571,59 @@ export default {
     },
   },
 
+  standup: {
+    title: 'Daily Standup',
+    subtitlePrefix: "Review tomorrow's plan —",
+    reviewedSuffix: 'reviewed',
+    loading: "Loading tomorrow's plan...",
+    loadFailed: 'Failed to load standup data',
+
+    empty: {
+      title: 'No projects scheduled for tomorrow',
+      hint: 'Assignments for tomorrow will appear here',
+    },
+
+    project: {
+      workersTomorrow_one: '{{count}} worker tomorrow',
+      workersTomorrow_other: '{{count}} workers tomorrow',
+      reviewed: '✓ Reviewed',
+    },
+
+    team: {
+      heading: 'Team Tomorrow',
+      empty: 'No workers assigned yet',
+    },
+
+    materials: {
+      heading: 'Materials for Tomorrow',
+      addCta: '+ Add materials',
+      noneYet: 'No material request yet for tomorrow',
+      empty: 'No items — add what you need',
+    },
+
+    addItem: {
+      cta: 'Add item',
+      namePlaceholder: 'e.g. Copper pipe 3/4 inch',
+      qtyPlaceholder: 'Qty *',
+      notePlaceholder: 'Note (optional)',
+      catalogUsed: 'used {{count}}×',
+      cancel: 'Cancel',
+      add: 'Add',
+      errors: {
+        nameRequired: 'Item name required',
+        qtyAtLeast1: 'Quantity must be at least 1',
+        addFailed: 'Failed to add item',
+      },
+    },
+
+    review: {
+      notePlaceholder: 'Any notes or blockers? (optional)',
+      cancel: 'Cancel',
+      complete: 'Complete Standup',
+      markReviewed: 'Mark as Reviewed',
+    },
+  },
+
   permissions: {
     title: 'Permissions Matrix',
     subtitle: 'Role-based access control · Changes apply company-wide',
