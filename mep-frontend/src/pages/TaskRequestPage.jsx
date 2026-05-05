@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import api from '@/lib/api'
 import {
   Send, Plus, Upload, X, Check, Loader2,
@@ -18,6 +19,7 @@ const avatarColor = name => AVATAR_COLORS[(name?.charCodeAt(0)||0) % AVATAR_COLO
 
 // ── New Task Form ─────────────────────────────────────────────
 function NewTaskTab({ workers, projects, defaultProject, onSent }) {
+  const { t } = useTranslation()
   const [form, setForm] = useState({
     title: '', body: '', priority: 'NORMAL', project_id: defaultProject || '', due_date: ''
   })
@@ -38,8 +40,8 @@ function NewTaskTab({ workers, projects, defaultProject, onSent }) {
 
   const handleSend = async () => {
     setError('')
-    if (!form.title.trim())   return setError('Title is required')
-    if (!recipients.length)   return setError('Add at least one recipient')
+    if (!form.title.trim())   return setError(t('taskRequest.new.errors.titleRequired'))
+    if (!recipients.length)   return setError(t('taskRequest.new.errors.recipientsRequired'))
     setSending(true)
     try {
       const fd = new FormData()
@@ -54,13 +56,13 @@ function NewTaskTab({ workers, projects, defaultProject, onSent }) {
       const res = await api.post('/hub/messages', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
       const d = res.data
       onSent(d.pending > 0
-        ? `Sent to ${d.sent} worker${d.sent!==1?'s':''} ✓ — ${d.pending} pending assignment`
-        : `Sent to ${d.sent} worker${d.sent!==1?'s':''} ✓`)
+        ? t('taskRequest.new.sentToastPending', { count: d.sent, pending: d.pending })
+        : t('taskRequest.new.sentToast', { count: d.sent }))
       setForm({ title:'', body:'', priority:'NORMAL', project_id:'', due_date:'' })
       setRecipients([])
       setFile(null)
     } catch (e) {
-      setError(e.response?.data?.error || e.message || 'Failed to send')
+      setError(e.response?.data?.error || e.message || t('taskRequest.new.errors.sendFailed'))
     } finally { setSending(false) }
   }
 
@@ -77,31 +79,31 @@ function NewTaskTab({ workers, projects, defaultProject, onSent }) {
 
         {/* Title */}
         <div>
-          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Title *</label>
+          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{t('taskRequest.new.titleLabel')}</label>
           <input type="text" value={form.title} onChange={e => set('title', e.target.value)}
-            placeholder="e.g. Install main water line — Section A"
+            placeholder={t('taskRequest.new.titlePlaceholder')}
             className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-primary-light"/>
         </div>
 
         {/* Instructions */}
         <div>
           <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
-            Instructions <span className="font-normal normal-case text-slate-400">(optional)</span>
+            {t('taskRequest.new.instructions')} <span className="font-normal normal-case text-slate-400">{t('taskRequest.new.instructionsOptional')}</span>
           </label>
           <textarea value={form.body} onChange={e => set('body', e.target.value)}
-            rows={4} placeholder="Describe the task in detail..."
+            rows={4} placeholder={t('taskRequest.new.instructionsPlaceholder')}
             className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-primary-light resize-none"/>
         </div>
 
         {/* Priority */}
         <div>
-          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Priority</label>
+          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{t('taskRequest.new.priority')}</label>
           <div className="flex gap-2">
             {[
-              { v:'LOW',    dot:'bg-slate-400',  ring:'ring-slate-300',  label:'Low',    bg:'bg-slate-50   hover:bg-slate-100',  active:'bg-slate-700 text-white'  },
-              { v:'NORMAL', dot:'bg-blue-500',   ring:'ring-blue-300',   label:'Normal', bg:'bg-blue-50    hover:bg-blue-100',   active:'bg-blue-600  text-white'  },
-              { v:'HIGH',   dot:'bg-amber-500',  ring:'ring-amber-300',  label:'High',   bg:'bg-amber-50   hover:bg-amber-100',  active:'bg-amber-500 text-white'  },
-              { v:'URGENT', dot:'bg-red-500',    ring:'ring-red-300',    label:'Urgent', bg:'bg-red-50     hover:bg-red-100',    active:'bg-red-600   text-white'  },
+              { v:'LOW',    dot:'bg-slate-400',  ring:'ring-slate-300',  bg:'bg-slate-50   hover:bg-slate-100',  active:'bg-slate-700 text-white'  },
+              { v:'NORMAL', dot:'bg-blue-500',   ring:'ring-blue-300',   bg:'bg-blue-50    hover:bg-blue-100',   active:'bg-blue-600  text-white'  },
+              { v:'HIGH',   dot:'bg-amber-500',  ring:'ring-amber-300',  bg:'bg-amber-50   hover:bg-amber-100',  active:'bg-amber-500 text-white'  },
+              { v:'URGENT', dot:'bg-red-500',    ring:'ring-red-300',    bg:'bg-red-50     hover:bg-red-100',    active:'bg-red-600   text-white'  },
             ].map(p => (
               <button key={p.v} type="button" onClick={() => set('priority', p.v)}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-xs font-semibold transition-all ${
@@ -110,7 +112,7 @@ function NewTaskTab({ workers, projects, defaultProject, onSent }) {
                     : `${p.bg} border-slate-200 text-slate-600`
                 }`}>
                 <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${p.dot}`}/>
-                {p.label}
+                {t(`taskRequest.new.priorities.${p.v}`)}
               </button>
             ))}
           </div>
@@ -119,15 +121,15 @@ function NewTaskTab({ workers, projects, defaultProject, onSent }) {
         {/* Project + Due date in one row */}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Project</label>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{t('taskRequest.new.project')}</label>
             <select value={form.project_id} onChange={e => set('project_id', e.target.value)}
               className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-primary-light">
-              <option value="">No project</option>
+              <option value="">{t('taskRequest.new.noProject')}</option>
               {projects.map(p => <option key={p.id} value={p.id}>{p.project_code} — {p.project_name}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Due Date</label>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{t('taskRequest.new.dueDate')}</label>
             <input type="date" value={form.due_date} onChange={e => set('due_date', e.target.value)}
               className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-light"/>
           </div>
@@ -136,14 +138,14 @@ function NewTaskTab({ workers, projects, defaultProject, onSent }) {
         {/* File */}
         <div>
           <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
-            Attachment <span className="font-normal normal-case text-slate-400">(PDF or image, max 20MB)</span>
+            {t('taskRequest.new.attachment')} <span className="font-normal normal-case text-slate-400">{t('taskRequest.new.attachmentHint')}</span>
           </label>
           <label className={`flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-colors ${
             file ? 'border-primary-pale bg-primary-pale' : 'border-dashed border-slate-200 hover:border-primary-pale hover:bg-primary-pale/30'
           }`}>
             <Upload size={16} className="text-slate-400 flex-shrink-0"/>
             <span className={`text-sm flex-1 truncate ${file ? 'text-primary-dark font-medium' : 'text-slate-400'}`}>
-              {file ? file.name : 'Click to upload'}
+              {file ? file.name : t('taskRequest.new.uploadCta')}
             </span>
             {file && <button type="button" onClick={e => { e.preventDefault(); setFile(null) }} className="text-slate-400 hover:text-red-500"><X size={14}/></button>}
             <input type="file" accept=".pdf,image/*" className="hidden" onChange={e => setFile(e.target.files?.[0]||null)}/>
@@ -154,7 +156,7 @@ function NewTaskTab({ workers, projects, defaultProject, onSent }) {
         <div className="flex justify-end pt-1">
           <button onClick={handleSend} disabled={sending}
             className="flex items-center gap-2 px-6 py-2.5 bg-primary hover:bg-primary-dark disabled:opacity-50 text-white rounded-xl text-sm font-bold transition-colors">
-            {sending ? <><Loader2 size={15} className="animate-spin"/>Sending...</> : <><Send size={15}/>Send Task</>}
+            {sending ? <><Loader2 size={15} className="animate-spin"/>{t('taskRequest.new.sending')}</> : <><Send size={15}/>{t('taskRequest.new.send')}</>}
           </button>
         </div>
       </div>
@@ -164,7 +166,7 @@ function NewTaskTab({ workers, projects, defaultProject, onSent }) {
         <div className="px-4 py-3.5 border-b border-slate-100">
           <div className="flex items-center justify-between">
             <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
-              Recipients *
+              {t('taskRequest.new.recipients')}
               {recipients.length > 0 && (
                 <span className="ml-2 px-1.5 py-0.5 bg-primary-pale text-primary rounded-full text-[10px] font-bold normal-case">
                   {recipients.length}
@@ -182,7 +184,7 @@ function NewTaskTab({ workers, projects, defaultProject, onSent }) {
             showAssigned={!!form.project_id}
             projectSelected={!!form.project_id}
           />
-          <p className="text-xs text-slate-400 mt-1.5">Start typing to search by name or trade</p>
+          <p className="text-xs text-slate-400 mt-1.5">{t('taskRequest.new.recipientsHint')}</p>
         </div>
         {/* Selected chips preview in a scrollable area */}
         {recipients.length === 0 && (
@@ -191,14 +193,14 @@ function NewTaskTab({ workers, projects, defaultProject, onSent }) {
               <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-2">
                 <Send size={16} className="text-slate-400"/>
               </div>
-              <p className="text-xs text-slate-400 font-medium">No recipients yet</p>
-              <p className="text-xs text-slate-300 mt-0.5">Type above to search workers</p>
+              <p className="text-xs text-slate-400 font-medium">{t('taskRequest.new.noRecipients')}</p>
+              <p className="text-xs text-slate-300 mt-0.5">{t('taskRequest.new.typeToSearch')}</p>
             </div>
           </div>
         )}
         {recipients.length > 0 && (
           <div className="flex-1 overflow-y-auto px-4 pb-4 pt-1 space-y-1.5">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Selected</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">{t('taskRequest.new.selected')}</p>
             {recipients.map(w => {
               const name = w.first_name ? `${w.first_name} ${w.last_name}` : w.username
               return (
@@ -224,6 +226,7 @@ function NewTaskTab({ workers, projects, defaultProject, onSent }) {
 
 // ── Sent Tasks Tab ────────────────────────────────────────────
 function SentTasksTab() {
+  const { t } = useTranslation()
   const [sent, setSent]       = useState([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState({})
@@ -241,18 +244,28 @@ function SentTasksTab() {
   if (sent.length === 0) return (
     <div className="flex flex-col items-center justify-center py-20 text-center">
       <Send size={36} className="text-slate-200 mb-3"/>
-      <p className="text-sm font-semibold text-slate-400">No tasks sent yet</p>
-      <p className="text-xs text-slate-300 mt-1">Switch to "New Task" to get started</p>
+      <p className="text-sm font-semibold text-slate-400">{t('taskRequest.sent.empty')}</p>
+      <p className="text-xs text-slate-300 mt-1">{t('taskRequest.sent.emptyHint')}</p>
     </div>
   )
+
+  const headers = [
+    { key: 'task',       label: t('taskRequest.sent.th.task') },
+    { key: 'project',    label: t('taskRequest.sent.th.project') },
+    { key: 'due',        label: t('taskRequest.sent.th.due') },
+    { key: 'priority',   label: t('taskRequest.sent.th.priority') },
+    { key: 'recipients', label: t('taskRequest.sent.th.recipients') },
+    { key: 'progress',   label: t('taskRequest.sent.th.progress') },
+    { key: 'spacer',     label: '' },
+  ]
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
       <table className="w-full">
         <thead>
           <tr className="border-b border-slate-100 bg-slate-50">
-            {['Task','Project','Due','Priority','Recipients','Progress',''].map(h => (
-              <th key={h} className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
+            {headers.map(h => (
+              <th key={h.key} className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h.label}</th>
             ))}
           </tr>
         </thead>
@@ -291,7 +304,7 @@ function SentTasksTab() {
                   {/* Priority */}
                   <td className="px-5 py-4">
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${PRIORITY_STYLE[task.priority]||PRIORITY_STYLE.NORMAL}`}>
-                      {task.priority}
+                      {t(`taskRequest.new.priorities.${task.priority}`, { defaultValue: task.priority })}
                     </span>
                   </td>
 
@@ -323,7 +336,7 @@ function SentTasksTab() {
                           style={{width:`${ackPct}%`}}/>
                       </div>
                       <span className="text-xs text-slate-500 whitespace-nowrap">{acked}/{total}</span>
-                      {pending > 0 && <Clock size={12} className="text-amber-400" title={`${pending} pending assignment`}/>}
+                      {pending > 0 && <Clock size={12} className="text-amber-400"/>}
                     </div>
                   </td>
 
@@ -348,6 +361,7 @@ function SentTasksTab() {
                             const isDone    = r.status==='ACKNOWLEDGED'
                             const isPending = r.status==='PENDING'
                             const isRead    = r.status==='READ'
+                            const statusKey = isDone ? 'done' : isPending ? 'awaiting' : isRead ? 'seen' : 'sent'
                             return (
                               <div key={i} className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl border ${
                                 isDone   ? 'bg-emerald-50 border-emerald-200'
@@ -361,7 +375,7 @@ function SentTasksTab() {
                                 <div className="min-w-0">
                                   <div className="text-xs font-semibold text-slate-700 truncate">{n}</div>
                                   <div className={`text-[10px] font-semibold ${isDone?'text-emerald-600':isPending?'text-amber-600':isRead?'text-blue-600':'text-slate-400'}`}>
-                                    {isDone?'✓ Done':isPending?'⏳ Awaiting':isRead?'👁 Seen':'📬 Sent'}
+                                    {t(`taskRequest.sent.status.${statusKey}`)}
                                   </div>
                                 </div>
                               </div>
@@ -371,7 +385,7 @@ function SentTasksTab() {
                         {pending > 0 && (
                           <div className="flex items-center gap-2 px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-700">
                             <Clock size={14} className="flex-shrink-0"/>
-                            {pending} recipient{pending!==1?'s':''} will receive this task once assigned to the project
+                            {t('taskRequest.sent.pendingBanner', { count: pending })}
                           </div>
                         )}
                       </div>
@@ -389,6 +403,7 @@ function SentTasksTab() {
 
 // ── Main Page ─────────────────────────────────────────────────
 export default function TaskRequestPage() {
+  const { t } = useTranslation()
   const [tab, setTab]               = useState('new')
   const [workers, setWorkers]       = useState([])
   const [projects, setProjects]     = useState([])
@@ -419,32 +434,32 @@ export default function TaskRequestPage() {
   }
 
   const tabs = [
-    { id: 'new',  icon: Plus,          label: 'New Task' },
-    { id: 'sent', icon: ClipboardList, label: 'Sent Tasks' },
+    { id: 'new',  icon: Plus,          label: t('taskRequest.tabs.new') },
+    { id: 'sent', icon: ClipboardList, label: t('taskRequest.tabs.sent') },
   ]
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-slate-50">
 
-      {/* Header — matches Material Request style */}
+      {/* Header */}
       <div className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-4">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-9 h-9 bg-primary rounded-xl flex items-center justify-center">
             <Send size={18} className="text-white"/>
           </div>
           <div>
-            <h1 className="text-lg font-bold text-slate-900">Task Request</h1>
-            <p className="text-xs text-slate-400 mt-0.5">Send tasks and blueprints to your workers</p>
+            <h1 className="text-lg font-bold text-slate-900">{t('taskRequest.title')}</h1>
+            <p className="text-xs text-slate-400 mt-0.5">{t('taskRequest.subtitle')}</p>
           </div>
         </div>
 
         <div className="flex items-center gap-1">
-          {tabs.map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)}
+          {tabs.map(tab1 => (
+            <button key={tab1.id} onClick={() => setTab(tab1.id)}
               className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${
-                tab===t.id ? 'bg-primary text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
+                tab===tab1.id ? 'bg-primary text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
               }`}>
-              <t.icon size={14}/>{t.label}
+              <tab1.icon size={14}/>{tab1.label}
             </button>
           ))}
         </div>
