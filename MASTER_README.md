@@ -3,14 +3,14 @@
 > Production: https://app.constrai.ca
 > Website: https://www.constrai.ca (Coming Soon landing page)
 > Server: root@143.110.218.84
-> Latest DECISIONS section: **Section 65 closeout** (coverage push STOPPED at 61.5% lines — Phase 2/3 deferred behind schema migration sprint; project_foremen schema bug discovered + filed P1)
-> Active program: **4 codebase audits** (Knip / DB columns / DB tables / bundle analyzer) — back at top of queue now that coverage push is paused.
+> Latest DECISIONS section: **Section 80** (companies.status / companies.plan FKs converted to inline CHECK constraints, lookup tables dropped; closes the C3 schema sprint and the broader engineering-hygiene program from Sections 66-80).
+> Active program: **none currently active**. The May 4 marathon shipped 19 PRs across Sections 66-80 covering all P1/P2 audit findings; remaining backlog is bigger-shape product work (see "Open backlog" below).
 > Web Tier 1 + Tier 2 DONE (10/10). ~509 i18n keys live. Tier 3 i18n deferred.
-> **Customer #1 status:** unsigned (constraint per Section 46). Engineering rigor work is paused pending revenue.
+> **Customer #1 status:** unsigned (constraint per Section 46). Sales materials still TODO; product side now in much better shape post-May-4 hygiene push.
 > **Prod is in sync with main**. `APP_NAME=Constrai` + `VITE_MAPBOX_TOKEN` live. Tab title "Constrai" everywhere.
 > **Deploy command** (after `ssh root@143.110.218.84`): `bash /var/www/mep/scripts/deploy.sh` — see Section 53/54 for behavior.
 > **Monitoring posture:** UptimeRobot pinging `/api/health/deep` ✅. Sentry alert rule (new issue → email Hedar) ✅. Sentry frontend SDK gap (Section 58 candidate).
-> Coverage thresholds: 51 / 45 / 52 / 52. Backend tests: **553 / 65 suites**. Total tests today: **590/590 passing** (4 harnesses). Bug 9 — fixed + deployed. Web i18n: **6/30 pages translated, live on prod** (Login + Dashboard + Layout + Employees + Projects + Suppliers).
+> Coverage thresholds: **58 / 49 / 58 / 59** (ratcheted in Section 80; measured 60.65 / 51.30 / 60.58 / 61.85). Backend tests: **566 / 66 suites**, all passing. Web i18n: **10/30 pages translated, live on prod** (Tier 1 + Tier 2 closed). Frontend bundle: **376 KB raw / 119 KB gzip** initial chunk after Section 67 lazy-load + Section 78 axios → fetch (-48% raw / -39% gzip from start of May 4).
 > Backend path on server: /var/www/mep
 > Landing page path on server: /var/www/constrai-landing
 > DB: mepdb / mepuser / MepSecure2026X
@@ -116,12 +116,14 @@ MEP Platform (Constrai) is a Quebec construction workforce ERP for MEP companies
 ---
 
 ## Database
-- Migrations: 031
-- Tables: 56 (includes refresh_tokens)
+- Migrations: 011 (000 baseline + 001-010, after the May 4 schema sprint)
+- Tables: **33** (down from 66 pre-Section-66; the C3 sprint dropped the `erp` schema entirely + 32 dead `public.*` tables across Sections 70-74 + Section 80, then Section 80 dropped `company_statuses`/`plans` after converting their FKs to inline CHECK constraints)
 - PostGIS extension: installed
 - Hub tables: task_messages, task_recipients
 - Status flow: PENDING → SENT → READ → ACKNOWLEDGED
 - material_requests: status flow PENDING → SENT (after Foreman sends PO)
+- Canonical schema reference: `db/schema_baseline_2026-05-04.sql` (post-sprint; 35 CREATE TABLE blocks)
+- Audit + regen tooling: `scripts/audit-schema.py` (schema-qualified + FK-aware + PK-aware) and `scripts/regen-baseline.ps1` (one-command Docker baseline regen — see Section 76 for the 5 gotchas it bakes in)
 
 ### Backups (deployed April 19, 2026 — fully tested end-to-end)
 - Automated daily pg_dump → DigitalOcean Spaces (`constrai-backups`, region **TOR1**)
