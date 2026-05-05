@@ -132,17 +132,34 @@ describeIfDb('User management — POST /:id/resend', () => {
   });
 
   test('POST /:id/resend without SendGrid env returns 500 EMAIL_NOT_CONFIGURED', async () => {
-    const company = await seedCompany();
-    const admin = await seedUser({ company_id: company.company_id, role: 'COMPANY_ADMIN' });
-    const target = await seedUser({ company_id: company.company_id, role: 'WORKER' });
-    const { token } = await loginUser(admin);
+    // Same env-pinning pattern as daily_dispatch.test.js POST /commit.
+    // The route checks SENDGRID_API_KEY / SENDGRID_FROM_EMAIL / APP_BASE_URL
+    // BEFORE looking up the user, so locally-set env vars caused this test
+    // to flap (404 instead of 500) across Sections 65-78. Pin the env
+    // explicitly so the result is deterministic.
+    const origKey = process.env.SENDGRID_API_KEY;
+    const origFrom = process.env.SENDGRID_FROM_EMAIL;
+    const origBase = process.env.APP_BASE_URL;
+    delete process.env.SENDGRID_API_KEY;
+    delete process.env.SENDGRID_FROM_EMAIL;
+    delete process.env.APP_BASE_URL;
+    try {
+      const company = await seedCompany();
+      const admin = await seedUser({ company_id: company.company_id, role: 'COMPANY_ADMIN' });
+      const target = await seedUser({ company_id: company.company_id, role: 'WORKER' });
+      const { token } = await loginUser(admin);
 
-    const res = await request(app)
-      .post(`/api/users/${target.id}/resend`)
-      .set('Authorization', `Bearer ${token}`);
+      const res = await request(app)
+        .post(`/api/users/${target.id}/resend`)
+        .set('Authorization', `Bearer ${token}`);
 
-    expect(res.statusCode).toBe(500);
-    expect(res.body).toMatchObject({ ok: false, error: 'EMAIL_NOT_CONFIGURED' });
+      expect(res.statusCode).toBe(500);
+      expect(res.body).toMatchObject({ ok: false, error: 'EMAIL_NOT_CONFIGURED' });
+    } finally {
+      if (origKey !== undefined) process.env.SENDGRID_API_KEY = origKey;
+      if (origFrom !== undefined) process.env.SENDGRID_FROM_EMAIL = origFrom;
+      if (origBase !== undefined) process.env.APP_BASE_URL = origBase;
+    }
   });
 
   test('POST /:id/resend without settings.user_management returns 403', async () => {
