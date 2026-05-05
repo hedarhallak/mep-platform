@@ -571,6 +571,44 @@ export default {
     },
   },
 
+  bi: {
+    workforcePlanner: {
+      title: 'Workforce Planner',
+      subtitle: "Geographical assignment optimization · Today's active workforce",
+      refresh: 'Refresh',
+
+      summary: {
+        activeToday: 'Active Today',
+        beyondKm: 'Beyond {{km}}km',
+        canOptimize: 'Can Optimize',
+        totalSavingKm: 'Total Saving (km)',
+      },
+
+      filter: {
+        all: 'All ({{count}})',
+        beyondKm: 'Beyond {{km}}km ({{count}})',
+        optimizable: 'Optimizable ({{count}})',
+      },
+
+      empty: {
+        title: 'All assignments look optimal',
+        subtitle: 'No improvements found for the selected filter',
+      },
+
+      badge: {
+        beyondThreshold: 'Beyond {{km}}km threshold',
+        canOptimize: 'Optimization available',
+        optimal: 'Optimal placement',
+      },
+
+      now: 'Now:',
+      suggested: 'Suggested:',
+      apply: 'Apply',
+      confirmMove: 'Move {{employee}} from {{currentProject}} to {{suggestedProject}}?',
+      successMove: '{{employee}} moved to {{suggestedProject}} ✓',
+    },
+  },
+
   projects: {
     title: 'Projects',
     subtitle: '{{count}} projects total',

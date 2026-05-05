@@ -569,6 +569,44 @@ export default {
     },
   },
 
+  bi: {
+    workforcePlanner: {
+      title: "Planificateur d'effectifs",
+      subtitle: "Optimisation des affectations géographiques · Effectif actif aujourd'hui",
+      refresh: 'Actualiser',
+
+      summary: {
+        activeToday: "Actifs aujourd'hui",
+        beyondKm: 'Au-delà de {{km}} km',
+        canOptimize: 'À optimiser',
+        totalSavingKm: 'Économies totales (km)',
+      },
+
+      filter: {
+        all: 'Tous ({{count}})',
+        beyondKm: 'Au-delà de {{km}} km ({{count}})',
+        optimizable: 'Optimisables ({{count}})',
+      },
+
+      empty: {
+        title: 'Toutes les affectations semblent optimales',
+        subtitle: 'Aucune amélioration trouvée pour ce filtre',
+      },
+
+      badge: {
+        beyondThreshold: 'Au-delà du seuil de {{km}} km',
+        canOptimize: 'Optimisation disponible',
+        optimal: 'Placement optimal',
+      },
+
+      now: 'Actuel :',
+      suggested: 'Suggéré :',
+      apply: 'Appliquer',
+      confirmMove: 'Déplacer {{employee}} de {{currentProject}} vers {{suggestedProject}} ?',
+      successMove: '{{employee}} déplacé vers {{suggestedProject}} ✓',
+    },
+  },
+
   projects: {
     title: 'Projets',
     subtitle: '{{count}} projets au total',
