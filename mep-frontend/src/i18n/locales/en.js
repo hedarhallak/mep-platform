@@ -571,6 +571,106 @@ export default {
     },
   },
 
+  userManagement: {
+    title: 'User Management',
+    totalSuffix: '{{count}} users total',
+
+    stats: {
+      total: 'Total',
+      active: 'Active',
+      pending: 'Pending',
+      disabled: 'Disabled',
+    },
+
+    searchPlaceholder: 'Search users...',
+    allRoles: 'All Roles',
+    allStatus: 'All Status',
+
+    statusFilter: {
+      active: 'Active',
+      pending: 'Pending Activation',
+      disabled: 'Disabled',
+    },
+
+    th: {
+      user: 'User',
+      role: 'Role',
+      trade: 'Trade',
+      status: 'Status',
+      joined: 'Joined',
+      actions: 'Actions',
+    },
+
+    badge: {
+      active: 'Active',
+      pending: 'Pending',
+      disabled: 'Disabled',
+    },
+
+    invitedPrefix: 'Invited {{date}}',
+
+    empty: 'No users found',
+    emptyHint: 'Try adjusting your filters',
+
+    actions: {
+      role: 'Role',
+      roleTooltip: 'Change role',
+      resend: 'Resend',
+      resendTooltip: 'Resend activation email',
+      disable: 'Disable',
+      enable: 'Enable',
+      disableTooltip: 'Disable account',
+      enableTooltip: 'Enable account',
+    },
+
+    toast: {
+      activated: 'User activated',
+      deactivated: 'User deactivated',
+      resent: 'Activation email resent',
+    },
+
+    errors: {
+      cannotDeactivateSelf: 'You cannot deactivate your own account',
+      insufficientPrivilegeStatus: "You cannot change this user's status",
+      updateStatusFailed: 'Failed to update status',
+      alreadyActivated: 'This user is already activated',
+      emailNotConfigured: 'Email service not configured',
+      noEmailOnRecord: 'No email found for this user',
+      resendFailed: 'Failed to resend email',
+    },
+
+    modal: {
+      heading: 'Change Role',
+      newRoleLabel: 'New Role',
+      cancel: 'Cancel',
+      saving: 'Saving...',
+      save: 'Save Role',
+      errors: {
+        insufficientPrivilege: "You cannot change this user's role",
+        cannotAssignHigher: 'You cannot assign a role higher than yours',
+        invalidRole: 'Invalid role selected',
+        updateFailed: 'Failed to update role',
+      },
+    },
+
+    roleLabels: {
+      WORKER: 'Worker',
+      TRADE_ADMIN: 'Trade Admin',
+      TRADE_PROJECT_MANAGER: 'Trade Project Manager',
+      COMPANY_ADMIN: 'Company Admin',
+      IT_ADMIN: 'IT Admin',
+    },
+
+    badgeLabels: {
+      SUPER_ADMIN: 'Super Admin',
+      IT_ADMIN: 'IT Admin',
+      COMPANY_ADMIN: 'Co. Admin',
+      TRADE_PROJECT_MANAGER: 'Project Mgr',
+      TRADE_ADMIN: 'Trade Admin',
+      WORKER: 'Worker',
+    },
+  },
+
   profile: {
     title: 'My Profile',
     addressPlaceholder: 'Start typing your home address...',

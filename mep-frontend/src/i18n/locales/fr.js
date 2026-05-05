@@ -569,6 +569,106 @@ export default {
     },
   },
 
+  userManagement: {
+    title: 'Gestion des utilisateurs',
+    totalSuffix: '{{count}} utilisateurs au total',
+
+    stats: {
+      total: 'Total',
+      active: 'Actifs',
+      pending: 'En attente',
+      disabled: 'Désactivés',
+    },
+
+    searchPlaceholder: 'Rechercher des utilisateurs...',
+    allRoles: 'Tous les rôles',
+    allStatus: 'Tous les statuts',
+
+    statusFilter: {
+      active: 'Actifs',
+      pending: 'En attente d\'activation',
+      disabled: 'Désactivés',
+    },
+
+    th: {
+      user: 'Utilisateur',
+      role: 'Rôle',
+      trade: 'Métier',
+      status: 'Statut',
+      joined: 'Inscription',
+      actions: 'Actions',
+    },
+
+    badge: {
+      active: 'Actif',
+      pending: 'En attente',
+      disabled: 'Désactivé',
+    },
+
+    invitedPrefix: 'Invité le {{date}}',
+
+    empty: 'Aucun utilisateur trouvé',
+    emptyHint: 'Essayez d\'ajuster les filtres',
+
+    actions: {
+      role: 'Rôle',
+      roleTooltip: 'Changer de rôle',
+      resend: 'Renvoyer',
+      resendTooltip: "Renvoyer l'e-mail d'activation",
+      disable: 'Désactiver',
+      enable: 'Activer',
+      disableTooltip: 'Désactiver le compte',
+      enableTooltip: 'Activer le compte',
+    },
+
+    toast: {
+      activated: 'Utilisateur activé',
+      deactivated: 'Utilisateur désactivé',
+      resent: "E-mail d'activation renvoyé",
+    },
+
+    errors: {
+      cannotDeactivateSelf: 'Vous ne pouvez pas désactiver votre propre compte',
+      insufficientPrivilegeStatus: 'Vous ne pouvez pas modifier le statut de cet utilisateur',
+      updateStatusFailed: 'Échec de la mise à jour du statut',
+      alreadyActivated: 'Cet utilisateur est déjà activé',
+      emailNotConfigured: "Service d'e-mail non configuré",
+      noEmailOnRecord: 'Aucun e-mail trouvé pour cet utilisateur',
+      resendFailed: "Échec de l'envoi de l'e-mail",
+    },
+
+    modal: {
+      heading: 'Changer le rôle',
+      newRoleLabel: 'Nouveau rôle',
+      cancel: 'Annuler',
+      saving: 'Enregistrement...',
+      save: 'Enregistrer le rôle',
+      errors: {
+        insufficientPrivilege: 'Vous ne pouvez pas changer le rôle de cet utilisateur',
+        cannotAssignHigher: 'Vous ne pouvez pas attribuer un rôle supérieur au vôtre',
+        invalidRole: 'Rôle invalide',
+        updateFailed: 'Échec de la mise à jour du rôle',
+      },
+    },
+
+    roleLabels: {
+      WORKER: 'Travailleur',
+      TRADE_ADMIN: 'Admin métier',
+      TRADE_PROJECT_MANAGER: 'Chef de projet métier',
+      COMPANY_ADMIN: 'Admin entreprise',
+      IT_ADMIN: 'Admin IT',
+    },
+
+    badgeLabels: {
+      SUPER_ADMIN: 'Super admin',
+      IT_ADMIN: 'Admin IT',
+      COMPANY_ADMIN: 'Admin ent.',
+      TRADE_PROJECT_MANAGER: 'Chef projet',
+      TRADE_ADMIN: 'Admin métier',
+      WORKER: 'Travailleur',
+    },
+  },
+
   profile: {
     title: 'Mon profil',
     addressPlaceholder: 'Commencez à saisir votre adresse...',
