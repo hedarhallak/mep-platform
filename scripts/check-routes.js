@@ -7,7 +7,19 @@ const path = require('path');
 const INDEX_FILE = path.join(__dirname, '../app.js');
 const ROUTES_DIR = path.join(__dirname, '../routes');
 
-const INTENTIONAL_DOUBLE_MOUNTS = ['/api/assignments', '/api/profile', '/api/materials'];
+// Some prefixes appear twice intentionally:
+//   - /api/assignments, /api/profile, /api/materials → one router file mounted
+//     at multiple paths (legacy aliases preserved for mobile compatibility).
+//   - /api/onboarding, /api/super → first mount is a rate-limiter middleware
+//     (express-rate-limit), second is the actual route handler. Same prefix,
+//     different roles. Not a conflict.
+const INTENTIONAL_DOUBLE_MOUNTS = [
+  '/api/assignments',
+  '/api/profile',
+  '/api/materials',
+  '/api/onboarding',
+  '/api/super',
+];
 
 function checkRoutes() {
   const indexContent = fs.readFileSync(INDEX_FILE, 'utf8');
