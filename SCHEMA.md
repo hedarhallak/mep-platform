@@ -1,13 +1,16 @@
 # SCHEMA.md — Constrai Database Reference
 
-> **Database:** `mepdb` (PostgreSQL 14 + PostGIS) on production server.
+> **Database:** `mepdb` (PostgreSQL 16 + PostGIS) on production server.
 > **User:** `mepuser` (owner of all application tables).
 > **Connection:** `localhost:5432` via `DATABASE_URL` env var.
-> **Total tables:** 56. **Migrations:** 31 (in `/migrations/`).
+> **Total tables:** 33. **Migrations:** 11 (`migrations/000_baseline_2026-04-28.sql` + `001-010`).
+> **Canonical baseline reference:** [`db/schema_baseline_2026-05-04.sql`](./db/schema_baseline_2026-05-04.sql) (post-Section-80; supersedes all earlier baseline files).
 >
 > **Multi-tenancy:** All business tables include `company_id` (FK → `companies.id`). Always filter by company in queries unless you're a SUPER_ADMIN explicitly viewing cross-company data.
 >
-> **Naming gotcha:** the user table is `app_users`, NOT `users`.
+> **Naming gotchas:**
+> - The user table is `app_users`, NOT `users`.
+> - The active material-request family is `material_requests` (singular). The legacy `materials_requests` plural variant + its `_items`/`_tickets` siblings were dropped in Section 70.
 
 ---
 
@@ -70,16 +73,15 @@ sudo -u postgres psql -d mepdb -c "SELECT COUNT(*) FROM employees;"
 
 ---
 
-### B. Companies & Employees (5 tables)
+### B. Companies & Employees (3 tables)
 
 | Table | Purpose |
 |---|---|
 | `companies` | Tenant container; one row per customer company |
 | `employees` | Worker roster per company (name, contact, location) |
 | `employee_profiles` | Extended profile: trade, rank, address, emergency contact, **PostGIS home location** |
-| `employee_trades` | Lookup: PLUMBING, ELECTRICAL, HVAC, CARPENTRY, GENERAL |
-| `employee_roles` | Lookup: WORKER, FOREMAN, ADMIN |
-| `employee_ranks` | Lookup: APPRENTICE_1-4, JOURNEYMAN, FOREMAN |
+
+> Lookup tables `employee_trades` / `employee_roles` / `employee_ranks` were dropped in Section 72. Trade/role/rank values are stored as plain text on `employee_profiles.trade_code` / `app_users.role` / `employee_profiles.rank_code` and constrained at the application layer.
 
 #### `companies` — key columns
 | Column | Type | Notes |
@@ -87,12 +89,11 @@ sudo -u postgres psql -d mepdb -c "SELECT COUNT(*) FROM employees;"
 | `id` | BIGSERIAL PK | |
 | `company_code` | TEXT UNIQUE | Used during employee signup |
 | `name` | TEXT | Display name |
-| `status` | TEXT | ACTIVE / SUSPENDED |
-| `travel_origin_policy` | TEXT | `home` or `company_yard` (where employee starts day for distance calcs) |
-| `yard_lat`, `yard_lng` | DOUBLE PRECISION | Optional company HQ coords |
-| `dispatch_time` | TIME | When daily dispatch fires |
-| `dispatch_timezone` | TEXT | Default `'America/Montreal'` |
+| `status` | TEXT | CHECK constraint: TRIAL / ACTIVE / PAST_DUE / SUSPENDED / CANCELLED (Section 80 — was a FK to `company_statuses` which is now dropped) |
+| `plan` | TEXT | CHECK constraint: BASIC / PRO / ENTERPRISE (Section 80) |
 | `procurement_email` | TEXT | Recipient for internal procurement POs |
+
+> Section 75 dropped 9 unused columns from `companies`: `travel_origin_policy`, `yard_lat`, `yard_lng`, `dispatch_time`, `dispatch_timezone`, `attendance_mode`, `break_count`, `break_minutes`, `overtime_threshold_hours` — all geofencing/dispatch/attendance config that was never wired to any feature.
 
 #### `employees` — key columns
 | Column | Type | Notes |
@@ -262,13 +263,13 @@ sudo -u postgres psql -d mepdb -c "SELECT COUNT(*) FROM employees;"
 
 ---
 
-### H. CCQ Rates & Travel (3 tables)
+### H. CCQ Rates & Travel (1 table)
 
 | Table | Purpose |
 |---|---|
 | `ccq_travel_rates` | ACQ/CCQ travel allowance rates by trade × sector × distance × effective period (updated every 2 years) |
-| `ccq_travel_allowance_bands` | Distance bands (e.g. 41-65 km, 66-90 km, ...) |
-| `ccq_travel_allowance_rates` | Allowance amounts by band |
+
+> The duplicate `ccq_travel_allowance_bands` / `ccq_travel_allowance_rates` lookup tables were dropped in Section 75 (they were dead duplicates of the active `ccq_travel_rates` table).
 
 #### `ccq_travel_rates`
 - Quebec construction industry standard reimbursements
@@ -280,7 +281,7 @@ sudo -u postgres psql -d mepdb -c "SELECT COUNT(*) FROM employees;"
 
 ---
 
-### I. Audit & System (5 tables)
+### I. Audit & System (4 tables)
 
 | Table | Purpose |
 |---|---|
@@ -288,7 +289,8 @@ sudo -u postgres psql -d mepdb -c "SELECT COUNT(*) FROM employees;"
 | `daily_dispatch_runs` | One row per company per day; status of dispatch job |
 | `employee_daily_dispatch_state` | Last sent digest version per employee per work date (idempotency) |
 | `push_tokens` | Mobile device push notification tokens (iOS/Android) |
-| `attendance_approvals_audit` | Specific audit for foreman-approved hours adjustments |
+
+> `attendance_approvals_audit` was dropped in Section 74 — was scaffolding for an absence-approval feature that never landed.
 
 #### `audit_logs`
 - Triggers: `prevent_update`, `prevent_delete` enforce immutability
@@ -303,21 +305,19 @@ sudo -u postgres psql -d mepdb -c "SELECT COUNT(*) FROM employees;"
 
 ---
 
-### J. Other (3 tables)
+### J. Other (1 table)
 
 | Table | Purpose |
 |---|---|
 | `standup_sessions` | Daily foreman standup to review tomorrow (assignments + materials) |
-| `early_checkout_requests` | Worker requests to leave early; foreman approves |
-| `borrow_requests` | Inter-project employee/equipment borrowing (lighter-weight than assignment workflow) |
-| `absence_reasons` | Lookup: vacation, sick, leave, etc. |
-| `attendance_absences` | Recorded absences |
-| `company_settings` | Per-company runtime settings (key-value) |
-| `company_statuses` | Lookup for company status |
-| `company_employee_field_config` | Per-company customization of which employee fields are required/optional |
-| `employee_field_catalog` | Master list of all possible employee fields |
-| `employee_field_values` | Custom field values per employee |
-| `employee_sensitive_values` | PII storage (separate from main employee table for access control) |
+
+> The May 4 schema sprint (Sections 70-74) dropped 10 tables in this section that were "designed in schema but never built in code":
+> - `early_checkout_requests`, `borrow_requests`, `absence_reasons`, `attendance_absences` (workflow features never wired)
+> - `company_settings` (real config lives directly on the `companies` table)
+> - `company_statuses` (replaced by inline CHECK on `companies.status` in Section 80)
+> - `company_employee_field_config` / `employee_field_catalog` / `employee_field_values` / `employee_sensitive_values` (entire dynamic-employee-field subsystem)
+>
+> Also dropped: `parking_claims`, `project_geofences`, `sensitive_access_log`, the `erp` schema (4 tables + 2 functions), and the legacy single-foreman `project_foremen.foreman_employee_id` column. See `db/schema_baseline_2026-05-04.sql` for the complete current state.
 
 ---
 
@@ -363,8 +363,24 @@ WHERE ep.employee_id = $1 AND p.id = $2;
 
 ## Migration Conventions
 
-- Files in `/migrations/` are numbered: `001_*.sql`, `002_*.sql`, ..., `031_*.sql`
-- Some "SAFE_" prefixed files are corrective/idempotent migrations
-- Run via `node scripts/migrate.js` (top-level) or `node scripts/run_sql_file.js <file>`
+- Files in `/migrations/` are numbered: `000_baseline_2026-04-28.sql` (the historical starting point) + `001_user_invites.sql` through `010_drop_company_statuses_and_plans.sql`.
+- Atlas applies them in lexical order on every PR's CI run against a fresh PostGIS-enabled DB; this is the canonical migration sequence.
+- The human-readable baseline `db/schema_baseline_2026-05-04.sql` is what you get after applying all of the above. Regenerate it via `.\scripts\regen-baseline.ps1` whenever a new migration ships (see Section 76 for the 5 gotchas the script bakes in).
 - **Always create a backup before running a destructive migration on production.** See `RECOVERY.md` Section 3.
+
+---
+
+## Audit Tooling
+
+`scripts/audit-schema.py` — schema-aware unused-objects detector. Schema-qualified, FK-aware, PK-aware, SERIAL-aware. Three modes:
+- `--tables` — find tables with no code references.
+- `--columns` — find columns with no code references AND no FK relationships.
+- `--inserts` — find route INSERT statements that omit NOT NULL columns (the bug class behind the project_foremen issue from Section 65 P1).
+
+Run with the canonical baseline:
+```
+python3 scripts/audit-schema.py --all
+```
+
+After the May 4 sprint, the audit reports zero truly-unused tables and zero truly-unused columns — confirming the schema is clean. See Sections 66-80 for the full sprint history.
 - New migrations: increment number, document in commit message what changed
