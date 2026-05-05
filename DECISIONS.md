@@ -8017,11 +8017,15 @@ Total: ~10-12 days of work
 
 ### Lessons captured
 
-#### Lesson 1 — Always present multi-step procedures as flow diagrams (NEW)
+#### Lesson 1 — Use flow diagrams for substantive content, not for every multi-step procedure (NEW, refined same-day)
 
-Hedar explicitly requested: when asking for steps for a task, present them as visual flow diagrams (boxes + arrows + numbered steps), not just bullet lists. Pattern: text-based ASCII art using box-drawing characters and arrows for reliability across rendering contexts (Mermaid widgets did not render correctly in Cowork mode during this session).
+**Initial form:** Hedar requested visual flow diagrams (boxes + arrows + numbered steps) instead of bullet lists when explaining steps. Codified in `CLAUDE.md` Section 2 as rule #8.
 
-This is now codified in `CLAUDE.md` Section 2 as rule #8.
+**Same-day refinement:** Claude over-applied this rule, wrapping every routine operational sequence (git commands, gh CLI setup, etc.) in box diagrams. Hedar pushed back: "معلش مافي داعي بكل خطوة للمخططات فقط لما منكون عم نتناقش بتعديل جوهري, انا بطلب منك المخططات التدفقية".
+
+**Final rule:** Flow diagrams are for substantive content where the shape of the work is non-obvious — architectural changes, activation flows, migration plans with branches/parallels, anything Hedar explicitly asks for as a "مخطط" / diagram. For routine operational steps (linear command lists, simple workflows), use plain numbered steps + code blocks.
+
+The corrected version is in `CLAUDE.md` Section 2 rule #8. Pattern: ASCII box-drawing characters (Mermaid widgets are unreliable in Cowork mode).
 
 #### Lesson 2 — Cloudflare should be in any production setup comparison from day 1
 

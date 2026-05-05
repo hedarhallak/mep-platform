@@ -142,21 +142,35 @@ Multi-tenancy is enforced via `company_id` on all business tables. There are 13 
    pm2 restart mep-backend
    ```
 
-8. **Present multi-step procedures as flow diagrams, NOT bullet lists** (NEW — May 5, 2026, Section 85). When Hedar asks for steps for a task — activation flows, deployment sequences, migration plans, debugging procedures, anything with sequential or branching steps — render them as a **text-based flow diagram** using box-drawing characters (`┌─┐ │ ▼ → ↓`) and arrows showing direction. Numbered bullet lists are harder to follow visually. Example pattern:
+8. **Use flow diagrams for architectural/substantive discussions, NOT for routine operational steps** (NEW — May 5, 2026, Section 85; **refined same-day after over-application**). Flow diagrams (text-based, using box-drawing characters `┌─┐ │ ▼ → ↓`) are for **substantive content only**:
+   - Architectural change discussions (multi-tenant flow, auth model, data flow between systems)
+   - Activation/onboarding flows that span multiple actors
+   - Migration plans with multiple gating phases
+   - Anything Hedar explicitly asks for as "مخطط" / "diagram"
 
+   For **routine operational steps** — git commands, deployment commands, CLI setup, debugging command sequences, anything that's just "run these commands in order" — use **plain numbered steps + code blocks**. Don't wrap every 3-step git workflow in a box diagram.
+
+   Why the refinement: in the Section 85 design session, Hedar said "اعمل مخطط" once for the multi-tenant activation flow, and I (over-)generalized this into "draw flow diagrams for every multi-step procedure". After ~6 git/gh commands wrapped in boxes, Hedar pushed back: "معلش مافي داعي بكل خطوة للمخططات فقط لما منكون عم نتناقش بتعديل جوهري". Lesson: diagrams add value when the **shape of the work** is non-obvious (forks, parallel paths, returning loops); they add noise when the work is just a linear command list.
+
+   When you DO use a diagram, prefer plain ASCII box-drawing characters — Mermaid widgets are NOT reliable in Cowork mode (failed to render colors during the Section 85 design session). ASCII renders reliably in any markdown context.
+
+   Example of when a diagram **is** justified:
    ```
    [Actor / Starting state]
         │
-        │ ① action description
+        │ ① action with branching consequence
         ▼
-   [Next state]
+   [Decision point] ─── alt path ──→ [Different state]
         │
-        │ ② action description
+        │ ② happy path
         ▼
    [Final state] ✅
    ```
 
-   Why: visual flow diagrams are faster to scan and easier to spot branches/forks. Hedar explicitly asked for this format on May 5. Mermaid widgets are NOT reliable in Cowork mode (failed to render colors during the Section 85 design session) — use plain ASCII box-drawing characters instead. They render reliably in any markdown context.
+   Example of when a diagram is **NOT** justified — just use numbered steps:
+   1. `git checkout main`
+   2. `git pull origin main`
+   3. `git branch -d feature/foo`
 
 9. **Don't flood the user with information faster than they can read it** (NEW — May 5, 2026, Section 85). For irreversible architectural decisions, ask **one focused question at a time** and wait for the answer before moving to the next. Hedar explicitly said: "انت عكيتني كم هائل من المعلومات وانا لازم اقرأها قبل ماجاوبك, انا ماعندي سرعتك بالقراءة". The right pattern: propose ONE decision → user answers → propose NEXT decision. Don't dump 9 phases + 5 security layers + 3 sub-questions in one message. The Section 4.5 batching rule applies to *execution* work; this rule applies to *architectural discussion*. Different shape, both about reducing cognitive load.
 
