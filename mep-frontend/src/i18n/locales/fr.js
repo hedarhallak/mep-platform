@@ -569,6 +569,59 @@ export default {
     },
   },
 
+  standup: {
+    title: 'Réunion quotidienne',
+    subtitlePrefix: 'Révision du plan de demain —',
+    reviewedSuffix: 'révisés',
+    loading: 'Chargement du plan de demain...',
+    loadFailed: 'Échec du chargement des données',
+
+    empty: {
+      title: 'Aucun projet prévu pour demain',
+      hint: 'Les affectations pour demain apparaîtront ici',
+    },
+
+    project: {
+      workersTomorrow_one: '{{count}} travailleur demain',
+      workersTomorrow_other: '{{count}} travailleurs demain',
+      reviewed: '✓ Révisé',
+    },
+
+    team: {
+      heading: 'Équipe de demain',
+      empty: 'Aucun travailleur affecté pour le moment',
+    },
+
+    materials: {
+      heading: 'Matériaux pour demain',
+      addCta: '+ Ajouter du matériel',
+      noneYet: 'Aucune demande de matériel pour demain',
+      empty: 'Aucun article — ajoutez ce dont vous avez besoin',
+    },
+
+    addItem: {
+      cta: 'Ajouter un article',
+      namePlaceholder: 'ex. Tuyau en cuivre 3/4 po',
+      qtyPlaceholder: 'Qté *',
+      notePlaceholder: 'Note (facultatif)',
+      catalogUsed: 'utilisé {{count}} ×',
+      cancel: 'Annuler',
+      add: 'Ajouter',
+      errors: {
+        nameRequired: "Le nom de l'article est requis",
+        qtyAtLeast1: "La quantité doit être d'au moins 1",
+        addFailed: "Échec de l'ajout de l'article",
+      },
+    },
+
+    review: {
+      notePlaceholder: 'Notes ou obstacles ? (facultatif)',
+      cancel: 'Annuler',
+      complete: 'Terminer la réunion',
+      markReviewed: 'Marquer comme révisé',
+    },
+  },
+
   permissions: {
     title: 'Matrice de permissions',
     subtitle: "Contrôle d'accès basé sur les rôles · Les changements s'appliquent à l'échelle de l'entreprise",

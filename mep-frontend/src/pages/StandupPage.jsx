@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import api from '@/lib/api'
 import { trade as tradeLookup } from '@/constants/trades'
 import {
@@ -94,6 +95,7 @@ function ItemRow({ item, requestId, onUpdate, onDelete }) {
 
 // ── Add Item Form ─────────────────────────────────────────────
 function AddItemForm({ requestId, onAdded }) {
+  const { t } = useTranslation()
   const [show, setShow]           = useState(false)
   const [name, setName]           = useState('')
   const [qty, setQty]             = useState('')
@@ -131,9 +133,9 @@ function AddItemForm({ requestId, onAdded }) {
 
   const handleAdd = async () => {
     setError('')
-    if (!name.trim())            return setError('Item name required')
+    if (!name.trim())            return setError(t('standup.addItem.errors.nameRequired'))
     const n = Math.floor(Number(qty))
-    if (!qty || n < 1)           return setError('Quantity must be at least 1')
+    if (!qty || n < 1)           return setError(t('standup.addItem.errors.qtyAtLeast1'))
     setSaving(true)
     try {
       const r = await api.post(`/standup/materials/${requestId}/items`, {
@@ -142,14 +144,14 @@ function AddItemForm({ requestId, onAdded }) {
       onAdded(r.data.item)
       setName(''); setQty(''); setUnit('pcs'); setNote('')
       setShow(false)
-    } catch (_) { setError('Failed to add item') }
+    } catch (_) { setError(t('standup.addItem.errors.addFailed')) }
     finally { setSaving(false) }
   }
 
   if (!show) return (
     <button onClick={() => setShow(true)}
       className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-primary hover:bg-primary-pale transition-colors border-t border-slate-100">
-      <Plus size={15} />Add item
+      <Plus size={15} />{t('standup.addItem.cta')}
     </button>
   )
 
@@ -164,7 +166,7 @@ function AddItemForm({ requestId, onAdded }) {
           onChange={e => handleNameChange(e.target.value)}
           onBlur={() => setTimeout(() => setShowSug(false), 150)}
           onFocus={() => name.length >= 2 && suggestions.length && setShowSug(true)}
-          placeholder="e.g. Copper pipe 3/4 inch"
+          placeholder={t('standup.addItem.namePlaceholder')}
           autoFocus
           className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-light placeholder:text-slate-300"
         />
@@ -175,7 +177,7 @@ function AddItemForm({ requestId, onAdded }) {
                 className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-primary-pale text-left transition-colors">
                 <span className="text-sm text-slate-700">{s.item_name}</span>
                 <span className="text-[10px] text-slate-400 ml-2 flex-shrink-0">
-                  {s.default_unit} · used {s.use_count}×
+                  {s.default_unit} · {t('standup.addItem.catalogUsed', { count: s.use_count })}
                 </span>
               </button>
             ))}
@@ -191,7 +193,7 @@ function AddItemForm({ requestId, onAdded }) {
           step="1"
           value={qty}
           onChange={e => setQty(e.target.value.replace(/[^0-9]/g, ''))}
-          placeholder="Qty *"
+          placeholder={t('standup.addItem.qtyPlaceholder')}
           className="w-24 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-light"
         />
         <select value={unit} onChange={e => setUnit(e.target.value)}
@@ -202,7 +204,7 @@ function AddItemForm({ requestId, onAdded }) {
 
       <input
         type="text" value={note} onChange={e => setNote(e.target.value)}
-        placeholder="Note (optional)"
+        placeholder={t('standup.addItem.notePlaceholder')}
         className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-light"
       />
 
@@ -211,11 +213,11 @@ function AddItemForm({ requestId, onAdded }) {
       <div className="flex gap-2">
         <button onClick={() => { setShow(false); setError('') }}
           className="flex-1 px-3 py-2 text-sm text-slate-500 border border-slate-200 rounded-lg hover:bg-slate-100">
-          Cancel
+          {t('standup.addItem.cancel')}
         </button>
         <button onClick={handleAdd} disabled={saving}
           className="flex-1 px-3 py-2 text-sm font-semibold bg-primary text-white rounded-lg hover:bg-primary-dark disabled:opacity-50 flex items-center justify-center gap-1.5">
-          {saving ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}Add
+          {saving ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}{t('standup.addItem.add')}
         </button>
       </div>
     </div>
@@ -224,6 +226,7 @@ function AddItemForm({ requestId, onAdded }) {
 
 // ── Project Standup Card ──────────────────────────────────────
 function ProjectStandupCard({ project, onComplete }) {
+  const { t } = useTranslation()
   const [expanded, setExpanded]     = useState(true)
   const [matRequest, setMatRequest] = useState(project.material_request)
   const [session, setSession]       = useState(project.session)
@@ -313,8 +316,8 @@ function ProjectStandupCard({ project, onComplete }) {
             {project.project_name && <span className="text-xs text-slate-400">— {project.project_name}</span>}
           </div>
           <div className="text-xs text-slate-400 mt-0.5">
-            {project.team.length} worker{project.team.length !== 1 ? 's' : ''} tomorrow
-            {isCompleted && <span className="ml-2 text-emerald-600 font-semibold">✓ Reviewed</span>}
+            {t('standup.project.workersTomorrow', { count: project.team.length })}
+            {isCompleted && <span className="ml-2 text-emerald-600 font-semibold">{t('standup.project.reviewed')}</span>}
           </div>
         </div>
         {expanded
@@ -329,10 +332,10 @@ function ProjectStandupCard({ project, onComplete }) {
           <div className="px-5 py-4">
             <div className="flex items-center gap-2 mb-3">
               <Users size={14} className="text-slate-400" />
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Team Tomorrow</span>
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">{t('standup.team.heading')}</span>
             </div>
             {project.team.length === 0
-              ? <p className="text-sm text-slate-400 italic">No workers assigned yet</p>
+              ? <p className="text-sm text-slate-400 italic">{t('standup.team.empty')}</p>
               : (
                 <div className="flex flex-wrap gap-2">
                   {project.team.map(w => {
@@ -359,12 +362,12 @@ function ProjectStandupCard({ project, onComplete }) {
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <Package size={14} className="text-slate-400" />
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Materials for Tomorrow</span>
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">{t('standup.materials.heading')}</span>
               </div>
               {!matRequest && !loading && (
                 <button onClick={handleOpenMaterials}
                   className="text-xs text-primary hover:underline font-medium">
-                  + Add materials
+                  {t('standup.materials.addCta')}
                 </button>
               )}
             </div>
@@ -376,13 +379,13 @@ function ProjectStandupCard({ project, onComplete }) {
             )}
 
             {!loading && !matRequest && (
-              <p className="text-sm text-slate-400 italic">No material request yet for tomorrow</p>
+              <p className="text-sm text-slate-400 italic">{t('standup.materials.noneYet')}</p>
             )}
 
             {!loading && matRequest && (
               <div className="border border-slate-200 rounded-xl overflow-hidden">
                 {(matRequest.items || []).length === 0
-                  ? <p className="text-sm text-slate-400 italic px-4 py-3">No items — add what you need</p>
+                  ? <p className="text-sm text-slate-400 italic px-4 py-3">{t('standup.materials.empty')}</p>
                   : (matRequest.items || []).map(item => (
                       <ItemRow
                         key={item.id}
@@ -407,18 +410,18 @@ function ProjectStandupCard({ project, onComplete }) {
                 <div className="space-y-2">
                   <textarea
                     value={note} onChange={e => setNote(e.target.value)}
-                    rows={2} placeholder="Any notes or blockers? (optional)"
+                    rows={2} placeholder={t('standup.review.notePlaceholder')}
                     className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-400 resize-none"
                   />
                   <div className="flex gap-2">
                     <button onClick={() => setShowNote(false)}
                       className="flex-1 px-4 py-2 text-sm text-slate-500 border border-slate-200 rounded-lg hover:bg-slate-100">
-                      Cancel
+                      {t('standup.review.cancel')}
                     </button>
                     <button onClick={handleComplete} disabled={completing}
                       className="flex-1 px-4 py-2 text-sm font-bold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2">
                       {completing ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
-                      Complete Standup
+                      {t('standup.review.complete')}
                     </button>
                   </div>
                 </div>
@@ -426,7 +429,7 @@ function ProjectStandupCard({ project, onComplete }) {
                 <button onClick={() => setShowNote(true)}
                   className="w-full flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold transition-colors">
                   <CheckCircle2 size={16} />
-                  Mark as Reviewed
+                  {t('standup.review.markReviewed')}
                 </button>
               )}
             </div>
@@ -445,6 +448,7 @@ function ProjectStandupCard({ project, onComplete }) {
 
 // ── Main Page ─────────────────────────────────────────────────
 export default function StandupPage() {
+  const { t, i18n } = useTranslation()
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState('')
@@ -455,7 +459,7 @@ export default function StandupPage() {
       const r = await api.get('/standup/tomorrow')
       setData(r.data)
     } catch (e) {
-      setError(e.response?.data?.error || 'Failed to load standup data')
+      setError(e.response?.data?.error || t('standup.loadFailed'))
     } finally { setLoading(false) }
   }
 
@@ -463,6 +467,8 @@ export default function StandupPage() {
 
   const completedCount = data?.projects.filter(p => p.session?.status === 'COMPLETED').length || 0
   const totalCount     = data?.projects.length || 0
+
+  const dateLocale = i18n.language === 'fr' ? 'fr-CA' : 'en-CA'
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-slate-50">
@@ -475,12 +481,12 @@ export default function StandupPage() {
               <ClipboardList size={18} className="text-white" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-slate-900">Daily Standup</h1>
+              <h1 className="text-lg font-bold text-slate-900">{t('standup.title')}</h1>
               <p className="text-xs text-slate-400 mt-0.5">
-                Review tomorrow's plan —{' '}
+                {t('standup.subtitlePrefix')}{' '}
                 <span className="font-semibold text-slate-600">
                   {data?.date
-                    ? new Date(data.date + 'T00:00:00').toLocaleDateString('en-CA', {
+                    ? new Date(data.date + 'T00:00:00').toLocaleDateString(dateLocale, {
                         weekday: 'long', month: 'long', day: 'numeric'
                       })
                     : '—'}
@@ -492,7 +498,7 @@ export default function StandupPage() {
             {totalCount > 0 && (
               <div className="text-right">
                 <div className="text-sm font-bold text-slate-700">{completedCount}/{totalCount}</div>
-                <div className="text-xs text-slate-400">reviewed</div>
+                <div className="text-xs text-slate-400">{t('standup.reviewedSuffix')}</div>
               </div>
             )}
             <button onClick={fetchData} disabled={loading}
@@ -518,7 +524,7 @@ export default function StandupPage() {
         {loading && (
           <div className="flex flex-col items-center justify-center py-20">
             <Loader2 size={28} className="animate-spin text-slate-300 mb-3" />
-            <p className="text-sm text-slate-400">Loading tomorrow's plan...</p>
+            <p className="text-sm text-slate-400">{t('standup.loading')}</p>
           </div>
         )}
 
@@ -531,8 +537,8 @@ export default function StandupPage() {
         {!loading && !error && totalCount === 0 && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <ClipboardList size={40} className="text-slate-200 mb-3" />
-            <p className="text-sm font-semibold text-slate-400">No projects scheduled for tomorrow</p>
-            <p className="text-xs text-slate-300 mt-1">Assignments for tomorrow will appear here</p>
+            <p className="text-sm font-semibold text-slate-400">{t('standup.empty.title')}</p>
+            <p className="text-xs text-slate-300 mt-1">{t('standup.empty.hint')}</p>
           </div>
         )}
 
