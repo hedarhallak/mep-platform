@@ -48,23 +48,10 @@ async function ensureSeedData() {
   if (_seeded) return;
   const pool = getPool();
 
-  await pool.query(
-    `INSERT INTO public.plans (code, label) VALUES
-       ('BASIC', 'Basic'),
-       ('PRO', 'Pro'),
-       ('ENTERPRISE', 'Enterprise')
-     ON CONFLICT (code) DO NOTHING`
-  );
-
-  await pool.query(
-    `INSERT INTO public.company_statuses (code, label) VALUES
-       ('TRIAL',     'Trial'),
-       ('ACTIVE',    'Active'),
-       ('PAST_DUE',  'Past Due'),
-       ('SUSPENDED', 'Suspended'),
-       ('CANCELLED', 'Cancelled')
-     ON CONFLICT (code) DO NOTHING`
-  );
+  // public.plans and public.company_statuses were dropped in migration 010
+  // (Section 80) — replaced by inline CHECK constraints on companies.plan /
+  // companies.status. Keep allowed values consistent: BASIC/PRO/ENTERPRISE
+  // for plan; TRIAL/ACTIVE/PAST_DUE/SUSPENDED/CANCELLED for status.
 
   await pool.query(
     `INSERT INTO public.roles (role_key, label) VALUES

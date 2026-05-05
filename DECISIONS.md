@@ -7602,3 +7602,26 @@ Replaces the 6-step recipe with one command. Also exposes `Push-FeatureBranch -M
 Source the script per-shell with the dot-source syntax above, or add to `$PROFILE` to auto-load.
 
 - **Today: 39 sections.** (Section 79 added.)
+
+---
+
+## Section 80 — Drop `company_statuses` + `plans`, replace FKs with CHECK (May 4, 2026, late evening)
+
+Closes the last open piece from the C3 sprint. Section 74 deferred dropping these 2 lookup tables because they were live FK targets from `companies.status` / `companies.plan`. Migration 010 replaces the FKs with inline `CHECK` constraints using the same allowed values, then drops the tables.
+
+Allowed values (sourced from `tests/helpers/db.js` — the only place that referenced these tables):
+
+```
+companies.status : 'TRIAL', 'ACTIVE', 'PAST_DUE', 'SUSPENDED', 'CANCELLED'
+companies.plan   : 'BASIC', 'PRO', 'ENTERPRISE'
+```
+
+Same enforcement, fewer moving parts. Test helper updated to skip the now-defunct INSERTs.
+
+**566/566 passing** (with TEST_DATABASE_URL set against a fresh DB that has migrations 000-010 applied).
+
+Final schema state after this PR:
+- Tables: 35 → 33
+- C3 sprint truly truly complete — all 32 originally-flagged dead tables dropped + 2 lookup tables converted to CHECK.
+
+- **Today: 40 sections.** (Section 80 added.)
