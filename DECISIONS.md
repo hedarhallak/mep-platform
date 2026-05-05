@@ -7532,3 +7532,56 @@ The script ends with a green ✅ and a reminder to update `CLAUDE.md`'s Step 4 r
   - **(P3)** Replace `axios` → native `fetch` in `mep-frontend/src/lib/api.js`. Saves ~114 KB raw / ~30 KB gzip on the bundle.
   - **(P3)** 2 failing email tests (`user_management.test.js:144`, `daily_dispatch.test.js:152`). Out-of-scope from Section 65; quick fix.
 - **Today: 37 sections.** (Section 77 added.)
+
+---
+
+## Section 78 — Replace `axios` with native `fetch` (May 4, 2026, late evening)
+
+Closes the Section 66 P2 backlog item. Drops 114 KB raw / 30 KB gzip from the bundle by replacing axios with a thin native-`fetch` wrapper that preserves the same axios-shaped public interface.
+
+### Why this is risk-free
+
+axios was contained to a single file (`mep-frontend/src/lib/api.js`). 20 consumer files imported `api` from there, calling `api.get`/`api.post`/etc. and using the response shape `r.data.X` and the error shape `err.response?.status`. The replacement keeps that exact interface — so zero changes needed in the 20 consumer files.
+
+### Implementation
+
+The new `api.js` (~150 lines, no dependencies) preserves every behavior of the previous axios setup:
+
+1. `baseURL: '/api'` — all paths relative.
+2. Auto-attach `Authorization: Bearer <token>` from `localStorage`.
+3. On 401 (except for `/auth/login` and `/auth/refresh`), try the refresh token, then retry the original request once. If refresh fails, clear tokens and redirect to `/login`.
+4. Single in-flight refresh: subsequent 401s during a refresh are queued and resolved with the new token.
+5. Public method shape: `api.get(url)`, `api.post(url, body)`, etc. Returns `{ data, status, ok }` on success; throws an `Error` with `err.response = { status, data }` on non-2xx — both match axios.
+
+### Bundle impact
+
+| Stage | Initial JS (raw) | Initial JS (gzip) |
+|---|---|---|
+| Pre-Section 66 (start of day) | 728.53 kB | 193.57 kB |
+| After Section 67 (lazy-load) | 414.61 kB | 133.17 kB |
+| **After Section 78 (this PR)** | **376.87 kB** | **118.69 kB** |
+| **Total day's reduction** | **−48%** | **−39%** |
+
+### Verification
+
+- Frontend build clean — `dist/assets/index-*.js` shrunk from 414.61 kB to 376.87 kB. Each lazy-loaded page chunk dropped slightly too (axios's tree-shaken pieces bled into them).
+- Frontend tests: 25/25 passing (vitest).
+- `npm uninstall axios`: removed 3 packages (axios + transitives).
+- `grep -rln axios src/`: zero hits remaining.
+
+### Files modified or generated this session
+
+- **Modified:** `mep-frontend/src/lib/api.js` (axios → native fetch wrapper)
+- **Modified:** `mep-frontend/package.json` (axios removed from dependencies)
+- **Modified:** `mep-frontend/package-lock.json` (3 transitive packages removed)
+- **Modified:** `DECISIONS.md` (this section)
+
+### Pointer for next sessions
+
+- Section 66 P2 backlog: closed.
+- Remaining Section 66 / 67 followups (all P3, deferred):
+  - Convert `companies.status` and `companies.plan` FKs to `CHECK` constraints, then drop `company_statuses` and `plans`. Optional final cleanup.
+  - 2 failing email tests (`user_management.test.js:144`, `daily_dispatch.test.js:152`).
+  - Section 19 BLOCKED routes that need SENDGRID env mock for happy-path coverage (`admin_users.js`, `invite_employee.js`, plus `user_invites.js` once we revisit the test fixture for the `user_invites` table).
+  - Tier 3 i18n (BI / Reports / Hub / etc. — page by page).
+- **Today: 38 sections.** (Section 78 added.)
