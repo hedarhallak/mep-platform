@@ -7788,3 +7788,21 @@ After Section 82, the only "obvious-cheap" wins are gone. Remaining gap to 65%+ 
 Section 82 marks the **end of the cheap-win route phase**. Future coverage pushes need explicit branch-targeting plans (not just "find a route with no tests"), per Section 4.6 lessons.
 
 - **Today: 50 sections.** (Section 82 added.)
+
+---
+
+## Section 83 — Pre-commit hook noise: silence two false-positive DOUBLE MOUNT warnings (May 5, 2026)
+
+`scripts/check-routes.js` was flagging `/api/onboarding` and `/api/super` as DOUBLE MOUNT warnings on every commit since Phase 11b. Investigation:
+
+- `app.js:120` — `app.use('/api/onboarding', onboardingLimiter)` is `express-rate-limit` middleware
+- `app.js:258` — `app.use('/api/onboarding', require('./routes/onboarding'))` is the route handler
+- Same pattern for `/api/super` (rate limiter at `:122`, handler at `:262`)
+
+Both pairs are the same prefix used at two different layers — rate limiting then routing — not actual conflicts. The audit script counted bare `app.use('/api/...'` matches without distinguishing middleware from routers.
+
+**Fix:** add both prefixes to the existing `INTENTIONAL_DOUBLE_MOUNTS` allowlist with a comment explaining the rate-limiter pattern. One-file change in `scripts/check-routes.js`.
+
+**Cost:** zero engineering risk. The warnings were never blocking commits (only ERRORS block); they were just visual noise on every push that trained the eye to ignore the audit output. Cleaning them out makes future real warnings visible.
+
+- **Today: 51 sections.** (Section 83 added.)
