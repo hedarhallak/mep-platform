@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/hooks/useAuth'
 import api from '@/lib/api'
@@ -10,7 +11,7 @@ import {
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || 'pk.eyJ1IjoiaGVkYXJoYWxsYWs3NiIsImEiOiJjbWxsenc1ZmkwY3JyM2RxOGpya2N0bDl0In0.fivZACTIk6dgF79Uw6-8iQ'
 
 // ── Address autocomplete ──
-function AddressInput({ value, onChange, onCoords }) {
+function AddressInput({ value, onChange, onCoords, placeholder }) {
   const [suggestions, setSuggestions] = useState([])
   const [open, setOpen] = useState(false)
   const timer = useRef(null)
@@ -40,7 +41,7 @@ function AddressInput({ value, onChange, onCoords }) {
           onBlur={() => setTimeout(() => setOpen(false), 200)}
           onFocus={() => suggestions.length && setOpen(true)}
           className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-          placeholder="Start typing your home address..."
+          placeholder={placeholder}
         />
       </div>
       {open && suggestions.length > 0 && (
@@ -63,6 +64,7 @@ function AddressInput({ value, onChange, onCoords }) {
 }
 
 export default function ProfilePage() {
+  const { t } = useTranslation()
   const { user } = useAuth()
   const qc = useQueryClient()
 
@@ -116,7 +118,7 @@ export default function ProfilePage() {
       setTimeout(() => setSuccess(false), 3000)
     },
     onError: (err) => {
-      setError(err.response?.data?.error || 'Failed to update profile')
+      setError(err.response?.data?.error || t('profile.errors.saveFailed'))
     }
   })
 
@@ -128,27 +130,27 @@ export default function ProfilePage() {
       setTimeout(() => { setPinSuccess(false); setShowPinSection(false) }, 3000)
     },
     onError: (err) => {
-      setPinError(err.response?.data?.error || 'Failed to change PIN')
+      setPinError(err.response?.data?.error || t('profile.errors.pinChangeFailed'))
     }
   })
 
   const handleSave = () => {
     setError('')
-    if (!form.trade_code) return setError('Trade is required')
-    if (!form.rank_code) return setError('Level is required')
-    if (!form.phone) return setError('Phone is required')
-    if (!form.home_address) return setError('Home address is required')
-    if (!form.city) return setError('City is required')
-    if (!form.postal_code) return setError('Postal code is required')
+    if (!form.trade_code) return setError(t('profile.errors.tradeRequired'))
+    if (!form.rank_code) return setError(t('profile.errors.levelRequired'))
+    if (!form.phone) return setError(t('profile.errors.phoneRequired'))
+    if (!form.home_address) return setError(t('profile.errors.addressRequired'))
+    if (!form.city) return setError(t('profile.errors.cityRequired'))
+    if (!form.postal_code) return setError(t('profile.errors.postalCodeRequired'))
     saveMutation.mutate(form)
   }
 
   const handleChangePin = () => {
     setPinError('')
-    if (!pinForm.current) return setPinError('Current PIN is required')
-    if (!pinForm.new_pin) return setPinError('New PIN is required')
-    if (pinForm.new_pin.length < 4) return setPinError('PIN must be at least 4 characters')
-    if (pinForm.new_pin !== pinForm.confirm) return setPinError('PINs do not match')
+    if (!pinForm.current) return setPinError(t('profile.errors.currentPinRequired'))
+    if (!pinForm.new_pin) return setPinError(t('profile.errors.newPinRequired'))
+    if (pinForm.new_pin.length < 4) return setPinError(t('profile.errors.pinTooShort'))
+    if (pinForm.new_pin !== pinForm.confirm) return setPinError(t('profile.errors.pinsMismatch'))
     pinMutation.mutate({ current_pin: pinForm.current, new_pin: pinForm.new_pin })
   }
 
@@ -163,7 +165,7 @@ export default function ProfilePage() {
 
   return (
     <div className="p-8 max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold text-slate-800 mb-1">My Profile</h1>
+      <h1 className="text-2xl font-bold text-slate-800 mb-1">{t('profile.title')}</h1>
       <p className="text-slate-500 text-sm mb-8">
         {profile?.first_name} {profile?.last_name}
         {user?.role && <span className="ml-2 text-xs bg-primary-pale text-primary-dark px-2 py-0.5 rounded-md font-medium">{user.role.replace(/_/g, ' ')}</span>}
@@ -175,10 +177,8 @@ export default function ProfilePage() {
           <div className="flex items-start gap-3">
             <AlertCircle size={18} className="text-amber-600 mt-0.5 flex-shrink-0" />
             <div>
-              <p className="text-sm font-semibold text-amber-800 mb-1">Complete Your Profile</p>
-              <p className="text-sm text-amber-700">
-                Please fill in all required fields below to complete your employee profile. Your administrator needs this information on file.
-              </p>
+              <p className="text-sm font-semibold text-amber-800 mb-1">{t('profile.incompleteBanner.title')}</p>
+              <p className="text-sm text-amber-700">{t('profile.incompleteBanner.body')}</p>
             </div>
           </div>
         </div>
@@ -189,15 +189,15 @@ export default function ProfilePage() {
         <div className="space-y-6">
           <div className="bg-white rounded-xl border border-slate-200 p-6">
             <h2 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
-              <Settings size={15} /> Account Info
+              <Settings size={15} /> {t('profile.admin.accountInfo')}
             </h2>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1">Username</label>
+                <label className="block text-xs font-medium text-slate-500 mb-1">{t('profile.admin.username')}</label>
                 <div className="text-sm font-medium text-slate-800">{user?.username || '—'}</div>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1">Role</label>
+                <label className="block text-xs font-medium text-slate-500 mb-1">{t('profile.admin.role')}</label>
                 <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-primary-pale text-primary-dark px-2.5 py-1 rounded-md">
                   <Shield size={12} />
                   {(user?.role || 'Admin').replace(/_/g, ' ')}
@@ -210,10 +210,10 @@ export default function ProfilePage() {
             <div className="flex items-start gap-3">
               <Users size={18} className="text-amber-600 mt-0.5 flex-shrink-0" />
               <div>
-                <p className="text-sm font-semibold text-amber-800 mb-1">Admin Account</p>
+                <p className="text-sm font-semibold text-amber-800 mb-1">{t('profile.admin.adminAccountTitle')}</p>
                 <p className="text-sm text-amber-700">
-                  This is an admin account without an employee profile. You can manage employees from the{' '}
-                  <a href="/employees" className="font-medium underline hover:text-amber-900">Employees</a> page.
+                  {t('profile.admin.adminAccountBody', { employeesLink: t('profile.admin.employees') })}{' '}
+                  <a href="/employees" className="font-medium underline hover:text-amber-900">→</a>
                 </p>
               </div>
             </div>
@@ -223,12 +223,12 @@ export default function ProfilePage() {
           <div className="bg-white rounded-xl border border-slate-200 p-6">
             <button onClick={() => setShowPinSection(s => !s)}
               className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-              <Lock size={15} /> Change PIN
+              <Lock size={15} /> {t('profile.pinSection.heading')}
             </button>
             {showPinSection && (
               <div className="mt-4 space-y-3">
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1.5">Current PIN</label>
+                  <label className="block text-xs font-medium text-slate-600 mb-1.5">{t('profile.pinSection.currentPin')}</label>
                   <div className="relative">
                     <input type={showPin ? 'text' : 'password'} value={pinForm.current}
                       onChange={e => setPinForm(f => ({ ...f, current: e.target.value }))}
@@ -241,13 +241,13 @@ export default function ProfilePage() {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1.5">New PIN</label>
+                    <label className="block text-xs font-medium text-slate-600 mb-1.5">{t('profile.pinSection.newPin')}</label>
                     <input type={showPin ? 'text' : 'password'} value={pinForm.new_pin}
                       onChange={e => setPinForm(f => ({ ...f, new_pin: e.target.value }))}
                       className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1.5">Confirm New PIN</label>
+                    <label className="block text-xs font-medium text-slate-600 mb-1.5">{t('profile.pinSection.confirmNewPin')}</label>
                     <input type={showPin ? 'text' : 'password'} value={pinForm.confirm}
                       onChange={e => setPinForm(f => ({ ...f, confirm: e.target.value }))}
                       className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light" />
@@ -260,13 +260,13 @@ export default function ProfilePage() {
                 )}
                 {pinSuccess && (
                   <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm rounded-lg px-4 py-2.5">
-                    <CheckCircle size={14} />PIN changed successfully
+                    <CheckCircle size={14} />{t('profile.success.pinChanged')}
                   </div>
                 )}
                 <button onClick={handleChangePin} disabled={pinMutation.isPending}
                   className="bg-slate-800 hover:bg-slate-900 disabled:opacity-60 text-white font-medium py-2.5 px-4 rounded-lg text-sm flex items-center gap-2">
                   {pinMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Lock size={14} />}
-                  Update PIN
+                  {t('profile.pinSection.updateButton')}
                 </button>
               </div>
             )}
@@ -279,22 +279,22 @@ export default function ProfilePage() {
           {/* Trade & Level */}
           <div className="bg-white rounded-xl border border-slate-200 p-6">
             <h2 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
-              <Wrench size={15} /> Trade Info
+              <Wrench size={15} /> {t('profile.tradeInfo.heading')}
             </h2>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1.5">Trade *</label>
+                <label className="block text-xs font-medium text-slate-600 mb-1.5">{t('profile.tradeInfo.trade')}</label>
                 <select value={form.trade_code} onChange={e => set('trade_code', e.target.value)}
                   className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-light">
-                  <option value="">Select trade</option>
-                  {trades.map(t => <option key={t.code} value={t.code}>{t.label}</option>)}
+                  <option value="">{t('profile.tradeInfo.selectTrade')}</option>
+                  {trades.map(tt => <option key={tt.code} value={tt.code}>{tt.label}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1.5">Level *</label>
+                <label className="block text-xs font-medium text-slate-600 mb-1.5">{t('profile.tradeInfo.level')}</label>
                 <select value={form.rank_code} onChange={e => set('rank_code', e.target.value)}
                   className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-light">
-                  <option value="">Select level</option>
+                  <option value="">{t('profile.tradeInfo.selectLevel')}</option>
                   {ranks.map(r => <option key={r.code} value={r.code}>{r.label}</option>)}
                 </select>
               </div>
@@ -304,44 +304,45 @@ export default function ProfilePage() {
           {/* Contact */}
           <div className="bg-white rounded-xl border border-slate-200 p-6">
             <h2 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
-              <Phone size={15} /> Contact
+              <Phone size={15} /> {t('profile.contact.heading')}
             </h2>
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1.5">Phone *</label>
+              <label className="block text-xs font-medium text-slate-600 mb-1.5">{t('profile.contact.phone')}</label>
               <input type="tel" value={form.phone} onChange={e => set('phone', e.target.value)}
                 className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light"
-                placeholder="+1 514 000 0000" />
+                placeholder={t('profile.contact.phonePlaceholder')} />
             </div>
           </div>
 
           {/* Address */}
           <div className="bg-white rounded-xl border border-slate-200 p-6">
             <h2 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
-              <MapPin size={15} /> Home Address
+              <MapPin size={15} /> {t('profile.address.heading')}
             </h2>
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1.5">Street Address *</label>
+                <label className="block text-xs font-medium text-slate-600 mb-1.5">{t('profile.address.street')}</label>
                 <AddressInput value={form.home_address}
                   onChange={v => set('home_address', v)}
-                  onCoords={c => { set('home_lat', c.lat); set('home_lng', c.lng) }} />
+                  onCoords={c => { set('home_lat', c.lat); set('home_lng', c.lng) }}
+                  placeholder={t('profile.addressPlaceholder')} />
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1.5">Unit/Apt</label>
+                  <label className="block text-xs font-medium text-slate-600 mb-1.5">{t('profile.address.unit')}</label>
                   <input type="text" value={form.home_unit} onChange={e => set('home_unit', e.target.value)}
                     className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1.5">City *</label>
+                  <label className="block text-xs font-medium text-slate-600 mb-1.5">{t('profile.address.city')}</label>
                   <input type="text" value={form.city} onChange={e => set('city', e.target.value)}
                     className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1.5">Postal Code *</label>
+                  <label className="block text-xs font-medium text-slate-600 mb-1.5">{t('profile.address.postalCode')}</label>
                   <input type="text" value={form.postal_code} onChange={e => set('postal_code', e.target.value)}
                     className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light"
-                    placeholder="H2X 1Y4" />
+                    placeholder={t('profile.address.postalCodePlaceholder')} />
                 </div>
               </div>
             </div>
@@ -350,24 +351,24 @@ export default function ProfilePage() {
           {/* Emergency Contact */}
           <div className="bg-white rounded-xl border border-slate-200 p-6">
             <h2 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
-              <Shield size={15} /> Emergency Contact
+              <Shield size={15} /> {t('profile.emergency.heading')}
             </h2>
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1.5">Name</label>
+                <label className="block text-xs font-medium text-slate-600 mb-1.5">{t('profile.emergency.name')}</label>
                 <input type="text" value={form.emergency_contact_name} onChange={e => set('emergency_contact_name', e.target.value)}
                   className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1.5">Phone</label>
+                <label className="block text-xs font-medium text-slate-600 mb-1.5">{t('profile.emergency.phone')}</label>
                 <input type="tel" value={form.emergency_contact_phone} onChange={e => set('emergency_contact_phone', e.target.value)}
                   className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1.5">Relationship</label>
+                <label className="block text-xs font-medium text-slate-600 mb-1.5">{t('profile.emergency.relationship')}</label>
                 <input type="text" value={form.emergency_contact_relationship} onChange={e => set('emergency_contact_relationship', e.target.value)}
                   className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light"
-                  placeholder="e.g. Spouse, Parent" />
+                  placeholder={t('profile.emergency.relationshipPlaceholder')} />
               </div>
             </div>
           </div>
@@ -380,7 +381,7 @@ export default function ProfilePage() {
           )}
           {success && (
             <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm rounded-lg px-4 py-2.5">
-              <CheckCircle size={14} />Profile updated successfully
+              <CheckCircle size={14} />{t('profile.success.profileUpdated')}
             </div>
           )}
 
@@ -388,19 +389,19 @@ export default function ProfilePage() {
           <button onClick={handleSave} disabled={saveMutation.isPending}
             className="w-full bg-primary hover:bg-primary-dark disabled:opacity-60 text-white font-semibold py-3 rounded-lg text-sm flex items-center justify-center gap-2 transition-colors">
             {saveMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-            Save Profile
+            {t('profile.save')}
           </button>
 
           {/* Change PIN section */}
           <div className="bg-white rounded-xl border border-slate-200 p-6">
             <button onClick={() => setShowPinSection(s => !s)}
               className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-              <Lock size={15} /> Change PIN
+              <Lock size={15} /> {t('profile.pinSection.heading')}
             </button>
             {showPinSection && (
               <div className="mt-4 space-y-3">
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1.5">Current PIN</label>
+                  <label className="block text-xs font-medium text-slate-600 mb-1.5">{t('profile.pinSection.currentPin')}</label>
                   <div className="relative">
                     <input type={showPin ? 'text' : 'password'} value={pinForm.current}
                       onChange={e => setPinForm(f => ({ ...f, current: e.target.value }))}
@@ -413,13 +414,13 @@ export default function ProfilePage() {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1.5">New PIN</label>
+                    <label className="block text-xs font-medium text-slate-600 mb-1.5">{t('profile.pinSection.newPin')}</label>
                     <input type={showPin ? 'text' : 'password'} value={pinForm.new_pin}
                       onChange={e => setPinForm(f => ({ ...f, new_pin: e.target.value }))}
                       className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1.5">Confirm New PIN</label>
+                    <label className="block text-xs font-medium text-slate-600 mb-1.5">{t('profile.pinSection.confirmNewPin')}</label>
                     <input type={showPin ? 'text' : 'password'} value={pinForm.confirm}
                       onChange={e => setPinForm(f => ({ ...f, confirm: e.target.value }))}
                       className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light" />
@@ -432,13 +433,13 @@ export default function ProfilePage() {
                 )}
                 {pinSuccess && (
                   <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm rounded-lg px-4 py-2.5">
-                    <CheckCircle size={14} />PIN changed successfully
+                    <CheckCircle size={14} />{t('profile.success.pinChanged')}
                   </div>
                 )}
                 <button onClick={handleChangePin} disabled={pinMutation.isPending}
                   className="bg-slate-800 hover:bg-slate-900 disabled:opacity-60 text-white font-medium py-2.5 px-4 rounded-lg text-sm flex items-center gap-2">
                   {pinMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Lock size={14} />}
-                  Update PIN
+                  {t('profile.pinSection.updateButton')}
                 </button>
               </div>
             )}
