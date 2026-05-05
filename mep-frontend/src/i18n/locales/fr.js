@@ -569,6 +569,71 @@ export default {
     },
   },
 
+  taskRequest: {
+    title: 'Demande de tâche',
+    subtitle: 'Envoyez des tâches et des plans à vos travailleurs',
+
+    tabs: {
+      new: 'Nouvelle tâche',
+      sent: 'Tâches envoyées',
+    },
+
+    new: {
+      titleLabel: 'Titre *',
+      titlePlaceholder: 'ex. Installer la conduite principale d\'eau — Section A',
+      instructions: 'Instructions',
+      instructionsOptional: '(facultatif)',
+      instructionsPlaceholder: 'Décrivez la tâche en détail...',
+      priority: 'Priorité',
+      priorities: {
+        LOW: 'Basse',
+        NORMAL: 'Normale',
+        HIGH: 'Haute',
+        URGENT: 'Urgente',
+      },
+      project: 'Projet',
+      noProject: 'Aucun projet',
+      dueDate: "Date d'échéance",
+      attachment: 'Pièce jointe',
+      attachmentHint: '(PDF ou image, max 20 Mo)',
+      uploadCta: 'Cliquez pour téléverser',
+      sending: 'Envoi...',
+      send: 'Envoyer la tâche',
+      recipients: 'Destinataires *',
+      recipientsHint: 'Commencez à saisir pour rechercher par nom ou métier',
+      noRecipients: 'Aucun destinataire pour le moment',
+      typeToSearch: 'Saisissez ci-dessus pour rechercher',
+      selected: 'Sélectionnés',
+      errors: {
+        titleRequired: 'Le titre est requis',
+        recipientsRequired: 'Ajoutez au moins un destinataire',
+        sendFailed: "Échec de l'envoi",
+      },
+      sentToast: 'Envoyé à {{count}} travailleur(s) ✓',
+      sentToastPending: 'Envoyé à {{count}} travailleur(s) ✓ — {{pending}} en attente d\'affectation',
+    },
+
+    sent: {
+      empty: 'Aucune tâche envoyée pour le moment',
+      emptyHint: 'Passez à "Nouvelle tâche" pour commencer',
+      th: {
+        task: 'Tâche',
+        project: 'Projet',
+        due: 'Échéance',
+        priority: 'Priorité',
+        recipients: 'Destinataires',
+        progress: 'Progression',
+      },
+      status: {
+        done: '✓ Terminé',
+        awaiting: '⏳ En attente',
+        seen: '👁 Vu',
+        sent: '📬 Envoyé',
+      },
+      pendingBanner: '{{count}} destinataire(s) recevront cette tâche une fois affecté(s) au projet',
+    },
+  },
+
   userManagement: {
     title: 'Gestion des utilisateurs',
     totalSuffix: '{{count}} utilisateurs au total',

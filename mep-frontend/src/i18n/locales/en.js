@@ -571,6 +571,71 @@ export default {
     },
   },
 
+  taskRequest: {
+    title: 'Task Request',
+    subtitle: 'Send tasks and blueprints to your workers',
+
+    tabs: {
+      new: 'New Task',
+      sent: 'Sent Tasks',
+    },
+
+    new: {
+      titleLabel: 'Title *',
+      titlePlaceholder: 'e.g. Install main water line — Section A',
+      instructions: 'Instructions',
+      instructionsOptional: '(optional)',
+      instructionsPlaceholder: 'Describe the task in detail...',
+      priority: 'Priority',
+      priorities: {
+        LOW: 'Low',
+        NORMAL: 'Normal',
+        HIGH: 'High',
+        URGENT: 'Urgent',
+      },
+      project: 'Project',
+      noProject: 'No project',
+      dueDate: 'Due Date',
+      attachment: 'Attachment',
+      attachmentHint: '(PDF or image, max 20MB)',
+      uploadCta: 'Click to upload',
+      sending: 'Sending...',
+      send: 'Send Task',
+      recipients: 'Recipients *',
+      recipientsHint: 'Start typing to search by name or trade',
+      noRecipients: 'No recipients yet',
+      typeToSearch: 'Type above to search workers',
+      selected: 'Selected',
+      errors: {
+        titleRequired: 'Title is required',
+        recipientsRequired: 'Add at least one recipient',
+        sendFailed: 'Failed to send',
+      },
+      sentToast: 'Sent to {{count}} worker(s) ✓',
+      sentToastPending: 'Sent to {{count}} worker(s) ✓ — {{pending}} pending assignment',
+    },
+
+    sent: {
+      empty: 'No tasks sent yet',
+      emptyHint: 'Switch to "New Task" to get started',
+      th: {
+        task: 'Task',
+        project: 'Project',
+        due: 'Due',
+        priority: 'Priority',
+        recipients: 'Recipients',
+        progress: 'Progress',
+      },
+      status: {
+        done: '✓ Done',
+        awaiting: '⏳ Awaiting',
+        seen: '👁 Seen',
+        sent: '📬 Sent',
+      },
+      pendingBanner: '{{count}} recipient(s) will receive this task once assigned to the project',
+    },
+  },
+
   userManagement: {
     title: 'User Management',
     totalSuffix: '{{count}} users total',
