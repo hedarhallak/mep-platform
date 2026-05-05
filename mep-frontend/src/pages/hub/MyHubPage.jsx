@@ -1,26 +1,17 @@
-﻿import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import api from '@/lib/api'
 import { usePermissions } from '@/hooks/usePermissions.jsx'
 import {
   Inbox, CalendarCheck, CheckCheck, Loader2, AlertCircle,
   Check, X, Clock, ChevronRight, RefreshCw, Briefcase, Package,
   FileText, ClipboardList, Eye, CheckCircle2, Upload,
-  Plus, Search, Users
+  Plus, Search, Send, Users
 } from 'lucide-react'
 
-
-// Ã¢â€â‚¬Ã¢â€â‚¬ Helpers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+// ── Helpers ───────────────────────────────────────────────────
 const todayStr = () => new Date().toISOString().split('T')[0]
-function fmtTime(ts) {
-  if (!ts) return 'Ã¢â‚¬â€'
-  return new Date(ts).toLocaleTimeString('en-CA', { hour: '2-digit', minute: '2-digit', hour12: true })
-}
-function fmtHours(h) {
-  if (h == null) return 'Ã¢â‚¬â€'
-  const n = Number(h); if (isNaN(n)) return 'Ã¢â‚¬â€'
-  const hrs = Math.floor(n); const mins = Math.round((n - hrs) * 60)
-  return mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`
-}
+
 const TRADE_DOT = { PLUMBING:'#0ea5e9', ELECTRICAL:'#f59e0b', HVAC:'#10b981', CARPENTRY:'#f97316', GENERAL:'#64748b' }
 const dot = c => TRADE_DOT[(c||'').toUpperCase()] || '#94a3b8'
 const PRIORITY_STYLE = {
@@ -31,8 +22,9 @@ const PRIORITY_STYLE = {
 }
 const TYPE_ICON = { TASK: ClipboardList, BLUEPRINT: FileText, NOTE: Briefcase }
 
-// Ã¢â€â‚¬Ã¢â€â‚¬ Attendance Tab Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+// ── Attendance Approval Tab ───────────────────────────────────
 function AttendanceApprovalTab() {
+  const { t } = useTranslation()
   const [date,      setDate]      = useState(todayStr())
   const [records,   setRecords]   = useState([])
   const [loading,   setLoading]   = useState(false)
@@ -59,7 +51,7 @@ function AttendanceApprovalTab() {
         regular_hours:  rec.regular_hours,
         overtime_hours: rec.overtime_hours,
       })
-      flash('Confirmed Ã¢Å“â€œ')
+      flash(t('myHub.attendance.toast.confirmed'))
       fetchRecords()
     } catch (e) { flash(e.response?.data?.message || e.message, 'error') }
     finally { setConfirming(null) }
@@ -76,7 +68,7 @@ function AttendanceApprovalTab() {
           overtime_hours: r.overtime_hours,
         })
       ))
-      flash(`${pending.length} records confirmed Ã¢Å“â€œ`)
+      flash(t('myHub.attendance.toast.bulkConfirmed', { count: pending.length }))
       fetchRecords()
     } catch (e) { flash(e.response?.data?.message || e.message, 'error') }
     finally { setConfirming(null) }
@@ -91,14 +83,16 @@ function AttendanceApprovalTab() {
     return acc
   }, {}))
 
-  const fmtT = (t) => {
-    if (!t) return 'Ã¢â‚¬â€'
-    const str = String(t).substring(0, 5)
+  const fmtT = (timeStr) => {
+    if (!timeStr) return '—'
+    const str = String(timeStr).substring(0, 5)
     const [h, m] = str.split(':').map(Number)
     const ap = h < 12 ? 'AM' : 'PM'
     const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h
     return `${String(h12).padStart(2,'0')}:${String(m).padStart(2,'0')} ${ap}`
   }
+
+  const tableHeaders = ['employee','in','out','regular','ot','status']
 
   return (
     <div className="space-y-4">
@@ -111,7 +105,7 @@ function AttendanceApprovalTab() {
         {pendingCount > 0 && (
           <button onClick={handleConfirmAll} disabled={confirming === 'all'}
             className="ml-auto flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 disabled:opacity-60">
-            {confirming === 'all' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><CheckCheck className="w-3.5 h-3.5" />Confirm All ({pendingCount})</>}
+            {confirming === 'all' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><CheckCheck className="w-3.5 h-3.5" />{t('myHub.attendance.confirmAll', { count: pendingCount })}</>}
           </button>
         )}
       </div>
@@ -127,7 +121,7 @@ function AttendanceApprovalTab() {
       {!loading && records.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <CalendarCheck className="w-10 h-10 text-slate-200 mb-3" />
-          <p className="text-sm font-semibold text-slate-400">No records for {date}</p>
+          <p className="text-sm font-semibold text-slate-400">{t('myHub.attendance.noRecords', { date })}</p>
         </div>
       )}
 
@@ -140,15 +134,16 @@ function AttendanceApprovalTab() {
             <span className="text-sm font-bold text-slate-800">{group.project_code}</span>
             {group.project_name && <span className="text-xs text-slate-400">{group.project_name}</span>}
             <span className="ml-auto text-[10px] font-semibold px-2 py-1 bg-primary-pale text-primary rounded-lg">
-              {group.records.length} employees
+              {t('myHub.attendance.groupCount', { count: group.records.length })}
             </span>
           </div>
           <table className="w-full">
             <thead>
               <tr className="border-b border-slate-100">
-                {['Employee','In','Out','Regular','OT','Status',''].map(h => (
-                  <th key={h} className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">{h}</th>
+                {tableHeaders.map(h => (
+                  <th key={h} className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">{t(`myHub.attendance.th.${h}`)}</th>
                 ))}
+                <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5"></th>
               </tr>
             </thead>
             <tbody>
@@ -173,29 +168,29 @@ function AttendanceApprovalTab() {
                     <td className="px-4 py-3 text-xs text-slate-600">{fmtT(r.check_in_time)}</td>
                     <td className="px-4 py-3 text-xs text-slate-600">{fmtT(r.check_out_time)}</td>
                     <td className="px-4 py-3 text-xs font-semibold text-slate-700">
-                      {finalReg != null ? `${finalReg}h` : 'Ã¢â‚¬â€'}
+                      {finalReg != null ? `${finalReg}h` : '—'}
                     </td>
                     <td className="px-4 py-3">
                       {parseFloat(finalOT) > 0
                         ? <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">+{finalOT}h</span>
-                        : <span className="text-xs text-slate-300">Ã¢â‚¬â€</span>}
+                        : <span className="text-xs text-slate-300">—</span>}
                     </td>
                     <td className="px-4 py-3">
-                      {status === 'OPEN'        && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-400">Absent</span>}
-                      {status === 'CHECKED_IN'  && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-600">On Site</span>}
-                      {status === 'CHECKED_OUT' && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-600">Pending</span>}
-                      {status === 'CONFIRMED'   && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary-pale text-primary-dark">Confirmed</span>}
-                      {status === 'ADJUSTED'    && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">Adjusted</span>}
+                      {status === 'OPEN'        && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-400">{t('myHub.attendance.status.absent')}</span>}
+                      {status === 'CHECKED_IN'  && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-600">{t('myHub.attendance.status.onSite')}</span>}
+                      {status === 'CHECKED_OUT' && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-600">{t('myHub.attendance.status.pending')}</span>}
+                      {status === 'CONFIRMED'   && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary-pale text-primary-dark">{t('myHub.attendance.status.confirmed')}</span>}
+                      {status === 'ADJUSTED'    && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">{t('myHub.attendance.status.adjusted')}</span>}
                     </td>
                     <td className="px-4 py-3">
                       {status === 'CHECKED_OUT' && r.attendance_id && (
                         <button onClick={() => handleConfirm(r)} disabled={confirming === r.attendance_id}
                           className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-600 border border-emerald-200 hover:bg-emerald-50 rounded-lg whitespace-nowrap disabled:opacity-60">
-                          {confirming === r.attendance_id ? <Loader2 className="w-3 h-3 animate-spin" /> : <><Check className="w-3 h-3" />Confirm</>}
+                          {confirming === r.attendance_id ? <Loader2 className="w-3 h-3 animate-spin" /> : <><Check className="w-3 h-3" />{t('myHub.attendance.confirm')}</>}
                         </button>
                       )}
                       {(status === 'CONFIRMED' || status === 'ADJUSTED') && (
-                        <span className="text-[10px] text-slate-400">{r.confirmed_by_name || 'Ã¢Å“â€œ'}</span>
+                        <span className="text-[10px] text-slate-400">{r.confirmed_by_name || '✓'}</span>
                       )}
                     </td>
                   </tr>
@@ -209,8 +204,9 @@ function AttendanceApprovalTab() {
   )
 }
 
-// Ã¢â€â‚¬Ã¢â€â‚¬ Send Task Tab Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+// ── Send Task Tab ─────────────────────────────────────────────
 function SendTaskTab() {
+  const { t } = useTranslation()
   const [projects, setProjects] = useState([])
   const [workers, setWorkers]   = useState([])
   const [sent, setSent]         = useState([])
@@ -255,8 +251,8 @@ function SendTaskTab() {
 
   const handleSend = async () => {
     setMsg(null)
-    if (!form.title.trim())         return flash('Title is required', 'error')
-    if (!form.recipient_ids.length) return flash('Select at least one recipient', 'error')
+    if (!form.title.trim())         return flash(t('myHub.send.errors.titleRequired'), 'error')
+    if (!form.recipient_ids.length) return flash(t('myHub.send.errors.recipientsRequired'), 'error')
     setSending(true)
     try {
       const fd = new FormData()
@@ -271,48 +267,44 @@ function SendTaskTab() {
       const res = await api.post('/hub/messages', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
       const d = res.data
       const text = d.pending > 0
-        ? `Sent to ${d.sent} worker${d.sent!==1?'s':''} Ã¢Å“â€œ Ã¢â‚¬â€ ${d.pending} pending assignment`
-        : `Sent to ${d.sent} worker${d.sent!==1?'s':''} Ã¢Å“â€œ`
+        ? t('myHub.send.sentToastPending', { count: d.sent, pending: d.pending })
+        : t('myHub.send.sentToast', { count: d.sent })
       flash(text)
       resetForm()
       fetchSent()
-    } catch (e) { flash(e.response?.data?.error || e.message || 'Failed to send', 'error') }
+    } catch (e) { flash(e.response?.data?.error || e.message || t('myHub.send.errors.sendFailed'), 'error') }
     finally { setSending(false) }
   }
 
   return (
     <div className="space-y-4">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-bold text-slate-700">Tasks & Blueprints</span>
-          {sent.length > 0 && <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{sent.length} sent</span>}
+          <span className="text-sm font-bold text-slate-700">{t('myHub.send.heading')}</span>
+          {sent.length > 0 && <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{t('myHub.send.sentSuffix', { count: sent.length })}</span>}
         </div>
         <button onClick={() => setShowForm(v => !v)}
           className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors ${showForm ? 'text-slate-500 hover:bg-slate-100' : 'bg-slate-900 text-white hover:bg-slate-700'}`}>
-          <Plus className="w-3.5 h-3.5" />{showForm ? 'Cancel' : 'New Task'}
+          <Plus className="w-3.5 h-3.5" />{showForm ? t('myHub.send.cancel') : t('myHub.send.newTask')}
         </button>
       </div>
 
       {msg && <div className={`flex items-center gap-2 p-3 rounded-xl text-xs font-semibold ${msg.type==='error' ? 'bg-red-50 border border-red-100 text-red-600' : 'bg-emerald-50 border border-emerald-100 text-emerald-700'}`}>{msg.text}</div>}
 
-      {/* Ã¢â€â‚¬Ã¢â€â‚¬ Compose Form Ã¢â€â‚¬Ã¢â€â‚¬ */}
       {showForm && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
 
           {/* Row 1: Type + Priority + Title */}
           <div className="p-4 border-b border-slate-100 space-y-3">
             <div className="flex items-center gap-3">
-              {/* Type */}
               <div className="flex rounded-lg border border-slate-200 overflow-hidden">
-                {[{v:'TASK',l:'Task'},{v:'BLUEPRINT',l:'Blueprint'},{v:'NOTE',l:'Note'}].map((t,i) => (
-                  <button key={t.v} onClick={() => set('type', t.v)}
-                    className={`px-3 py-1.5 text-xs font-semibold transition-colors ${t.v===form.type ? 'bg-slate-900 text-white' : 'text-slate-400 hover:bg-slate-50'} ${i>0?'border-l border-slate-200':''}`}>
-                    {t.l}
+                {[{v:'TASK'},{v:'BLUEPRINT'},{v:'NOTE'}].map((typeBtn,i) => (
+                  <button key={typeBtn.v} onClick={() => set('type', typeBtn.v)}
+                    className={`px-3 py-1.5 text-xs font-semibold transition-colors ${typeBtn.v===form.type ? 'bg-slate-900 text-white' : 'text-slate-400 hover:bg-slate-50'} ${i>0?'border-l border-slate-200':''}`}>
+                    {t(`myHub.send.types.${typeBtn.v}`)}
                   </button>
                 ))}
               </div>
-              {/* Priority */}
               <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg">
                 {[{v:'LOW',c:'bg-slate-300'},{v:'NORMAL',c:'bg-blue-400'},{v:'HIGH',c:'bg-amber-400'},{v:'URGENT',c:'bg-red-500'}].map(p => (
                   <button key={p.v} onClick={() => set('priority', p.v)} title={p.v}
@@ -320,29 +312,28 @@ function SendTaskTab() {
                 ))}
                 <span className="text-[10px] font-semibold text-slate-500 ml-1">{form.priority}</span>
               </div>
-              {/* Due date Ã¢â‚¬â€ inline */}
               <input type="date" value={form.due_date} onChange={e => set('due_date', e.target.value)}
                 className="ml-auto px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800 text-slate-500" />
             </div>
             <input type="text" value={form.title} onChange={e => set('title', e.target.value)}
-              placeholder="Task title *"
+              placeholder={t('myHub.send.titlePlaceholder')}
               className="w-full px-3 py-2.5 text-sm font-medium border border-slate-200 rounded-lg placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-900" />
             <textarea value={form.body} onChange={e => set('body', e.target.value)}
-              rows={2} placeholder="Instructions for the worker (optional)..."
+              rows={2} placeholder={t('myHub.send.bodyPlaceholder')}
               className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-900 resize-none" />
           </div>
 
-          {/* Row 2: Project + File in one line */}
+          {/* Row 2: Project + File */}
           <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-3">
             <select value={form.project_id} onChange={e => { set('project_id', e.target.value); set('recipient_ids', []); setWorkerSearch('') }}
               className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-slate-900">
-              <option value="">No project</option>
-              {projects.map(p => <option key={p.id} value={p.id}>{p.project_code} Ã¢â‚¬â€ {p.project_name}</option>)}
+              <option value="">{t('myHub.send.noProject')}</option>
+              {projects.map(p => <option key={p.id} value={p.id}>{p.project_code} — {p.project_name}</option>)}
             </select>
             <label className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors flex-shrink-0 ${file ? 'border-slate-900 bg-slate-50' : 'border-dashed border-slate-200 hover:border-slate-400'}`}>
               <Upload className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
               <span className={`text-xs truncate max-w-[140px] ${file ? 'text-slate-700 font-medium' : 'text-slate-400'}`}>
-                {file ? file.name : 'Attach file'}
+                {file ? file.name : t('myHub.send.attachFile')}
               </span>
               {file && <button type="button" onClick={e => { e.preventDefault(); setFile(null) }} className="text-slate-400 hover:text-red-500 flex-shrink-0"><X className="w-3 h-3" /></button>}
               <input type="file" accept=".pdf,image/*" className="hidden" onChange={e => setFile(e.target.files?.[0] || null)} />
@@ -353,22 +344,22 @@ function SendTaskTab() {
           <div className="px-4 py-3 border-b border-slate-100">
             <div className="flex items-center justify-between mb-2.5">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-slate-700">Recipients</span>
-                {form.recipient_ids.length > 0 && <span className="px-2 py-0.5 bg-slate-900 text-white rounded-full text-[10px] font-bold">{form.recipient_ids.length} selected</span>}
+                <span className="text-xs font-semibold text-slate-700">{t('myHub.send.recipients')}</span>
+                {form.recipient_ids.length > 0 && <span className="px-2 py-0.5 bg-slate-900 text-white rounded-full text-[10px] font-bold">{t('myHub.send.selectedCount', { count: form.recipient_ids.length })}</span>}
               </div>
               <div className="flex items-center gap-3">
                 <div className="relative">
                   <Search className="w-3 h-3 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input type="text" value={workerSearch} onChange={e => setWorkerSearch(e.target.value)}
-                    placeholder="Search..."
+                    placeholder={t('myHub.send.searchPlaceholder')}
                     className="pl-7 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg w-36 focus:outline-none focus:ring-2 focus:ring-slate-900 bg-white" />
                 </div>
-                <button onClick={selectAll} className="text-[11px] text-primary hover:underline font-medium">All</button>
-                <button onClick={clearAll} className="text-[11px] text-slate-400 hover:underline">Clear</button>
+                <button onClick={selectAll} className="text-[11px] text-primary hover:underline font-medium">{t('myHub.send.selectAll')}</button>
+                <button onClick={clearAll} className="text-[11px] text-slate-400 hover:underline">{t('myHub.send.clearAll')}</button>
               </div>
             </div>
             {workers.length === 0
-              ? <p className="text-xs text-slate-400 py-2 text-center">No workers found</p>
+              ? <p className="text-xs text-slate-400 py-2 text-center">{t('myHub.send.noWorkers')}</p>
               : <div className="grid grid-cols-3 gap-1.5 max-h-40 overflow-y-auto">
                   {filteredWorkers
                     .sort((a,b) => (b.is_assigned?1:0)-(a.is_assigned?1:0))
@@ -384,7 +375,7 @@ function SendTaskTab() {
                           <div className="min-w-0 flex-1">
                             <div className={`text-xs font-semibold truncate ${selected ? 'text-white' : 'text-slate-700'}`}>{name}</div>
                             <div className={`text-[10px] truncate ${selected ? 'text-slate-400' : 'text-slate-400'}`}>
-                              {w.trade_name || 'Ã¢â‚¬â€'}{form.project_id && (w.is_assigned ? <span className="text-emerald-500"> Ã¢Å“â€œ</span> : <span className="text-amber-500"> Ã¢ÂÂ³</span>)}
+                              {w.trade_name || '—'}{form.project_id && (w.is_assigned ? <span className="text-emerald-500"> ✓</span> : <span className="text-amber-500"> ⏳</span>)}
                             </div>
                           </div>
                         </button>
@@ -398,26 +389,28 @@ function SendTaskTab() {
           {/* Footer */}
           <div className="px-4 py-3 bg-slate-50 flex items-center justify-between">
             <span className="text-xs text-slate-400">
-              {form.recipient_ids.length === 0 ? 'Select at least one recipient' : `Ready to send to ${form.recipient_ids.length} worker${form.recipient_ids.length>1?'s':''}`}
+              {form.recipient_ids.length === 0
+                ? t('myHub.send.footer.empty')
+                : t('myHub.send.footer.ready', { count: form.recipient_ids.length })}
             </span>
             <div className="flex gap-2">
-              <button onClick={resetForm} className="px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-200 rounded-lg transition-colors">Cancel</button>
+              <button onClick={resetForm} className="px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-200 rounded-lg transition-colors">{t('myHub.send.cancel')}</button>
               <button onClick={handleSend} disabled={sending}
                 className="flex items-center gap-2 px-5 py-2 bg-slate-900 hover:bg-slate-700 disabled:opacity-50 text-white rounded-lg text-sm font-semibold">
-                {sending ? <><Loader2 className="w-3.5 h-3.5 animate-spin"/>Sending...</> : <><Send className="w-3.5 h-3.5"/>Send Task</>}
+                {sending ? <><Loader2 className="w-3.5 h-3.5 animate-spin"/>{t('myHub.send.sending')}</> : <><Send className="w-3.5 h-3.5"/>{t('myHub.send.send')}</>}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Ã¢â€â‚¬Ã¢â€â‚¬ Sent List Ã¢â‚¬â€ card style like Material Requests Ã¢â€â‚¬Ã¢â€â‚¬ */}
+      {/* Sent List */}
       {loadingSent && <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-slate-300" /></div>}
       {!loadingSent && sent.length === 0 && !showForm && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <Send className="w-10 h-10 text-slate-200 mb-3" />
-          <p className="text-sm font-semibold text-slate-400">No tasks sent yet</p>
-          <p className="text-xs text-slate-300 mt-1">Create a task to send to your team</p>
+          <p className="text-sm font-semibold text-slate-400">{t('myHub.send.empty')}</p>
+          <p className="text-xs text-slate-300 mt-1">{t('myHub.send.emptyHint')}</p>
         </div>
       )}
       {!loadingSent && sent.map(task => {
@@ -430,7 +423,6 @@ function SendTaskTab() {
 
         return (
           <div key={task.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-            {/* Card header Ã¢â‚¬â€ clickable to expand */}
             <button onClick={() => setExpanded(p => ({...p, [task.id]: !p[task.id]}))}
               className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-slate-50 text-left">
               <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
@@ -442,20 +434,19 @@ function SendTaskTab() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-sm font-semibold text-slate-800">{task.title}</span>
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${PRIORITY_STYLE[task.priority]||PRIORITY_STYLE.NORMAL}`}>{task.priority}</span>
-                  {task.file_url && <span className="text-[10px] text-slate-400 flex items-center gap-0.5"><FileText className="w-3 h-3" />File</span>}
+                  {task.file_url && <span className="text-[10px] text-slate-400 flex items-center gap-0.5"><FileText className="w-3 h-3" />{t('myHub.send.attachedHasFile')}</span>}
                 </div>
                 <div className="flex items-center gap-2 mt-0.5 text-[10px] text-slate-400 flex-wrap">
                   <span>{new Date(task.created_at).toLocaleDateString('en-CA',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</span>
-                  {task.project_code && <><span>Â·</span><span>{task.project_code}</span></>}
-                  {task.due_date && <span className="text-amber-600">Â· Due {new Date(task.due_date).toLocaleDateString()}</span>}
-                  <span>Â· {total} recipient{total!==1?'s':''}</span>
+                  {task.project_code && <><span>·</span><span>{task.project_code}</span></>}
+                  {task.due_date && <span className="text-amber-600">· {t('myHub.send.dueLabel', { date: new Date(task.due_date).toLocaleDateString() })}</span>}
+                  <span>· {t('myHub.send.recipientsSuffix', { count: total })}</span>
                 </div>
               </div>
-              {/* Mini progress */}
               <div className="flex items-center gap-2 flex-shrink-0">
                 <div className="text-right">
                   <div className="text-xs font-bold text-slate-700">{ackPct}%</div>
-                  <div className="text-[10px] text-slate-400">done</div>
+                  <div className="text-[10px] text-slate-400">{t('myHub.send.doneSuffix')}</div>
                 </div>
                 <div className="w-10 h-10 flex-shrink-0 relative">
                   <svg viewBox="0 0 36 36" className="w-10 h-10 -rotate-90">
@@ -471,19 +462,18 @@ function SendTaskTab() {
               </div>
             </button>
 
-            {/* Expanded details */}
             {isOpen && (
               <div className="border-t border-slate-100 p-4 space-y-3">
-                {/* Recipient statuses */}
                 {task.recipients && task.recipients.length > 0 && (
                   <div>
-                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">Recipients</p>
+                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">{t('myHub.send.recipientsLabel')}</p>
                     <div className="space-y-1.5">
                       {task.recipients.map((r, i) => {
                         const rname = r.first_name ? `${r.first_name} ${r.last_name}` : r.username
                         const isPending = r.status === 'PENDING'
                         const isDone    = r.status === 'ACKNOWLEDGED'
                         const isRead    = r.status === 'READ'
+                        const statusKey = isDone ? 'done' : isPending ? 'awaiting' : isRead ? 'seen' : 'sent'
                         return (
                           <div key={i} className={`flex items-center gap-2.5 px-3 py-2 rounded-lg ${
                             isDone ? 'bg-emerald-50' : isPending ? 'bg-amber-50' : isRead ? 'bg-blue-50' : 'bg-slate-50'
@@ -493,7 +483,7 @@ function SendTaskTab() {
                             }`}>{rname[0]?.toUpperCase()}</div>
                             <span className="text-xs font-medium text-slate-700 flex-1">{rname}</span>
                             <span className={`text-[10px] font-semibold ${isDone?'text-emerald-600':isPending?'text-amber-600':isRead?'text-blue-600':'text-slate-500'}`}>
-                              {isDone ? 'Ã¢Å“â€œ Done' : isPending ? 'Ã¢ÂÂ³ Awaiting assignment' : isRead ? 'Ã°Å¸â€˜Â Seen' : 'Ã°Å¸â€œÂ¬ Sent'}
+                              {t(`myHub.send.status.${statusKey}`)}
                             </span>
                             {r.acknowledged_at && <span className="text-[10px] text-slate-400">{new Date(r.acknowledged_at).toLocaleDateString()}</span>}
                           </div>
@@ -505,7 +495,7 @@ function SendTaskTab() {
                 {pending > 0 && (
                   <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 rounded-lg text-xs text-amber-700">
                     <Clock className="w-3.5 h-3.5 flex-shrink-0" />
-                    <span>{pending} recipient{pending!==1?'s':''} will receive this task once assigned to the project</span>
+                    <span>{t('myHub.send.pendingBanner', { count: pending })}</span>
                   </div>
                 )}
               </div>
@@ -517,8 +507,9 @@ function SendTaskTab() {
   )
 }
 
-// Ã¢â€â‚¬Ã¢â€â‚¬ Worker Inbox Tab Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+// ── Worker Inbox Tab ──────────────────────────────────────────
 function WorkerInboxTab() {
+  const { t } = useTranslation()
   const [messages, setMessages] = useState([])
   const [loading, setLoading]   = useState(true)
   const [expanded, setExpanded] = useState({})
@@ -545,14 +536,6 @@ function WorkerInboxTab() {
     }
   }
 
-  const handleAck = async (msgId) => {
-    setAcking(p => ({ ...p, [msgId]: true }))
-    try {
-      await api.patch(`/hub/messages/${msgId}/ack`)
-      setMessages(prev => prev.map(m => m.id===msgId ? {...m, status:'ACKNOWLEDGED', acknowledged_at: new Date().toISOString()} : m))
-    } catch (e) { console.error('Failed to acknowledge message:', e) } finally { setAcking(p => ({ ...p, [msgId]: false })) }
-  }
-
   const handleComplete = async (msgId) => {
     setCompleting(p => ({ ...p, [msgId]: true }))
     try {
@@ -571,16 +554,16 @@ function WorkerInboxTab() {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <span className="text-sm font-bold text-slate-700">My Tasks</span>
-        {unread > 0 && <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">{unread} new</span>}
+        <span className="text-sm font-bold text-slate-700">{t('myHub.inbox.heading')}</span>
+        {unread > 0 && <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">{t('myHub.inbox.unreadSuffix', { count: unread })}</span>}
         <button onClick={fetchInbox} className="ml-auto p-1.5 text-slate-400 hover:bg-slate-100 rounded-lg"><RefreshCw className="w-3.5 h-3.5" /></button>
       </div>
       {loading && <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-slate-300" /></div>}
       {!loading && messages.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <Inbox className="w-10 h-10 text-slate-200 mb-3" />
-          <p className="text-sm font-semibold text-slate-400">No tasks yet</p>
-          <p className="text-xs text-slate-300 mt-1">Tasks from your foreman will appear here</p>
+          <p className="text-sm font-semibold text-slate-400">{t('myHub.inbox.empty')}</p>
+          <p className="text-xs text-slate-300 mt-1">{t('myHub.inbox.emptyHint')}</p>
         </div>
       )}
       {!loading && messages.map(msg => {
@@ -598,31 +581,31 @@ function WorkerInboxTab() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className={`text-sm font-semibold ${isNew ? 'text-slate-900' : 'text-slate-700'}`}>{msg.title}</span>
-                  {isDone ? <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700"><CheckCircle2 className="w-3 h-3" />Done</span>
-                    : isNew ? <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700"><Clock className="w-3 h-3" />New</span>
-                    : <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-600"><Eye className="w-3 h-3" />Read</span>}
+                  {isDone ? <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700"><CheckCircle2 className="w-3 h-3" />{t('myHub.inbox.status.done')}</span>
+                    : isNew ? <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700"><Clock className="w-3 h-3" />{t('myHub.inbox.status.new')}</span>
+                    : <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-600"><Eye className="w-3 h-3" />{t('myHub.inbox.status.read')}</span>}
                   {msg.priority && msg.priority !== 'NORMAL' && <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${PRIORITY_STYLE[msg.priority]||PRIORITY_STYLE.NORMAL}`}>{msg.priority}</span>}
                 </div>
                 <div className="text-[10px] text-slate-400 mt-0.5 flex gap-2">
-                  <span>From {sender}</span>
-                  {msg.project_code && <><span>Â·</span><span>{msg.project_code}</span></>}
-                  {msg.due_date && <span className="text-amber-600">Â· Due {new Date(msg.due_date).toLocaleDateString()}</span>}
+                  <span>{t('myHub.inbox.from', { sender })}</span>
+                  {msg.project_code && <><span>·</span><span>{msg.project_code}</span></>}
+                  {msg.due_date && <span className="text-amber-600">· {t('myHub.inbox.dueLabel', { date: new Date(msg.due_date).toLocaleDateString() })}</span>}
                 </div>
               </div>
               <ChevronRight className={`w-4 h-4 text-slate-300 flex-shrink-0 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
             </button>
             {isOpen && (
               <div className="border-t border-slate-100 p-4 space-y-3">
-                {msg.body && <div className="bg-slate-50 rounded-lg p-3"><p className="text-xs font-semibold text-slate-500 mb-1">Instructions</p><p className="text-sm text-slate-700 whitespace-pre-wrap">{msg.body}</p></div>}
+                {msg.body && <div className="bg-slate-50 rounded-lg p-3"><p className="text-xs font-semibold text-slate-500 mb-1">{t('myHub.inbox.instructions')}</p><p className="text-sm text-slate-700 whitespace-pre-wrap">{msg.body}</p></div>}
                 {msg.file_url && (
                   <div>
-                    <p className="text-xs font-semibold text-slate-500 mb-2">Attached File</p>
+                    <p className="text-xs font-semibold text-slate-500 mb-2">{t('myHub.inbox.attachedFile')}</p>
                     {msg.file_type?.startsWith('image/')
                       ? <img src={`/uploads${msg.file_url}`} alt={msg.file_name} className="max-w-full rounded-lg border border-slate-200 max-h-96 object-contain" />
                       : <a href={`/uploads${msg.file_url}`} target="_blank" rel="noopener noreferrer"
                           className="flex items-center gap-3 px-4 py-3 bg-primary-pale border border-primary-pale rounded-lg hover:bg-primary-pale transition-colors">
                           <FileText className="w-5 h-5 text-primary flex-shrink-0" />
-                          <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-primary-dark truncate">{msg.file_name}</p><p className="text-xs text-primary-light">Click to open</p></div>
+                          <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-primary-dark truncate">{msg.file_name}</p><p className="text-xs text-primary-light">{t('myHub.inbox.clickToOpen')}</p></div>
                           <ChevronRight className="w-4 h-4 text-primary-light" />
                         </a>}
                   </div>
@@ -632,25 +615,25 @@ function WorkerInboxTab() {
                     <textarea
                       value={completionNote[msg.id] || ''}
                       onChange={e => setCompletionNote(p => ({...p, [msg.id]: e.target.value}))}
-                      rows={2} placeholder="Completion notes (optional)..."
+                      rows={2} placeholder={t('myHub.inbox.completionPlaceholder')}
                       className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
                     />
                     <label className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors ${completionFile[msg.id] ? 'border-emerald-400 bg-emerald-50' : 'border-dashed border-slate-200 hover:border-slate-400'}`}>
                       <Upload className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
                       <span className={`text-xs truncate flex-1 ${completionFile[msg.id] ? 'text-emerald-700 font-medium' : 'text-slate-400'}`}>
-                        {completionFile[msg.id] ? completionFile[msg.id].name : 'Add completion photo (optional)'}
+                        {completionFile[msg.id] ? completionFile[msg.id].name : t('myHub.inbox.addPhoto')}
                       </span>
                       {completionFile[msg.id] && <button type="button" onClick={e => { e.preventDefault(); setCompletionFile(p => ({...p,[msg.id]:null})) }} className="text-slate-400 hover:text-red-500"><X className="w-3 h-3" /></button>}
                       <input type="file" accept="image/*" className="hidden" onChange={e => setCompletionFile(p => ({...p,[msg.id]:e.target.files?.[0]||null}))} />
                     </label>
                     <button onClick={() => handleComplete(msg.id)} disabled={completing[msg.id]}
                       className="w-full flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white rounded-lg text-sm font-semibold">
-                      {completing[msg.id] ? <><Loader2 className="w-4 h-4 animate-spin" />Completing...</> : <><CheckCircle2 className="w-4 h-4" />Mark Complete</>}
+                      {completing[msg.id] ? <><Loader2 className="w-4 h-4 animate-spin" />{t('myHub.inbox.completing')}</> : <><CheckCircle2 className="w-4 h-4" />{t('myHub.inbox.markComplete')}</>}
                     </button>
                   </div>
                 ) : (
                   <div className="flex items-center justify-center gap-2 py-2 text-emerald-600 text-sm font-semibold">
-                    <CheckCircle2 className="w-4 h-4" />Completed {msg.acknowledged_at ? new Date(msg.acknowledged_at).toLocaleDateString() : ''}
+                    <CheckCircle2 className="w-4 h-4" />{t('myHub.inbox.completedOn', { date: msg.acknowledged_at ? new Date(msg.acknowledged_at).toLocaleDateString() : '' })}
                   </div>
                 )}
               </div>
@@ -662,8 +645,9 @@ function WorkerInboxTab() {
   )
 }
 
-// Ã¢â€â‚¬Ã¢â€â‚¬ Materials Inbox Tab Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+// ── Materials Inbox Tab ───────────────────────────────────────
 function InboxTab() {
+  const { t } = useTranslation()
   const [requests, setRequests] = useState([])
   const [suppliers, setSuppliers] = useState([])
   const [loading, setLoading] = useState(true)
@@ -710,9 +694,8 @@ function InboxTab() {
 
   const handleSend = async () => {
     if (!sendTarget) return
-    // PO Number required when sending to supplier
     if (sendTarget !== 'procurement' && !sendPoNumber.trim()) {
-      alert('PO Number is required when sending to a supplier.')
+      alert(t('myHub.materials.poNumberRequired'))
       return
     }
     setSending(true)
@@ -734,14 +717,14 @@ function InboxTab() {
 
         const toSection = d.supplier
           ? `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin-bottom:16px">
-              <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:8px">To Ã¢â‚¬â€ Supplier</div>
+              <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:8px">To — Supplier</div>
               <div style="font-size:14px;font-weight:700">${d.supplier.name}</div>
-              ${d.supplier.email ? `<div style="font-size:12px;color:#64748b">Ã¢Å“â€° ${d.supplier.email}</div>` : ''}
-              ${d.supplier.phone ? `<div style="font-size:12px;color:#64748b">Ã°Å¸â€œÅ¾ ${d.supplier.phone}</div>` : ''}
-              ${d.supplier.address ? `<div style="font-size:12px;color:#64748b">Ã°Å¸â€œÂ ${d.supplier.address}</div>` : ''}
+              ${d.supplier.email ? `<div style="font-size:12px;color:#64748b">✉ ${d.supplier.email}</div>` : ''}
+              ${d.supplier.phone ? `<div style="font-size:12px;color:#64748b">📞 ${d.supplier.phone}</div>` : ''}
+              ${d.supplier.address ? `<div style="font-size:12px;color:#64748b">📍 ${d.supplier.address}</div>` : ''}
             </div>`
           : `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px;margin-bottom:16px">
-              <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:8px">To Ã¢â‚¬â€ Internal</div>
+              <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:8px">To — Internal</div>
               <div style="font-size:14px;font-weight:700">Procurement Department</div>
             </div>`
 
@@ -749,37 +732,36 @@ function InboxTab() {
           <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,sans-serif;padding:40px;max-width:800px;margin:0 auto}@media print{.noprint{display:none}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style>
         </head><body>
           <div class="noprint" style="margin-bottom:20px;text-align:right">
-            <button onclick="window.print()" style="background:#162d4a;color:#fff;border:none;padding:10px 24px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">Ã°Å¸â€“Â¨ Print / Save PDF</button>
+            <button onclick="window.print()" style="background:#162d4a;color:#fff;border:none;padding:10px 24px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">🖨 Print / Save PDF</button>
           </div>
           <div style="display:flex;justify-content:space-between;margin-bottom:28px;padding-bottom:20px;border-bottom:2px solid #162d4a">
             <div>
               <div style="font-size:22px;font-weight:800;color:#162d4a">${d.company?.name||'Company'}</div>
-              ${d.company?.address ? `<div style="font-size:12px;color:#64748b;margin-top:4px">Ã°Å¸â€œÂ ${d.company.address}</div>` : ''}
-              ${d.company?.phone   ? `<div style="font-size:12px;color:#64748b">Ã°Å¸â€œÅ¾ ${d.company.phone}</div>` : ''}
+              ${d.company?.address ? `<div style="font-size:12px;color:#64748b;margin-top:4px">📍 ${d.company.address}</div>` : ''}
+              ${d.company?.phone   ? `<div style="font-size:12px;color:#64748b">📞 ${d.company.phone}</div>` : ''}
             </div>
             <div style="text-align:right">
               <div style="font-size:20px;font-weight:800">Purchase Order</div>
-              <div style="font-size:13px;color:#64748b;margin-top:4px">Ref: <strong>${d.ref}</strong> Â· ${d.date}</div>
+              <div style="font-size:13px;color:#64748b;margin-top:4px">Ref: <strong>${d.ref}</strong> · ${d.date}</div>
               ${d.po_number ? `<div style="font-size:14px;font-weight:800;color:#162d4a;margin-top:4px">PO # ${d.po_number}</div>` : ''}
             </div>
           </div>
 
-          <!-- Delivery Location -->
           <div style="background:#fefce8;border:2px solid #fbbf24;border-radius:10px;padding:16px;margin-bottom:16px">
-            <div style="font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Ã°Å¸â€œÂ¦ Delivery Location</div>
+            <div style="font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">📦 Delivery Location</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
               <div>
                 <div style="font-size:11px;font-weight:600;color:#92400e;margin-bottom:4px">Project</div>
-                <div style="font-size:15px;font-weight:800;color:#1e293b">${d.project?.project_code||''}${d.project?.project_name?' Ã¢â‚¬â€ '+d.project.project_name:''}</div>
+                <div style="font-size:15px;font-weight:800;color:#1e293b">${d.project?.project_code||''}${d.project?.project_name?' — '+d.project.project_name:''}</div>
                 ${d.project?.site_address
-                  ? `<div style="font-size:13px;color:#64748b;margin-top:6px">Ã°Å¸â€œÂ ${d.project.site_address}</div>`
+                  ? `<div style="font-size:13px;color:#64748b;margin-top:6px">📍 ${d.project.site_address}</div>`
                   : '<div style="font-size:12px;color:#94a3b8;margin-top:4px">No site address on file</div>'}
               </div>
               <div>
                 <div style="font-size:11px;font-weight:600;color:#92400e;margin-bottom:4px">On-Site Contact (Foreman)</div>
-                <div style="font-size:15px;font-weight:800;color:#1e293b">${d.foreman?.full_name||'Ã¢â‚¬â€'}</div>
-                ${d.foreman?.foreman_phone ? `<div style="font-size:14px;font-weight:700;color:#162d4a;margin-top:6px">Ã°Å¸â€œÅ¾ ${d.foreman.foreman_phone}</div>` : ''}
-                ${d.foreman?.contact_email ? `<div style="font-size:12px;color:#64748b;margin-top:2px">Ã¢Å“â€° ${d.foreman.contact_email}</div>` : ''}
+                <div style="font-size:15px;font-weight:800;color:#1e293b">${d.foreman?.full_name||'—'}</div>
+                ${d.foreman?.foreman_phone ? `<div style="font-size:14px;font-weight:700;color:#162d4a;margin-top:6px">📞 ${d.foreman.foreman_phone}</div>` : ''}
+                ${d.foreman?.contact_email ? `<div style="font-size:12px;color:#64748b;margin-top:2px">✉ ${d.foreman.contact_email}</div>` : ''}
               </div>
             </div>
           </div>
@@ -793,14 +775,14 @@ function InboxTab() {
           </table>
           ${d.note ? `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:14px;margin-bottom:20px"><div style="font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;margin-bottom:6px">Notes</div><div style="font-size:13px;color:#78350f">${d.note}</div></div>` : ''}
           <div style="border-top:1px solid #e2e8f0;padding-top:16px;display:flex;justify-content:space-between">
-            <div style="font-size:11px;color:#94a3b8">Generated by MEP Platform Â· ${d.date}</div>
+            <div style="font-size:11px;color:#94a3b8">Generated by MEP Platform · ${d.date}</div>
             <div style="font-size:11px;color:#94a3b8">${d.ref}</div>
           </div>
         </body></html>`
       })()
       const win = window.open('','_blank','width=900,height=700'); win.document.write(html); win.document.close(); win.focus()
       await Promise.all(pending.map(r => api.patch(`/materials/requests/${r.id}/review`, { status: 'SENT' })))
-      setSendModal(false); setSendNote(''); setSendPoNumber(''); setMergedItems(null); flash('Sent Ã¢Å“â€œ'); fetchInbox()
+      setSendModal(false); setSendNote(''); setSendPoNumber(''); setMergedItems(null); flash(t('myHub.materials.sent')); fetchInbox()
     } catch (e) { alert(e.response?.data?.message || e.message) }
     finally { setSending(false) }
   }
@@ -811,12 +793,12 @@ function InboxTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-bold text-slate-700">Material Requests</span>
-          {pending.length > 0 && <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">{pending.length} pending</span>}
+          <span className="text-sm font-bold text-slate-700">{t('myHub.materials.heading')}</span>
+          {pending.length > 0 && <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">{t('myHub.materials.pendingSuffix', { count: pending.length })}</span>}
         </div>
         <div className="flex items-center gap-2">
           {pending.length > 0 && !mergedItems && (
-            <button onClick={handleMerge} className="flex items-center gap-1.5 px-4 py-2 bg-primary text-white text-xs font-bold rounded-lg hover:bg-primary-dark"><Package className="w-3.5 h-3.5" />Merge & Review</button>
+            <button onClick={handleMerge} className="flex items-center gap-1.5 px-4 py-2 bg-primary text-white text-xs font-bold rounded-lg hover:bg-primary-dark"><Package className="w-3.5 h-3.5" />{t('myHub.materials.mergeReview')}</button>
           )}
           <button onClick={fetchInbox} disabled={loading} className="p-2 bg-white border border-slate-200 rounded-lg text-slate-400 hover:bg-slate-50 disabled:opacity-50"><RefreshCw className={`w-3.5 h-3.5 ${loading?'animate-spin':''}`} /></button>
         </div>
@@ -827,13 +809,13 @@ function InboxTab() {
       {!loading && mergedItems && (
         <div className="bg-white rounded-xl border border-primary-pale overflow-hidden">
           <div className="px-4 py-3 bg-primary-pale border-b border-primary-pale flex items-center justify-between">
-            <div className="flex items-center gap-2"><Package className="w-4 h-4 text-primary" /><span className="text-sm font-bold text-primary-dark">Merged Ã¢â‚¬â€ {mergedItems.length} items from {pending.length} requests</span></div>
+            <div className="flex items-center gap-2"><Package className="w-4 h-4 text-primary" /><span className="text-sm font-bold text-primary-dark">{t('myHub.materials.merged', { items: mergedItems.length, requests: pending.length })}</span></div>
             <div className="flex gap-2">
-              <button onClick={() => setMergedItems(null)} className="px-3 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100 rounded-lg">Cancel</button>
-              <button onClick={() => setSendModal(true)} className="flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700"><Check className="w-3.5 h-3.5" />Send Request</button>
+              <button onClick={() => setMergedItems(null)} className="px-3 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100 rounded-lg">{t('myHub.materials.cancel')}</button>
+              <button onClick={() => setSendModal(true)} className="flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700"><Check className="w-3.5 h-3.5" />{t('myHub.materials.sendRequest')}</button>
             </div>
           </div>
-          <table className="w-full"><thead><tr className="bg-slate-50 border-b border-slate-100">{['Item','Qty','Unit','Sources','Surplus'].map(h=><th key={h} className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">{h}</th>)}</tr></thead>
+          <table className="w-full"><thead><tr className="bg-slate-50 border-b border-slate-100">{['item','qty','unit','sources','surplus'].map(h=><th key={h} className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2.5">{t(`myHub.materials.th.${h}`)}</th>)}</tr></thead>
           <tbody>{mergedItems.map((item,i)=>{
             const si = surplus[item.item_name.toLowerCase()]||[]; const ts = si.reduce((s,x)=>s+Number(x.qty_available),0)
             return <tr key={i} className="border-b border-slate-50 last:border-0">
@@ -841,27 +823,27 @@ function InboxTab() {
               <td className="px-4 py-3"><input type="number" min="0" value={item.quantity} onChange={e=>setMergedItems(prev=>prev.map((it,j)=>j===i?{...it,quantity:Math.max(0,Math.floor(Number(e.target.value)||0))}:it))} className="w-20 px-2 py-1 border border-slate-200 rounded-lg text-sm font-bold text-primary text-center focus:outline-none focus:ring-2 focus:ring-primary-pale" /></td>
               <td className="px-4 py-3 text-xs text-slate-400">{item.unit}</td>
               <td className="px-4 py-3">{item.sources.map((s,j)=><span key={j} className="text-[10px] text-slate-400 block">{s.requester}: {s.qty}</span>)}</td>
-              <td className="px-4 py-3">{ts>0?si.map((s,j)=><span key={j} className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full block w-fit">{s.qty_available} {item.unit} @ {s.project_code}</span>):<span className="text-[10px] text-slate-300">None</span>}</td>
+              <td className="px-4 py-3">{ts>0?si.map((s,j)=><span key={j} className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full block w-fit">{s.qty_available} {item.unit} @ {s.project_code}</span>):<span className="text-[10px] text-slate-300">{t('myHub.materials.none')}</span>}</td>
             </tr>
           })}</tbody></table>
         </div>
       )}
-      {!loading && requests.length === 0 && <div className="flex flex-col items-center justify-center py-16 text-center"><Inbox className="w-10 h-10 text-slate-200 mb-3" /><p className="text-sm font-semibold text-slate-400">No material requests</p></div>}
+      {!loading && requests.length === 0 && <div className="flex flex-col items-center justify-center py-16 text-center"><Inbox className="w-10 h-10 text-slate-200 mb-3" /><p className="text-sm font-semibold text-slate-400">{t('myHub.materials.empty')}</p></div>}
       {!loading && requests.map(req => (
         <div key={req.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
           <button onClick={() => toggleExpand(req.id)} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 text-left">
             <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white" style={{background:'#1e3a5f'}}>{(req.requester_name||'?')[0]}</div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap"><span className="text-sm font-semibold text-slate-800">{req.requester_name}</span><span className="text-xs text-slate-400">{req.project_code}</span><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${sc(req.status)}`}>{req.status}</span></div>
-              <div className="text-[10px] text-slate-400 mt-0.5">{req.items?.length||0} items Â· {new Date(req.created_at).toLocaleString('en-CA',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
+              <div className="text-[10px] text-slate-400 mt-0.5">{t('myHub.materials.itemsCount', { count: req.items?.length || 0 })} · {new Date(req.created_at).toLocaleString('en-CA',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
             </div>
             <ChevronRight className={`w-4 h-4 text-slate-300 flex-shrink-0 transition-transform ${expanded[req.id]?'rotate-90':''}`} />
           </button>
           {expanded[req.id] && (
             <div className="border-t border-slate-100">
-              {req.note && <div className="px-4 py-2 bg-amber-50 text-xs text-amber-700 border-b border-amber-100">Ã°Å¸â€œÂ {req.note}</div>}
-              <table className="w-full"><thead><tr className="bg-slate-50 border-b border-slate-100">{['Item','Qty','Unit','Note'].map(h=><th key={h} className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2">{h}</th>)}</tr></thead>
-              <tbody>{(req.items||[]).map((item,i)=><tr key={i} className="border-b border-slate-50 last:border-0"><td className="px-4 py-2.5 text-sm font-medium text-slate-700">{item.item_name}</td><td className="px-4 py-2.5 text-sm font-bold text-primary">{item.quantity}</td><td className="px-4 py-2.5 text-xs text-slate-400">{item.unit}</td><td className="px-4 py-2.5 text-xs text-slate-400">{item.note||'Ã¢â‚¬â€'}</td></tr>)}</tbody></table>
+              {req.note && <div className="px-4 py-2 bg-amber-50 text-xs text-amber-700 border-b border-amber-100">📍 {req.note}</div>}
+              <table className="w-full"><thead><tr className="bg-slate-50 border-b border-slate-100">{['item','qty','unit','note'].map(h=><th key={h} className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-2">{t(`myHub.materials.th.${h}`)}</th>)}</tr></thead>
+              <tbody>{(req.items||[]).map((item,i)=><tr key={i} className="border-b border-slate-50 last:border-0"><td className="px-4 py-2.5 text-sm font-medium text-slate-700">{item.item_name}</td><td className="px-4 py-2.5 text-sm font-bold text-primary">{item.quantity}</td><td className="px-4 py-2.5 text-xs text-slate-400">{item.unit}</td><td className="px-4 py-2.5 text-xs text-slate-400">{item.note||'—'}</td></tr>)}</tbody></table>
             </div>
           )}
         </div>
@@ -869,17 +851,17 @@ function InboxTab() {
       {sendModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between"><h3 className="text-sm font-bold text-slate-800">Send Request To</h3><button onClick={()=>setSendModal(false)} className="p-1.5 text-slate-400 hover:bg-slate-100 rounded-lg"><X className="w-4 h-4" /></button></div>
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between"><h3 className="text-sm font-bold text-slate-800">{t('myHub.materials.modal.title')}</h3><button onClick={()=>setSendModal(false)} className="p-1.5 text-slate-400 hover:bg-slate-100 rounded-lg"><X className="w-4 h-4" /></button></div>
             <div className="px-6 py-4 space-y-2 max-h-[55vh] overflow-y-auto">
               <button onClick={()=>setSendTarget('procurement')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-left ${sendTarget==='procurement'?'border-primary-light bg-primary-pale':'border-slate-200 hover:bg-slate-50'}`}>
                 <div className="w-8 h-8 bg-primary-pale rounded-lg flex items-center justify-center"><Briefcase className="w-4 h-4 text-primary" /></div>
-                <div><div className="text-sm font-semibold text-slate-800">Procurement Department</div><div className="text-[10px] text-slate-400">Internal</div></div>
+                <div><div className="text-sm font-semibold text-slate-800">{t('myHub.materials.modal.procurement')}</div><div className="text-[10px] text-slate-400">{t('myHub.materials.modal.internal')}</div></div>
                 {sendTarget==='procurement' && <Check className="w-4 h-4 text-primary ml-auto" />}
               </button>
-              {suppliers.length > 0 && (<><div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pt-1">Suppliers</div>
+              {suppliers.length > 0 && (<><div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pt-1">{t('myHub.materials.modal.suppliers')}</div>
                 {suppliers.map(s=><button key={s.id} onClick={()=>setSendTarget(String(s.id))} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-left ${sendTarget===String(s.id)?'border-primary-light bg-primary-pale':'border-slate-200 hover:bg-slate-50'}`}>
                   <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center"><Package className="w-4 h-4 text-slate-500" /></div>
-                  <div className="flex-1 min-w-0"><div className="text-sm font-semibold text-slate-800 truncate">{s.name}</div><div className="text-[10px] text-slate-400">{s.trade_code} Â· {s.email}</div></div>
+                  <div className="flex-1 min-w-0"><div className="text-sm font-semibold text-slate-800 truncate">{s.name}</div><div className="text-[10px] text-slate-400">{s.trade_code} · {s.email}</div></div>
                   {sendTarget===String(s.id) && <Check className="w-4 h-4 text-primary ml-auto" />}
                 </button>)}</>)}
             </div>
@@ -887,29 +869,29 @@ function InboxTab() {
               <div>
                 <label className="block text-[10px] font-bold uppercase tracking-widest mb-1">
                   <span className={sendTarget && sendTarget !== 'procurement' ? 'text-red-500' : 'text-slate-400'}>
-                    PO Number
+                    {t('myHub.materials.modal.poNumber')}
                   </span>
                   {sendTarget && sendTarget !== 'procurement'
-                    ? <span className="text-red-400 font-semibold"> *required for supplier</span>
-                    : <span className="text-slate-300 font-normal normal-case"> (optional)</span>
+                    ? <span className="text-red-400 font-semibold"> {t('myHub.materials.modal.poNumberRequired')}</span>
+                    : <span className="text-slate-300 font-normal normal-case"> {t('myHub.materials.modal.poNumberOptional')}</span>
                   }
                 </label>
                 <input type="text" value={sendPoNumber} onChange={e=>setSendPoNumber(e.target.value)}
-                  placeholder="e.g. PO-2026-001"
+                  placeholder={t('myHub.materials.modal.poPlaceholder')}
                   className={`w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:ring-2 placeholder:text-slate-300 ${
                     sendTarget && sendTarget !== 'procurement' && !sendPoNumber.trim()
                       ? 'border-red-300 focus:ring-red-400'
                       : 'border-slate-200 focus:ring-primary-light'
                   }`} />
               </div>
-              <textarea value={sendNote} onChange={e=>setSendNote(e.target.value)} rows={2} placeholder="Notes (optional)" className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-primary-light resize-none" />
+              <textarea value={sendNote} onChange={e=>setSendNote(e.target.value)} rows={2} placeholder={t('myHub.materials.modal.notesPlaceholder')} className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-primary-light resize-none" />
             </div>
             <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3">
-              <button onClick={()=>setSendModal(false)} className="px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 rounded-xl">Cancel</button>
+              <button onClick={()=>setSendModal(false)} className="px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 rounded-xl">{t('myHub.materials.modal.cancel')}</button>
               <button onClick={handleSend}
                 disabled={!sendTarget || sending || (sendTarget !== 'procurement' && !sendPoNumber.trim())}
                 className="flex items-center gap-2 px-5 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 disabled:opacity-60">
-                {sending?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<><Check className="w-3.5 h-3.5"/>Confirm Send</>}
+                {sending?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<><Check className="w-3.5 h-3.5"/>{t('myHub.materials.modal.confirmSend')}</>}
               </button>
             </div>
           </div>
@@ -919,8 +901,9 @@ function InboxTab() {
   )
 }
 
-// Ã¢â€â‚¬Ã¢â€â‚¬ Main Page Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+// ── Main Page ─────────────────────────────────────────────────
 export default function MyHubPage() {
+  const { t } = useTranslation()
   const { can, loading: permsLoading } = usePermissions()
   const [tab, setTab] = useState(null)
   const [materialsCount, setMaterialsCount] = useState(0)
@@ -950,9 +933,9 @@ export default function MyHubPage() {
   }, [canReceiveTasks])
 
   const tabs = [
-    canAttendance   && { id:'attendance', icon:CalendarCheck, label:'Attendance' },
-    canMaterials    && { id:'materials',  icon:Package,       label:'Materials',  count:materialsCount },
-    canReceiveTasks && { id:'tasks',      icon:ClipboardList, label:'My Tasks',   count:tasksUnread },
+    canAttendance   && { id:'attendance', icon:CalendarCheck, labelKey:'attendance' },
+    canMaterials    && { id:'materials',  icon:Package,       labelKey:'materials',  count:materialsCount },
+    canReceiveTasks && { id:'tasks',      icon:ClipboardList, labelKey:'tasks',      count:tasksUnread },
   ].filter(Boolean)
 
   return (
@@ -960,14 +943,14 @@ export default function MyHubPage() {
       <div className="bg-white border-b border-slate-200 px-6 py-4 flex-shrink-0">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-9 h-9 bg-primary rounded-xl flex items-center justify-center"><Inbox className="w-5 h-5 text-white" /></div>
-          <div><h1 className="text-lg font-bold text-slate-900">My Hub</h1><p className="text-xs text-slate-400 mt-0.5">Your daily tasks, approvals and requests</p></div>
+          <div><h1 className="text-lg font-bold text-slate-900">{t('myHub.title')}</h1><p className="text-xs text-slate-400 mt-0.5">{t('myHub.subtitle')}</p></div>
         </div>
         <div className="flex items-center gap-1">
-          {tabs.map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${tab===t.id ? 'bg-primary text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'}`}>
-              <t.icon className="w-3.5 h-3.5" />{t.label}
-              {t.count > 0 && <span className={`min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full flex items-center justify-center ${tab===t.id ? 'bg-white text-primary' : 'bg-red-500 text-white'}`}>{t.count>99?'99+':t.count}</span>}
+          {tabs.map(tt => (
+            <button key={tt.id} onClick={() => setTab(tt.id)}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${tab===tt.id ? 'bg-primary text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'}`}>
+              <tt.icon className="w-3.5 h-3.5" />{t(`myHub.tabs.${tt.labelKey}`)}
+              {tt.count > 0 && <span className={`min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full flex items-center justify-center ${tab===tt.id ? 'bg-white text-primary' : 'bg-red-500 text-white'}`}>{tt.count>99?'99+':tt.count}</span>}
             </button>
           ))}
         </div>
@@ -975,9 +958,8 @@ export default function MyHubPage() {
       <div className="flex-1 overflow-y-auto px-6 py-5">
         {tab==='attendance' && <AttendanceApprovalTab />}
         {tab==='materials'  && <InboxTab />}
-        {tab==='tasks'      && <WorkerInboxTab />}
+        {tab==='tasks'      && <SendTaskTab />}
       </div>
     </div>
   )
 }
-
