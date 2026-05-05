@@ -1,10 +1,10 @@
 # MEP Platform — Master Project README
-> Last updated: May 4, 2026 | Maintainer: Hedar Hallak
+> Last updated: May 5, 2026 | Maintainer: Hedar Hallak
 > Production: https://app.constrai.ca
 > Website: https://www.constrai.ca (Coming Soon landing page)
 > Server: root@143.110.218.84
-> Latest DECISIONS section: **Section 80** (companies.status / companies.plan FKs converted to inline CHECK constraints, lookup tables dropped; closes the C3 schema sprint and the broader engineering-hygiene program from Sections 66-80).
-> Active program: **none currently active**. The May 4 marathon shipped 19 PRs across Sections 66-80 covering all P1/P2 audit findings; remaining backlog is bigger-shape product work (see "Open backlog" below).
+> Latest DECISIONS section: **Section 85** (Multi-Tenant Architecture Design — opens the "Productize for paying clients" chapter. Subdomain-per-tenant model A approved + 5-layer defense-in-depth + 8-phase execution plan, ~10-12 days. See Section 85 for full design + phase-by-phase roadmap.)
+> Active program: **Multi-Tenant Migration (Section 85, Phases 1-8)** — see DECISIONS.md Section 85 for the design, decisions log, and phase plan. Phase 1 (Infrastructure: DNS + Cloudflare + Wildcard SSL + Nginx) starts next session. The Section 84 UI smoke test is **paused** until all 8 phases ship.
 > Web Tier 1 + Tier 2 DONE (10/10). ~509 i18n keys live. Tier 3 i18n deferred.
 > **Customer #1 status:** unsigned (constraint per Section 46). Sales materials still TODO; product side now in much better shape post-May-4 hygiene push.
 > **Prod is in sync with main**. `APP_NAME=Constrai` + `VITE_MAPBOX_TOKEN` live. Tab title "Constrai" everywhere.
