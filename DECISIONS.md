@@ -7625,3 +7625,88 @@ Final schema state after this PR:
 - C3 sprint truly truly complete — all 32 originally-flagged dead tables dropped + 2 lookup tables converted to CHECK.
 
 - **Today: 40 sections.** (Section 80 added.)
+
+---
+
+## Section 81 — Web i18n Tier 3 sprint (May 4, 2026, late evening → May 5, 2026, morning)
+
+After Section 56 closed Tier 1 at 10/30 pages and Sections 57–63 closed Tier 2 at 18/30, this sprint translated **9 more pages** in a single sequenced run, taking the project from 18/30 to **19/30 + 8 admin/internal screens** (effectively all user-facing French coverage now done — what remains is mostly low-traffic admin pages).
+
+Each batch shipped as its own PR with its own EN/FR key namespace under `src/i18n/locales/{en,fr}.js`. Commits + PR numbers below for traceability.
+
+### Batch 1 — WorkforcePlannerPage (S81, commit `17055b4`)
+
+`bi.workforcePlanner.*` — Business Intelligence module forecast view. Includes role/skill matrix headers, capacity bars, week-picker labels, "drag to reassign" hints. ~50 keys.
+
+### Batch 2 — OnboardingPage (S82, commit `663278b`)
+
+`onboarding.*` — public sign-up + invite acceptance flow. The 5-step wizard (account → company → trade → invites → confirm), plus all error/validation strings. ~40 keys. Pairs with Section 47/48 onboarding fixes.
+
+### Batch 3 — ProfilePage (S83, commit `bf6c185`)
+
+`profile.*` — user self-service profile page (avatar, name, phone, language switcher, password change). ~30 keys.
+
+### Batch 4 — UserManagementPage (S84, commit `e02d8ad`)
+
+`userManagement.*` — admin grid for CRUD on users + role assignment + per-user permission overrides. ~45 keys.
+
+### Batch 5 — TaskRequestPage (S85, commit `d0cfa6f`)
+
+`taskRequest.*` — worker-facing task acknowledgement / completion page (the worker side of `/api/tasks/:id`). ~25 keys.
+
+### Batch 6 — PermissionsPage (S86, commit `5379c56`)
+
+`permissions.*` — superuser permission matrix (roles × 58 permissions, grouped by category). ~35 keys.
+
+### Batch 7 — StandupPage (S87, commit `026f777`)
+
+`standup.*` — daily standup form (GPS-pinned check-in, photo upload, blocker note). ~30 keys.
+
+### Batch 8 — ReportsPage (S88, commit `cbd8526`)
+
+`reports.*` — reports module (PDF/Excel exports for attendance, payroll, materials, project status). Includes report-type dropdowns + date-range labels + export-button states. ~40 keys.
+
+### Batch 9 — MyHubPage (S89, commit `da19412`, PR #130)
+
+`myHub.*` — the multi-tab worker hub (4 tabs: Attendance approval, Send task, Worker inbox, Materials inbox). Largest page in the sprint: full file rewrite from 983 → ~700 lines while wiring i18n, plus a parallel cleanup of pre-existing UTF-8 encoding artifacts (em-dashes, checkmarks, French accents). ~80 keys with `_one`/`_other` plural variants for "{{count}} workers" / "{{count}} pending".
+
+Sample of the namespace:
+
+```
+myHub.attendance.confirmAll
+myHub.attendance.groupCount_one  / _other
+myHub.attendance.toast.confirmedSingle
+myHub.send.recipients.searchPlaceholder
+myHub.inbox.completion.uploadPhoto
+myHub.materials.modal.poNumberInvalid
+```
+
+### Tier 3 sprint result
+
+| | Before | After |
+|---|---|---|
+| Pages with full i18n | 18/30 | **19/30** |
+| Plus admin / internal pages translated | 0 | **8** (workforce planner, onboarding, profile, user mgmt, task request, permissions, standup, reports) |
+| EN/FR key delta | — | **+~375 new keys** across both locale files |
+
+### Pattern lessons from this sprint
+
+1. **Encoding hygiene first.** Several files (especially MyHubPage) had pre-existing UTF-8 → CP1252 round-trip damage (Ã¢â‚¬â€ → —, Ã¢Å"â€œ → ✓). Fixing those mid-translation kept commits clean. Future i18n work: run a quick `grep -P "Ã" src/pages/<file>` first.
+2. **PO PDF stays English.** Section 62 already established that printable PO documents stay in English — confirmed again here in MyHubPage's Materials tab. Translation is for the operator UI; the printed artifact is a separate concern.
+3. **`_one`/`_other` plurals beat string concatenation.** Used heavily in MyHubPage for crew-size messages — react-i18next handles the FR plural rules natively without `${count} ${count === 1 ? 'worker' : 'workers'}` ladder.
+4. **Default to one feature PR per batch (Section 4.5 rule).** All 9 batches followed this — no Section 4.5 violations. Each PR averaged 3 files (1 page + 2 locale files), 200–500 lines of diff. Clean review surface.
+
+### Verification on Batch 9 (the only one in this session)
+
+- `npm run build` → green, workbox precache 48 entries / 791.55 KiB
+- `npm test` (vitest) → 25/25 passing
+- `Push-FeatureBranch` → CI green, merged as `da19412` (squash-merge, fast-forward to main)
+
+### What's still untranslated (for the next i18n session)
+
+Approximately 11 remaining pages, all low-traffic admin or rarely-visited:
+- BillingPage, IntegrationsPage, AuditLogPage, BackupSettingsPage, NotificationSettingsPage, EmailTemplatesPage, ApiKeysPage, FeatureFlagsPage, DataExportPage, SystemHealthPage, AboutPage.
+
+These are stage-2 priority — they're internal/admin and the FR-language workers don't typically reach them. Tier 4 backlog only.
+
+- **Today: 49 sections.** (Sections 81–89 added as a single consolidated entry — 9 sub-batches.)
