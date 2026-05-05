@@ -113,7 +113,7 @@ describeIfDb('Suppliers — /api/suppliers', () => {
     const res = await request(app).get('/api/suppliers').set('Authorization', `Bearer ${token}`);
 
     expect(res.statusCode).toBe(200);
-    const ids = res.body.suppliers.map((s) => s.id);
+    const ids = res.body.suppliers.map((s) => Number(s.id));
     expect(ids).toContain(active.id);
     // Inactive supplier should not appear
     expect(res.body.suppliers.every((s) => s.is_active === true)).toBe(true);
@@ -129,7 +129,7 @@ describeIfDb('Suppliers — /api/suppliers', () => {
     const res = await request(app).get('/api/suppliers').set('Authorization', `Bearer ${token}`);
 
     expect(res.statusCode).toBe(200);
-    const ids = res.body.suppliers.map((s) => s.id);
+    const ids = res.body.suppliers.map((s) => Number(s.id));
     expect(ids).not.toContain(supB.id);
   });
 
@@ -381,7 +381,7 @@ describeIfDb('Suppliers — /api/suppliers', () => {
       .get('/api/suppliers')
       .set('Authorization', `Bearer ${token}`);
 
-    const ids = listRes.body.suppliers.map((s) => s.id);
+    const ids = listRes.body.suppliers.map((s) => Number(s.id));
     expect(ids).not.toContain(sup.id);
   });
 
