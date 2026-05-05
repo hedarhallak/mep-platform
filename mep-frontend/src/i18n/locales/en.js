@@ -571,6 +571,91 @@ export default {
     },
   },
 
+  permissions: {
+    title: 'Permissions Matrix',
+    subtitle: 'Role-based access control · Changes apply company-wide',
+
+    auditLog: 'Audit Log',
+    resetDefaults: 'Reset to Defaults',
+    discard: 'Discard',
+    save: 'Save Changes',
+    saving: 'Saving…',
+
+    confirmReset: 'Reset "{{role}}" to system defaults?',
+    unsavedBanner: 'Unsaved changes for {{role}} — click "Save Changes" to apply.',
+    recentChanges: 'Recent Permission Changes',
+
+    audit: {
+      loading: 'Loading audit log…',
+      empty: 'No permission changes recorded yet.',
+      updatedFor: 'updated permissions for',
+    },
+
+    sidebar: {
+      heading: 'Roles',
+      locked: 'locked',
+    },
+
+    matrix: {
+      readOnly: 'Read-only',
+      toggleColumn: 'Toggle column:',
+      module: 'Module',
+      all: 'All',
+      loading: 'Loading matrix…',
+      partial: 'partial',
+      footerCount: '{{enabled}} / {{total}} permissions enabled',
+    },
+
+    actions: {
+      view: 'View',
+      create: 'Create',
+      edit: 'Edit',
+      delete: 'Delete',
+      approve: 'Approve',
+      lockedSuffix: '(locked)',
+    },
+
+    modules: {
+      dashboard: 'Dashboard',
+      projects: 'Projects',
+      employees: 'Employees',
+      assignments: 'Assignments',
+      attendance: 'Attendance',
+      material_requests: 'Material Requests',
+      purchase_orders: 'Purchase Orders',
+      suppliers: 'Suppliers',
+      workforce_planner: 'Workforce Planner',
+      reports: 'Reports / BI',
+      permissions: 'Permissions',
+      settings: 'Settings',
+    },
+
+    roles: {
+      SUPER_ADMIN: 'Super Admin',
+      IT_ADMIN: 'IT Admin',
+      COMPANY_ADMIN: 'Company Admin',
+      TRADE_PROJECT_MANAGER: 'Project Manager',
+      TRADE_ADMIN: 'Trade Admin',
+      FOREMAN: 'Foreman',
+      JOURNEYMAN: 'Journeyman',
+      APPRENTICE_4: 'Apprentice 4',
+      APPRENTICE_3: 'Apprentice 3',
+      APPRENTICE_2: 'Apprentice 2',
+      APPRENTICE_1: 'Apprentice 1',
+      WORKER: 'Worker',
+      DRIVER: 'Driver',
+    },
+
+    toast: {
+      saved: 'Permissions saved for {{role}}',
+      resetDone: '"{{role}}" reset to defaults',
+      loadFailed: 'Failed to load permissions matrix',
+      auditLoadFailed: 'Failed to load audit log',
+      saveFailed: 'Save failed',
+      resetFailed: 'Reset failed',
+    },
+  },
+
   taskRequest: {
     title: 'Task Request',
     subtitle: 'Send tasks and blueprints to your workers',

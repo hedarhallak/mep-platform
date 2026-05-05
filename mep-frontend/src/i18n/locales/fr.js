@@ -569,6 +569,91 @@ export default {
     },
   },
 
+  permissions: {
+    title: 'Matrice de permissions',
+    subtitle: "Contrôle d'accès basé sur les rôles · Les changements s'appliquent à l'échelle de l'entreprise",
+
+    auditLog: "Journal d'audit",
+    resetDefaults: 'Réinitialiser aux valeurs par défaut',
+    discard: 'Annuler',
+    save: 'Enregistrer les modifications',
+    saving: 'Enregistrement…',
+
+    confirmReset: 'Réinitialiser "{{role}}" aux valeurs par défaut du système ?',
+    unsavedBanner: 'Modifications non enregistrées pour {{role}} — cliquez sur "Enregistrer" pour appliquer.',
+    recentChanges: 'Modifications récentes des permissions',
+
+    audit: {
+      loading: "Chargement du journal d'audit…",
+      empty: 'Aucun changement de permission enregistré pour le moment.',
+      updatedFor: 'a mis à jour les permissions pour',
+    },
+
+    sidebar: {
+      heading: 'Rôles',
+      locked: 'verrouillé',
+    },
+
+    matrix: {
+      readOnly: 'Lecture seule',
+      toggleColumn: 'Basculer la colonne :',
+      module: 'Module',
+      all: 'Tous',
+      loading: 'Chargement de la matrice…',
+      partial: 'partiel',
+      footerCount: '{{enabled}} / {{total}} permissions activées',
+    },
+
+    actions: {
+      view: 'Voir',
+      create: 'Créer',
+      edit: 'Modifier',
+      delete: 'Supprimer',
+      approve: 'Approuver',
+      lockedSuffix: '(verrouillé)',
+    },
+
+    modules: {
+      dashboard: 'Tableau de bord',
+      projects: 'Projets',
+      employees: 'Employés',
+      assignments: 'Affectations',
+      attendance: 'Présence',
+      material_requests: 'Demandes de matériel',
+      purchase_orders: "Bons d'achat",
+      suppliers: 'Fournisseurs',
+      workforce_planner: "Planificateur d'effectifs",
+      reports: 'Rapports / BI',
+      permissions: 'Permissions',
+      settings: 'Paramètres',
+    },
+
+    roles: {
+      SUPER_ADMIN: 'Super admin',
+      IT_ADMIN: 'Admin IT',
+      COMPANY_ADMIN: 'Admin entreprise',
+      TRADE_PROJECT_MANAGER: 'Chef de projet',
+      TRADE_ADMIN: 'Admin métier',
+      FOREMAN: 'Contremaître',
+      JOURNEYMAN: 'Compagnon',
+      APPRENTICE_4: 'Apprenti 4',
+      APPRENTICE_3: 'Apprenti 3',
+      APPRENTICE_2: 'Apprenti 2',
+      APPRENTICE_1: 'Apprenti 1',
+      WORKER: 'Travailleur',
+      DRIVER: 'Chauffeur',
+    },
+
+    toast: {
+      saved: 'Permissions enregistrées pour {{role}}',
+      resetDone: '"{{role}}" réinitialisé aux valeurs par défaut',
+      loadFailed: 'Échec du chargement de la matrice de permissions',
+      auditLoadFailed: "Échec du chargement du journal d'audit",
+      saveFailed: "Échec de l'enregistrement",
+      resetFailed: 'Échec de la réinitialisation',
+    },
+  },
+
   taskRequest: {
     title: 'Demande de tâche',
     subtitle: 'Envoyez des tâches et des plans à vos travailleurs',
