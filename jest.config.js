@@ -50,7 +50,12 @@ module.exports = {
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'text-summary', 'lcov'],
 
-  // Coverage thresholds — ratcheted at Section 80 closeout (May 4, 2026):
+  // Coverage thresholds — ratcheted at Section 82 closeout (May 5, 2026):
+  //   Section 82 measured (PR #133):   Statements 61.71% / Branches 53.05% / Functions 61.64% / Lines 62.69%
+  //                                    +0.84pp lines from Section 80. Driver: 57 new integration tests
+  //                                    covering the last two zero-coverage route files (suppliers + projects).
+  //                                    Also fixed a real bug in routes/projects.js GET /map (ambiguous `id`
+  //                                    after LEFT JOIN to project_statuses) that the new test exposed.
   //   Section 80 measured (PR #129):   Statements 60.65% / Branches 51.30% / Functions 60.58% / Lines 61.85%
   //                                    +6.16pp lines from Phase 75c+d+e. Net change: +12 integration tests
   //                                    on routes/project_foremen.js (Section 69 / PR #106) plus a
@@ -70,13 +75,13 @@ module.exports = {
   // Floors set with ≥2.5pp headroom below measured per Section 4.6 convention —
   // absorbs the ~1.5pp build flake (Jest worker scheduling, cache hits,
   // parallel ordering) without flapping CI on small drift. Headrooms after
-  // this ratchet: stmts 2.65pp / branches 2.30pp / fns 2.58pp / lines 2.85pp.
+  // this ratchet: stmts 2.71pp / branches 3.05pp / fns 2.64pp / lines 2.69pp.
   coverageThreshold: {
     global: {
-      statements: 58,
-      branches: 49,
-      functions: 58,
-      lines: 59,
+      statements: 59,
+      branches: 50,
+      functions: 59,
+      lines: 60,
     },
   },
 

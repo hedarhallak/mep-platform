@@ -7710,3 +7710,81 @@ Approximately 11 remaining pages, all low-traffic admin or rarely-visited:
 These are stage-2 priority — they're internal/admin and the FR-language workers don't typically reach them. Tier 4 backlog only.
 
 - **Today: 49 sections.** (Sections 81–89 added as a single consolidated entry — 9 sub-batches.)
+
+---
+
+## Section 82 — Routes coverage push: suppliers + projects integration tests (May 5, 2026)
+
+After Section 80 left coverage at 61.85% lines with thresholds at 58/49/58/59, an audit of the test layout vs. the routes/ directory found **two route files with zero test coverage**:
+
+```
+suppliers.js   — 150 lines, 0 tests
+projects.js    — 391 lines, 0 tests
+```
+
+Every other route in the 25-file set already had at least one integration test. These were the last two cheap wins before route+DB coverage work hits a different velocity (deeper handlers need richer fixture surfaces, multi-step seeds, etc.).
+
+### What shipped (PR #133)
+
+**`tests/integration/suppliers.test.js` — 24 tests:**
+- GET (list, filters by trade, tenant isolation, RBAC, soft-delete exclusion, no-auth 401, worker 403)
+- POST (create, defaults, name/email/phone validation, invalid trade, RBAC)
+- PATCH (update, partial preserve, 404, tenant-isolation 404, invalid trade)
+- DELETE (soft-delete, list-after-delete, 404, tenant-isolation 404, RBAC)
+
+**`tests/integration/projects.test.js` — 33 tests:**
+- GET / (list, status filter, trade filter, empty list, tenant isolation, no-auth, RBAC)
+- GET /meta (returns trade_types + statuses + clients arrays)
+- GET /map (only coord-bearing rows; this test exposed the route bug below)
+- GET /:id (details, 404, tenant-isolation 404, INVALID_ID)
+- POST / (create with auto-generated `PRJ-XXXX`, default ccq_sector=IC, INDUSTRIAL accepted, validation: name/trade/status/cross-tenant client, RBAC)
+- PATCH /:id (update, partial preserves project_code, 404, tenant-isolation, INVALID_ID)
+- DELETE /:id (delete, assignment-block 409, 404, tenant-isolation, INVALID_ID)
+- GET /clients + POST /clients (list + create with auto-generated `CLI-XXXX`)
+
+### Bug caught by the new tests
+
+`routes/projects.js` GET `/map` had an **ambiguous column reference**: the SELECT list included `id, project_code, project_name, site_address, site_lat, site_lng` without a table alias, but after the `LEFT JOIN public.project_statuses ps`, both `projects.id` and `project_statuses.id` were in scope. PostgreSQL returned `42702: column reference "id" is ambiguous`.
+
+The bug had been latent because the route had **never returned >0 rows** in any prior test or production scenario (the only pre-Section-82 caller was the Map page in the web app, which silently failed when the only company with coordinates had no projects matching). The new `/map` test seeded a project, patched coordinates onto it, and queried — surfacing the parser error immediately as a 500.
+
+Fix: prefix all six unqualified columns with `p.`. One-line change.
+
+### Test-file pitfall caught in the same PR
+
+PostgreSQL `BIGINT` columns serialize to **strings** through the `pg` driver by default (to avoid Number precision loss above 2^53). The first version of `suppliers.test.js` did:
+
+```js
+const ids = res.body.suppliers.map((s) => s.id);   // ['18']
+expect(ids).toContain(active.id);                   // 18 (number)
+```
+
+→ failed because `'18' !== 18`. Three call sites in the file needed `Number(s.id)` coercion. Same pattern applies to all bigint PK columns; `projects.test.js` got it right from the start because it followed the existing `project_trades.test.js` template.
+
+**Convention reminder for future tests:** when comparing a `res.body.<thing>.id` (string from pg) against a JS number from a seed helper, always coerce: `res.body.things.map((t) => Number(t.id))`.
+
+### Coverage delta + threshold ratchet
+
+| Metric | Section 80 | Section 82 | Δ |
+|---|---:|---:|---:|
+| Statements | 60.65% | 61.71% | +1.06pp |
+| Branches | 51.30% | 53.05% | +1.75pp |
+| Functions | 60.58% | 61.64% | +1.06pp |
+| **Lines** | **61.85%** | **62.69%** | **+0.84pp** |
+
+Threshold ratchet (per Section 4.6 convention, ≥2.5pp headroom):
+- statements: 58 → **59** (2.71pp margin)
+- branches: 49 → **50** (3.05pp margin)
+- functions: 58 → **59** (2.64pp margin)
+- lines: 59 → **60** (2.69pp margin)
+
+### What's next for the coverage push
+
+After Section 82, the only "obvious-cheap" wins are gone. Remaining gap to 65%+ lines is inside:
+- **`routes/employees.js`** (351 lines) — has only `employees_get.test.js` covering GET routes. CRUD (POST/PUT/DELETE/PATCH) is uncovered. Next batch candidate.
+- **Deep branches inside already-tested routes** — error-path branches in `assignments.js`, `material_requests.js`, `daily_dispatch.js`, `auto_assign.js`. Different velocity: requires careful fixture orchestration to trigger each branch.
+- **`lib/` and `services/`** helpers that are only exercised through one or two paths in the integration tests — could pick up some coverage cheaply by adding targeted unit tests.
+
+Section 82 marks the **end of the cheap-win route phase**. Future coverage pushes need explicit branch-targeting plans (not just "find a route with no tests"), per Section 4.6 lessons.
+
+- **Today: 50 sections.** (Section 82 added.)
