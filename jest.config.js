@@ -50,17 +50,15 @@ module.exports = {
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'text-summary', 'lcov'],
 
-  // Coverage thresholds — ratcheted at Phase 75c+d+e closeout (May 3, 2026, Sections 43-45):
-  //   Phase 75c+d+e measured (PR #68): Statements 54.49% / Branches 48.33% / Functions 55.14% / Lines 55.66%
-  //                                    +2.44pp lines from Phase 75b. 31 new integration tests across
-  //                                    routes/hub.js (12 — task lifecycle), routes/attendance.js (10 —
-  //                                    checkin/checkout/confirm), routes/reports.js (9 — parseRange +
-  //                                    happy paths). Mega-batch shipped as a single feature PR per
-  //                                    Section 4.5 default batching rule. Helper extension: 3 perms
-  //                                    (attendance.view_self, attendance.approve, reports.view_self)
-  //                                    + 4 grants for COMPANY_ADMIN.
-  //                                    Section 40 closing here — bug yield zero across 4 of 5 batches
-  //                                    (Bug 9 found in 75a only). Per-batch ROI signal triggers stop.
+  // Coverage thresholds — ratcheted at Section 80 closeout (May 4, 2026):
+  //   Section 80 measured (PR #129):   Statements 60.65% / Branches 51.30% / Functions 60.58% / Lines 61.85%
+  //                                    +6.16pp lines from Phase 75c+d+e. Net change: +12 integration tests
+  //                                    on routes/project_foremen.js (Section 69 / PR #106) plus a
+  //                                    significantly smaller denominator after C3 dropped 32 dead tables
+  //                                    + 13 dead columns + the entire erp schema. Both the numerator
+  //                                    (more tests) and the denominator (less code) moved in the
+  //                                    favorable direction.
+  //   Phase 75c+d+e ratchet (PR #68):  Statements 54.49% / Branches 48.33% / Functions 55.14% / Lines 55.66%
   //   Phase 75b ratchet  (PR #67):     Statements 52.17% / Branches 46.63% / Functions 53.67% / Lines 53.22%
   //   Phase 75a ratchet  (PR #64):     Statements 50.67% / Branches 45.07% / Functions 52.45% / Lines 51.77%
   //   Phase 73d ratchet  (CI #?):      Statements 48.54% / Branches 43.70% / Functions 51.47% / Lines 49.62%
@@ -69,19 +67,16 @@ module.exports = {
   //   Phase 58 ratchet   (CI #131):    Statements 34.85% / Branches 26.44% / Functions 33.9%  / Lines 35.97%
   //   Phase 15 baseline  (CI #80):     Statements 18.14% / Branches 10.01% / Functions 14.00% / Lines 18.79%
   //
-  // Floors set with ≥3pp headroom below measured per Section 4.6 convention —
+  // Floors set with ≥2.5pp headroom below measured per Section 4.6 convention —
   // absorbs the ~1.5pp build flake (Jest worker scheduling, cache hits,
   // parallel ordering) without flapping CI on small drift. Headrooms after
-  // this ratchet: stmts 3.49pp / branches 3.33pp / fns 3.14pp / lines 3.66pp.
-  // Goal met (functionally): from 49.62% → 55.66% lines in one session.
-  // 65% stretch target deferred — see DECISIONS.md Section 45 for the
-  // bug-yield-driven stop decision.
+  // this ratchet: stmts 2.65pp / branches 2.30pp / fns 2.58pp / lines 2.85pp.
   coverageThreshold: {
     global: {
-      statements: 51,
-      branches: 45,
-      functions: 52,
-      lines: 52,
+      statements: 58,
+      branches: 49,
+      functions: 58,
+      lines: 59,
     },
   },
 
