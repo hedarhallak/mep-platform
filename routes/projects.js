@@ -173,7 +173,7 @@ router.get('/', can('projects.view'), async (req, res) => {
 router.get('/map', can('projects.view'), async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT id, project_code, project_name, site_address, site_lat, site_lng,
+      `SELECT p.id, p.project_code, p.project_name, p.site_address, p.site_lat, p.site_lng,
               tt.name AS trade_name, ps.name AS status_name
        FROM public.projects p
        LEFT JOIN public.trade_types      tt ON tt.id = p.trade_type_id
