@@ -7470,3 +7470,65 @@ When this baseline goes stale (next time we ship a migration that changes the sc
   - **(P3) optional cleanup** — drop `company_statuses` + `plans` after converting their FKs to CHECK constraints.
 - All other Section 66 P1/P2 items DONE this session: 5 unused npm deps removed, 16 frontend pages lazy-loaded (initial bundle −43%), 2 unused exports removed.
 - **Today: 36 sections.** (Section 76 added.)
+
+---
+
+## Section 77 — Tooling: promote audit + regen scripts to `scripts/` (May 4, 2026, late evening)
+
+Picks up the (P3) tooling backlog item from Section 76. Encodes the audit-detector improvements and the baseline-regen process into checked-in scripts so future sessions don't re-derive them from scratch.
+
+### `scripts/audit-schema.py` — consolidated unused-objects detector
+
+Subsumes the ad-hoc `/tmp/audit-*.py` scripts that lived in /tmp during Sections 65/66/67/73/74/75/76. Three modes via subcommand flags:
+
+```
+python3 scripts/audit-schema.py --tables    # unused tables
+python3 scripts/audit-schema.py --columns   # unused columns
+python3 scripts/audit-schema.py --inserts   # routes/* with INSERT NOT-NULL violations
+python3 scripts/audit-schema.py --all       # default — runs all three
+```
+
+The script bakes in every audit-tooling fix we hit this session:
+
+- **Schema-qualified** (Section 73): distinguishes `public.X` from `erp.X`. Fixes the original word-boundary detector's blind spot that classified `erp.employees` as "used" because of unrelated `public.employees` traffic.
+- **FK-aware** (Section 74): tables and columns that participate in FK constraints are flagged separately from "truly dead". Output explicitly distinguishes droppable items from FK-attached ones the user must NOT drop without first migrating the constraints.
+- **PK-aware** (Section 75): excludes columns that are part of any `PRIMARY KEY` constraint, not just columns named `id`. Catches `roles.role_id` and similar that the original noise filter missed.
+- **SERIAL-aware**: parses both inline DEFAULTs in `CREATE TABLE` AND separate `ALTER TABLE … SET DEFAULT` statements (which is how pg_dump emits SERIAL/auto-increment defaults). Without this the `--inserts` mode false-flags every `id` column.
+- **Common-name noise filter**: a 25-name allowlist (`id`, `name`, `created_at`, etc.) excluded from the unused-cols report regardless of count, since those bare names appear too broadly to be meaningful via grep.
+
+Default schema-baseline path: `db/schema_baseline_2026-05-04.sql` (the canonical baseline shipped in Section 76). Configurable via `--schema`.
+
+### `scripts/regen-baseline.ps1` — baseline regeneration wrapper
+
+Encodes the 5 gotchas from Section 76 into a single PowerShell script:
+
+```
+.\scripts\regen-baseline.ps1                          # outputs db/schema_baseline_<today>.sql
+.\scripts\regen-baseline.ps1 -OutputDate "2026-06-01" # explicit output date
+```
+
+Steps the script automates:
+
+1. Reset Docker container (postgis/postgis:16-3.4 — the one that doesn't choke on `\restrict`).
+2. Create `mepuser` + `postgres` SUPERUSER roles (referenced by `OWNER TO …` statements in the baseline).
+3. Apply every `migrations/*.sql` file in lexical order, stripping `\restrict` / `\unrestrict` lines on the fly.
+4. `pg_dump --schema=public --no-owner --no-acl | Out-File -Encoding utf8 …` — the `--schema=public` skips PostGIS extension schemas (`tiger`/`tiger_data`/`topology`) that the image installs but prod doesn't have, and the `Out-File -Encoding utf8` is non-negotiable to avoid the UTF-16 LE corruption that the `>` redirect operator silently produces.
+5. Verify line count + table count, with a yellow warning if the output is suspiciously small (the canonical encoding-bug-detector).
+6. Tear down the test container.
+
+The script ends with a green ✅ and a reminder to update `CLAUDE.md`'s Step 4 reference to the new baseline file. That last step still has to be manual because each baseline filename includes a date and CLAUDE.md is the canonical pointer.
+
+### Files modified or generated this session
+
+- **New:** `scripts/audit-schema.py` (~250 lines, fully docstring'd)
+- **New:** `scripts/regen-baseline.ps1` (~80 lines)
+- **Modified:** `DECISIONS.md` (this section)
+
+### Pointer for next sessions
+
+- The audit + regen flows that took ~30-60 min of manual setup per session this week are now one-command operations. Next time we ship a schema-touching migration, regen the baseline by running `.\scripts\regen-baseline.ps1` and update `CLAUDE.md`'s Step 4 reference. Total elapsed: ~2 minutes.
+- Open Section 67 backlog (still deferred):
+  - **(P3)** Convert `companies.status` and `companies.plan` FKs to `CHECK (... IN (...))` constraints, then drop `company_statuses` and `plans`. Optional final cleanup for the schema sprint.
+  - **(P3)** Replace `axios` → native `fetch` in `mep-frontend/src/lib/api.js`. Saves ~114 KB raw / ~30 KB gzip on the bundle.
+  - **(P3)** 2 failing email tests (`user_management.test.js:144`, `daily_dispatch.test.js:152`). Out-of-scope from Section 65; quick fix.
+- **Today: 37 sections.** (Section 77 added.)
