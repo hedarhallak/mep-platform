@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
 import {
@@ -7,12 +8,14 @@ import {
 } from 'lucide-react'
 
 // ── Constants ─────────────────────────────────────────────────
-const ROLES = [
-  { value: 'WORKER',                label: 'Worker'               },
-  { value: 'TRADE_ADMIN',           label: 'Trade Admin'          },
-  { value: 'TRADE_PROJECT_MANAGER', label: 'Trade Project Manager'},
-  { value: 'COMPANY_ADMIN',         label: 'Company Admin'        },
-  { value: 'IT_ADMIN',              label: 'IT Admin'             },
+// Role values are stable; labels are looked up via t() at render time so
+// each component re-derives them in the active language.
+const ROLE_VALUES = [
+  'WORKER',
+  'TRADE_ADMIN',
+  'TRADE_PROJECT_MANAGER',
+  'COMPANY_ADMIN',
+  'IT_ADMIN',
 ]
 
 const ROLE_COLORS = {
@@ -22,15 +25,6 @@ const ROLE_COLORS = {
   TRADE_PROJECT_MANAGER: 'bg-blue-100   text-blue-700   border-blue-200',
   TRADE_ADMIN:           'bg-primary-pale text-primary-dark border-primary-pale',
   WORKER:                'bg-slate-100  text-slate-600  border-slate-200',
-}
-
-const ROLE_LABELS = {
-  SUPER_ADMIN:           'Super Admin',
-  IT_ADMIN:              'IT Admin',
-  COMPANY_ADMIN:         'Co. Admin',
-  TRADE_PROJECT_MANAGER: 'Project Mgr',
-  TRADE_ADMIN:           'Trade Admin',
-  WORKER:                'Worker',
 }
 
 // ── Sub-components ────────────────────────────────────────────
@@ -52,8 +46,9 @@ function Avatar({ name, size = 'md' }) {
 }
 
 function RoleBadge({ role }) {
+  const { t } = useTranslation()
   const cls   = ROLE_COLORS[role] || ROLE_COLORS.WORKER
-  const label = ROLE_LABELS[role] || role
+  const label = t(`userManagement.badgeLabels.${role}`, { defaultValue: role })
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border ${cls}`}>
       {label}
@@ -62,25 +57,27 @@ function RoleBadge({ role }) {
 }
 
 function AccountStatus({ user }) {
+  const { t } = useTranslation()
   if (!user.is_active) return (
     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium border bg-red-50 text-red-600 border-red-200">
-      <Ban size={10} />Disabled
+      <Ban size={10} />{t('userManagement.badge.disabled')}
     </span>
   )
   if (user.activated_at) return (
     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium border bg-emerald-50 text-emerald-700 border-emerald-200">
-      <CheckCircle size={10} />Active
+      <CheckCircle size={10} />{t('userManagement.badge.active')}
     </span>
   )
   return (
     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium border bg-amber-50 text-amber-700 border-amber-200">
-      <Clock size={10} />Pending
+      <Clock size={10} />{t('userManagement.badge.pending')}
     </span>
   )
 }
 
 // ── Edit Role Modal ───────────────────────────────────────────
 function EditRoleModal({ user, onClose }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const [role, setRole]     = useState(user.role)
   const [error, setError]   = useState('')
@@ -93,11 +90,11 @@ function EditRoleModal({ user, onClose }) {
     },
     onError: (err) => {
       const msgs = {
-        INSUFFICIENT_PRIVILEGE:   'You cannot change this user\'s role',
-        CANNOT_ASSIGN_HIGHER_ROLE:'You cannot assign a role higher than yours',
-        INVALID_ROLE:             'Invalid role selected',
+        INSUFFICIENT_PRIVILEGE:    t('userManagement.modal.errors.insufficientPrivilege'),
+        CANNOT_ASSIGN_HIGHER_ROLE: t('userManagement.modal.errors.cannotAssignHigher'),
+        INVALID_ROLE:              t('userManagement.modal.errors.invalidRole'),
       }
-      setError(msgs[err.response?.data?.error] || err.response?.data?.error || 'Failed to update role')
+      setError(msgs[err.response?.data?.error] || err.response?.data?.error || t('userManagement.modal.errors.updateFailed'))
     }
   })
 
@@ -107,7 +104,7 @@ function EditRoleModal({ user, onClose }) {
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
           <div className="flex items-center gap-2">
             <Shield size={16} className="text-primary" />
-            <h2 className="font-semibold text-slate-800">Change Role</h2>
+            <h2 className="font-semibold text-slate-800">{t('userManagement.modal.heading')}</h2>
           </div>
           <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-lg">
             <X size={16} className="text-slate-500" />
@@ -126,14 +123,14 @@ function EditRoleModal({ user, onClose }) {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1.5">New Role</label>
+            <label className="block text-xs font-medium text-slate-600 mb-1.5">{t('userManagement.modal.newRoleLabel')}</label>
             <select
               value={role}
               onChange={e => setRole(e.target.value)}
               className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
             >
-              {ROLES.map(r => (
-                <option key={r.value} value={r.value}>{r.label}</option>
+              {ROLE_VALUES.map(v => (
+                <option key={v} value={v}>{t(`userManagement.roleLabels.${v}`)}</option>
               ))}
             </select>
           </div>
@@ -147,7 +144,7 @@ function EditRoleModal({ user, onClose }) {
           <div className="flex gap-3">
             <button onClick={onClose}
               className="flex-1 px-4 py-2.5 border border-slate-200 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50">
-              Cancel
+              {t('userManagement.modal.cancel')}
             </button>
             <button
               onClick={() => mutation.mutate(role)}
@@ -155,8 +152,8 @@ function EditRoleModal({ user, onClose }) {
               className="flex-1 px-4 py-2.5 bg-primary hover:bg-primary-dark disabled:opacity-60 text-white rounded-lg text-sm font-semibold flex items-center justify-center gap-2"
             >
               {mutation.isPending
-                ? <><Loader2 size={14} className="animate-spin" />Saving...</>
-                : <><Shield size={14} />Save Role</>}
+                ? <><Loader2 size={14} className="animate-spin" />{t('userManagement.modal.saving')}</>
+                : <><Shield size={14} />{t('userManagement.modal.save')}</>}
             </button>
           </div>
         </div>
@@ -167,6 +164,7 @@ function EditRoleModal({ user, onClose }) {
 
 // ── Main Page ─────────────────────────────────────────────────
 export default function UserManagementPage() {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const [search, setSearch]       = useState('')
   const [filterRole, setFilterRole] = useState('')
@@ -188,14 +186,14 @@ export default function UserManagementPage() {
     mutationFn: ({ id, is_active }) => api.patch(`/users/${id}/status`, { is_active }),
     onSuccess: (_, vars) => {
       qc.invalidateQueries(['users'])
-      showToast(vars.is_active ? 'User activated' : 'User deactivated')
+      showToast(vars.is_active ? t('userManagement.toast.activated') : t('userManagement.toast.deactivated'))
     },
     onError: (err) => {
       const msgs = {
-        CANNOT_DEACTIVATE_SELF: 'You cannot deactivate your own account',
-        INSUFFICIENT_PRIVILEGE: 'You cannot change this user\'s status',
+        CANNOT_DEACTIVATE_SELF: t('userManagement.errors.cannotDeactivateSelf'),
+        INSUFFICIENT_PRIVILEGE: t('userManagement.errors.insufficientPrivilegeStatus'),
       }
-      showToast(msgs[err.response?.data?.error] || 'Failed to update status', 'error')
+      showToast(msgs[err.response?.data?.error] || t('userManagement.errors.updateStatusFailed'), 'error')
     }
   })
 
@@ -203,15 +201,15 @@ export default function UserManagementPage() {
     mutationFn: (id) => api.post(`/users/${id}/resend`),
     onSuccess: () => {
       qc.invalidateQueries(['users'])
-      showToast('Activation email resent')
+      showToast(t('userManagement.toast.resent'))
     },
     onError: (err) => {
       const msgs = {
-        ALREADY_ACTIVATED:  'This user is already activated',
-        EMAIL_NOT_CONFIGURED: 'Email service not configured',
-        NO_EMAIL_ON_RECORD: 'No email found for this user',
+        ALREADY_ACTIVATED:    t('userManagement.errors.alreadyActivated'),
+        EMAIL_NOT_CONFIGURED: t('userManagement.errors.emailNotConfigured'),
+        NO_EMAIL_ON_RECORD:   t('userManagement.errors.noEmailOnRecord'),
       }
-      showToast(msgs[err.response?.data?.error] || 'Failed to resend email', 'error')
+      showToast(msgs[err.response?.data?.error] || t('userManagement.errors.resendFailed'), 'error')
     }
   })
 
@@ -240,21 +238,21 @@ export default function UserManagementPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">User Management</h1>
-          <p className="text-slate-500 text-sm mt-0.5">{users.length} users total</p>
+          <h1 className="text-2xl font-bold text-slate-800">{t('userManagement.title')}</h1>
+          <p className="text-slate-500 text-sm mt-0.5">{t('userManagement.totalSuffix', { count: users.length })}</p>
         </div>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-4 gap-4 mb-6">
         {[
-          { label: 'Total',    value: stats.total,    color: 'text-slate-700',   bg: 'bg-slate-50',   border: 'border-slate-200' },
-          { label: 'Active',   value: stats.active,   color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200' },
-          { label: 'Pending',  value: stats.pending,  color: 'text-amber-700',   bg: 'bg-amber-50',   border: 'border-amber-200' },
-          { label: 'Disabled', value: stats.disabled, color: 'text-red-700',     bg: 'bg-red-50',     border: 'border-red-200' },
+          { key: 'total',    value: stats.total,    color: 'text-slate-700',   bg: 'bg-slate-50',   border: 'border-slate-200' },
+          { key: 'active',   value: stats.active,   color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200' },
+          { key: 'pending',  value: stats.pending,  color: 'text-amber-700',   bg: 'bg-amber-50',   border: 'border-amber-200' },
+          { key: 'disabled', value: stats.disabled, color: 'text-red-700',     bg: 'bg-red-50',     border: 'border-red-200' },
         ].map(s => (
-          <div key={s.label} className={`${s.bg} border ${s.border} rounded-xl px-4 py-3`}>
-            <p className="text-xs text-slate-500 mb-1">{s.label}</p>
+          <div key={s.key} className={`${s.bg} border ${s.border} rounded-xl px-4 py-3`}>
+            <p className="text-xs text-slate-500 mb-1">{t(`userManagement.stats.${s.key}`)}</p>
             <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
           </div>
         ))}
@@ -266,7 +264,7 @@ export default function UserManagementPage() {
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text" value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search users..."
+            placeholder={t('userManagement.searchPlaceholder')}
             className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary"
           />
         </div>
@@ -274,18 +272,18 @@ export default function UserManagementPage() {
           <Filter size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <select value={filterRole} onChange={e => setFilterRole(e.target.value)}
             className="pl-8 pr-8 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary appearance-none">
-            <option value="">All Roles</option>
-            {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+            <option value="">{t('userManagement.allRoles')}</option>
+            {ROLE_VALUES.map(v => <option key={v} value={v}>{t(`userManagement.roleLabels.${v}`)}</option>)}
           </select>
         </div>
         <div className="relative">
           <Filter size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
             className="pl-8 pr-8 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary appearance-none">
-            <option value="">All Status</option>
-            <option value="active">Active</option>
-            <option value="pending">Pending Activation</option>
-            <option value="disabled">Disabled</option>
+            <option value="">{t('userManagement.allStatus')}</option>
+            <option value="active">{t('userManagement.statusFilter.active')}</option>
+            <option value="pending">{t('userManagement.statusFilter.pending')}</option>
+            <option value="disabled">{t('userManagement.statusFilter.disabled')}</option>
           </select>
         </div>
       </div>
@@ -299,19 +297,19 @@ export default function UserManagementPage() {
         ) : filtered.length === 0 ? (
           <div className="text-center py-16">
             <Users size={32} className="mx-auto text-slate-300 mb-3" />
-            <p className="text-slate-500 font-medium">No users found</p>
-            <p className="text-slate-400 text-sm mt-1">Try adjusting your filters</p>
+            <p className="text-slate-500 font-medium">{t('userManagement.empty')}</p>
+            <p className="text-slate-400 text-sm mt-1">{t('userManagement.emptyHint')}</p>
           </div>
         ) : (
           <table className="w-full">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50">
-                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">User</th>
-                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Role</th>
-                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Trade</th>
-                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Status</th>
-                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Joined</th>
-                <th className="px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide text-right">Actions</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{t('userManagement.th.user')}</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{t('userManagement.th.role')}</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{t('userManagement.th.trade')}</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{t('userManagement.th.status')}</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{t('userManagement.th.joined')}</th>
+                <th className="px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide text-right">{t('userManagement.th.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -356,7 +354,7 @@ export default function UserManagementPage() {
                       {u.activated_at
                         ? new Date(u.activated_at).toLocaleDateString()
                         : u.activation_sent_at
-                          ? `Invited ${new Date(u.activation_sent_at).toLocaleDateString()}`
+                          ? t('userManagement.invitedPrefix', { date: new Date(u.activation_sent_at).toLocaleDateString() })
                           : '—'
                       }
                     </span>
@@ -370,9 +368,9 @@ export default function UserManagementPage() {
                       <button
                         onClick={() => setEditModal(u)}
                         className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-primary hover:bg-primary-pale rounded-lg transition-colors"
-                        title="Change role"
+                        title={t('userManagement.actions.roleTooltip')}
                       >
-                        <Shield size={12} />Role
+                        <Shield size={12} />{t('userManagement.actions.role')}
                       </button>
 
                       {/* Resend invite (only for pending) */}
@@ -381,13 +379,13 @@ export default function UserManagementPage() {
                           onClick={() => resendMutation.mutate(u.id)}
                           disabled={resendMutation.isPending}
                           className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
-                          title="Resend activation email"
+                          title={t('userManagement.actions.resendTooltip')}
                         >
                           {resendMutation.isPending
                             ? <Loader2 size={12} className="animate-spin" />
                             : <Mail size={12} />
                           }
-                          Resend
+                          {t('userManagement.actions.resend')}
                         </button>
                       )}
 
@@ -400,11 +398,11 @@ export default function UserManagementPage() {
                             ? 'text-red-500 hover:bg-red-50'
                             : 'text-emerald-600 hover:bg-emerald-50'
                         }`}
-                        title={u.is_active ? 'Disable account' : 'Enable account'}
+                        title={u.is_active ? t('userManagement.actions.disableTooltip') : t('userManagement.actions.enableTooltip')}
                       >
                         {u.is_active
-                          ? <><ToggleRight size={14} />Disable</>
-                          : <><ToggleLeft size={14} />Enable</>
+                          ? <><ToggleRight size={14} />{t('userManagement.actions.disable')}</>
+                          : <><ToggleLeft size={14} />{t('userManagement.actions.enable')}</>
                         }
                       </button>
                     </div>
