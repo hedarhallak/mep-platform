@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import api from '@/lib/api'
 import { trade } from '@/constants/trades'
 import {
@@ -43,6 +44,7 @@ function SummaryCard({ icon: Icon, label, value, color }) {
 }
 
 export default function WorkforcePlannerPage() {
+  const { t } = useTranslation()
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState('')
@@ -63,14 +65,21 @@ export default function WorkforcePlannerPage() {
 
   const handleApply = async (suggestion) => {
     if (!window.confirm(
-      `Move ${suggestion.employee_name} from ${suggestion.current_project} to ${suggestion.suggested_project}?`
+      t('bi.workforcePlanner.confirmMove', {
+        employee: suggestion.employee_name,
+        currentProject: suggestion.current_project,
+        suggestedProject: suggestion.suggested_project,
+      })
     )) return
     setApplying(suggestion.assignment_id)
     try {
       await api.patch(`/assignments/requests/${suggestion.assignment_id}/move`, {
         new_project_id: suggestion.suggested_project_id
       })
-      setSuccessMsg(`${suggestion.employee_name} moved to ${suggestion.suggested_project} ✓`)
+      setSuccessMsg(t('bi.workforcePlanner.successMove', {
+        employee: suggestion.employee_name,
+        suggestedProject: suggestion.suggested_project,
+      }))
       setTimeout(() => setSuccessMsg(''), 4000)
       fetchData()
     } catch (e) { alert(e.response?.data?.message || e.message) }
@@ -94,13 +103,13 @@ export default function WorkforcePlannerPage() {
               <Brain className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-slate-900">Workforce Planner</h1>
-              <p className="text-xs text-slate-400 mt-0.5">Geographical assignment optimization · Today's active workforce</p>
+              <h1 className="text-lg font-bold text-slate-900">{t('bi.workforcePlanner.title')}</h1>
+              <p className="text-xs text-slate-400 mt-0.5">{t('bi.workforcePlanner.subtitle')}</p>
             </div>
           </div>
           <button onClick={fetchData} disabled={loading}
             className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-600 text-xs font-semibold rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50">
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />Refresh
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />{t('bi.workforcePlanner.refresh')}
           </button>
         </div>
       </div>
@@ -130,18 +139,18 @@ export default function WorkforcePlannerPage() {
           <>
             {/* Summary cards */}
             <div className="grid grid-cols-4 gap-3">
-              <SummaryCard icon={Users}        label="Active Today"       value={data.summary.total_assignments} color="bg-primary-pale text-primary" />
-              <SummaryCard icon={AlertTriangle} label={`Beyond ${data.threshold_km}km`} value={data.summary.far_assignments}   color="bg-red-50 text-red-500" />
-              <SummaryCard icon={Zap}           label="Can Optimize"       value={data.summary.optimizable}       color="bg-amber-50 text-amber-500" />
-              <SummaryCard icon={Route}         label="Total Saving (km)"  value={data.summary.total_saving_km}   color="bg-emerald-50 text-emerald-600" />
+              <SummaryCard icon={Users}         label={t('bi.workforcePlanner.summary.activeToday')}                                value={data.summary.total_assignments} color="bg-primary-pale text-primary" />
+              <SummaryCard icon={AlertTriangle} label={t('bi.workforcePlanner.summary.beyondKm', { km: data.threshold_km })}        value={data.summary.far_assignments}   color="bg-red-50 text-red-500" />
+              <SummaryCard icon={Zap}           label={t('bi.workforcePlanner.summary.canOptimize')}                                value={data.summary.optimizable}       color="bg-amber-50 text-amber-500" />
+              <SummaryCard icon={Route}         label={t('bi.workforcePlanner.summary.totalSavingKm')}                              value={data.summary.total_saving_km}   color="bg-emerald-50 text-emerald-600" />
             </div>
 
             {/* Filter tabs */}
             <div className="flex items-center gap-2">
               {[
-                { id: 'all',         label: `All (${data.suggestions.length})` },
-                { id: 'far',         label: `Beyond ${data.threshold_km}km (${data.summary.far_assignments})` },
-                { id: 'optimizable', label: `Optimizable (${data.summary.optimizable})` },
+                { id: 'all',         label: t('bi.workforcePlanner.filter.all',         { count: data.suggestions.length }) },
+                { id: 'far',         label: t('bi.workforcePlanner.filter.beyondKm',    { km: data.threshold_km, count: data.summary.far_assignments }) },
+                { id: 'optimizable', label: t('bi.workforcePlanner.filter.optimizable', { count: data.summary.optimizable }) },
               ].map(f => (
                 <button key={f.id} onClick={() => setFilter(f.id)}
                   className={`px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${
@@ -156,8 +165,8 @@ export default function WorkforcePlannerPage() {
             {filtered.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <Check className="w-10 h-10 text-emerald-300 mb-3" />
-                <p className="text-sm font-semibold text-slate-400">All assignments look optimal</p>
-                <p className="text-xs text-slate-300 mt-1">No improvements found for the selected filter</p>
+                <p className="text-sm font-semibold text-slate-400">{t('bi.workforcePlanner.empty.title')}</p>
+                <p className="text-xs text-slate-300 mt-1">{t('bi.workforcePlanner.empty.subtitle')}</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -172,10 +181,10 @@ export default function WorkforcePlannerPage() {
                       s.is_far ? 'bg-red-50 text-red-600' : s.can_optimize ? 'bg-amber-50 text-amber-600' : 'bg-slate-50 text-slate-500'
                     }`}>
                       {s.is_far
-                        ? <><AlertTriangle className="w-3.5 h-3.5" />Beyond {data.threshold_km}km threshold</>
+                        ? <><AlertTriangle className="w-3.5 h-3.5" />{t('bi.workforcePlanner.badge.beyondThreshold', { km: data.threshold_km })}</>
                         : s.can_optimize
-                          ? <><Zap className="w-3.5 h-3.5" />Optimization available</>
-                          : <><Check className="w-3.5 h-3.5" />Optimal placement</>
+                          ? <><Zap className="w-3.5 h-3.5" />{t('bi.workforcePlanner.badge.canOptimize')}</>
+                          : <><Check className="w-3.5 h-3.5" />{t('bi.workforcePlanner.badge.optimal')}</>
                       }
                     </div>
 
@@ -198,7 +207,7 @@ export default function WorkforcePlannerPage() {
                           {/* Current → Suggested */}
                           <div className="flex items-center gap-2 mt-2 flex-wrap">
                             <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 rounded-lg">
-                              <span className="text-xs text-slate-500">Now:</span>
+                              <span className="text-xs text-slate-500">{t('bi.workforcePlanner.now')}</span>
                               <span className="text-xs font-bold text-slate-700">{s.current_project}</span>
                               <DistanceBadge km={s.current_distance_km} />
                             </div>
@@ -207,7 +216,7 @@ export default function WorkforcePlannerPage() {
                               <>
                                 <ArrowRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
                                 <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-50 rounded-lg border border-emerald-100">
-                                  <span className="text-xs text-emerald-600">Suggested:</span>
+                                  <span className="text-xs text-emerald-600">{t('bi.workforcePlanner.suggested')}</span>
                                   <span className="text-xs font-bold text-emerald-700">{s.suggested_project}</span>
                                   <DistanceBadge km={s.suggested_distance_km} />
                                   <span className="text-[10px] font-bold text-emerald-600">−{s.saving_km}km</span>
@@ -223,7 +232,7 @@ export default function WorkforcePlannerPage() {
                             className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 bg-primary text-white text-xs font-bold rounded-lg hover:bg-primary-dark transition-colors disabled:opacity-60 whitespace-nowrap">
                             {applying === s.assignment_id
                               ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              : <><Check className="w-3.5 h-3.5" />Apply</>
+                              : <><Check className="w-3.5 h-3.5" />{t('bi.workforcePlanner.apply')}</>
                             }
                           </button>
                         )}
