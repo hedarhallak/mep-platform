@@ -7585,3 +7585,20 @@ The new `api.js` (~150 lines, no dependencies) preserves every behavior of the p
   - Section 19 BLOCKED routes that need SENDGRID env mock for happy-path coverage (`admin_users.js`, `invite_employee.js`, plus `user_invites.js` once we revisit the test fixture for the `user_invites` table).
   - Tier 3 i18n (BI / Reports / Hub / etc. — page by page).
 - **Today: 38 sections.** (Section 78 added.)
+
+---
+
+## Section 79 — Dev workflow helper (May 4, 2026, late evening)
+
+Mid-session retro: every PR today involved the same 6-step boilerplate (`git stash → checkout main → fetch → reset --hard origin/main → branch -D → checkout -b → stash pop → status`). After ~13 PRs, that's ~80 manual lines of git ceremony. Promoted the recipe into `scripts/dev-helpers.ps1`:
+
+```
+. .\scripts\dev-helpers.ps1
+New-FeatureBranch chore/whatever
+```
+
+Replaces the 6-step recipe with one command. Also exposes `Push-FeatureBranch -Message "..."` for the `git add -A && git commit && git push -u origin HEAD` shortcut.
+
+Source the script per-shell with the dot-source syntax above, or add to `$PROFILE` to auto-load.
+
+- **Today: 39 sections.** (Section 79 added.)
