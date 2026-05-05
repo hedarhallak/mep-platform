@@ -137,19 +137,30 @@ describeIfDb('Daily dispatch — POST /api/daily-dispatch/commit', () => {
   });
 
   test('POST /commit without SendGrid env returns 500 EMAIL_NOT_CONFIGURED', async () => {
-    // CI does not configure SENDGRID_API_KEY / SENDGRID_FROM_EMAIL.
-    // The route checks the env BEFORE looking up the run, so this
-    // always returns 500 EMAIL_NOT_CONFIGURED in test environments.
-    const company = await seedCompany();
-    const admin = await seedUser({ company_id: company.company_id, role: 'COMPANY_ADMIN' });
-    const { token } = await loginUser(admin);
+    // The route checks SENDGRID_API_KEY / SENDGRID_FROM_EMAIL BEFORE looking
+    // up the run. Explicitly clear those env vars for the duration of the
+    // test so the assertion holds regardless of whether the dev's local .env
+    // has SendGrid configured. (CI doesn't, but local devs often do — this
+    // was the failure mode that left the test red across Sections 65-78.)
+    const origKey = process.env.SENDGRID_API_KEY;
+    const origFrom = process.env.SENDGRID_FROM_EMAIL;
+    delete process.env.SENDGRID_API_KEY;
+    delete process.env.SENDGRID_FROM_EMAIL;
+    try {
+      const company = await seedCompany();
+      const admin = await seedUser({ company_id: company.company_id, role: 'COMPANY_ADMIN' });
+      const { token } = await loginUser(admin);
 
-    const res = await request(app)
-      .post('/api/daily-dispatch/commit')
-      .query({ date: '2027-08-18' })
-      .set('Authorization', `Bearer ${token}`);
+      const res = await request(app)
+        .post('/api/daily-dispatch/commit')
+        .query({ date: '2027-08-18' })
+        .set('Authorization', `Bearer ${token}`);
 
-    expect(res.statusCode).toBe(500);
-    expect(res.body).toMatchObject({ ok: false, error: 'EMAIL_NOT_CONFIGURED' });
+      expect(res.statusCode).toBe(500);
+      expect(res.body).toMatchObject({ ok: false, error: 'EMAIL_NOT_CONFIGURED' });
+    } finally {
+      if (origKey !== undefined) process.env.SENDGRID_API_KEY = origKey;
+      if (origFrom !== undefined) process.env.SENDGRID_FROM_EMAIL = origFrom;
+    }
   });
 });
