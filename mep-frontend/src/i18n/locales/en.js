@@ -571,6 +571,56 @@ export default {
     },
   },
 
+  onboarding: {
+    accountSetup: 'Account Setup',
+    welcome: 'Welcome',
+    linkInvalid: {
+      title: 'Link Invalid',
+      contactAdmin: 'Please contact your administrator for a new invitation.',
+    },
+    errors: {
+      invalidLink: 'Invalid invitation link',
+      expiredLink: 'This invitation link has expired.',
+      invalidOrExpired: 'Invalid or expired invitation link.',
+      usernameRequired: 'Username is required',
+      usernameTooShort: 'Username must be at least 3 characters',
+      pinRequired: 'PIN is required',
+      pinTooShort: 'PIN must be at least 4 characters',
+      pinsMismatch: 'PINs do not match',
+      addressRequired: 'Home address is required for assignment matching',
+      usernameTaken: 'Username already taken, choose another.',
+      generic: 'Something went wrong. Please try again.',
+    },
+    done: {
+      title: "You're all set! 🎉",
+      subtitle: 'Your account is ready. Sign in with your username and PIN to get started.',
+      goToSignIn: 'Go to Sign In',
+    },
+    credentials: {
+      heading: 'Choose your credentials',
+      subheading: "You'll use these to sign in every day.",
+      username: 'Username',
+      usernamePlaceholder: 'Choose a username',
+      pin: 'PIN',
+      pinPlaceholder: 'Choose a secure PIN',
+      pinConfirm: 'Confirm PIN',
+      pinConfirmPlaceholder: 'Confirm your PIN',
+      continue: 'Continue',
+    },
+    profile: {
+      heading: 'Your profile',
+      subheading: 'Your home address helps us assign you to the closest projects.',
+      phone: 'Phone Number',
+      phonePlaceholder: '+1 514 000 0000',
+      homeAddress: 'Home Address *',
+      addressPlaceholder: 'Start typing your home address...',
+      locationConfirmed: 'Location confirmed',
+      addressDisclaimer: 'Used only for smart assignment matching — never shared publicly.',
+      back: 'Back',
+      submit: 'Complete Setup',
+    },
+  },
+
   bi: {
     workforcePlanner: {
       title: 'Workforce Planner',

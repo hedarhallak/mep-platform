@@ -569,6 +569,56 @@ export default {
     },
   },
 
+  onboarding: {
+    accountSetup: 'Configuration du compte',
+    welcome: 'Bienvenue',
+    linkInvalid: {
+      title: 'Lien invalide',
+      contactAdmin: "Veuillez contacter votre administrateur pour une nouvelle invitation.",
+    },
+    errors: {
+      invalidLink: "Lien d'invitation invalide",
+      expiredLink: "Ce lien d'invitation a expiré.",
+      invalidOrExpired: "Lien d'invitation invalide ou expiré.",
+      usernameRequired: "Le nom d'utilisateur est requis",
+      usernameTooShort: "Le nom d'utilisateur doit contenir au moins 3 caractères",
+      pinRequired: 'Le NIP est requis',
+      pinTooShort: 'Le NIP doit contenir au moins 4 caractères',
+      pinsMismatch: 'Les NIP ne correspondent pas',
+      addressRequired: "L'adresse du domicile est requise pour les affectations",
+      usernameTaken: "Nom d'utilisateur déjà pris, choisissez-en un autre.",
+      generic: "Une erreur s'est produite. Veuillez réessayer.",
+    },
+    done: {
+      title: 'Tout est prêt ! 🎉',
+      subtitle: "Votre compte est prêt. Connectez-vous avec votre nom d'utilisateur et votre NIP pour commencer.",
+      goToSignIn: 'Aller à la connexion',
+    },
+    credentials: {
+      heading: 'Choisissez vos identifiants',
+      subheading: 'Vous les utiliserez pour vous connecter chaque jour.',
+      username: "Nom d'utilisateur",
+      usernamePlaceholder: "Choisissez un nom d'utilisateur",
+      pin: 'NIP',
+      pinPlaceholder: 'Choisissez un NIP sécurisé',
+      pinConfirm: 'Confirmer le NIP',
+      pinConfirmPlaceholder: 'Confirmez votre NIP',
+      continue: 'Continuer',
+    },
+    profile: {
+      heading: 'Votre profil',
+      subheading: 'Votre adresse de domicile nous aide à vous affecter aux chantiers les plus proches.',
+      phone: 'Numéro de téléphone',
+      phonePlaceholder: '+1 514 000 0000',
+      homeAddress: 'Adresse du domicile *',
+      addressPlaceholder: 'Commencez à saisir votre adresse...',
+      locationConfirmed: 'Adresse confirmée',
+      addressDisclaimer: 'Utilisée uniquement pour les affectations intelligentes — jamais partagée publiquement.',
+      back: 'Retour',
+      submit: 'Terminer la configuration',
+    },
+  },
+
   bi: {
     workforcePlanner: {
       title: "Planificateur d'effectifs",

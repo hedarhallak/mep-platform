@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import api from '@/lib/api'
 import {
@@ -37,7 +38,7 @@ function StepBar({ current, total }) {
 }
 
 // ── Address autocomplete ──────────────────────────────────────
-function AddressInput({ value, onChange, onCoords }) {
+function AddressInput({ value, onChange, onCoords, placeholder }) {
   const [suggestions, setSuggestions] = useState([])
   const [open, setOpen] = useState(false)
   const timer = useRef(null)
@@ -68,7 +69,7 @@ function AddressInput({ value, onChange, onCoords }) {
           onBlur={() => setTimeout(() => setOpen(false), 200)}
           onFocus={() => suggestions.length && setOpen(true)}
           className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-          placeholder="Start typing your home address..."
+          placeholder={placeholder}
         />
       </div>
       {open && suggestions.length > 0 && (
@@ -92,6 +93,7 @@ function AddressInput({ value, onChange, onCoords }) {
 
 // ── Main Onboarding Page ──────────────────────────────────────
 export default function OnboardingPage() {
+  const { t } = useTranslation()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const token = searchParams.get('token')
@@ -117,31 +119,33 @@ export default function OnboardingPage() {
 
   // Verify token on load
   useEffect(() => {
-    if (!token) { setError('Invalid invitation link'); setLoading(false); return }
+    if (!token) { setError(t('onboarding.errors.invalidLink')); setLoading(false); return }
     api.get(`/onboarding/verify?token=${token}`)
       .then(r => {
         if (r.data.ok) { setInvite(r.data.invite); setStep(1) }
-        else setError(r.data.error === 'TOKEN_EXPIRED' ? 'This invitation link has expired.' : 'Invalid invitation link.')
+        else setError(r.data.error === 'TOKEN_EXPIRED'
+          ? t('onboarding.errors.expiredLink')
+          : t('onboarding.errors.invalidLink'))
       })
-      .catch(() => setError('Invalid or expired invitation link.'))
+      .catch(() => setError(t('onboarding.errors.invalidOrExpired')))
       .finally(() => setLoading(false))
-  }, [token])
+  }, [token, t])
 
   const handleCredentials = async (e) => {
     e.preventDefault()
     setError('')
-    if (!form.username.trim()) return setError('Username is required')
-    if (form.username.length < 3) return setError('Username must be at least 3 characters')
-    if (!form.pin.trim()) return setError('PIN is required')
-    if (form.pin.length < 4) return setError('PIN must be at least 4 characters')
-    if (form.pin !== form.pin_confirm) return setError('PINs do not match')
+    if (!form.username.trim()) return setError(t('onboarding.errors.usernameRequired'))
+    if (form.username.length < 3) return setError(t('onboarding.errors.usernameTooShort'))
+    if (!form.pin.trim()) return setError(t('onboarding.errors.pinRequired'))
+    if (form.pin.length < 4) return setError(t('onboarding.errors.pinTooShort'))
+    if (form.pin !== form.pin_confirm) return setError(t('onboarding.errors.pinsMismatch'))
     setStep(2)
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
-    if (!form.home_address) return setError('Home address is required for assignment matching')
+    if (!form.home_address) return setError(t('onboarding.errors.addressRequired'))
     setSubmitting(true)
     try {
       const res = await api.post('/onboarding/complete', {
@@ -154,11 +158,13 @@ export default function OnboardingPage() {
         home_lng:     form.home_lng,
       })
       if (res.data.ok) setStep(3)
-      else setError(res.data.error === 'USERNAME_TAKEN' ? 'Username already taken, choose another.' : res.data.error)
+      else setError(res.data.error === 'USERNAME_TAKEN'
+        ? t('onboarding.errors.usernameTaken')
+        : res.data.error)
     } catch (err) {
       setError(err.response?.data?.error === 'USERNAME_TAKEN'
-        ? 'Username already taken, choose another.'
-        : 'Something went wrong. Please try again.')
+        ? t('onboarding.errors.usernameTaken')
+        : t('onboarding.errors.generic'))
     } finally {
       setSubmitting(false)
     }
@@ -178,9 +184,9 @@ export default function OnboardingPage() {
         <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
           <AlertCircle size={28} className="text-red-500" />
         </div>
-        <h2 className="text-lg font-bold text-slate-800 mb-2">Link Invalid</h2>
+        <h2 className="text-lg font-bold text-slate-800 mb-2">{t('onboarding.linkInvalid.title')}</h2>
         <p className="text-slate-500 text-sm">{error}</p>
-        <p className="text-slate-400 text-xs mt-4">Please contact your administrator for a new invitation.</p>
+        <p className="text-slate-400 text-xs mt-4">{t('onboarding.linkInvalid.contactAdmin')}</p>
       </div>
     </div>
   )
@@ -192,15 +198,13 @@ export default function OnboardingPage() {
         <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-5">
           <CheckCircle size={32} className="text-emerald-500" />
         </div>
-        <h2 className="text-xl font-bold text-slate-800 mb-2">You're all set! 🎉</h2>
-        <p className="text-slate-500 text-sm mb-6">
-          Your account is ready. Sign in with your username and PIN to get started.
-        </p>
+        <h2 className="text-xl font-bold text-slate-800 mb-2">{t('onboarding.done.title')}</h2>
+        <p className="text-slate-500 text-sm mb-6">{t('onboarding.done.subtitle')}</p>
         <button
           onClick={() => navigate('/login')}
           className="w-full bg-primary hover:bg-primary-dark text-white font-semibold py-3 rounded-xl transition-colors"
         >
-          Go to Sign In
+          {t('onboarding.done.goToSignIn')}
         </button>
       </div>
     </div>
@@ -215,14 +219,14 @@ export default function OnboardingPage() {
             <Building2 size={28} className="text-white" />
           </div>
           <h1 className="text-2xl font-bold text-white">Constrai</h1>
-          <p className="text-slate-400 text-sm mt-1">Account Setup</p>
+          <p className="text-slate-400 text-sm mt-1">{t('onboarding.accountSetup')}</p>
         </div>
 
         <div className="bg-white rounded-2xl shadow-2xl p-8">
           {/* Welcome */}
           {invite && (
             <div className="mb-6 pb-5 border-b border-slate-100">
-              <p className="text-slate-500 text-xs uppercase tracking-wide font-semibold mb-1">Welcome</p>
+              <p className="text-slate-500 text-xs uppercase tracking-wide font-semibold mb-1">{t('onboarding.welcome')}</p>
               <h2 className="text-lg font-bold text-slate-800">
                 {invite.first_name} {invite.last_name}
               </h2>
@@ -246,29 +250,29 @@ export default function OnboardingPage() {
           {step === 1 && (
             <form onSubmit={handleCredentials} className="space-y-4">
               <div>
-                <p className="font-semibold text-slate-800 mb-1">Choose your credentials</p>
-                <p className="text-sm text-slate-500 mb-5">You'll use these to sign in every day.</p>
+                <p className="font-semibold text-slate-800 mb-1">{t('onboarding.credentials.heading')}</p>
+                <p className="text-sm text-slate-500 mb-5">{t('onboarding.credentials.subheading')}</p>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Username</label>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{t('onboarding.credentials.username')}</label>
                 <div className="relative">
                   <User size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input type="text" value={form.username}
                     onChange={e => set('username', e.target.value.toLowerCase().replace(/\s/g, ''))}
                     className="w-full pl-9 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                    placeholder="Choose a username" autoFocus />
+                    placeholder={t('onboarding.credentials.usernamePlaceholder')} autoFocus />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">PIN</label>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{t('onboarding.credentials.pin')}</label>
                 <div className="relative">
                   <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input type={showPin ? 'text' : 'password'} value={form.pin}
                     onChange={e => set('pin', e.target.value)}
                     className="w-full pl-9 pr-10 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                    placeholder="Choose a secure PIN" />
+                    placeholder={t('onboarding.credentials.pinPlaceholder')} />
                   <button type="button" onClick={() => setShowPin(s => !s)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
                     {showPin ? <EyeOff size={15} /> : <Eye size={15} />}
@@ -277,13 +281,13 @@ export default function OnboardingPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Confirm PIN</label>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{t('onboarding.credentials.pinConfirm')}</label>
                 <div className="relative">
                   <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input type={showPin ? 'text' : 'password'} value={form.pin_confirm}
                     onChange={e => set('pin_confirm', e.target.value)}
                     className="w-full pl-9 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                    placeholder="Confirm your PIN" />
+                    placeholder={t('onboarding.credentials.pinConfirmPlaceholder')} />
                 </div>
               </div>
 
@@ -295,7 +299,7 @@ export default function OnboardingPage() {
 
               <button type="submit"
                 className="w-full bg-primary hover:bg-primary-dark text-white font-semibold py-3 rounded-xl transition-colors flex items-center justify-center gap-2">
-                Continue <ChevronRight size={16} />
+                {t('onboarding.credentials.continue')} <ChevronRight size={16} />
               </button>
             </form>
           )}
@@ -304,38 +308,37 @@ export default function OnboardingPage() {
           {step === 2 && (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <p className="font-semibold text-slate-800 mb-1">Your profile</p>
-                <p className="text-sm text-slate-500 mb-5">
-                  Your home address helps us assign you to the closest projects.
-                </p>
+                <p className="font-semibold text-slate-800 mb-1">{t('onboarding.profile.heading')}</p>
+                <p className="text-sm text-slate-500 mb-5">{t('onboarding.profile.subheading')}</p>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
-                  <Phone size={11} className="inline mr-1" />Phone Number
+                  <Phone size={11} className="inline mr-1" />{t('onboarding.profile.phone')}
                 </label>
                 <input type="tel" value={form.phone}
                   onChange={e => set('phone', e.target.value)}
                   className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                  placeholder="+1 514 000 0000" />
+                  placeholder={t('onboarding.profile.phonePlaceholder')} />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
-                  <MapPin size={11} className="inline mr-1" />Home Address *
+                  <MapPin size={11} className="inline mr-1" />{t('onboarding.profile.homeAddress')}
                 </label>
                 <AddressInput
                   value={form.home_address}
                   onChange={v => set('home_address', v)}
                   onCoords={c => { set('home_lat', c.lat); set('home_lng', c.lng) }}
+                  placeholder={t('onboarding.profile.addressPlaceholder')}
                 />
                 {form.home_lat && (
                   <p className="text-xs text-emerald-600 mt-1.5 flex items-center gap-1">
-                    <CheckCircle size={11} /> Location confirmed
+                    <CheckCircle size={11} /> {t('onboarding.profile.locationConfirmed')}
                   </p>
                 )}
                 <p className="text-xs text-slate-400 mt-1.5">
-                  Used only for smart assignment matching — never shared publicly.
+                  {t('onboarding.profile.addressDisclaimer')}
                 </p>
               </div>
 
@@ -348,12 +351,12 @@ export default function OnboardingPage() {
               <div className="flex gap-3">
                 <button type="button" onClick={() => setStep(1)}
                   className="flex items-center gap-1 px-4 py-3 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors">
-                  <ChevronLeft size={15} /> Back
+                  <ChevronLeft size={15} /> {t('onboarding.profile.back')}
                 </button>
                 <button type="submit" disabled={submitting}
                   className="flex-1 bg-primary hover:bg-primary-dark disabled:opacity-60 text-white font-semibold py-3 rounded-xl transition-colors flex items-center justify-center gap-2">
                   {submitting && <Loader2 size={14} className="animate-spin" />}
-                  Complete Setup
+                  {t('onboarding.profile.submit')}
                 </button>
               </div>
             </form>
