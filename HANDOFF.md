@@ -59,7 +59,7 @@ When you receive the one-line command above:
 | Phase 2 — Tenant Resolver | ✅ No-op (Model C) | 87 |
 | Phase 3 — DB schema 011 + email login | ✅ Deployed | 87 |
 | **Phase 4a — RLS Stage 1 (permissive policies)** | ✅ **Deployed to prod** | 88 |
-| **Phase 4b — RLS Stage 2 (req.db middleware)** | ⏳ **NEXT** | TBD (Section 89+) |
+| **Phase 4b — RLS Stage 2 (req.db middleware)** | ⏳ **In progress** (89-A: mepuser_super role bootstrap) | 89 |
 | Phase 4c — RLS Stage 3 (strict policies) | ⏳ Pending | TBD |
 | Phase 5 — SUPER_ADMIN portal split | ⏳ Pending | TBD |
 | Phase 6 — Frontend tenant context + branding | ⏳ Pending | TBD |

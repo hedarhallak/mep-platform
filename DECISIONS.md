@@ -8638,5 +8638,89 @@ Migration 012 deployed to production immediately after PR #146 closeout merge. S
 
 Stage 1 is now LIVE on prod. Stage 2 (req.db middleware + route migration) can begin immediately on top of this without any rollback risk.
 
-- **Today: 56 sections.** (Section 88 = Phase 4 Stage 1 design + closeout + prod deploy. Stage 2 will open Section 89.)
+- **Today: 56 sections.** (Section 88 = Phase 4 Stage 1 design + closeout + prod deploy. Stage 2 opens in Section 89 below.)
+
+---
+
+## Section 89 — Phase 4 Stage 2 Design + First Piece (mepuser_super role bootstrap) (May 6, 2026)
+
+Stage 1 (Section 88) shipped permissive RLS policies on 20 tenant-scoped tables. The policies stay permissive when the `app.company_id` GUC is unset, so existing routes work unchanged. Stage 2's job is to **start setting the GUC per request** in a backwards-compatible way, while also introducing the BYPASSRLS escape hatch for SUPER_ADMIN routes that legitimately span tenants.
+
+### Stage 2 plan (multiple PRs, ~1 week)
+
+| Piece | Scope | Status |
+|---|---|---|
+| 89-A: `mepuser_super` role bootstrap | Provision the role in CI + on prod. Tests confirm BYPASSRLS attribute. | ⏳ This PR |
+| 89-B: `req.db` middleware | Per-request transaction wrapper that calls `SET LOCAL app.company_id`. Backend module + 2 sample route migrations. | ⏳ Next |
+| 89-C: Route migration batches | Migrate ~5-10 routes per PR. Add integration test per batch confirming cross-tenant queries return 0 rows. | ⏳ Pending |
+| 89-D: SUPER pool wiring | Open a second `pg.Pool` against `DATABASE_URL_SUPER`; SUPER_ADMIN routes use it. | ⏳ Pending |
+| 89-E: Stage 3 graduation | Once 100% of routes migrated, ship migration 014 dropping the "GUC unset = bypass" clause. Strict mode active. | ⏳ Pending |
+
+### Why a separate role with BYPASSRLS
+
+When Stage 3 makes policies strict (no permissive bypass), every query without `app.company_id` set will return zero rows. That's correct for tenant-scoped routes but breaks legitimate cross-tenant queries:
+
+- **SUPER_ADMIN listing all companies** (e.g., the future Phase 5 portal) — needs to see every tenant.
+- **Background jobs** (e.g., `runWeeklyReports`) iterating across all tenants.
+- **`pg_dump` / backup scripts** running as a regular DB user — currently work because of the permissive bypass; after Stage 3 they'd dump empty tables.
+
+`mepuser_super` (BYPASSRLS) is the escape hatch. The application opens TWO pools — `pool` (mepuser, subject to RLS) and `poolSuper` (mepuser_super, bypasses RLS). Routes pick the pool based on context.
+
+### What this PR ships (Piece 89-A)
+
+1. **`scripts/postgres/setup_rls_roles.sql`** — already drafted in a prior session, now tracked. Idempotent one-shot script that:
+   - Creates `mepuser_super` with `LOGIN BYPASSRLS NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION` + a password supplied via psql variable binding (`-v MEPUSER_SUPER_PASSWORD="$MEPUSER_SUPER_PASSWORD"`).
+   - On re-run, ALTERs the existing role to ensure attributes match (defensive).
+   - Grants `mepuser` membership to `mepuser_super` so it inherits all current + future table grants.
+   - Sanity check: aborts if BYPASSRLS attribute didn't land.
+
+2. **`.github/workflows/ci.yml`** — adds the script to the "Pre-create roles" step, with `MEPUSER_SUPER_PASSWORD=testpass`. Now every CI run has both `mepuser` and `mepuser_super` provisioned before tests start.
+
+3. **`.env.example`** — documents `DATABASE_URL_SUPER` and `MEPUSER_SUPER_PASSWORD` so prod / dev environments know what to set.
+
+4. **`tests/integration/rls_stage2_super_role.test.js`** — 4 scenarios:
+   - Role exists with `rolcanlogin=t, rolbypassrls=t` AND `rolsuper=f, rolcreatedb=f, rolcreaterole=f, rolreplication=f` (defense-in-depth).
+   - Role is a MEMBER OF `mepuser`.
+   - `SET LOCAL ROLE mepuser_super` + GUC=999999 still returns rows (BYPASSRLS works).
+   - Contrast: `SET LOCAL ROLE mepuser` + GUC=999999 returns 0 rows (sanity that Stage 1 still enforces).
+
+### Why the role is created OUTSIDE the migrations/ directory
+
+`migrations/*.sql` is auto-applied by `scripts/migrate.js` which connects as `mepuser` (DATABASE_URL). `mepuser` does not have CREATE ROLE privilege. So the role provisioning HAS to be a one-shot DBA script run as `postgres`. Same pattern is used by the baseline schema dump (which also requires superuser to create extensions).
+
+### Production deployment plan (run this PR's apply step manually post-merge)
+
+After PR merges to main:
+1. Generate a strong password: `openssl rand -base64 32`. Store in password manager + `.env` on prod.
+2. SSH to prod, set the env var, run the script:
+   ```
+   ssh root@143.110.218.84
+   ```
+   Then on the server:
+   ```bash
+   cd /var/www/mep
+   git pull origin main
+   export MEPUSER_SUPER_PASSWORD='<from-password-manager>'
+   sudo -u postgres psql -d mepdb \
+     -v MEPUSER_SUPER_PASSWORD="$MEPUSER_SUPER_PASSWORD" \
+     -f scripts/postgres/setup_rls_roles.sql
+   ```
+3. Add `DATABASE_URL_SUPER=postgres://mepuser_super:$MEPUSER_SUPER_PASSWORD@localhost:5432/mepdb` to `/var/www/mep/.env`.
+4. No pm2 restart needed yet — backend doesn't read `DATABASE_URL_SUPER` until Piece 89-D (SUPER pool wiring).
+
+### Files changed in this PR (89-A)
+
+- `scripts/postgres/setup_rls_roles.sql` (track existing untracked draft from earlier session)
+- `.env.example` (DATABASE_URL_SUPER + MEPUSER_SUPER_PASSWORD docs)
+- `.github/workflows/ci.yml` (provision mepuser_super in CI)
+- `tests/integration/rls_stage2_super_role.test.js` (new — 4 scenarios)
+- `DECISIONS.md` (this Section 89)
+- `HANDOFF.md` (Phase 4b status update)
+
+### Deferred
+
+- Piece 89-B (`req.db` middleware) — sized for next PR.
+- Piece 89-C, D, E — pending.
+
+- **Today: 57 sections.** (Section 89 opens Phase 4 Stage 2. Piece 89-A ships in this PR; pieces B-E will open subsections as they land.)
 

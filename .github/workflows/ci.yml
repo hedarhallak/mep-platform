@@ -73,6 +73,13 @@ jobs:
           PGPASSWORD: testpass
         run: |
           psql -h localhost -U postgres -d testdb -c "CREATE ROLE mepuser WITH LOGIN PASSWORD 'testpass';"
+          # Section 89 (Phase 4 Stage 2): provision mepuser_super for the
+          # SUPER pool tests. setup_rls_roles.sql is idempotent and creates
+          # the role with BYPASSRLS + grants membership in mepuser.
+          psql -h localhost -U postgres -d testdb \
+            -v MEPUSER_SUPER_PASSWORD=testpass \
+            -v ON_ERROR_STOP=1 \
+            -f scripts/postgres/setup_rls_roles.sql
           psql -h localhost -U postgres -d testdb -v ON_ERROR_STOP=1 -f migrations/000_baseline_2026-04-28.sql
 
       - name: Apply pending migrations on top of baseline (Phase 59 onwards)
