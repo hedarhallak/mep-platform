@@ -106,11 +106,26 @@ router.post('/complete', async (req, res) => {
     const pinHash = await bcrypt.hash(pin, 12);
 
     // ── Create app_user ───────────────────────────────────────
+    // Section 87 / migration 011: email is now NOT NULL and globally unique.
+    // Pull email from the invite (which carries the email the admin sent
+    // the invitation to). Fall back to a synthetic if the invite somehow
+    // lacks one (legacy pre-migration invites).
+    const emailFromInvite =
+      invite.email && invite.email.trim()
+        ? invite.email.trim().toLowerCase()
+        : `${username.toLowerCase().trim()}.${invite.employee_id}@${invite.company_id}.constrai.local`;
     await client.query(
       `INSERT INTO public.app_users
-         (username, pin_hash, employee_id, company_id, role, is_active, must_change_pin)
-       VALUES ($1, $2, $3, $4, $5, true, false)`,
-      [username.toLowerCase().trim(), pinHash, invite.employee_id, invite.company_id, invite.role]
+         (username, email, pin_hash, employee_id, company_id, role, is_active, must_change_pin)
+       VALUES ($1, $2, $3, $4, $5, $6, true, false)`,
+      [
+        username.toLowerCase().trim(),
+        emailFromInvite,
+        pinHash,
+        invite.employee_id,
+        invite.company_id,
+        invite.role,
+      ]
     );
 
     // ── Activate employee in public.employees ─────────────────
