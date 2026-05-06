@@ -50,7 +50,9 @@ test.describe('Login page — public smoke', () => {
 
     // Inputs — match by placeholder rather than label since the labels are
     // visually decorative (not associated via `htmlFor`).
-    await expect(page.getByPlaceholder(/Enter username/i)).toBeVisible();
+    // Section 87 / migration 011: login is now email-based for the Model C
+    // single-domain architecture. Placeholder updated from "Enter username".
+    await expect(page.getByPlaceholder(/Enter your email/i)).toBeVisible();
     await expect(page.getByPlaceholder(/Enter PIN/i)).toBeVisible();
 
     // Submit button.

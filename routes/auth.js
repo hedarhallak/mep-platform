@@ -108,18 +108,24 @@ function buildTokenPayload(user, role, mustChangePin) {
  */
 router.post('/login', async (req, res) => {
   try {
-    const { username, pin } = req.body || {};
+    // Section 87 / migration 011: login is now email-based for the Model C
+    // single-domain architecture. Backward-compat: still accept `username` in
+    // the request body for older mobile builds; the lookup matches either
+    // email or username.
+    const { email, username, pin } = req.body || {};
+    const loginIdentifier = email || username;
 
-    if (!username || !pin) {
+    if (!loginIdentifier || !pin) {
       return res.status(400).json({ ok: false, error: 'MISSING_FIELDS' });
     }
 
     const { rows } = await pool.query(
-      `SELECT au.id, au.username, au.employee_id, au.company_id, au.role, au.is_active, au.pin_hash, au.must_change_pin, ep.full_name
+      `SELECT au.id, au.username, au.email, au.employee_id, au.company_id, au.role, au.is_active, au.pin_hash, au.must_change_pin, ep.full_name
        FROM public.app_users au
        LEFT JOIN public.employee_profiles ep ON ep.employee_id = au.employee_id
-       WHERE au.username = $1 LIMIT 1`,
-      [username]
+       WHERE lower(au.email) = lower($1) OR lower(au.username) = lower($1)
+       LIMIT 1`,
+      [loginIdentifier]
     );
 
     const user = rows[0];
@@ -133,7 +139,7 @@ router.post('/login', async (req, res) => {
       await audit(pool, req, {
         action: ACTIONS.LOGIN_FAILED,
         entity_type: 'user',
-        entity_name: username,
+        entity_name: loginIdentifier,
         details: { reason: 'INVALID_CREDENTIALS' },
       });
       return res.status(401).json({ ok: false, error: 'INVALID_CREDENTIALS' });
@@ -183,6 +189,7 @@ router.post('/login', async (req, res) => {
       user: {
         user_id: user.id,
         username: user.username,
+        email: user.email,
         name: user.full_name || user.username,
         employee_id: user.employee_id,
         company_id: user.company_id,

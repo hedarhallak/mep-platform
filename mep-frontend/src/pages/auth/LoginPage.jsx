@@ -2,14 +2,15 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '@/hooks/useAuth'
-import { Building2, Lock, User, Eye, EyeOff } from 'lucide-react'
+import { Building2, Lock, Mail, Eye, EyeOff } from 'lucide-react'
 import LanguageSwitcher from '@/components/shared/LanguageSwitcher'
 
 export default function LoginPage() {
   const { t } = useTranslation()
   const { login } = useAuth()
   const navigate  = useNavigate()
-  const [form, setForm]       = useState({ username: '', pin: '' })
+  // Section 87 / migration 011: login is now email-based.
+  const [form, setForm]       = useState({ email: '', pin: '' })
   const [showPin, setShowPin] = useState(false)
   const [error, setError]     = useState('')
   const [loading, setLoading] = useState(false)
@@ -19,7 +20,7 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
     try {
-      await login(form.username, form.pin)
+      await login(form.email, form.pin)
       navigate('/dashboard')
     } catch (err) {
       const code = err.message
@@ -51,16 +52,17 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wide">
-                {t('login.username')}
+                {t('login.email')}
               </label>
               <div className="relative">
-                <User size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
-                  type="text"
-                  value={form.username}
-                  onChange={e => setForm(f => ({ ...f, username: e.target.value }))}
+                  type="email"
+                  autoComplete="email"
+                  value={form.email}
+                  onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
                   className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light focus:border-transparent"
-                  placeholder={t('login.usernamePlaceholder')}
+                  placeholder={t('login.emailPlaceholder')}
                   required
                 />
               </div>

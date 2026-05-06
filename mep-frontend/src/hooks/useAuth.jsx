@@ -20,8 +20,11 @@ export function AuthProvider({ children }) {
       .finally(() => setLoading(false))
   }, [])
 
-  const login = async (username, pin) => {
-    const res = await api.post('/auth/login', { username, pin })
+  // Section 87 / migration 011: login is now email-based for the Model C
+  // single-domain architecture. Backend still accepts `username` as a legacy
+  // fallback, but the frontend always sends `email`.
+  const login = async (email, pin) => {
+    const res = await api.post('/auth/login', { email, pin })
     if (res.data.ok) {
       localStorage.setItem('mep_token', res.data.token)
       if (res.data.refresh_token) {

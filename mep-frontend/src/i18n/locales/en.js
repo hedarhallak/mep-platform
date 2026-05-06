@@ -78,6 +78,8 @@ export default {
     title: 'Sign in to your account',
     username: 'Username',
     usernamePlaceholder: 'Enter username',
+    email: 'Email',
+    emailPlaceholder: 'Enter your email',
     pin: 'PIN',
     pinPlaceholder: 'Enter PIN',
     submit: 'Sign In',
@@ -85,7 +87,7 @@ export default {
     showPin: 'Show PIN',
     hidePin: 'Hide PIN',
     errors: {
-      INVALID_CREDENTIALS: 'Invalid username or PIN',
+      INVALID_CREDENTIALS: 'Invalid email or PIN',
       ACCOUNT_SUSPENDED: 'Account suspended',
       COMPANY_SUSPENDED: 'Company account suspended',
       LOGIN_FAILED: 'Login failed',
