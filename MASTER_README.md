@@ -3,8 +3,8 @@
 > Production: https://app.constrai.ca
 > Website: https://www.constrai.ca (Coming Soon landing page)
 > Server: root@143.110.218.84
-> Latest DECISIONS section: **Section 85** (Multi-Tenant Architecture Design — opens the "Productize for paying clients" chapter. Subdomain-per-tenant model A approved + 5-layer defense-in-depth + 8-phase execution plan, ~10-12 days. See Section 85 for full design + phase-by-phase roadmap.)
-> Active program: **Multi-Tenant Migration (Section 85, Phases 1-8)** — see DECISIONS.md Section 85 for the design, decisions log, and phase plan. Phase 1 (Infrastructure: DNS + Cloudflare + Wildcard SSL + Nginx) starts next session. The Section 84 UI smoke test is **paused** until all 8 phases ship.
+> Latest DECISIONS section: **Section 85** (Multi-Tenant Architecture — pivoted same-day from Model A subdomain-per-tenant to **Model C single domain** after Hedar questioned subdomain complexity. Final plan: `app.constrai.ca` for ALL users + `admin.constrai.ca` for SUPER_ADMIN + `www.constrai.ca` for marketing. Same 5-layer defense-in-depth (RLS + middleware + JWT + RBAC + Cloudflare). Phase 2 simplified — tenant resolves from JWT, not Host header. Net savings: ~1.5 days. PIN → password migration noted as future Phase-7-area work.)
+> Active program: **Multi-Tenant Migration (Section 85, Phases 1-8)** — see DECISIONS.md Section 85 for the full design + same-day Model A → C pivot. Phase 1 (Infrastructure) currently in progress: Cloudflare account + DNS migration + Resend email signup all done; awaiting Cloudflare nameserver propagation. The Section 84 UI smoke test is **paused** until all 8 phases ship.
 > Web Tier 1 + Tier 2 DONE (10/10). ~509 i18n keys live. Tier 3 i18n deferred.
 > **Customer #1 status:** unsigned (constraint per Section 46). Sales materials still TODO; product side now in much better shape post-May-4 hygiene push.
 > **Prod is in sync with main**. `APP_NAME=Constrai` + `VITE_MAPBOX_TOKEN` live. Tab title "Constrai" everywhere.
