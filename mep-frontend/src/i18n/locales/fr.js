@@ -78,6 +78,8 @@ export default {
     title: 'Connectez-vous à votre compte',
     username: "Nom d'utilisateur",
     usernamePlaceholder: "Entrez le nom d'utilisateur",
+    email: 'Courriel',
+    emailPlaceholder: 'Entrez votre courriel',
     pin: 'NIP',
     pinPlaceholder: 'Entrez votre NIP',
     submit: 'Se connecter',
@@ -85,7 +87,7 @@ export default {
     showPin: 'Afficher le NIP',
     hidePin: 'Masquer le NIP',
     errors: {
-      INVALID_CREDENTIALS: "Nom d'utilisateur ou NIP invalide",
+      INVALID_CREDENTIALS: 'Courriel ou NIP invalide',
       ACCOUNT_SUSPENDED: 'Compte suspendu',
       COMPANY_SUSPENDED: "Compte de l'entreprise suspendu",
       LOGIN_FAILED: 'Échec de la connexion',
