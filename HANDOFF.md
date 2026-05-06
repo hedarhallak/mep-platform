@@ -1,7 +1,7 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 6, 2026, ~11:40 UTC — after Phase 4 Stage 1 (PR #145) merged.
+> Last updated: May 6, 2026, ~12:50 UTC — after Phase 4 Stage 1 deployed to prod.
 
 ---
 
@@ -45,8 +45,8 @@ When you receive the one-line command above:
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04) |
 | Backend | Node.js + Express + Postgres 16, pm2-managed at `/var/www/mep` |
 | Frontend | React + Vite + Tailwind, deployed to `/var/www/mep/mep-frontend/dist` |
-| Latest deployed to prod | Phase 3 (email-based login) — May 6, 2026, ~03:00 UTC |
-| Last merged to main | Phase 4 Stage 1 (PR #145) — May 6, 2026, 11:37 UTC — **NOT yet deployed to prod** |
+| Latest deployed to prod | **Phase 4 Stage 1 (migration 012, permissive RLS)** — May 6, 2026, ~12:50 UTC |
+| Last merged to main | Phase 4 Stage 1 closeout (PR #146) — May 6, 2026, 12:26 UTC |
 | Active program | **Multi-Tenant Migration** (Section 85, Phases 1-8) — Phase 4 in progress |
 | Mobile app | Still on legacy username login — backend keeps backward-compat |
 
@@ -58,7 +58,7 @@ When you receive the one-line command above:
 | Phase 1 — Cloudflare + Origin SSL | ✅ Deployed | 86 |
 | Phase 2 — Tenant Resolver | ✅ No-op (Model C) | 87 |
 | Phase 3 — DB schema 011 + email login | ✅ Deployed | 87 |
-| **Phase 4a — RLS Stage 1 (permissive policies)** | ✅ **Merged, not yet deployed** | 88 |
+| **Phase 4a — RLS Stage 1 (permissive policies)** | ✅ **Deployed to prod** | 88 |
 | **Phase 4b — RLS Stage 2 (req.db middleware)** | ⏳ **NEXT** | TBD (Section 89+) |
 | Phase 4c — RLS Stage 3 (strict policies) | ⏳ Pending | TBD |
 | Phase 5 — SUPER_ADMIN portal split | ⏳ Pending | TBD |
@@ -74,18 +74,20 @@ When you receive the one-line command above:
 
 **Goal:** introduce a per-request transaction wrapper that calls `SET LOCAL app.company_id = $userCompanyId` so backend routes start setting the GUC. Once all routes are migrated, Stage 3 can drop the permissive bypass clause.
 
-**Two parts:**
+Stage 1 (migration 012) is now LIVE on prod (verified May 6, 2026, ~12:50 UTC — `mepuser` queries with GUC=999999 return 0 rows; with GUC=5 return 50 rows; without GUC return 50 rows). So Stage 2 work can start immediately on top.
 
-1. **Pre-work — deploy migration 012 to prod first.** Stage 2 backend code references the GUC; deploying it without RLS infrastructure on prod is wrong order. The deploy is ~5 min: SSH, pre-migration backup, run migration, verify with the queries at the bottom of `migrations/012_rls_stage1_permissive.sql`.
+**Stage 2 implementation plan:**
 
-2. **Stage 2 implementation:**
-   - `middleware/db_context.js` exposing `req.db` — a per-request transaction wrapper that calls `SET LOCAL app.company_id = $userCompanyId` before any route logic runs.
-   - Migrate routes batch by batch (5-10 routes per PR, lowest-risk read-heavy first). For each batch:
-     - Replace `pool.query(...)` with `req.db.query(...)`.
-     - Add an integration test that confirms cross-tenant queries return 0 rows after middleware sets the GUC.
+1. **`mepuser_super` role** — create in Stage 2 first PR (deferred from Stage 1). BYPASSRLS DB role used by SUPER_ADMIN routes that legitimately span tenants (e.g. cross-tenant company listings, billing dashboards). Migration 013 ships this.
+
+2. **`middleware/db_context.js` exposing `req.db`** — per-request transaction wrapper that calls `SET LOCAL app.company_id = $userCompanyId` before any route logic runs. SUPER_ADMIN routes use the `mepuser_super` connection instead.
+
+3. **Migrate routes batch by batch** (5-10 routes per PR, lowest-risk read-heavy first). For each batch:
+   - Replace `pool.query(...)` with `req.db.query(...)`.
+   - Add an integration test that confirms cross-tenant queries return 0 rows after middleware sets the GUC.
    - Plan ~5-7 batch PRs over Stage 2.
 
-3. **`mepuser_super` role** — create in Stage 2 first PR (deferred from Stage 1). BYPASSRLS DB role used by SUPER_ADMIN routes that legitimately span tenants (e.g. cross-tenant company listings, billing dashboards).
+4. **Stage 3 graduation** — once all 323 call sites are migrated, ship migration 014 that drops the "GUC unset = bypass" clause. Strict mode active.
 
 > NOTE: there are some untracked WIP files on Hedar's local working tree from a previous session (`middleware/tenant_db.js`, `migrations/012_enable_rls_permissive.sql`, `tests/integration/rls.test.js`, `scripts/postgres/`). They were a prior attempt at Stage 2 that didn't ship. The names differ from the canonical ones above (`db_context.js`, not `tenant_db.js`); leave them as untracked reference material or `git clean -df` them when starting Stage 2 fresh.
 
