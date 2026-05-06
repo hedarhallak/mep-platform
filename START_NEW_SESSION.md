@@ -45,7 +45,8 @@ If you already know what you want to work on, add it after the bootstrap block:
 - `اليوم Phase 1 follow-ups` (certbot disable + nginx warnings cleanup + firewall lock-down — separate session because firewall mistakes can lock SSH)
 - `اليوم نـ update Mobile login لـ email-based` (mep-mobile still sends username; backend backward-compat keeps it alive but next mobile release should switch)
 
-**Quick reference — where we are in the multi-tenant migration:**
+**Quick reference — multi-tenant migration state:**
+
 | Phase | Status | DECISIONS section |
 |---|---|---|
 | Section 85 — Architecture design (Model A→C pivot) | ✅ Done | Section 85 |
