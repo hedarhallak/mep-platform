@@ -186,6 +186,10 @@ async function seedUser(overrides = {}) {
   const pool = getPool();
   const { hashPin } = require('../../lib/auth_utils');
   const username = overrides.username || `${TEST_PREFIX}u_${uniqueTag()}`;
+  // Section 87 / migration 011: email is now NOT NULL and globally unique.
+  // If the override doesn't supply one, derive a unique synthetic email from
+  // the username (which already includes a unique tag from uniqueTag()).
+  const email = overrides.email || `${username}@test.constrai.local`;
   const role = overrides.role || 'WORKER';
   const pin = overrides.pin || '1234';
   const isActive = overrides.is_active !== undefined ? overrides.is_active : true;
@@ -193,14 +197,15 @@ async function seedUser(overrides = {}) {
   const employeeId = overrides.employee_id || null;
   const pinHash = await hashPin(pin);
   const { rows } = await pool.query(
-    `INSERT INTO public.app_users (username, pin_hash, role, is_active, company_id, employee_id)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO public.app_users (username, email, pin_hash, role, is_active, company_id, employee_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING id`,
-    [username, pinHash, role, isActive, companyId, employeeId]
+    [username, email, pinHash, role, isActive, companyId, employeeId]
   );
   return {
     id: Number(rows[0].id),
     username,
+    email,
     role,
     pin,
     company_id: companyId,

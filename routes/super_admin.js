@@ -178,12 +178,18 @@ router.post('/companies', async (req, res) => {
     const company = companyIns.rows[0];
 
     const pinHash = await hashPin(pinStr);
+    // Section 87 / migration 011: email is NOT NULL and globally unique. Use
+    // admin_email if provided, otherwise synthesize from username + code.
+    const adminEmail =
+      admin_email && String(admin_email).trim()
+        ? String(admin_email).trim().toLowerCase()
+        : `${adminUsername}@${companyCode}.constrai.local`;
     const userIns = await client.query(
       `INSERT INTO public.app_users
-         (username, pin_hash, company_id, role, is_active, must_change_pin, is_temp_pin)
-       VALUES ($1, $2, $3, 'ADMIN', true, true, true)
-       RETURNING id, username, role`,
-      [adminUsername, pinHash, company.company_id]
+         (username, email, pin_hash, company_id, role, is_active, must_change_pin, is_temp_pin)
+       VALUES ($1, $2, $3, $4, 'ADMIN', true, true, true)
+       RETURNING id, username, email, role`,
+      [adminUsername, adminEmail, pinHash, company.company_id]
     );
     const adminUser = userIns.rows[0];
 
