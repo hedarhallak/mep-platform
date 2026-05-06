@@ -8147,3 +8147,103 @@ App loads at app.constrai.ca with Acme's logo + colors
 Section 85 is the multi-tenant architecture chapter. The pivot from A → C is a refinement of the same chapter, not a new chapter. Future Sections 86, 87, ... will be the per-phase execution logs.
 
 - **Today: 53 sections.** (Section 85 captures the multi-tenant architecture chapter — original Model A design + same-day pivot to Model C single domain. Phase plan updated. PIN → password migration noted as Phase-7-area deferred work.)
+
+---
+
+## Section 86 — Phase 1 Execution: Cloudflare + Origin SSL Migration (May 5-6, 2026, late evening → early morning)
+
+First execution log for the multi-tenant migration program from Section 85. Phase 1 goal: stand up Cloudflare proxy in front of DigitalOcean and replace the auto-renewing Let's Encrypt certs with a Cloudflare Origin Certificate (15-year, only valid behind Cloudflare).
+
+### What landed
+
+1. **Cloudflare Free account** registered for `hedar.hallak@gmail.com` (Professional / Founder / 1-person team / Public websites + Application security profile). Block AI training bots enabled.
+2. **DNS migration** from Namecheap BasicDNS → Cloudflare:
+   - Cloudflare nameservers: `jeremy.ns.cloudflare.com`, `macy.ns.cloudflare.com`
+   - Updated at Namecheap (Custom DNS).
+   - Existing records imported automatically: 3 A records (app, apex, www → 143.110.218.84, all proxied), 5 MX records (Namecheap email forwarding, eforward1-5, DNS only), 1 TXT (SPF, DNS only).
+   - Propagation took ~30 minutes; Cloudflare flipped to "Active" without downtime.
+3. **SSL/TLS encryption mode** set to **Full (strict)** (was "Full" by default). Verified site still loaded with existing Let's Encrypt cert.
+4. **Cloudflare Origin Certificate** generated with all defaults:
+   - Private key type: RSA (2048)
+   - Hostnames: `*.constrai.ca, constrai.ca` (wildcard, future-proofs us if we ever add subdomains)
+   - Validity: 15 years (default)
+5. **Cert installed on Nginx** at `/etc/nginx/ssl/cloudflare/cloudflare-origin.{pem,key}` (644 / 600). New SSL snippet at `/etc/nginx/snippets/cloudflare-ssl.conf` includes the cert paths plus modern protocols (TLSv1.2 + 1.3, no session tickets, no ssl_prefer_server_ciphers).
+6. **All 3 site configs migrated** via batch sed (`/etc/nginx/sites-available/{constrai,www-constrai}` + `/etc/nginx/sites-enabled/default`):
+   - Removed Let's Encrypt `ssl_certificate`, `ssl_certificate_key`, `include /etc/letsencrypt/options-ssl-nginx.conf`, `ssl_dhparam` lines.
+   - Added `include /etc/nginx/snippets/cloudflare-ssl.conf;` after every `listen 443 ssl;`.
+7. **Backups** at `/root/nginx-backup-20260506-052551/` on the Droplet (constrai, www-constrai, default).
+8. **Verified** with `curl -I https://app.constrai.ca`:
+   - `HTTP/2 200`
+   - `server: cloudflare`
+   - `cf-ray: 9f7599eaab79de04-YYZ` (Toronto datacenter)
+   - `alt-svc: h3=":443"; ma=86400` (HTTP/3 advertised)
+   - Browser test: login page rendered correctly with HTTPS lock icon.
+
+### Pitfalls hit (encode in convention)
+
+#### 1. Notepad on Windows adds `.txt` to filenames silently
+
+When saving the Cloudflare Origin Certificate + private key from the browser into Notepad, the default "Save as type" is `Text Documents (*.txt)` and the filename gets `.txt` appended unless the dropdown is changed to `All Files (*.*)`. Files ended up as `cloudflare-origin.pem.txt` and `cloudflare-origin.key.txt`. Caught when SCP failed with "no such file or directory".
+
+**Convention:** when saving cert / key files from a browser, always use a code editor (VS Code) instead of Notepad, OR explicitly verify file names with `dir` after saving. Notepad's "All Files (*.*)" dropdown is mandatory but easy to miss.
+
+#### 2. Cloudflare's PEM/KEY copy buttons can swap content if user clicks them out of order
+
+The Origin Certificate page has two textboxes (Cert + Private Key) with copy buttons. If the user pastes the Private Key into the cert file by mistake (or vice versa), nginx fails with:
+```
+PEM_read_bio_X509_AUX() failed (SSL: error:0480006C:PEM routines::no start line:Expecting: TRUSTED CERTIFICATE)
+```
+
+**Diagnosis:** `head -3 cloudflare-origin.pem` will show `-----BEGIN PRIVATE KEY-----` instead of `-----BEGIN CERTIFICATE-----` — files are swapped.
+
+**Fix:** swap file contents (mv `.pem` → `.tmp`, `.key` → `.pem`, `.tmp` → `.key`).
+
+**Convention:** after saving cert/key files, immediately run `head -3` on each to verify content matches the filename suffix. The cert file must start with `-----BEGIN CERTIFICATE-----`; the key file must start with `-----BEGIN PRIVATE KEY-----`.
+
+#### 3. Windows CRLF + UTF-8 BOM break PEM parsing
+
+Notepad on Windows saves with CRLF line endings and (sometimes) a UTF-8 BOM at the start. OpenSSL's PEM parser tolerates CRLF in some cases but the BOM always breaks it.
+
+**Fix:** `apt install dos2unix && dos2unix file.pem file.key` cleans both line endings and BOM.
+
+**Convention:** on the Droplet, run `dos2unix` on any cert/key file copied from a Windows machine before installing. Add to standard install procedure.
+
+### nginx warnings (deferred cleanup, not blockers)
+
+`nginx -t` after the migration emits 4 warnings:
+```
+[warn] conflicting server name "constrai.ca" on 0.0.0.0:443, ignored
+[warn] conflicting server name "www.constrai.ca" on 0.0.0.0:443, ignored
+[warn] conflicting server name "www.constrai.ca" on 0.0.0.0:80, ignored
+[warn] conflicting server name "constrai.ca" on 0.0.0.0:80, ignored
+```
+
+**Cause:** historical duplication between `/etc/nginx/sites-enabled/default` (handles `www + constrai.ca` for landing) and `/etc/nginx/sites-available/www-constrai` (also handles `www + constrai.ca` with a constrai.ca → www.constrai.ca redirect). Both got merged in over multiple sessions. nginx ignores the duplicates, picks the first-loaded server block, and continues normally.
+
+**Plan:** clean up in a follow-up — choose `www-constrai` as the canonical (it has the apex → www redirect + cache headers) and delete the conflicting block from `default`.
+
+### Deferred work (Phase 1 follow-ups)
+
+1. **Disable certbot auto-renewal** — `systemctl disable --now certbot.timer`. Let's Encrypt certs are no longer in use; renewals will eventually fail in the absence of port 80 challenge responses, generating noise. Keep the `/etc/letsencrypt/live/*` directory as backup for now (small, harmless).
+
+2. **Firewall lock-down to Cloudflare IPs only** — currently the Droplet IP `143.110.218.84` is still reachable directly on ports 80 and 443. Anyone with the IP can bypass Cloudflare's WAF. Setup: install `ufw`, allow only Cloudflare's published IP ranges (https://www.cloudflare.com/ips/), block everything else. **Important:** also allow SSH from Hedar's IP. **Do this in a separate session** (mistakes here can lock everyone out of the server).
+
+3. **Clean up duplicate server_name blocks** (the 4 nginx warnings above). Low priority.
+
+4. **Authenticated Origin Pulls** (Cloudflare → Nginx mTLS) — even more secure than just IP filtering. Defer until after Phase 8.
+
+5. **Resend Domain Authentication** — when we reach Phase 6 / email migration, add SendGrid → Resend swap and the DKIM CNAME records to Cloudflare DNS.
+
+### What's next
+
+**Phase 2 — Tenant Resolver Middleware** is now significantly simplified by the Section 85 pivot to Model C (single domain). Tenant resolution at login: backend looks up `email → company_id` and bakes it into the JWT. No Host-header parsing needed. Likely 0.5 day of work; may be folded into the closeout PR for Phase 1 instead of a separate phase.
+
+The 9-task UI smoke test (Section 84) remains paused until all 8 phases ship.
+
+### Files changed in repo this phase (commit set)
+
+- `.gitignore` — added `.secrets/`, `*.pem`, `*.key` to prevent accidental commits of cert material.
+
+That's it for the repo. All other Phase 1 changes are server-side (nginx config + cert files at `/etc/nginx/`).
+
+- **Today: 54 sections.** (Section 86 closes Phase 1 of the multi-tenant migration.)

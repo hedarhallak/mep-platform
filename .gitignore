@@ -46,3 +46,11 @@ mep-frontend/coverage/
 # Local-only debug/coverage logs (Section 65 leftovers; regeneratable)
 jest-cov-*.txt
 jest-foremen-debug.txt
+
+# Secrets folder (Phase 1 multi-tenant migration — Cloudflare Origin Cert + private key, etc.)
+# NEVER commit anything inside .secrets/ — contains private keys
+.secrets/
+*.pem
+*.key
+!package-lock.json
+!**/node_modules/**
