@@ -8624,5 +8624,19 @@ PR #145 (feat/s88-phase4-rls-stage1-permissive → main):
 
 CI: 6/6 checks passed on the second attempt (first attempt failed on the BYPASSRLS pitfall above). Backend (Node 20) duration: 5m5s.
 
-- **Today: 56 sections.** (Section 88 = Phase 4 Stage 1 design + closeout. Stage 2 will open Section 89.)
+### Prod deployment (May 6, 2026, ~12:50 UTC)
+
+Migration 012 deployed to production immediately after PR #146 closeout merge. Sequence executed via SSH:
+
+1. Pre-migration backup: `/root/backups/mepdb-pre-migration-012-20260506-124608.dump` (~502 KB).
+2. Apply: `sudo -u postgres psql -d mepdb -v ON_ERROR_STOP=1 -f /var/www/mep/migrations/012_rls_stage1_permissive.sql` — clean COMMIT, both internal sanity checks passed (RLS / FORCE / policy count = 20 across all tenant tables).
+3. Verification queries — first as `postgres` (BYPASSRLS, all rows visible regardless of GUC, expected) then as `mepuser` (non-super, RLS applies):
+   - `SET ROLE mepuser; SELECT COUNT(*) FROM employees;` → 50 (permissive bypass works when GUC unset).
+   - `BEGIN; SET LOCAL app.company_id = '999999'; SELECT COUNT(*) FROM employees; ROLLBACK;` → 0 (RLS filters unknown tenant).
+   - `BEGIN; SET LOCAL app.company_id = '5'; SELECT COUNT(*) FROM employees; ROLLBACK;` → 50 (correct tenant returns its rows).
+4. Web smoke test — login at `https://app.constrai.ca` as `hedar.hallak@gmail.com`, navigate to `/employees` page, confirmed all 50 records load with role / trade / status / profile columns intact. App behaviour is unchanged because no routes set the GUC yet (Stage 2's job).
+
+Stage 1 is now LIVE on prod. Stage 2 (req.db middleware + route migration) can begin immediately on top of this without any rollback risk.
+
+- **Today: 56 sections.** (Section 88 = Phase 4 Stage 1 design + closeout + prod deploy. Stage 2 will open Section 89.)
 
