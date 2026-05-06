@@ -8041,4 +8041,109 @@ Mid-discussion, Hedar said: "انت عكيتني كم هائل من المعلو
 
 The 9-task UI smoke test (Section 84 plan) remains **paused** for the duration of the multi-tenant migration. Each phase will include a small smoke check at its boundary.
 
-- **Today: 53 sections.** (Section 85 added — opens the multi-tenant architecture chapter.)
+---
+
+### Same-day pivot: Model A → Model C (single domain) — May 5, 2026, late evening
+
+After the original Section 85 design proposed subdomain-per-tenant (Model A, Salesforce-style), Hedar questioned the architectural choice mid-Phase-1 (during Cloudflare setup) with a series of probing questions:
+
+1. *"ليش انت حابب يكون فيه subdomain سالدخول نفسه هل هالشي بيعطي موثوقية وأمان اعلى لكل شركة؟"* — Does the subdomain actually provide more security?
+2. *"حتى لو صار عندنا عشرات الشركات...رح يضل خيار app.constrai.ca هو الأفضل؟"* — Does single domain still work at scale?
+3. *"هي طريقة procored؟"* — Is this what Procore does?
+
+The honest answer to all three: **subdomain doesn't add security beyond what RLS + middleware + JWT already provide. It only adds branding-via-URL and easier custom-domain support later.** Procore (10,000+ construction companies) and the entire construction-ERP industry (BuilderTREND, CoConstruct, JobNimbus, Buildr, Knowify) all use single-domain architecture.
+
+Hedar landed on the simpler conclusion: **single domain is easier for users (no need to find their company's URL) and identical in security**. We pivoted.
+
+#### New architecture (Model C — single domain)
+
+```
+www.constrai.ca       → Marketing landing (public, no login)
+app.constrai.ca       → ALL users login + use the app here (every tenant)
+admin.constrai.ca     → SUPER_ADMIN portal (still separated for security)
+```
+
+**3 subdomains total**, not per-tenant. Cloudflare wildcard cert covers all 3 with no operational overhead.
+
+#### Tenant isolation (no subdomain involvement)
+
+The 5-layer defense-in-depth from the original design **all still apply**:
+1. Network: Cloudflare proxy (DDoS + WAF + IP hiding)
+2. App middleware: JWT contains `company_id`, set at login from email lookup
+3. RBAC: role + permission checks per route
+4. Per-query filtering: `WHERE company_id = $1` on every business query
+5. PostgreSQL RLS: DB-level rejection if backend code forgets WHERE
+
+The subdomain was a **6th visual layer** that didn't add security. Removing it costs nothing in safety.
+
+#### Tenant branding (post-login)
+
+After login, the app fetches `/api/tenant/info` based on JWT's `company_id` and applies:
+- Company logo in header
+- Theme colors via CSS variables (`--color-primary-*`)
+- Company display name
+- Email templates with company branding
+
+User experience: feels like "their company's app", even though the URL is the same as everyone else's.
+
+#### Activation flow (revised)
+
+```
+SUPER_ADMIN creates company "Acme" + admin email ahmad@acme.com
+            │
+            ▼
+Backend: companies(id=1, code='acme'), app_users(email='ahmad@acme.com', is_active=false)
+            │
+            ▼
+Resend: activation email → ahmad@acme.com
+            │
+            │ link: https://app.constrai.ca/activate?token=xxx
+            ▼
+Ahmad clicks → app.constrai.ca/activate?token=xxx
+            │
+            │ Backend reads token → finds company_id=1, role=COMPANY_ADMIN
+            │
+            ▼
+Activation page (with Acme branding from token)
+            │
+            │ Ahmad sets PIN
+            ▼
+✅ Logged in. JWT includes company_id=1
+            │
+            ▼
+App loads at app.constrai.ca with Acme's logo + colors
+```
+
+**Same flow for all subsequent logins:** app.constrai.ca → email + PIN → JWT identifies company → app loads with branding.
+
+#### Phase plan changes
+
+| Phase | Original (Model A) | Updated (Model C) |
+|---|---|---|
+| Phase 1 — Infrastructure | Wildcard SSL for `*.constrai.ca` + tenant resolver from Host | Just 3 subdomain certs (`www`, `app`, `admin`) — saves ~1 day |
+| Phase 2 — Tenant Resolver | Read Host header → company_code → company_id | **Eliminated**. Tenant resolves from email → company_id at login. JWT carries it after. |
+| Phase 3 — DB Migration | email globally unique | (unchanged) |
+| Phase 4 — PostgreSQL RLS | (unchanged) | (unchanged) |
+| Phase 5 — SUPER_ADMIN Portal Split | Move to admin.constrai.ca | (unchanged — still gets dedicated subdomain) |
+| Phase 6 — Frontend + Branding | Read tenant from Host, then API | Read tenant from JWT after login, then API for branding details |
+| Phase 7 — 2FA + Account Security | (unchanged) | (unchanged) |
+| Phase 8 — Audit + Compliance | (unchanged) | (unchanged) |
+
+**Net effect:** save ~1.5 days of infrastructure work + significantly simpler code (no Host-header parsing, no per-tenant routing). Same security. Same branding. Better UX (one URL for everyone).
+
+#### Future architectural notes (deferred decisions)
+
+1. **PIN → Password migration (deferred — Phase 7 area):** Hedar noted: *"عندنا بالدخول لازم نحولها لكلمة سر مو بس pin ولكن لسهولة الاستخدام الحالي نحنا عملناها pin"*. Long-term, the auth system should support full passwords (with complexity rules) for office staff (COMPANY_ADMIN, IT_ADMIN, SUPER_ADMIN), keeping PIN only for field workers (WORKER, FOREMAN, JOURNEYMAN) where mobile entry speed matters. Likely model:
+   - **Admins:** email + password (mandatory) + TOTP 2FA (Phase 7)
+   - **Field workers:** email + PIN (4-8 digits) + biometric on mobile (Expo `expo-local-authentication`)
+   - This split was already implicit in the Phase 7 plan; making it explicit here so future sessions don't accidentally drop PIN entirely.
+
+2. **Custom domain support (`app.acme.com`)** stays deferred (was Phase 9 in original plan, now becomes a 2-week migration project triggered by first enterprise client demanding it — single-domain → custom-domain mapping is harder than subdomain → custom-domain, but solvable).
+
+3. **Subdomain fallback** stays available as a future option. If, at scale, branding-via-URL becomes a sales differentiator, we can add subdomains in 2 weeks of work.
+
+#### Why this change is captured here, not as a new section
+
+Section 85 is the multi-tenant architecture chapter. The pivot from A → C is a refinement of the same chapter, not a new chapter. Future Sections 86, 87, ... will be the per-phase execution logs.
+
+- **Today: 53 sections.** (Section 85 captures the multi-tenant architecture chapter — original Model A design + same-day pivot to Model C single domain. Phase plan updated. PIN → password migration noted as Phase-7-area deferred work.)

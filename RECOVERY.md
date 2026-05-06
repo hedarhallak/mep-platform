@@ -109,6 +109,59 @@ sudo -u postgres psql -d mepdb -c "SELECT id, username, role FROM public.app_use
 
 ---
 
+### 2.4 Cost & Subscription Inventory (NEW — May 5, 2026)
+
+> **Source of truth for all paid + free services Constrai depends on.** Keep this updated whenever a subscription is added, upgraded, or canceled. Compiled during the Phase 1 infrastructure setup when Hedar asked: "اعملي قائمة بكل المواقع اللي عم ندفع عليها مشان اقدر نظم الموضوع".
+
+#### Active services (May 2026)
+
+| Service | Purpose | Plan | Monthly cost | Annual cost | Notes |
+|---|---|---|---|---|---|
+| **DigitalOcean** | Droplet (s-2vcpu-2gb-90gb-intel) + Spaces (250 GiB / 1 TiB bandwidth) | Pay-as-you-go | ~$32 USD + ~15% taxes (GST + QST) = **~$37 USD** | **~$444 USD** | Largest single cost. Droplet started Apr 6, Spaces started Apr 18 — May 2026 is first full-month bill |
+| **Namecheap** | Domain registrar for `constrai.ca` | Annual | — | **~$15-20 USD** | DNS hosting also was at Namecheap (BasicDNS) until May 5, 2026 — moved to Cloudflare |
+| **Apple Developer** | iOS distribution (TestFlight + App Store) | Individual | — | **$99 USD** | **Single point of failure** — see Section 6.1 |
+| **Google Play Console** | Android distribution | One-time | — | **$25 USD** (one-time) | Status TBD — verify if paid |
+| **Cloudflare** | DNS + CDN + WAF + DDoS proxy | Free | **$0** | **$0** | Activated May 5, 2026. 100% of needs covered by Free tier |
+| **SendGrid** | Transactional email (legacy — being migrated) | "End of Trial" — 0 emails/month effective | **$0** | **$0** | Trial ended Mar 30, 2026. Email broken since. **Migration in progress: SendGrid → Resend.** Once Resend is verified, cancel this account |
+| **Resend** | Transactional email (replacing SendGrid) | Free Forever | **$0** | **$0** | 3,000 emails/month, 100/day. API key generated May 5, 2026. Code migration deferred to Phase 6 |
+| **Mapbox** | Maps + geocoding | Pay-as-you-go (with $200/month free credits) | **$0** at current scale | **$0** | Verify usage in Mapbox dashboard if traffic grows |
+| **GitHub** | Code hosting (`hedarhallak/mep-platform`) | Free | **$0** | **$0** | Public-repo features used; Pro ($4/mo) not needed |
+| **Expo / EAS** | Mobile build service | Free Tier | **$0** at current cadence | **$0** | Verify in expo.dev/billing |
+| **UptimeRobot** | Liveness monitoring | Free | **$0** | **$0** | 50 monitors max, currently using 1 |
+| **Sentry** | Error tracking | Developer (Free) | **$0** | **$0** | 5,000 events/month |
+
+#### Total cost summary
+
+- **Monthly recurring:** **~$37 USD** (DigitalOcean only)
+- **Annual recurring (with annuals):** **~$37 × 12 + $99 + $20 = ~$563 USD/year ≈ $770 CAD/year**
+- **One-time (deferred):** $25 (Google Play Console)
+
+#### Migration / cancellation watchlist
+
+| Service | Action | Target | Status |
+|---|---|---|---|
+| SendGrid → Resend | Migrate transactional email senders, then cancel SendGrid account | Phase 6 of multi-tenant migration | Resend account ready; code migration pending |
+| DigitalOcean Spaces backups | Add weekly retention policy ($2/month addition mentioned in Section 3) | When backup volume justifies it | Pending |
+| Apple Developer Individual → Organization | Required to add team members under distinct Apple IDs | When team grows beyond 1 | Pending — see Section 6.1 |
+
+#### What to verify when reviewing this list
+
+1. **Mapbox usage** — log into Mapbox dashboard quarterly; if usage approaches 50K loads/month, plan for paid tier.
+2. **Expo/EAS plan** — confirm in `expo.dev/billing` that no surprise charges have appeared (build minutes can rack up if EAS Build is used heavily).
+3. **GitHub Pro** — only needed if private repos or org features are added.
+4. **DigitalOcean snapshots** — every 6 months, check Manage → Snapshots and delete any abandoned ones ($0.06/GB/month each).
+
+#### Cancellation procedures (for the cost-conscious)
+
+If Hedar wants to pause Constrai (no clients, dev pause):
+- **Snapshot the Droplet** ($5.40/month for ~90 GB), then destroy the Droplet → saves ~$32/month.
+- **Keep Spaces** for backups ($5/month) OR download all and destroy → saves another $5/month.
+- **Cloudflare/Namecheap/GitHub** stay free — no action needed.
+- **Apple Developer** is annual; cancel only if pausing for >12 months.
+- Resume by restoring snapshot, re-pointing DNS, ~30 min total.
+
+---
+
 ## 3. Database Recovery
 
 ### 3.1 Daily automated backups
