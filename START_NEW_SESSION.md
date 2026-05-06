@@ -39,11 +39,27 @@ If you already know what you want to work on, add it after the bootstrap block:
 اليوم نكمل: <اكتب المهمة هنا>
 ```
 
-**Examples for the task line:**
-- `اليوم نبلش Engineering Quality Program — Week 1` (per DECISIONS.md Section 18)
-- `اليوم نكمل Tenant Lifecycle (Section 17 pending)`
-- `اليوم في bug في الموبايل: <وصف>`
-- `اليوم نشتغل على web frontend i18n`
+**Examples for the task line (May 6, 2026 — current state):**
+- `اليوم نبلش Phase 4 — PostgreSQL Row-Level Security` (Section 85/87 — DB-layer defense-in-depth, ~2 days, the next major phase)
+- `اليوم نـ migrate SendGrid → Resend` (Phase 6 prerequisite, ~30-45 min code work)
+- `اليوم Phase 1 follow-ups` (certbot disable + nginx warnings cleanup + firewall lock-down — separate session because firewall mistakes can lock SSH)
+- `اليوم نـ update Mobile login لـ email-based` (mep-mobile still sends username; backend backward-compat keeps it alive but next mobile release should switch)
+
+**Quick reference — multi-tenant migration state:**
+
+| Phase | Status | DECISIONS section |
+|---|---|---|
+| Section 85 — Architecture (Model A→C) | ✅ Done | Section 85 |
+| Phase 1 — Infrastructure (Cloudflare + SSL) | ✅ Done | Section 86 |
+| Phase 2 — Tenant Resolver | ✅ No-op (Model C) | Section 87 |
+| Phase 3 — DB Schema + email login | ✅ Done + deployed | Section 87 |
+| Phase 4 — PostgreSQL RLS ★ | ⏳ NEXT | TBD |
+| Phase 5 — SUPER_ADMIN Portal Split | ⏳ Pending | TBD |
+| Phase 6 — Frontend Tenant Context + Branding | ⏳ Pending | TBD |
+| Phase 7 — 2FA + Account Security | ⏳ Pending | TBD |
+| Phase 8 — Audit + Compliance | ⏳ Pending | TBD |
+| Email migration SendGrid → Resend | ⏳ Before Phase 6 | TBD |
+| UI Smoke Test (Section 84, 9 tasks) | ⏸️ Paused | Resume after Phase 8 |
 
 Claude reads the bootstrap, then sees your specified task, and pulls in any extra reference files needed (SCHEMA.md for DB work, API.md for backend, etc.) automatically.
 

@@ -1,10 +1,10 @@
 # MEP Platform — Master Project README
-> Last updated: May 5, 2026 | Maintainer: Hedar Hallak
+> Last updated: May 6, 2026 | Maintainer: Hedar Hallak
 > Production: https://app.constrai.ca
 > Website: https://www.constrai.ca (Coming Soon landing page)
 > Server: root@143.110.218.84
-> Latest DECISIONS section: **Section 85** (Multi-Tenant Architecture — pivoted same-day from Model A subdomain-per-tenant to **Model C single domain** after Hedar questioned subdomain complexity. Final plan: `app.constrai.ca` for ALL users + `admin.constrai.ca` for SUPER_ADMIN + `www.constrai.ca` for marketing. Same 5-layer defense-in-depth (RLS + middleware + JWT + RBAC + Cloudflare). Phase 2 simplified — tenant resolves from JWT, not Host header. Net savings: ~1.5 days. PIN → password migration noted as future Phase-7-area work.)
-> Active program: **Multi-Tenant Migration (Section 85, Phases 1-8)** — see DECISIONS.md Section 85 for the full design + same-day Model A → C pivot. Phase 1 (Infrastructure) currently in progress: Cloudflare account + DNS migration + Resend email signup all done; awaiting Cloudflare nameserver propagation. The Section 84 UI smoke test is **paused** until all 8 phases ship.
+> Latest DECISIONS section: **Section 87** (Phase 3 closeout — email-based login deployed and verified on prod). Section 85 = multi-tenant architecture (Model C single domain). Section 86 = Phase 1 Cloudflare + Origin SSL execution log. Section 87 = Phase 3 email login execution log.
+> Active program: **Multi-Tenant Migration (Section 85, Phases 1-8)** — Phase 1 (Cloudflare + Origin SSL) ✅ DONE, Phase 2 (Tenant Resolver) ✅ no-op after Model C pivot, Phase 3 (email-based login + DB schema) ✅ DONE and deployed. **Next session starts Phase 4 (PostgreSQL Row-Level Security)** — DB-layer defense-in-depth, ~2 days estimated. The Section 84 UI smoke test is **paused** until all 8 phases ship. Email migration SendGrid → Resend (Resend account ready, code change pending) sits between Phase 5 and Phase 6.
 > Web Tier 1 + Tier 2 DONE (10/10). ~509 i18n keys live. Tier 3 i18n deferred.
 > **Customer #1 status:** unsigned (constraint per Section 46). Sales materials still TODO; product side now in much better shape post-May-4 hygiene push.
 > **Prod is in sync with main**. `APP_NAME=Constrai` + `VITE_MAPBOX_TOKEN` live. Tab title "Constrai" everywhere.

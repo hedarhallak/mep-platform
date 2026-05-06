@@ -8147,3 +8147,157 @@ App loads at app.constrai.ca with Acme's logo + colors
 Section 85 is the multi-tenant architecture chapter. The pivot from A → C is a refinement of the same chapter, not a new chapter. Future Sections 86, 87, ... will be the per-phase execution logs.
 
 - **Today: 53 sections.** (Section 85 captures the multi-tenant architecture chapter — original Model A design + same-day pivot to Model C single domain. Phase plan updated. PIN → password migration noted as Phase-7-area deferred work.)
+
+---
+
+## Section 86 — Phase 1 Execution: Cloudflare + Origin SSL Migration (May 5-6, 2026)
+
+First execution log for the multi-tenant migration program from Section 85. Phase 1 goal: stand up Cloudflare proxy in front of DigitalOcean and replace the auto-renewing Let's Encrypt certs with a Cloudflare Origin Certificate (15-year, only valid behind Cloudflare).
+
+### What landed
+
+1. **Cloudflare Free account** registered for `hedar.hallak@gmail.com`. Block AI training bots enabled.
+2. **DNS migration** from Namecheap BasicDNS → Cloudflare:
+   - Cloudflare nameservers: `jeremy.ns.cloudflare.com`, `macy.ns.cloudflare.com`
+   - Updated at Namecheap (Custom DNS).
+   - 3 A records (app, apex, www → 143.110.218.84, all proxied), 5 MX records (Namecheap email forwarding), 1 TXT (SPF) — all imported automatically.
+   - Propagation took ~30 minutes; site stayed up throughout.
+3. **SSL/TLS encryption mode** set to **Full (strict)** (was "Full" by default).
+4. **Cloudflare Origin Certificate** generated (RSA 2048, hostnames `*.constrai.ca, constrai.ca`, validity 15 years).
+5. **Cert installed on Nginx** at `/etc/nginx/ssl/cloudflare/cloudflare-origin.{pem,key}` (644 / 600). New SSL snippet at `/etc/nginx/snippets/cloudflare-ssl.conf` (TLSv1.2 + 1.3, no session tickets).
+6. **All 3 site configs migrated** via batch sed (`/etc/nginx/sites-available/{constrai,www-constrai}` + `/etc/nginx/sites-enabled/default`): Let's Encrypt cert lines removed, `include /etc/nginx/snippets/cloudflare-ssl.conf;` added after every `listen 443 ssl;`.
+7. **Backups** at `/root/nginx-backup-20260506-052551/` on the Droplet.
+8. **Verified**: `curl -I https://app.constrai.ca` → `HTTP/2 200`, `server: cloudflare`, `cf-ray: ...-YYZ`, `alt-svc: h3=":443"`. Browser test of login page passed.
+
+### Pitfalls hit (encode in convention)
+
+#### 1. Notepad on Windows adds `.txt` to filenames silently
+When saving cert/key files from a browser into Notepad, the filename gets `.txt` appended unless "Save as type" is changed to `All Files (*.*)`. Caught when SCP failed with "no such file or directory".
+
+**Convention:** use VS Code instead of Notepad for cert files, OR explicitly run `dir` after saving to verify no `.txt` suffix.
+
+#### 2. Cloudflare's PEM/KEY copy buttons can swap content if user clicks them out of order
+The Origin Certificate page has two textboxes (Cert + Private Key). If pasted into the wrong file, nginx fails with `PEM_read_bio_X509_AUX() failed (SSL: ... Expecting: TRUSTED CERTIFICATE)`.
+
+**Convention:** after saving cert/key files, immediately run `head -3` on each. The cert file must start with `-----BEGIN CERTIFICATE-----`; the key file must start with `-----BEGIN PRIVATE KEY-----`. If swapped, swap the filenames.
+
+#### 3. Windows CRLF + UTF-8 BOM break PEM parsing
+Notepad on Windows saves CRLF line endings and a UTF-8 BOM. OpenSSL's PEM parser tolerates CRLF in some cases but the BOM always breaks it.
+
+**Convention:** on the Droplet, run `dos2unix` on any cert/key file copied from a Windows machine before installing.
+
+### Deferred Phase 1 follow-ups
+
+1. **Disable certbot auto-renewal**: `systemctl disable --now certbot.timer`. Let's Encrypt certs are no longer in use.
+2. **Firewall lock-down to Cloudflare IPs only** — install `ufw`, allow only Cloudflare's IP ranges, allow SSH from Hedar's IP, block everything else. **Do this in a separate session** (mistakes can lock everyone out).
+3. **Clean up duplicate server_name blocks** (4 nginx warnings about conflicting names — `default` and `www-constrai` both handle `www + constrai.ca`).
+4. **Authenticated Origin Pulls** (Cloudflare → Nginx mTLS) — defer until after Phase 8.
+5. **Resend Domain Authentication** — when we reach Phase 6, add the DKIM CNAME records to Cloudflare DNS.
+
+### Files changed in repo this phase
+- `.gitignore` — added `.secrets/`, `*.pem`, `*.key` to prevent accidental commits of cert material.
+
+All other Phase 1 changes are server-side (nginx config + cert files at `/etc/nginx/`).
+
+---
+
+## Section 87 — Phase 3 Execution: Email-based Login Migration (May 6, 2026)
+
+Second execution log. Phase 3 goal per Section 85: drop `UNIQUE(username)` and add `UNIQUE(email)` globally; switch the login flow to email-based for the Model C single-domain architecture. Phase 2 (Tenant Resolver Middleware) was a no-op after the Section 85 Model A → C pivot — the existing JWT-with-`company_id` middleware already covers tenant scoping post-login.
+
+### What landed
+
+#### Database (migration 011)
+
+`migrations/011_email_globally_unique.sql` (122 lines, transactional). Backfilled 53 users:
+
+- 50 seed workers (`seed.workerN@meptest.com`): `email = username` (already email-formatted)
+- `admin` (id=257): synthetic `admin@mep.constrai.app`
+- `hedar` (id=259): real `hedar.hallak@gmail.com`
+- `badie` (id=258): hard-deleted (Hedar will re-add through proper SUPER_ADMIN procedure)
+
+Schema changes:
+- `companies.company_code` for company_id=5 set to `'mep'` (was empty)
+- Dropped `app_users_username_key` (global UNIQUE on username — username is now display-only)
+- Dropped `app_users_company_email_uniq` (per-company unique on email)
+- Added `app_users_email_global_uniq` (global UNIQUE on `lower(email)`)
+- Added NOT NULL on `app_users.email`
+
+Pre-migration backup: `/root/backups/mepdb-pre-migration-011-20260506-055729.dump` (502 KB).
+
+#### Backend code
+- `routes/auth.js`: login route accepts `email || username` (backward-compat); query is `lower(email) = lower($1) OR lower(username) = lower($1)`.
+- `routes/onboarding.js`: `POST /complete` passes email from invite to the `app_users` INSERT.
+- `routes/super_admin.js`: `POST /companies` passes `admin_email` to the INSERT, with synthetic fallback.
+- Login response payload now includes `email`.
+
+#### Frontend code
+- `mep-frontend/src/hooks/useAuth.jsx`: sends `{ email, pin }` instead of `{ username, pin }`.
+- `mep-frontend/src/pages/auth/LoginPage.jsx`: form field swapped from username (User icon) to email (Mail icon, type=email, autocomplete=email).
+- `mep-frontend/src/i18n/locales/{en,fr}.js`: added `login.email` + `login.emailPlaceholder` keys; updated `errors.INVALID_CREDENTIALS` copy.
+
+#### Tests
+- `mep-frontend/e2e/login.spec.js`: placeholder assertion updated.
+- `tests/helpers/db.js` `seedUser()`: now generates a synthetic email (`{username}@test.constrai.local`) per user.
+
+### Pitfalls hit (encode in convention)
+
+#### 1. Cherry-picking commits can cross feature branches by mistake
+A commit intended for the migration branch was committed on the frontend branch because the active branch wasn't switched before `git commit`.
+
+**Convention:** when working with multiple feature branches in one session, run `git status` (or `git branch --show-current`) immediately before any `git add`/`git commit`.
+
+#### 2. PR auto-merge order can flip when CI times differ across PRs
+Two PRs queued with `gh pr merge --auto` merged out of dependency order because the smaller PR's CI passed first.
+
+**Convention:** when two PRs have a code dependency, enable auto-merge only on the leaf PR; manually merge the dependency PR after confirming order.
+
+#### 3. `gh pr merge` requires branch up-to-date with main
+After a sibling PR merges, the still-open PR's branch becomes stale. `gh pr merge --squash` rejects with "the head branch is not up to date". Fix: `git rebase origin/main` + `git push --force-with-lease`, then re-trigger CI.
+
+#### 4. `git pull` aborts when an untracked file collides with an incoming committed file
+We had SCP'd `migrations/011_email_globally_unique.sql` to the production server before the file existed in git. After the migration PR merged, `git pull` aborted: "untracked working tree files would be overwritten by merge".
+
+**Convention:** when a file is SCP'd ahead of its git PR landing, delete the SCP'd copy on the server before the next `git pull`.
+
+#### 5. `npm ci --omit=dev` fails on the husky prepare script
+`HUSKY=0 npm ci --omit=dev` fails because the `prepare` lifecycle script tries to run husky which `--omit=dev` skipped. `HUSKY=0` only helps inside husky once installed.
+
+**Convention:** for production deploys, use `npm ci --omit=dev --ignore-scripts`. Often the npm step can be skipped entirely if no new dependencies were added.
+
+#### 6. Cowork bash sandbox file sync can lose Edit tool changes
+Edit tool changes made to a file may not persist into the working tree before a subsequent `git checkout` / `git add` operation, leaving them silently dropped. Symptom: `git status` shows no modifications even though the Edit tool reported success.
+
+**Convention:** after a sequence of Edit tool calls on multiple files, immediately verify with Read tool (or via PowerShell `Get-Content`) that the changes are present. If not, re-apply via Edit tool. Don't rely on lint-staged's automatic stash to recover lost edits — it only stashes the staged version, not unstaged Edit-tool writes.
+
+### Deferred work
+1. **Mobile app login update** — `mep-mobile` still sends `username`. Backward-compat in backend keeps it alive; next mobile release should switch to email.
+2. **Resend migration** — SendGrid trial ended Mar 30, 2026; activation emails for new SUPER_ADMIN-created companies currently fail. Fix before Phase 6.
+3. **`must_change_pin` flow validation** — admin user (id=257) has the flag set; worth confirming the temp-PIN flow still works with email login.
+4. **PR #139 cleanup** — the original "Section 86 closeout" PR (#139) on branch `docs/s86-phase1-cloudflare-done` never merged. Section 86 is now landed via this Section 87 PR. The old PR + branch can be closed/deleted manually.
+
+### Files changed (across PRs #140 + #141)
+
+PR #140: `migrations/011_email_globally_unique.sql` (new), `routes/onboarding.js`, `routes/super_admin.js`, `tests/helpers/db.js`.
+
+PR #141: `routes/auth.js`, `mep-frontend/src/hooks/useAuth.jsx`, `mep-frontend/src/pages/auth/LoginPage.jsx`, `mep-frontend/src/i18n/locales/{en,fr}.js`, `mep-frontend/e2e/login.spec.js`.
+
+Both merged on May 6, 2026. Production deployed; login at `https://app.constrai.ca` with `hedar.hallak@gmail.com` + `hedar2026` verified working.
+
+### What's next
+
+**Phase 4 — PostgreSQL Row-Level Security (RLS)** is the highest-priority remaining phase per Section 85. Adds the database-layer defense-in-depth that catches any future backend bug forgetting `WHERE company_id`. Estimated 2 days. Skeleton:
+
+- Enable RLS on all business tables (employees, projects, assignments, materials, attendance, hub messages, etc.)
+- Policy: `USING (company_id = current_setting('app.company_id')::bigint)`
+- Backend middleware: `SET LOCAL app.company_id = $1` per authenticated request
+- SUPER_ADMIN bypass via dedicated DB role (`mepuser_super`) with `BYPASSRLS`
+- Test: a non-SUPER_ADMIN session cannot SELECT cross-tenant rows even with raw SQL
+
+**Phase 1 follow-ups** (minor, can be batched into Phase 4 closeout): certbot disable, nginx warnings cleanup, firewall lock-down (separate session — risky if SSH lockout).
+
+**Email migration (SendGrid → Resend)** — best done before Phase 6. ~30-45 min code work. Resend Free (3K emails/month) covers our scale through Phase 8.
+
+The 9-task UI smoke test (Section 84) remains paused until all 8 phases ship.
+
+- **Today: 55 sections.** (Sections 86 + 87 close Phases 1 + 3. Phase 4 RLS is next.)
