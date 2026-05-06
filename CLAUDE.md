@@ -283,6 +283,77 @@ This forces the local-vs-CI parity check before any ratchet PR.
 
 ---
 
+## 4.7. The "File-Based Log" Convention (NEW — May 6, 2026, Section 88)
+
+When Claude needs to inspect command output that's larger than ~30 lines (CI failure logs, test output, big git diffs, schema dumps, etc.), do NOT have Hedar paste the raw output into chat. Instead, write the output to a fixed file path inside the workspace folder, then have Claude `Read` the file directly.
+
+**Why this matters:** CI failure logs are routinely 1000-3000 lines. Pasting them into chat (a) burns Hedar's time copying, (b) bloats Claude's context window which costs both money and quality, and (c) clutters scrollback when iterating on a fix that may take 3-5 retries. The file-based approach is dramatically faster and cleaner — Hedar only acks completion in chat (one Arabic word) per round-trip instead of pasting kilobytes of logs.
+
+**The convention:**
+
+1. **Save tool output to a file in the workspace folder** (NOT `C:\temp\` or any other path Claude can't read directly):
+   - `<workspace>\ci-status.log` — `gh pr checks`, `gh pr view --json`, etc.
+   - `<workspace>\ci-fail.log` — `gh run view --log-failed`
+   - `<workspace>\test-fail.log` — `npx jest --no-coverage 2>&1`
+   - `<workspace>\diff.log` — `git diff <something>`
+   - `<workspace>\git-status.log`, `<workspace>\bash-out.log`, etc., for one-off needs.
+
+2. **Always overwrite, never append.** Each new run replaces the previous output. The file never grows. Use PowerShell `Out-File -FilePath` (or `Set-Content`), not `>>` and not bare `>`.
+
+3. **Always use `-Encoding utf8`.** PowerShell's bare `>` redirect defaults to UTF-16 with BOM, which makes the file harder for Claude's Read tool to parse (lines come back with spaces between every character). The fix:
+   ```powershell
+   gh pr checks 145 | Out-File -Encoding utf8 -FilePath ci-status.log
+   ```
+   not
+   ```powershell
+   gh pr checks 145 > ci-status.log    # BAD: UTF-16 BOM
+   ```
+
+4. **Filename ends in `.log`** so the existing `*.log` rule in `.gitignore` keeps the files out of commits. No new gitignore entry needed.
+
+5. **Hedar acks in chat** (a single Arabic word) to signal the command finished. Claude then reads the file. **Never embed any echo command** (`"تم"`, `Write-Host "done"`, etc.) inside the PowerShell block — Hedar's terminal would just print it without telling Claude anything.
+
+6. **Claude reads the relevant file directly.** Use the `Read` tool on the absolute path (e.g. `C:\Users\Lenovo\Desktop\mep-site-backend-fixed\mep-fixed\ci-fail.log`) or use `Grep` for targeted patterns when files are very large.
+
+**Example — correct CI failure debug loop:**
+
+```powershell
+# Hedar runs (after Backend job fails):
+$runId = gh run list --branch feat/some-branch --limit 1 --json databaseId --jq '.[0].databaseId'
+gh run view $runId --log-failed | Out-File -Encoding utf8 -FilePath ci-fail.log
+```
+
+Hedar acks in chat. Claude (silently): `Read C:\Users\Lenovo\...\ci-fail.log` → grep for FAIL / ✕ / Expected: → diagnose → propose fix.
+
+**Example — incorrect (old) loop:**
+
+```powershell
+gh run view $runId --log-failed
+```
+
+Hedar pastes 2000+ lines of console output into chat. Claude wastes context tokens parsing it. Hedar's terminal scrollback floods. Iteration takes 3x longer.
+
+**This rule applies to:**
+- CI status / failure logs
+- Local test output (`npx jest`, `npx vitest`, `npx playwright test`)
+- Long git diffs that span multiple files
+- Bash sandbox output exceeding ~30 lines
+- Any psql / SQL output that doesn't fit on a screen
+
+**This rule does NOT apply to:**
+- Single-line confirmations (`git status` for a clean tree, `gh pr view 145 --json mergedAt` returning one line, etc.) — these can be pasted directly.
+- The output of commands Hedar ran for his own info that he wants Claude to see in passing.
+
+**Convention summary:**
+- File: workspace-local, `.log` extension
+- Write: `Out-File -Encoding utf8 -FilePath <name>.log` (overwrites)
+- Signal: Hedar acks in chat (no echo inside the block)
+- Read: Claude uses Read tool on absolute path
+
+This rule was extracted from the Section 88 (Phase 4 Stage 1) closeout retro after a CI debug round wasted ~5 turns on log re-pasting before Hedar proposed the convention. Encoding it here so future sessions apply it from turn 1.
+
+---
+
 ## 5. Required Reading at Session Start
 
 Every Claude session must begin by reading these in order:
@@ -351,6 +422,17 @@ Every Claude session must begin by reading these in order:
 3. **At every meaningful checkpoint** (architectural decision, finished step in a multi-step task, before Hedar takes a break, after a non-trivial bug fix): update `DECISIONS.md`, then tell Hedar to commit + push from PowerShell. **Don't wait to be asked.**
 4. **After server-side fixes:** commit from server and push immediately.
 5. **Pre-commit hook** runs route audit; never bypass with `--no-verify` unless Hedar explicitly approves.
+6. **ALWAYS delete the local branch after a PR merges** (NEW — May 6, 2026, Section 88). `gh pr merge --auto --squash --delete-branch` only deletes the REMOTE branch. The local branch stays put. If you later run `git branch -D <name>` + `git checkout -b <name>` to "recreate" a branch with the same name, the **stale remote branch** (deleted by the previous merge but possibly still present from a prior session) can collide with your new push and produce a Frankenstein PR with extra commits + wrong files. Encode this as the standard close-out:
+
+   ```powershell
+   # Wait for the PR to actually merge (gh pr view <num> --json mergedAt)
+   git checkout main
+   git pull origin main
+   git branch -D <branch-name>             # delete LOCAL
+   git push origin --delete <branch-name>  # belt + suspenders: ensure remote is gone (no-op if already deleted)
+   ```
+
+   Run this every single time after `gh pr merge` succeeds, before starting the next branch — even if the next branch will have a different name. This is a "clean kitchen between meals" habit. The Section 88 closeout PR (PR #146) had to be force-pushed because a stale remote `docs/s88-phase4-stage1-closeout` from a prior session merged with the current session's local branch and produced a 6-file diff instead of a 3-file diff.
 
 ---
 

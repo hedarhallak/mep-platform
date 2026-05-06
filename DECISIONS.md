@@ -8566,5 +8566,63 @@ No changes to backend code, schema baseline (the baseline gets regenerated post-
 
 Earlier draft said "21 tables". The actual list is **20 tables** (re-counted after grepping COPY statements). The companies table contains its own `company_id` as PK and is included in the 20.
 
-- **Today: 56 sections.** (Section 88 is the Phase 4 Stage 1 design. Implementation files shipping in PR #145.)
+### Implementation closeout (May 6, 2026, 11:37 UTC)
+
+PR #145 merged. Stage 1 implementation lives on main; not yet deployed to prod. Files shipped:
+
+- `migrations/012_rls_stage1_permissive.sql` (~190 lines, transactional, with built-in sanity checks asserting RLS / FORCE / policy count = 20).
+- `migrations/012_rls_stage1_permissive.rollback.sql` (~70 lines).
+- `tests/integration/rls_stage1.test.js` (~140 lines, 4 scenarios).
+- `DECISIONS.md` Section 88 design doc + locked decisions.
+
+#### Pitfalls hit (encode in convention)
+
+##### 1. RLS doesn't apply to BYPASSRLS roles, even with `FORCE ROW LEVEL SECURITY`
+
+Initial CI run failed on 2 of 4 RLS test scenarios — the policy wasn't filtering rows when the GUC was set. Diagnosis: CI connects as `postgres` (superuser, BYPASSRLS attribute by default), and BYPASSRLS roles ignore every RLS policy regardless of FORCE. The FORCE attribute only forces RLS on table **owners**, not on BYPASSRLS roles.
+
+**Fix:** every RLS-specific test must `SET LOCAL ROLE mepuser` (or any non-super, non-BYPASSRLS role) inside the test transaction. The CI workflow already pre-creates `mepuser` (line 75 of `.github/workflows/ci.yml`); we just needed to switch to it. GRANT statements + the SET ROLE both auto-revert on ROLLBACK so the testdb stays clean.
+
+**Convention:** `tests/integration/rls_stage1.test.js` introduced a `withMepuserRls(callback)` helper that wraps `BEGIN → GRANT → SET LOCAL ROLE mepuser → callback → ROLLBACK`. Future RLS tests should reuse this pattern.
+
+##### 2. `git checkout main` fails silently with dirty tree, then `git pull` merges into wrong branch
+
+While preparing the closeout docs PR, ran the standard sequence `git checkout main; git pull origin main; git checkout -b docs/...` while the working tree had uncommitted edits to HANDOFF/DECISIONS/CLAUDE. The `git checkout main` quietly stayed on `feat/s88` (didn't switch). The next `git pull origin main` then merged origin/main into the CURRENT branch (`feat/s88`), opening vim for the merge commit message. Confused several minutes of debugging.
+
+**Convention:** before `git checkout main`, always check the working tree (`git status`) and stash if dirty (`git stash push -m "..."`). If the silent-fail-then-vim trap happens anyway, exit vim with `:q!` followed by `git merge --abort` to undo cleanly. (NEW HANDOFF.md pitfall #15.)
+
+##### 3. `git stash pop` can silently revert previously-applied changes if it later hits a conflict
+
+Even worse: the stash-and-restore recovery from #2 above appeared to apply the HANDOFF/CLAUDE edits cleanly, but then conflicted on DECISIONS.md. After resolving the conflict and looking at HANDOFF.md, it was back to its pre-stash content — the stash-pop conflict caused it to revert silently.
+
+**Convention:** after `git stash pop`, always Read each previously-stashed file via Claude's Read tool to verify content actually changed. Don't trust "no conflict markers in this file" as proof the change applied. (NEW HANDOFF.md pitfall #16.)
+
+##### 4. Log-file convention for CI / test debug output (NEW workflow rule)
+
+Mid-debug, a back-and-forth on "where did the failure come from" wasted turns because Hedar had to paste full CI logs (~2000+ lines) into chat for Claude to read. Hedar proposed: write tool output to a fixed file path that's overwritten each time, so it never grows and can be read directly.
+
+**Convention adopted (CLAUDE.md Section 4.7):** write to `<workspace>\<purpose>.log` (e.g. `ci-fail.log`, `ci-status.log`, `test-fail.log`, `diff.log`). Files inside the workspace folder so Claude can Read them directly via the file tools. Filename ends in `.log` so the existing `*.log` line in `.gitignore` keeps them out of commits. Always overwrite (`Out-File -Encoding utf8 -FilePath ...`), never append. Use `Out-File -Encoding utf8` rather than the bare `>` PowerShell redirect — `>` defaults to UTF-16 with BOM and makes the files harder for Claude to parse.
+
+##### 5. Don't echo `"تم"` from inside PowerShell blocks
+
+Briefly tried embedding `"تم"` at the end of PowerShell blocks to indicate completion — this just prints the literal string to Hedar's terminal without telling Claude anything (Claude only sees what Hedar pastes in chat). Removed; added to HANDOFF.md workflow rules.
+
+#### Deferred to Stage 2
+
+1. **`mepuser_super` role with BYPASSRLS** — needed for SUPER_ADMIN routes that legitimately span tenants and for pg_dump in strict mode. Will land in Stage 2 first PR.
+2. **`req.db` middleware** — the actual per-request `SET LOCAL app.company_id` plumbing. The whole point of Stage 2.
+3. **Route migration** — replace 323 `pool.query()` call sites across 51 files with `req.db.query(...)`. Plan ~5-7 batch PRs, lowest-risk routes first.
+4. **Prod deployment of migration 012** — Stage 1 is permissive so it's safe to deploy any time. Decision pending: deploy now (~5 min) or defer until Stage 2 first PR ships and deploy together. Stage 2 backend code references the GUC, so the latest viable deferral is "deploy migration 012 to prod immediately before deploying any Stage 2 backend code".
+
+#### Files / PRs
+
+PR #145 (feat/s88-phase4-rls-stage1-permissive → main):
+- `migrations/012_rls_stage1_permissive.sql` (new)
+- `migrations/012_rls_stage1_permissive.rollback.sql` (new)
+- `tests/integration/rls_stage1.test.js` (new)
+- `DECISIONS.md` Section 88 update
+
+CI: 6/6 checks passed on the second attempt (first attempt failed on the BYPASSRLS pitfall above). Backend (Node 20) duration: 5m5s.
+
+- **Today: 56 sections.** (Section 88 = Phase 4 Stage 1 design + closeout. Stage 2 will open Section 89.)
 
