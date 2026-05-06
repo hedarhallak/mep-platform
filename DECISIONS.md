@@ -8282,6 +8282,12 @@ The deploy command `HUSKY=0 npm ci --omit=dev` failed because `package.json` has
 
 **Convention:** for production deploys, use `npm ci --omit=dev --ignore-scripts`. The pm2 restart doesn't need new node_modules anyway when no new dependencies are added — often the npm step can be skipped entirely.
 
+#### 6. Cowork bash sandbox file sync can lose Edit tool changes
+
+Edit tool changes made to a file may not persist into the working tree before a subsequent `git checkout` / `git add` operation, leaving them silently dropped. Symptom: `git status` shows no modifications even though the Edit tool reported success.
+
+**Convention:** after a sequence of Edit tool calls on multiple files, immediately verify with Read tool (or via PowerShell `Get-Content`) that the changes are present. If not, re-apply via Edit tool. Don't rely on lint-staged's automatic stash to recover lost edits — it only stashes the staged version, not unstaged Edit-tool writes.
+
 ### Deferred work
 
 1. **Mobile app login update** — `mep-mobile` still sends `username` for login. Backend's backward-compat keeps the existing TestFlight build alive, but the next mobile release must update the login screen to use email.
