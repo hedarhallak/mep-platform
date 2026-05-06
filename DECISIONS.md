@@ -8334,3 +8334,237 @@ Both PRs merged to main on May 6, 2026. Production deployed and verified: login 
 The 9-task UI smoke test (Section 84) remains paused until all 8 phases ship.
 
 - **Today: 55 sections.** (Sections 86 + 87 close Phases 1 + 3 of the multi-tenant migration. Phase 1 + Phase 2 + Phase 3 done; Phase 4 RLS is the next major piece.)
+
+---
+
+## Section 88 — Phase 4 Stage 1 Design: Permissive RLS Migration (May 6, 2026)
+
+Design write-up for Phase 4 Stage 1, before any code lands. Phase 4 implements PostgreSQL Row-Level Security (RLS) as the database-layer defense-in-depth for tenant isolation. Picked migration strategy: **Permissive-then-strict** (option b from Section 87 closeout). Stage 1 ships RLS with permissive policies so existing routes keep working without modification.
+
+### Why Stage 1 = permissive
+
+- Backend has 323 `pool.query()` call sites across 51 files. Migrating all of them to a per-request transaction with `SET LOCAL` in one PR is high blast-radius (any bug in any route blocks the entire migration).
+- Permissive Stage 1 enables RLS infrastructure on the database side WITHOUT requiring any backend route changes — policy passes when the GUC is unset, so existing connection-pool-based queries continue to work.
+- Stage 2 (separate PRs) progressively migrates routes to use a `req.db` helper that sets the GUC per-request.
+- Stage 3 (final PR) tightens the policy to remove the "GUC unset = bypass" clause. Any forgotten `SET LOCAL` then fails closed.
+- This trades end-state speed (~2 weeks total vs ~3 days big-bang) for incremental safety: each stage is independently shippable and reversible.
+
+### Tables in scope (21 total)
+
+Inventoried from `db/schema_baseline_2026-05-04.sql` — every table with a `company_id` column, plus `companies` itself (the tenant root):
+
+```
+companies                       (PK = company_id; tenant root)
+app_users
+assignment_requests
+attendance_records
+audit_logs
+clients
+daily_dispatch_runs
+employee_daily_dispatch_state
+employees
+material_catalog
+material_requests
+material_returns
+project_foremen
+project_trades
+projects
+purchase_orders
+standup_sessions
+suppliers
+task_messages
+user_invites
+```
+
+Wait — that's 20 tables + `companies` = 21. Final list:
+
+| # | Table | company_id position |
+|---|---|---|
+| 1 | `companies` | PK |
+| 2 | `app_users` | column |
+| 3 | `assignment_requests` | column |
+| 4 | `attendance_records` | column |
+| 5 | `audit_logs` | column |
+| 6 | `clients` | column |
+| 7 | `daily_dispatch_runs` | column |
+| 8 | `employee_daily_dispatch_state` | column |
+| 9 | `employees` | column |
+| 10 | `material_catalog` | column |
+| 11 | `material_requests` | column |
+| 12 | `material_returns` | column |
+| 13 | `project_foremen` | column |
+| 14 | `project_trades` | column |
+| 15 | `projects` | column |
+| 16 | `purchase_orders` | column |
+| 17 | `standup_sessions` | column |
+| 18 | `suppliers` | column |
+| 19 | `task_messages` | column |
+| 20 | `user_invites` | column |
+
+The other ~35 tables in the schema (`roles`, `permissions`, `trade_types`, `audit_field_views`, lookup tables, etc.) are global / cross-tenant by design and do NOT get RLS in this phase.
+
+### Migration SQL — `migrations/012_rls_stage1_permissive.sql`
+
+Skeleton (full file will be transactional with `BEGIN; ... COMMIT;`):
+
+```sql
+-- 012_rls_stage1_permissive.sql
+-- Phase 4 Stage 1: Enable RLS with permissive policies on all 20 tenant-scoped
+-- tables + the companies tenant root. No backend changes required at this stage.
+-- Stage 2 will introduce req.db middleware. Stage 3 will tighten the policies.
+
+BEGIN;
+
+-- 1. Privileged role for backups, migrations, SUPER_ADMIN cross-tenant ops.
+--    Created here so it exists for Stages 2+. Not yet used by backend.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'mepuser_super') THEN
+    CREATE ROLE mepuser_super WITH LOGIN PASSWORD :'mepuser_super_password' BYPASSRLS;
+  END IF;
+END $$;
+
+-- Grant the new role access to existing schema (read/write on all current + future tables)
+GRANT USAGE ON SCHEMA public TO mepuser_super;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO mepuser_super;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO mepuser_super;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO mepuser_super;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO mepuser_super;
+
+-- 2. Helper: same permissive policy applied to every tenant-scoped table.
+--    "company_id" is the column name on 19 of the 20 non-companies tables.
+--    The companies table uses its own PK (also called company_id).
+--
+--    Policy logic:
+--      - If GUC `app.company_id` is unset OR empty string -> allow row (Stage 1 bypass)
+--      - Otherwise enforce row.company_id = GUC.company_id
+--
+--    This is the PERMISSIVE form. Stage 3 will drop the first clause.
+
+-- 3. Apply to each table. Each block is idempotent (DROP POLICY IF EXISTS first).
+
+-- companies (tenant root)
+ALTER TABLE public.companies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.companies FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation ON public.companies;
+CREATE POLICY tenant_isolation ON public.companies
+  USING (
+    NULLIF(current_setting('app.company_id', true), '') IS NULL
+    OR company_id = NULLIF(current_setting('app.company_id', true), '')::bigint
+  );
+
+-- app_users
+ALTER TABLE public.app_users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.app_users FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation ON public.app_users;
+CREATE POLICY tenant_isolation ON public.app_users
+  USING (
+    NULLIF(current_setting('app.company_id', true), '') IS NULL
+    OR company_id = NULLIF(current_setting('app.company_id', true), '')::bigint
+  );
+
+-- ... (same shape repeated for the other 18 tables) ...
+
+COMMIT;
+```
+
+Full file will inline all 21 table blocks. Will be ~300 lines.
+
+### Critical: why `FORCE ROW LEVEL SECURITY`
+
+Without `FORCE`, PostgreSQL exempts the **table owner** from RLS by default. The backend connects as `mepuser`, who owns these tables (created them via earlier migrations). Without `FORCE`, `ENABLE ROW LEVEL SECURITY` would be a no-op for actual backend traffic — the policy would only apply to other DB users (e.g., a manually-connected psql session as a different role). That defeats the entire defense-in-depth purpose.
+
+`FORCE` makes the policy apply even to the table owner. Combined with the permissive bypass (GUC unset = allow), this still lets Stage 1 ship without backend changes, but Stage 3 (which drops the bypass) will then meaningfully enforce isolation against the real backend traffic.
+
+### Backend changes in Stage 1: NONE
+
+No changes to:
+- `db.js` (connection pool stays as-is)
+- Any `routes/*.js` file
+- Any service / middleware file
+- `seed.js` or any script
+
+This is the entire point of permissive Stage 1 — drop in the database-side infrastructure without touching the application code.
+
+### Test plan
+
+1. **Migration runs cleanly** on test DB (`TEST_DATABASE_URL`).
+2. **All 566 existing tests still pass** — confirms permissive policies don't break any current route.
+3. **New unit test** in `tests/integration/rls_stage1.test.js`:
+   - With GUC unset: SELECT * FROM employees returns rows from all companies (permissive bypass works).
+   - With `SET LOCAL app.company_id = '5'`: SELECT * FROM employees returns only company 5's rows.
+   - With `SET LOCAL app.company_id = '999'` (non-existent company): SELECT * FROM employees returns 0 rows.
+   - Insert / update / delete enforcement works the same way (RLS applies to all command types when policy is permissive).
+4. **Manual smoke test** post-deploy: log in as Hedar, verify dashboard loads + projects/employees lists populate.
+5. **`mepuser_super` smoke**: connect as mepuser_super, verify queries return cross-tenant data even with GUC set (BYPASSRLS works).
+
+### Rollback plan
+
+Stage 1 is reversible without data loss. Rollback SQL:
+
+```sql
+BEGIN;
+
+-- Drop policies on all 21 tables
+DROP POLICY IF EXISTS tenant_isolation ON public.companies;
+DROP POLICY IF EXISTS tenant_isolation ON public.app_users;
+-- ... (repeat for all 21) ...
+
+-- Disable RLS
+ALTER TABLE public.companies NO FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.companies DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.app_users NO FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.app_users DISABLE ROW LEVEL SECURITY;
+-- ... (repeat for all 21) ...
+
+-- Optionally drop the role (only if confirmed nothing depends on it)
+-- DROP ROLE IF EXISTS mepuser_super;
+
+COMMIT;
+```
+
+The rollback file will be `migrations/012_rls_stage1_permissive.rollback.sql` so it can be applied as one transaction if needed.
+
+### Stages 2 + 3 preview (NOT in this PR)
+
+**Stage 2** (multiple PRs, ~1 week):
+- Add `middleware/db_context.js` exposing `req.db` — a per-request transaction wrapper that calls `SET LOCAL app.company_id = $userCompanyId` before any route logic runs.
+- Migrate routes batch by batch (5-10 routes per PR). Each batch:
+  - Replaces `pool.query(...)` with `req.db.query(...)`.
+  - Adds an integration test that confirms cross-tenant queries return 0 rows after middleware sets the GUC.
+- Order of batches will be chosen by risk: lowest-risk first (e.g., read-heavy listing routes before write-heavy onboarding routes).
+
+**Stage 3** (1 PR, ~1 day):
+- Single migration `013_rls_strict.sql` that drops the "GUC unset" bypass clause from every policy.
+- After this lands, any forgotten `SET LOCAL` in a route will cause queries to return 0 rows — fails closed.
+- Section 88 + Section 89 (Stage 2) will be merged into one program log when Stage 3 closes.
+
+### Files changed in this PR (Stage 1)
+
+- `migrations/012_rls_stage1_permissive.sql` (new, ~300 lines)
+- `migrations/012_rls_stage1_permissive.rollback.sql` (new, ~80 lines)
+- `tests/integration/rls_stage1.test.js` (new, ~80 lines)
+- `RECOVERY.md` — add `mepuser_super` password to credentials inventory section
+- `.env.example` — add `MEPUSER_SUPER_PASSWORD` placeholder
+
+No changes to backend code, schema baseline (the baseline gets regenerated post-merge via `scripts/regen-baseline.ps1`), or frontend.
+
+### What's deferred from Stage 1 to Stage 2
+
+- Backend `req.db` middleware
+- Per-route migrations to use `req.db`
+- Updating `seed.js` / scripts to set the GUC where needed (currently they run as mepuser → owner → would be enforced by FORCE, BUT permissive policy lets them through; Stage 3 will require GUC set for them too)
+- pg_dump backup script — currently runs as `mepuser` (table owner with FORCE). Permissive bypass keeps backups working in Stage 1, but Stage 3 will require switching to `mepuser_super` (BYPASSRLS).
+
+### Locked decisions (replaces earlier open questions)
+
+1. **`mepuser_super` role: deferred to Stage 2.** Stage 1 doesn't actually need it — `FORCE ROW LEVEL SECURITY` + permissive policy is sufficient defense-in-depth as the foundation. Adding the role here would mean handling password rotation, env var, RECOVERY.md update, and pg_dump rewiring — all of which are not blocking the migration's value. Stage 2 introduces the role together with `req.db` middleware (which is when we actually need BYPASSRLS for SUPER_ADMIN routes anyway).
+2. **`scripts/migrate.js`: no change in Stage 1.** Migrations run as `mepuser` (table owner with FORCE) but permissive policy bypasses when GUC unset. So migrations work unchanged. Stage 3 will require updating this when strict policies require GUC set.
+3. **Rollback file convention: `*.rollback.sql`.** Used here for the first time. `migrations/012_rls_stage1_permissive.rollback.sql` companion file. Cleaner than `_down.sql` because it groups visually with the forward migration when listed alphabetically.
+
+### Updated table count: 20, not 21
+
+Earlier draft said "21 tables". The actual list is **20 tables** (re-counted after grepping COPY statements). The companies table contains its own `company_id` as PK and is included in the 20.
+
+- **Today: 56 sections.** (Section 88 is the Phase 4 Stage 1 design. Implementation files shipping in PR #145.)
+
