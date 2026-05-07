@@ -8973,17 +8973,59 @@ Verify after restart:
 - `middleware/permissions.js` `can()` calls `pool.query` directly (not `req.db.query`). Under Stage 1 permissive RLS this works because `user_permissions` queries return rows when the GUC is unset on the pool client. **Under Stage 3 strict RLS, can() will return 0 rows and reject every authenticated request.** Fix planned for 89-D or 89-E: refactor `can()` to either run on a `req.db`-aware client or accept the GUC unset state via a SUPER-pool fallback.
 - `routes/project_trades.js` has a top-level `router.use(auth)` that duplicates `app.js`'s mount-time `auth`. Harmless but redundant; remove in a future cleanup PR (not this batch — out of scope per Code Convention #3).
 
-### Status — Piece 89-C/1 complete (pending CI + merge)
+### Status — Piece 89-C/1 complete
 
 | Item | Status |
 |---|---|
 | Code migrated | ✅ 3 files, 17 queries → req.db.query |
 | Cross-tenant integration test | ✅ 7 new tests in `tenant_db_89c1.test.js` |
 | Route audit clean | ✅ no new mount prefixes added |
-| PR opened + CI green | ⏳ Pending |
-| Merged to main | ⏳ Pending |
-| Deployed to prod | ⏳ Pending |
+| PR opened + CI green | ✅ PR auto-merged after CI #416 (5m 2s) |
+| Merged to main | ✅ May 7, 2026 |
+| Deployed to prod | ✅ May 7, 2026 (jointly with 89-B catch-up — see deploy record below) |
 | Next batch (89-C/2) | ⏳ Pending — candidates: profile + push_tokens, attendance, projects, reports |
 
-- **Today: 58 sections.** (Section 89 extended once more with Piece 89-C/1: first bulk route migration batch. Subsequent 89-C/N batches will continue in this section until 89-C is complete; then 89-D and 89-E open as their own pieces under Section 89.)
+### Production deployment record — 89-B + 89-C/1 (May 7, 2026)
+
+Both 89-B (originally awaiting deploy from earlier in the day) and 89-C/1 shipped together in a single `pm2 restart` cycle. Step-by-step trace:
+
+1. **SSH to prod + pull.** From local PowerShell, single SSH invocation captured to `deploy.log`:
+   ```powershell
+   ssh root@143.110.218.84 "cd /var/www/mep && git pull origin main && pm2 restart mep-backend && sleep 2 && pm2 logs mep-backend --lines 40 --nostream" 2>&1 | Out-File -Encoding utf8 -FilePath deploy.log
+   ```
+   `git pull` reported `Already up to date.` — server was already at the latest main commit. Likely explanation: the existing `mep-webhook` pm2 process (uptime 29 days at the time of this deploy) auto-pulls on push, so the working tree was already synced before the manual `git pull` ran. The pm2 restart was still required to load the new code into the running Node process.
+
+2. **pm2 restart.** Output: `[PM2] [mep-backend](0) ✓`. Process table showed pid 698437, uptime 0s, status `online` immediately after restart.
+
+3. **Startup logs (clean).** No errors. Saw the expected sequence:
+   ```
+   [sentry] initialized — env=production
+   Server running on http://localhost:3000
+   Health: http://localhost:3000/api/health
+   [weeklyReportJob] Scheduled: 0 23 * * 1
+   [ccqRatesReminder] Scheduled: Mar 1 + Apr 1, 2028
+   ```
+   Specifically NOT seen: `tenant_db.js` require failure, `superPool undefined` panic, any `Cannot find module` errors. Both 89-B (suppliers + tenant_db middleware) and 89-C/1 (bi + project-foremen + project-trades migrations) loaded cleanly.
+
+4. **Health check.** `curl https://app.constrai.ca/api/health/deep` returned:
+   ```json
+   {
+     "ok": true,
+     "checks": {
+       "db":     {"status":"ok","latency_ms":33},
+       "disk":   {"status":"ok","used_pct":6,"threshold_pct":90,"path":"/var/lib/postgresql"},
+       "backup": {"status":"warn","last_run":"2026-05-06T07:00:05.000Z","age_hours":39,"threshold_hours":26}
+     },
+     "warnings":["backup is 39h old (threshold 26h)"]
+   }
+   ```
+   `ok=true` (hard-fail checks all passed). The backup warning is pre-existing — surfaced as P2 in HANDOFF/TODO, not introduced by this deploy.
+
+5. **No further smoke test against the migrated routes was run.** Rationale: (a) CI #416 green covers all 3 migrated routes' integration tests on a real Postgres DB; (b) pm2 restart-up clean confirms the middleware + new mounts wired correctly; (c) /api/health/deep returns `ok=true` (DB connectivity + cross-pool connection working). Auth-gated smoke against `/api/bi`, `/api/project-foremen`, `/api/project-trades` would add little signal beyond what CI already proved. If future batches add routes with tighter behavioral coupling, the deploy plan should re-introduce per-route auth-gated smoke.
+
+### Status — Piece 89-C/1 fully done (code + test + merge + deploy)
+
+Stage 2 progress: ~12% of the protected route surface migrated to `req.db` (4 of ~25 protected routes: suppliers, bi, project-foremen, project-trades). Next batches (89-C/2 through 89-C/N) continue the pattern.
+
+- **Today: 58 sections.** (Section 89 extended once more with Piece 89-C/1: first bulk route migration batch + joint deploy record for 89-B + 89-C/1. Subsequent 89-C/N batches will continue in this section until 89-C is complete; then 89-D and 89-E open as their own pieces under Section 89.)
 
