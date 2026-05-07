@@ -93,14 +93,7 @@ When you receive the one-line command above:
 
 **89-D (SUPER pool wiring) and 89-E (Stage 3 graduation) come AFTER 89-C is 100% done.**
 
-> NOTE on the prior WIP: the May 5-6 session had drafted `middleware/tenant_db.js` and `tests/integration/rls.test.js` as untracked WIP. **`tenant_db.js` was promoted to main in 89-B** (Section 89 documents the discovery + naming deviation from the original `db_context.js` HANDOFF name). **`rls.test.js` was DEFERRED** because it connects as `postgres` (superuser, bypasses RLS) — needs CI to also `GRANT` table privileges to `mepuser` first; filed as a small fixup PR. The third WIP file `migrations/012_enable_rls_permissive.sql` is a duplicate of an already-shipped migration and remains untracked.
-
-### Side task before 89-C: ship `rls.test.js`
-
-Quick PR (~30 minutes):
-1. Edit `.github/workflows/ci.yml` — after schema load, add: `psql -h localhost -U postgres -d testdb -c "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO mepuser; GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO mepuser;"`
-2. Edit `tests/integration/rls.test.js` — wrap each `client.query(...)` block in `BEGIN; SET LOCAL ROLE mepuser; <existing query>; ROLLBACK;`. Without this, RLS bypasses superuser and tests fail.
-3. `git add tests/integration/rls.test.js .github/workflows/ci.yml`, commit, PR.
+> NOTE on the prior WIP: the May 5-6 session had drafted `middleware/tenant_db.js` and `tests/integration/rls.test.js` as untracked WIP. **Both shipped now** — `tenant_db.js` in PR #152 (89-B), `rls.test.js` in the follow-up PR (CI mepuser GRANTs + `BEGIN; SET LOCAL ROLE mepuser; ...; ROLLBACK;` test wrapping). The third WIP file `migrations/012_enable_rls_permissive.sql` is a duplicate of an already-shipped migration and remains untracked.
 
 ---
 

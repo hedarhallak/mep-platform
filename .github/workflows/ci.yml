@@ -99,6 +99,31 @@ jobs:
             psql -h localhost -U postgres -d testdb -v ON_ERROR_STOP=1 -f "$f"
           done
 
+      - name: Grant mepuser privileges on schema (for RLS tests — Section 89-B follow-up)
+        env:
+          PGPASSWORD: testpass
+        run: |
+          # Section 89-B follow-up: tests that exercise RLS policies must
+          # connect as `mepuser` (not `postgres`, which is a superuser and
+          # bypasses RLS by default — HANDOFF pitfall #13). The standard
+          # pattern in tests/integration/rls.test.js wraps each scenario in
+          # `BEGIN; SET LOCAL ROLE mepuser; <queries>; ROLLBACK;` so the
+          # role switch is scoped to the test. For that to work, mepuser
+          # needs SELECT/INSERT/UPDATE/DELETE on all the tables RLS protects.
+          #
+          # We grant after migrations so any tables created by 001_, 002_,
+          # ... are covered. Idempotent — re-running on an existing CI run
+          # is a no-op.
+          psql -h localhost -U postgres -d testdb -v ON_ERROR_STOP=1 -c "
+            GRANT USAGE ON SCHEMA public TO mepuser;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO mepuser;
+            GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO mepuser;
+            ALTER DEFAULT PRIVILEGES IN SCHEMA public
+              GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO mepuser;
+            ALTER DEFAULT PRIVILEGES IN SCHEMA public
+              GRANT USAGE, SELECT ON SEQUENCES TO mepuser;
+          "
+
       - name: Route audit (check-routes.js)
         run: npm run audit:routes
 
