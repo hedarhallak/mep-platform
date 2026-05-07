@@ -1,12 +1,14 @@
 # SCHEMA.md — Constrai Database Reference
 
 > **Database:** `mepdb` (PostgreSQL 16 + PostGIS) on production server.
-> **User:** `mepuser` (owner of all application tables).
-> **Connection:** `localhost:5432` via `DATABASE_URL` env var.
-> **Total tables:** 33. **Migrations:** 11 (`migrations/000_baseline_2026-04-28.sql` + `001-010`).
+> **User:** `mepuser` (owner of all application tables; subject to RLS). **Cross-tenant role:** `mepuser_super` (BYPASSRLS, used by SUPER_ADMIN routes — see Section 89-A).
+> **Connection:** `localhost:5432` via `DATABASE_URL` env var. SUPER pool: `DATABASE_URL_SUPER` (Section 89-D wiring still pending).
+> **Total tables:** 33. **Migrations:** 12 (`migrations/000_baseline_2026-04-28.sql` + `001-010` + `011_email_login` + `012_enable_rls_permissive.sql`). Future: `013_enable_rls_strict.sql` (Stage 3, drops the unset-GUC bypass) ships once 100% of routes consume `req.db`.
 > **Canonical baseline reference:** [`db/schema_baseline_2026-05-04.sql`](./db/schema_baseline_2026-05-04.sql) (post-Section-80; supersedes all earlier baseline files).
 >
-> **Multi-tenancy:** All business tables include `company_id` (FK → `companies.id`). Always filter by company in queries unless you're a SUPER_ADMIN explicitly viewing cross-company data.
+> **Multi-tenancy:** All business tables include `company_id` (FK → `companies.id`). Filter by company in queries unless you're a SUPER_ADMIN explicitly viewing cross-company data. **Defense-in-depth via RLS (Section 88, May 2026):** Row-Level Security is ENABLED + FORCED on 27 tenant-scoped tables — 19 direct (`app_users`, `assignment_requests`, `attendance_records`, `audit_logs`, `clients`, `daily_dispatch_runs`, `employee_daily_dispatch_state`, `employees`, `material_catalog`, `material_requests`, `material_returns`, `project_foremen`, `project_trades`, `projects`, `purchase_orders`, `standup_sessions`, `suppliers`, `task_messages`, `user_invites`), 1 via PK (`companies` itself), 7 child via parent join (`employee_profiles`, `material_request_items`, `material_return_items`, `push_tokens`, `refresh_tokens`, `task_recipients`, `user_permissions`). Global lookup tables (`ccq_travel_rates`, `permissions`, `role_permissions`, `roles`, `project_statuses`, `trade_types`) intentionally have NO RLS — they're cross-tenant by design.
+>
+> **RLS Stage 1 policies (migration 012)** are permissive — `current_setting('app.company_id') IS NULL OR ... = ''` allows rows when the GUC is unset, so legacy code paths using `pool.query` (no transaction → no SET LOCAL) keep working. Routes migrated to `req.db.query` (Section 89-B + 89-C) flow through `middleware/tenant_db.js`, which BEGINs a transaction and runs `SET LOCAL app.company_id = <jwt.company_id>` so the policy filters correctly. Section 89-E will ship migration 013 dropping the unset-GUC bypass and making RLS strict.
 >
 > **Naming gotchas:**
 > - The user table is `app_users`, NOT `users`.

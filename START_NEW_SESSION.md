@@ -39,11 +39,14 @@ If you already know what you want to work on, add it after the bootstrap block:
 اليوم نكمل: <اكتب المهمة هنا>
 ```
 
-**Examples for the task line (May 6, 2026 — current state):**
-- `اليوم نبلش Phase 4 — PostgreSQL Row-Level Security` (Section 85/87 — DB-layer defense-in-depth, ~2 days, the next major phase)
+**Examples for the task line (May 7, 2026 — current state):**
+- `اليوم نكمل Phase 4b — batch 89-C/2 (next 3-5 routes onto req.db)` ★ default next task — see HANDOFF.md "Next task" for the candidates (profile + push_tokens, attendance, projects, reports)
 - `اليوم نـ migrate SendGrid → Resend` (Phase 6 prerequisite, ~30-45 min code work)
 - `اليوم Phase 1 follow-ups` (certbot disable + nginx warnings cleanup + firewall lock-down — separate session because firewall mistakes can lock SSH)
 - `اليوم نـ update Mobile login لـ email-based` (mep-mobile still sends username; backend backward-compat keeps it alive but next mobile release should switch)
+- `اليوم نشتغل P1 من TODOs — fix RLS policy على employee_profiles (skipped test)` — pre-existing item in HANDOFF TODOs
+
+**HANDOFF-based bootstrap (preferred since May 7, 2026):** The newer single-line command pasted by Hedar is the one in `HANDOFF.md`'s top section. It points the receiving Claude to read HANDOFF.md FIRST (which directs it to the latest 2-3 DECISIONS sections only), instead of asking it to crawl the whole DECISIONS archive. The CLAUDE.md Section 0 path above still works, but HANDOFF-based is faster and less context-burning.
 
 **Quick reference — multi-tenant migration state:**
 
@@ -53,11 +56,14 @@ If you already know what you want to work on, add it after the bootstrap block:
 | Phase 1 — Infrastructure (Cloudflare + Origin SSL) | ✅ Done | Section 86 |
 | Phase 2 — Tenant Resolver Middleware | ✅ No-op (Model C) | Section 87 |
 | Phase 3 — DB Schema + email login | ✅ Done + deployed | Section 87 |
-| Phase 4 — PostgreSQL RLS ★ | ⏳ NEXT | TBD (Section 88+) |
+| Phase 4a — RLS Stage 1 (permissive policies on 27 tables) | ✅ Done + deployed | Section 88 |
+| Phase 4b — RLS Stage 2 (`req.db` middleware + bulk route migration) ★ | ⏳ IN PROGRESS (4 of ~25 routes migrated) | Section 89 |
+| Phase 4c — RLS Stage 3 (strict policies, drops unset-GUC bypass) | ⏳ Pending (after 100% of routes on req.db) | TBD |
 | Phase 5 — SUPER_ADMIN Portal Split | ⏳ Pending | TBD |
 | Phase 6 — Frontend Tenant Context + Branding | ⏳ Pending | TBD |
 | Phase 7 — 2FA + Account Security | ⏳ Pending | TBD |
 | Phase 8 — Audit + Compliance | ⏳ Pending | TBD |
+| Email migration SendGrid → Resend (between Phase 5 + 6) | ⏳ Pending | TBD |
 | Email migration SendGrid → Resend | ⏳ Pending (do before Phase 6) | TBD |
 | UI Smoke Test (Section 84 plan, 9 tasks) | ⏸️ Paused | Resume after Phase 8 |
 

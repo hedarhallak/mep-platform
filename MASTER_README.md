@@ -1,10 +1,10 @@
 # MEP Platform — Master Project README
-> Last updated: May 6, 2026 | Maintainer: Hedar Hallak
+> Last updated: May 7, 2026 | Maintainer: Hedar Hallak
 > Production: https://app.constrai.ca
 > Website: https://www.constrai.ca (Coming Soon landing page)
 > Server: root@143.110.218.84
-> Latest DECISIONS section: **Section 87** (Phase 3 closeout — email-based login deployed and verified on prod). Section 85 = multi-tenant architecture (Model C single domain). Section 86 = Phase 1 Cloudflare + Origin SSL execution log. Section 87 = Phase 3 email login execution log. Phases 1 + 2 + 3 done. Phase 4 (PostgreSQL RLS) is next.
-> Active program: **Multi-Tenant Migration (Section 85, Phases 1-8)** — Phase 1 (Cloudflare + Origin SSL) ✅ DONE, Phase 2 (Tenant Resolver) ✅ no-op after Model C pivot, Phase 3 (email-based login + DB schema) ✅ DONE and deployed. **Next session starts Phase 4 (PostgreSQL Row-Level Security)** — DB-layer defense-in-depth, ~2 days estimated. The Section 84 UI smoke test is **paused** until all 8 phases ship. Email migration SendGrid → Resend (Resend account ready, code change pending) sits between Phase 5 and Phase 6.
+> Latest DECISIONS section: **Section 89** (Phase 4 Stage 2 — `req.db` middleware + bulk route migration in progress). Section 85 = multi-tenant architecture (Model C single domain). Section 86 = Phase 1 Cloudflare + Origin SSL. Section 87 = Phase 3 email login. Section 88 = Phase 4 Stage 1 (RLS permissive policies on 27 tenant-scoped tables, deployed). Section 89 covers Stage 2 in pieces 89-A (`mepuser_super` BYPASSRLS role, deployed), 89-B (`tenant_db.js` middleware + suppliers route, deployed), 89-C/1 (bi + project-foremen + project-trades migrated to req.db, deployed) and 89-C/1-fix (tenantDb COMMIT race resolved via res.end override, deployed). 89-C/2..N (bulk route migration) is the active line of work.
+> Active program: **Multi-Tenant Migration (Section 85, Phases 1-8)** — Phase 1 (Cloudflare + Origin SSL) ✅ DONE, Phase 2 (Tenant Resolver) ✅ no-op after Model C pivot, Phase 3 (email-based login + DB schema) ✅ DONE, Phase 4a (RLS Stage 1 permissive) ✅ DONE, **Phase 4b (RLS Stage 2 — req.db middleware) IN PROGRESS** (4 of ~25 protected routes migrated: suppliers, bi, project-foremen, project-trades). **Next session starts batch 89-C/2** (candidates: profile + push_tokens paired mount, or attendance.js, or projects.js). Phase 4c (RLS Stage 3 strict, drops the GUC-unset bypass) ships only after 100% of routes are on req.db. Then Phase 5 (SUPER_ADMIN portal split) → Phase 6 (frontend tenant context + branding) → Phase 7 (2FA + biometric) → Phase 8 (audit + compliance). The Section 84 UI smoke test is **paused** until all 8 phases ship. Email migration SendGrid → Resend (Resend account ready, code change pending) sits between Phase 5 and Phase 6.
 > Web Tier 1 + Tier 2 DONE (10/10). ~509 i18n keys live. Tier 3 i18n deferred.
 > **Customer #1 status:** unsigned (constraint per Section 46). Sales materials still TODO; product side now in much better shape post-May-4 hygiene push.
 > **Prod is in sync with main**. `APP_NAME=Constrai` + `VITE_MAPBOX_TOKEN` live. Tab title "Constrai" everywhere.
@@ -101,22 +101,27 @@ MEP Platform (Constrai) is a Quebec construction workforce ERP for MEP companies
 ---
 
 ## Backend — API Routes
-| Route | Feature | Status |
-|---|---|---|
-| auth.js | Login / JWT + PIN + full_name + refresh tokens + logout/logout-all | ✅ |
-| hub.js | My Hub — tasks + complete + file upload | ✅ |
-| assignments.js | Assignments | ✅ |
-| attendance.js | Attendance + CCQ hours | ✅ |
-| materials.js + material_requests.js | Materials + PO + PDF + POST /send-order | ✅ |
-| reports.js | My Report + Distance 41km+ | ✅ |
-| permissions.js | RBAC — 58 permissions / 13 roles / 284 mappings | ✅ |
-| bi.js | Business Intelligence + Workforce Planner (PostGIS) | ✅ |
-| projects.js | Projects CRUD | ✅ |
+| Route | Feature | Status | RLS migrated to req.db (Section 89) |
+|---|---|---|---|
+| auth.js | Login / JWT + PIN + full_name + refresh tokens + logout/logout-all | ✅ | n/a (public, pre-tenant) |
+| hub.js | My Hub — tasks + complete + file upload | ✅ | ⏳ |
+| assignments.js | Assignments | ✅ | ⏳ |
+| attendance.js | Attendance + CCQ hours | ✅ | ⏳ |
+| materials.js + material_requests.js | Materials + PO + PDF + POST /send-order | ✅ | ⏳ |
+| reports.js | My Report + Distance 41km+ | ✅ | ⏳ |
+| permissions.js | RBAC — 58 permissions / 13 roles / 284 mappings | ✅ | ⏳ |
+| bi.js | Business Intelligence + Workforce Planner (PostGIS) | ✅ | ✅ (89-C/1) |
+| projects.js | Projects CRUD | ✅ | ⏳ |
+| suppliers.js | Suppliers CRUD | ✅ | ✅ (89-B canary) |
+| project_foremen.js | Foremen per project per trade | ✅ | ✅ (89-C/1) |
+| project_trades.js | Trades within a project | ✅ | ✅ (89-C/1) |
+
+**RLS migration status (Section 89-C):** 4 of ~25 protected routes consume `req.db.query` (RLS-enforced via `middleware/tenant_db.js`). The remaining ~21 routes still use `pool.query` and rely on Stage 1 permissive RLS (unset-GUC = bypass) until they're migrated batch by batch. Stage 3 (strict, no bypass) is gated behind 100% migration.
 
 ---
 
 ## Database
-- Migrations: 011 (000 baseline + 001-010, after the May 4 schema sprint)
+- Migrations: 012 (000 baseline + 001-011 + 012 RLS Stage 1 permissive). Migration 012 enables ROW LEVEL SECURITY on 27 tenant-scoped tables (19 direct via `company_id`, 1 via `companies` PK, 7 child tables via parent join). All policies are permissive (`unset-GUC = bypass`) so legacy `pool.query` callers keep working during Stage 2 migration. `setup_rls_roles.sql` (run once as `postgres` outside the migration pipeline) provisions `mepuser_super` (BYPASSRLS) for SUPER_ADMIN cross-tenant reads.
 - Tables: **33** (down from 66 pre-Section-66; the C3 sprint dropped the `erp` schema entirely + 32 dead `public.*` tables across Sections 70-74 + Section 80, then Section 80 dropped `company_statuses`/`plans` after converting their FKs to inline CHECK constraints)
 - PostGIS extension: installed
 - Hub tables: task_messages, task_recipients

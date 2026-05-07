@@ -7,6 +7,8 @@
 > **Permissions:** Most endpoints require a specific permission via `requirePermission(...)` middleware. See [`SCHEMA.md`](./SCHEMA.md) Section G + `routes/permissions.js` for the 58-permission registry. The full role × permission matrix lives in `DECISIONS.md` Section 1.
 >
 > **Multi-tenancy:** Every endpoint that touches business data scopes by `req.user.company_id`. SUPER_ADMIN can pass `?company_id=` to override.
+>
+> **Database-level isolation (Section 88 + 89, May 2026):** PostgreSQL Row-Level Security is enabled on 27 tenant-scoped tables (Stage 1 permissive — see migration `012_enable_rls_permissive.sql`). Routes that have been migrated to `req.db.query` (instead of `pool.query`) get tenant filtering enforced at the DB layer via `SET LOCAL app.company_id` set by `middleware/tenant_db.js`. Routes still on `pool.query` keep working unchanged because Stage 1 policies allow rows when the GUC is unset — they'll be migrated batch by batch in Section 89-C. Stage 3 (`013_enable_rls_strict.sql`) drops the unset-GUC bypass once 100% of routes are migrated. Migrated so far (Section 89-C/1): `/api/suppliers`, `/api/bi`, `/api/project-foremen`, `/api/project-trades`. SUPER_ADMIN cross-tenant reads use a separate `mepuser_super` BYPASSRLS DB role (Section 89-A).
 
 ---
 

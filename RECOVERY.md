@@ -6,7 +6,7 @@
 >
 > **Review cadence:** Every 3 months, or after any major infrastructure change.
 >
-> **Last reviewed:** April 18, 2026
+> **Last reviewed:** May 7, 2026 (added `mepuser_super` to credential checklist after Section 89-A; rest of doc unchanged from April 18 review).
 
 ---
 
@@ -63,7 +63,8 @@ If you are the backup contact and Hedar is unreachable:
 - [ ] SendGrid account + API key
 - [ ] Mapbox account + API key
 - [ ] Server root SSH private key (export from Hedar's laptop)
-- [ ] Database password (`MepSecure2026X`)
+- [ ] Database password (`MepSecure2026X` — `mepuser` role)
+- [ ] **`mepuser_super` DB password** (Section 89-A, May 7, 2026) — used by `DATABASE_URL_SUPER` for SUPER_ADMIN cross-tenant reads via the BYPASSRLS role. Stored in Apple Passwords as `Constrai Prod - mepuser_super DB`. Also embedded in `/var/www/mep/.env` (`DATABASE_URL_SUPER=postgres://mepuser_super:<pwd>@localhost:5432/mepdb`).
 - [ ] `JWT_SECRET` value from `/var/www/mep/.env` on server
 - [ ] `server.env` file contents (full) — stored as secure note
 
