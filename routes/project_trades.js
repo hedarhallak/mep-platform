@@ -11,12 +11,20 @@
  */
 
 const router = require('express').Router();
-const { pool } = require('../db');
 const auth = require('../middleware/auth');
 const { can } = require('../middleware/permissions');
 
 // All routes require authentication
 router.use(auth);
+
+// Section 89-C/1 (Phase 4 Stage 2): this route now consumes req.db (RLS-
+// enforced via middleware/tenant_db). The pool import was removed. WHERE
+// company_id clauses kept for defense-in-depth — RLS does the actual
+// filtering at the DB layer once tenant_db sets the GUC. NOTE: auth is
+// already applied via app.js (`auth, tenantDb, ...`) before this router
+// is invoked; the router-level `router.use(auth)` is a pre-existing belt-
+// and-suspenders that verifies the token a second time. Harmless, but
+// future cleanup should remove it.
 
 // ── GET /api/project-trades/:project_id ──────────────────────
 router.get('/:project_id', async (req, res) => {
@@ -25,13 +33,13 @@ router.get('/:project_id', async (req, res) => {
     const companyId = req.user.company_id;
 
     // Verify project belongs to company
-    const proj = await pool.query(
+    const proj = await req.db.query(
       `SELECT id FROM public.projects WHERE id = $1 AND company_id = $2 LIMIT 1`,
       [project_id, companyId]
     );
     if (!proj.rows.length) return res.status(404).json({ ok: false, error: 'PROJECT_NOT_FOUND' });
 
-    const result = await pool.query(
+    const result = await req.db.query(
       `SELECT
          pt.id,
          pt.project_id,
@@ -76,14 +84,14 @@ router.post('/:project_id', can('projects.edit'), async (req, res) => {
     if (!trade_type_id) return res.status(400).json({ ok: false, error: 'TRADE_TYPE_REQUIRED' });
 
     // Verify project belongs to company
-    const proj = await pool.query(
+    const proj = await req.db.query(
       `SELECT id FROM public.projects WHERE id = $1 AND company_id = $2 LIMIT 1`,
       [project_id, companyId]
     );
     if (!proj.rows.length) return res.status(404).json({ ok: false, error: 'PROJECT_NOT_FOUND' });
 
     // Verify trade type exists
-    const trade = await pool.query(
+    const trade = await req.db.query(
       `SELECT id FROM public.trade_types WHERE id = $1 AND is_active = true LIMIT 1`,
       [trade_type_id]
     );
@@ -91,7 +99,7 @@ router.post('/:project_id', can('projects.edit'), async (req, res) => {
 
     // If trade_admin_id provided, verify user belongs to company
     if (trade_admin_id) {
-      const admin = await pool.query(
+      const admin = await req.db.query(
         `SELECT id FROM public.app_users WHERE id = $1 AND company_id = $2 LIMIT 1`,
         [trade_admin_id, companyId]
       );
@@ -99,7 +107,7 @@ router.post('/:project_id', can('projects.edit'), async (req, res) => {
         return res.status(400).json({ ok: false, error: 'INVALID_TRADE_ADMIN' });
     }
 
-    const result = await pool.query(
+    const result = await req.db.query(
       `INSERT INTO public.project_trades
          (project_id, trade_type_id, trade_admin_id, notes, company_id)
        VALUES ($1, $2, $3, $4, $5)
@@ -123,13 +131,13 @@ router.patch('/:id', can('projects.edit'), async (req, res) => {
     const { trade_admin_id, status, notes } = req.body;
     const companyId = req.user.company_id;
 
-    const existing = await pool.query(
+    const existing = await req.db.query(
       `SELECT * FROM public.project_trades WHERE id = $1 AND company_id = $2 LIMIT 1`,
       [id, companyId]
     );
     if (!existing.rows.length) return res.status(404).json({ ok: false, error: 'NOT_FOUND' });
 
-    const result = await pool.query(
+    const result = await req.db.query(
       `UPDATE public.project_trades SET
          trade_admin_id = COALESCE($1, trade_admin_id),
          status         = COALESCE($2, status),
@@ -157,7 +165,7 @@ router.delete('/:id', can('projects.delete'), async (req, res) => {
     // the GET subquery: assignment_requests has no project_trade_id
     // column, so the original check was a 500 in disguise. When the
     // assignment-to-trade linkage is redesigned, restore the guard.
-    await pool.query(`DELETE FROM public.project_trades WHERE id = $1 AND company_id = $2`, [
+    await req.db.query(`DELETE FROM public.project_trades WHERE id = $1 AND company_id = $2`, [
       id,
       companyId,
     ]);

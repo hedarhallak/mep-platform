@@ -8894,5 +8894,96 @@ Verify after restart:
 
 8. **GitHub web "Update branch" button is for behind-main branches, not for already-merged ones.** Today's PR #150 (89-A docs) merged cleanly. Then someone clicked "Update branch" on the same branch's GitHub page, which created a new merge-commit on top of the just-merged content. That triggered "Compare & pull request" → PR #151 → auto-merged because `gh pr merge --auto` was already enabled. Result: main now has duplicate squash commits (`#150` and `#151`) for the same file change. File content is correct; git history has noise. Lesson: **after `gh pr merge`, leave the PR's GitHub page alone**. The local cleanup steps (`git branch -D`, `git push origin --delete`) are the only post-merge actions needed. Add this to HANDOFF.md as Pitfall #18.
 
-- **Today: 58 sections.** (Section 89 extended again with Piece 89-B middleware shipping. Pieces C/D/E still pending; C is next.)
+### Piece 89-C/1 — first batch route migration (May 7, 2026)
+
+After 89-B established the `tenantDb` middleware and migrated `/api/suppliers` as the canary route, Piece 89-C/1 is the **first batch of bulk route migrations**. It moves three more routes onto `req.db.query` so the middleware exercises a wider mix of route shapes (BI analytics, project-structure CRUD).
+
+### Routes in this batch
+
+| Route file | Mount | Handlers | `pool.query` calls converted |
+|---|---|---|---|
+| `routes/bi.js` | `/api/bi` | 1 (GET `/workforce-suggestions`) | 2 |
+| `routes/project_foremen.js` | `/api/project-foremen` | 3 (GET / POST / DELETE) | 6 |
+| `routes/project_trades.js` | `/api/project-trades` | 4 (GET / POST / PATCH / DELETE) | 9 |
+
+**Total: 17 query conversions across 3 files**, comparable in scope to 89-B's suppliers migration. All three routes only consume tenant-scoped tables (`projects`, `assignment_requests`, `employee_profiles`, `project_foremen`, `project_trades`, `app_users`, etc.) plus the global `trade_types` lookup table (which has no RLS — Stage 1 permissive lets it pass through unchanged).
+
+### Why this batch was chosen
+
+Following the criteria from HANDOFF.md and Section 89's Stage 2 plan ("low-risk read-heavy routes first"), we picked the three smallest tenant-scoped routes whose handlers have a uniform `companyId = req.user.company_id` → single-table-or-simple-join shape:
+
+- **bi.js** is small (1 endpoint, 2 queries) and exercises the JOIN-heavy SELECT shape (PostGIS distance calc, multi-table joins). Useful coverage of the middleware under analytical queries.
+- **project_foremen.js** has the cleanest CRUD shape — every handler is `companyId = req.user.company_id` followed by 1-3 SQL statements. No caching tricks, no helpers. Ideal training-wheels migration.
+- **project_trades.js** is similar but slightly larger (4 handlers, 9 queries). Includes one query against the global `trade_types` table — useful for confirming the middleware doesn't break global-table reads.
+
+**Routes deferred to later 89-C batches:**
+
+- `profile.js` (mounted on `/api/profile`) uses a custom `q()` helper that delegates to `db.query` or `db.pool.query`, plus module-level caches keyed off DB schema queries. Migration requires refactoring the `q()` helper to take a `db` parameter — non-trivial. Pair with `push_tokens_route.js` (also mounted on `/api/profile`) so both routes get the middleware together.
+- `permissions.js` queries primarily global tables (`permissions`, `role_permissions`) — migration adds little RLS value. Defer until the high-value routes are done.
+- `employees.js` has dynamic column detection cached on `module._epCols`. The cache is populated via a query against `information_schema.columns` (global, no RLS), so migration is technically safe — but the lifecycle is delicate and warrants a dedicated PR with explicit testing.
+- `attendance.js` (9 queries), `assignments.js` (30 queries), `daily_dispatch.js` (19 queries), `material_requests.js` (26 queries), `projects.js` (20 queries), `reports.js` (11 queries), `standup.js` (15 queries), `hub.js` (11 queries), `auto_assign.js` (6 queries), `user_management.js` (9 queries) — all candidates for batches 89-C/2 through 89-C/N. Batch sizing target: 3-5 routes per PR.
+
+### Files in this PR
+
+| File | Change |
+|---|---|
+| `app.js` | Add `tenantDb` between `auth` and the three route modules (`/api/bi`, `/api/project-foremen`, `/api/project-trades`). Update the Section 89-B comment to note the 89-C/1 extension. |
+| `routes/bi.js` | Drop `const { pool } = require('../db')`, replace `await pool.query(...)` (×2) with `await req.db.query(...)`. Add header comment marking the migration. |
+| `routes/project_foremen.js` | Same migration pattern (×6 queries). |
+| `routes/project_trades.js` | Same migration pattern (×9 queries). Note in comment that `router.use(auth)` (a pre-existing belt-and-suspenders) runs after `auth, tenantDb` from app.js — harmless but should be removed in a future cleanup. |
+| `tests/integration/tenant_db_89c1.test.js` | NEW — 7 tests: 3 cross-tenant assertions for project-foremen, 3 for project-trades, 1 smoke test for `/api/bi/workforce-suggestions`. Confirms each batched route preserves tenant isolation under the middleware. |
+| `DECISIONS.md` | This sub-section (89-C/1). |
+| `HANDOFF.md` | Update batch progress + next-task pointer. |
+
+### Why `/api/bi` only gets a smoke test (not full cross-tenant assertions)
+
+The `/api/bi/workforce-suggestions` endpoint requires a heavyweight fixture: projects with `site_lat` + `site_lng`, employee_profiles with `home_lat` + `home_lng`, and APPROVED assignment_requests covering today's date. The seed helpers (`seedProject`, `seedEmployeeProfile`) don't currently set lat/lng, so a deeper test would need either (a) new helpers, or (b) raw INSERTs with PostGIS geography literals in the test setup.
+
+The smoke test (200 status + array shape) is sufficient to confirm the `tenantDb` middleware is correctly wired for this route — the actual cross-tenant property is enforced by the same RLS policies and middleware code already verified by the project-foremen / project-trades tests in this same PR. Filed as a backlog item: extend the BI test if/when the lat/lng helpers exist (likely tied to a future workforce-planner feature batch).
+
+### Pre-deploy checks (CI must pass)
+
+- All existing tests continue passing — confirms the migration is behavior-preserving for routes whose tests already exist.
+- New `tests/integration/tenant_db_89c1.test.js` passes — 7 new tests, RLS-enforced cross-tenant isolation on the migrated routes.
+- Pre-commit route audit (`scripts/check-routes.js`) remains clean — adding `tenantDb` between `auth` and the route module preserves mount uniqueness; the audit looks at `app.use("path"` prefixes, not at middleware count.
+
+### Production deploy plan (after merge)
+
+89-C/1 is **code-only** — no DB migrations, no env var changes, no role provisioning. Standard deploy (same recipe as 89-B):
+
+```
+ssh root@143.110.218.84
+```
+
+Then on the server:
+```bash
+cd /var/www/mep
+git pull origin main
+pm2 restart mep-backend
+```
+
+Verify after restart:
+- `pm2 logs mep-backend --lines 20` — no startup errors.
+- `curl -s https://app.constrai.ca/api/health/deep | jq .` — overall ok=true.
+- Smoke test: `curl -s -H 'Authorization: Bearer <admin_token>' https://app.constrai.ca/api/bi/workforce-suggestions | jq '.ok'` — confirm 200 + ok:true.
+- Smoke test: `curl -s -H 'Authorization: Bearer <admin_token>' https://app.constrai.ca/api/project-foremen/<a-real-project-id> | jq '.foremen | length'` — confirm a real account still gets its own foremen.
+
+### Known cleanup items surfaced (deferred)
+
+- `middleware/permissions.js` `can()` calls `pool.query` directly (not `req.db.query`). Under Stage 1 permissive RLS this works because `user_permissions` queries return rows when the GUC is unset on the pool client. **Under Stage 3 strict RLS, can() will return 0 rows and reject every authenticated request.** Fix planned for 89-D or 89-E: refactor `can()` to either run on a `req.db`-aware client or accept the GUC unset state via a SUPER-pool fallback.
+- `routes/project_trades.js` has a top-level `router.use(auth)` that duplicates `app.js`'s mount-time `auth`. Harmless but redundant; remove in a future cleanup PR (not this batch — out of scope per Code Convention #3).
+
+### Status — Piece 89-C/1 complete (pending CI + merge)
+
+| Item | Status |
+|---|---|
+| Code migrated | ✅ 3 files, 17 queries → req.db.query |
+| Cross-tenant integration test | ✅ 7 new tests in `tenant_db_89c1.test.js` |
+| Route audit clean | ✅ no new mount prefixes added |
+| PR opened + CI green | ⏳ Pending |
+| Merged to main | ⏳ Pending |
+| Deployed to prod | ⏳ Pending |
+| Next batch (89-C/2) | ⏳ Pending — candidates: profile + push_tokens, attendance, projects, reports |
+
+- **Today: 58 sections.** (Section 89 extended once more with Piece 89-C/1: first bulk route migration batch. Subsequent 89-C/N batches will continue in this section until 89-C is complete; then 89-D and 89-E open as their own pieces under Section 89.)
 

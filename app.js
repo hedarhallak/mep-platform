@@ -271,9 +271,11 @@ app.use('/api/super/ccq-rates', auth, superAdmin, require('./routes/ccq_rates'))
 // ── Core business routes ──────────────────────────────────────
 app.use('/api/employees', auth, loadRouter('./routes/employees'));
 app.use('/api/projects', auth, loadRouter('./routes/projects'));
-// Section 89-B sample migration: /api/suppliers is the first production
-// route to consume req.db (RLS-enforced). Other routes still use pool.query
-// + permissive RLS until they migrate in subsequent PRs (89-C).
+// Section 89-B sample migration: /api/suppliers was the first production
+// route to consume req.db (RLS-enforced). Section 89-C/1 (May 7, 2026)
+// extends this to /api/bi, /api/project-trades, /api/project-foremen.
+// Other routes still use pool.query + permissive RLS until they migrate
+// in subsequent 89-C batches.
 app.use('/api/suppliers', auth, tenantDb, require('./routes/suppliers'));
 app.use('/api/assignments', auth, loadRouter('./routes/assignments'));
 app.use('/api/assignments', auth, require('./routes/auto_assign'));
@@ -282,8 +284,9 @@ app.use('/api/profile', auth, loadRouter('./routes/profile'));
 app.use('/api/profile', auth, require('./routes/push_tokens_route'));
 
 // ── Project structure ─────────────────────────────────────────
-app.use('/api/project-trades', auth, require('./routes/project_trades'));
-app.use('/api/project-foremen', auth, require('./routes/project_foremen'));
+// Section 89-C/1: project_trades + project_foremen migrated to req.db.
+app.use('/api/project-trades', auth, tenantDb, require('./routes/project_trades'));
+app.use('/api/project-foremen', auth, tenantDb, require('./routes/project_foremen'));
 
 // ── Materials & Purchase Orders ───────────────────────────────
 // NOTE (2026-04-26): routes/materials.js (the "v1" daily-ticket workflow)
@@ -294,7 +297,8 @@ app.use('/api/project-foremen', auth, require('./routes/project_foremen'));
 app.use('/api/materials', auth, require('./routes/material_requests'));
 
 // ── Business Intelligence ─────────────────────────────────────
-app.use('/api/bi', auth, require('./routes/bi'));
+// Section 89-C/1: bi route migrated to req.db.
+app.use('/api/bi', auth, tenantDb, require('./routes/bi'));
 app.use('/api/reports', auth, loadRouter('./routes/reports'));
 
 // ── Daily operations ──────────────────────────────────────────
