@@ -8804,11 +8804,37 @@ After 89-A's role bootstrap landed on prod, Piece 89-B ships the **per-request D
 
 A prior session (May 5-6) had drafted three Phase 4 Stage 2 files that were never committed:
 
-- `middleware/tenant_db.js` — well-engineered Express middleware
-- `tests/integration/rls.test.js` — comprehensive DB-layer Stage 1 RLS test
-- `migrations/012_enable_rls_permissive.sql` — duplicate of migration 012 already on main + prod (WIP from before 88 shipped)
+- `middleware/tenant_db.js` — well-engineered Express middleware ✅ shipped here
+- `tests/integration/rls.test.js` — comprehensive DB-layer Stage 1 RLS test ⏳ **deferred** (see "rls.test.js deferred" subsection below)
+- `migrations/012_enable_rls_permissive.sql` — duplicate of migration 012 already on main + prod (WIP from before 88 shipped) — left untracked
 
 The WIP `tenant_db.js` implementation is solid: BEGIN/COMMIT/ROLLBACK lifecycle wired to `res` events, single-fire release guard for the finish/close double-event quirk, defensive handling of missing `req.user`, super pool fallback when `DATABASE_URL_SUPER` is unset (graceful degradation under Stage 1 permissive), `SET LOCAL app.company_id` parameterized via `Number()` cast for SQL safety. We're shipping it as-is rather than rewriting from scratch.
+
+### `rls.test.js` deferred (CI mepuser GRANTs gap)
+
+Initial 89-B PR included `tests/integration/rls.test.js` from the WIP. CI failed with 6 assertions — RLS policies appeared to NOT filter:
+
+```
+Expected length: 1
+Received length: 2  ← both companies' rows visible
+```
+
+**Root cause:** CI's test DB connects via the `postgres` superuser role (`.github/workflows/ci.yml` line 55). Postgres superusers bypass RLS by default (HANDOFF pitfall #13). The WIP test connects with `pool.connect()` and sets `app.company_id` GUC, but doesn't switch role — so RLS is bypassed and both tenants' rows leak through.
+
+**The fix the test needs:** wrap each scenario in `BEGIN ... SET LOCAL ROLE mepuser ... query ... ROLLBACK`. HANDOFF pitfall #14 documents this exact pattern.
+
+**The blocker preventing the fix in this PR:** `ci.yml` creates `mepuser` (line 75) **but never GRANTs it any table privileges**. `SET LOCAL ROLE mepuser` would succeed, but the subsequent SELECT would fail with `permission denied for table suppliers`.
+
+**Decision:** ship 89-B without `rls.test.js`. The middleware-side regression coverage comes from the new `tenant_db_middleware.test.js` (which exercises the route + middleware chain end-to-end via supertest).
+
+**Known limitation of `tenant_db_middleware.test.js` under current CI setup:** because CI connects as `postgres` (superuser, bypasses RLS), the test currently passes via the route's defensive `WHERE company_id = $1` clauses rather than via RLS itself. This is a smoke test — it verifies the middleware doesn't break the route, but doesn't strictly prove RLS is what's filtering. Once CI grants `mepuser` table privileges + the test is updated to switch role per request, the assertion becomes RLS-strict. Filed alongside the `rls.test.js` deferral.
+
+DB-layer RLS coverage is restored in a future small PR that:
+
+1. Adds `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO mepuser` to `ci.yml`'s test setup (after the schema is loaded but before tests run).
+2. Promotes `tests/integration/rls.test.js` with the `SET LOCAL ROLE mepuser` wrapping pattern applied per scenario.
+
+That PR is small, focused, and not on the critical path for 89-C. Filed as the next backlog item below.
 
 **Naming deviation from HANDOFF:** Section 89's Stage 2 plan called the middleware `db_context.js`. The existing WIP file is `tenant_db.js`. Keeping the existing name because (a) it accurately describes the middleware's job (sets tenant context on the DB connection), (b) `tenant_db.js` is more self-documenting than `db_context.js`, and (c) renaming is pure churn for no value. HANDOFF.md is being updated accordingly.
 
@@ -8819,7 +8845,7 @@ The duplicate migration (`migrations/012_enable_rls_permissive.sql`) is left unt
 | File | Change |
 |---|---|
 | `middleware/tenant_db.js` | Promote untracked → tracked (no code changes — file is shipped as-is from the WIP) |
-| `tests/integration/rls.test.js` | Promote untracked → tracked (free Stage 1 RLS coverage at the DB layer) |
+| `tests/integration/rls.test.js` | ❌ **NOT shipped** — failed CI because the test connects as `postgres` (superuser, bypasses RLS) and CI's `mepuser` has no table GRANTs. See "rls.test.js deferred" subsection above. Left as untracked WIP to revisit. |
 | `app.js` | Import `tenantDb`, mount on `/api/suppliers` (after `auth`, before the route module) |
 | `routes/suppliers.js` | Migrate all 4 handlers (GET / POST / PATCH / DELETE) from `pool.query` → `req.db.query`. Drop the now-unused `pool` import. WHERE company_id clauses kept for defense-in-depth (RLS does the real filtering, but explicit > implicit). |
 | `tests/integration/tenant_db_middleware.test.js` | NEW — 4 tests covering middleware + suppliers route end-to-end: tenant A sees only A's rows, tenant B sees only B's, direct `pool.query` (bypassing middleware) sees both (proves GUC is what's filtering), and write-side correctness via POST. |
