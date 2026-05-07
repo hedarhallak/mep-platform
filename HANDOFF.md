@@ -1,7 +1,7 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 7, 2026 — after Phase 4 Stage 2 Piece 89-B (`tenant_db.js` middleware + first route migration) merged to main. Awaiting prod deploy.
+> Last updated: May 7, 2026 — after Phase 4 Stage 2 Piece 89-C/1 (first bulk route migration batch: bi + project-foremen + project-trades) merged to main. Awaiting prod deploy.
 
 ---
 
@@ -45,8 +45,8 @@ When you receive the one-line command above:
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04) |
 | Backend | Node.js + Express + Postgres 16, pm2-managed at `/var/www/mep` |
 | Frontend | React + Vite + Tailwind, deployed to `/var/www/mep/mep-frontend/dist` |
-| Latest deployed to prod | **Phase 4 Stage 2 Piece 89-A (`mepuser_super` BYPASSRLS role)** — May 7, 2026 |
-| Last merged to main | Piece 89-B (`tenant_db.js` middleware + suppliers route migration) — May 7, 2026 |
+| Latest deployed to prod | **Phase 4 Stage 2 Piece 89-B (`tenant_db.js` + suppliers route)** — May 7, 2026 |
+| Last merged to main | Piece 89-C/1 (bi + project-foremen + project-trades) — May 7, 2026 |
 | Active program | **Multi-Tenant Migration** (Section 85, Phases 1-8) — Phase 4 in progress |
 | Mobile app | Still on legacy username login — backend keeps backward-compat |
 
@@ -59,7 +59,7 @@ When you receive the one-line command above:
 | Phase 2 — Tenant Resolver | ✅ No-op (Model C) | 87 |
 | Phase 3 — DB schema 011 + email login | ✅ Deployed | 87 |
 | **Phase 4a — RLS Stage 1 (permissive policies)** | ✅ **Deployed to prod** | 88 |
-| **Phase 4b — RLS Stage 2 (req.db middleware)** | ⏳ **In progress** (89-A deployed; 89-B middleware + suppliers migrated; 89-C bulk migration next) | 89 |
+| **Phase 4b — RLS Stage 2 (req.db middleware)** | ⏳ **In progress** (89-A + 89-B deployed; 89-C/1 merged, awaiting deploy; 89-C/2..N next) | 89 |
 | Phase 4c — RLS Stage 3 (strict policies) | ⏳ Pending | TBD |
 | Phase 5 — SUPER_ADMIN portal split | ⏳ Pending | TBD |
 | Phase 6 — Frontend tenant context + branding | ⏳ Pending | TBD |
@@ -68,32 +68,39 @@ When you receive the one-line command above:
 | Email migration SendGrid → Resend (before Phase 6) | ⏳ Pending | TBD |
 | UI smoke test (Section 84, 9 tasks) | ⏸️ Paused | Resume after Phase 8 |
 
+### 89-C bulk route migration progress
+
+| Batch | Routes | Status |
+|---|---|---|
+| 89-C/1 | `/api/bi`, `/api/project-foremen`, `/api/project-trades` | ✅ **Merged to main** — awaiting prod deploy |
+| 89-C/2 | TBD — likely profile + push_tokens (paired mount) | ⏳ Next |
+| 89-C/3..N | attendance, projects, reports, hub, daily_dispatch, standup, material_requests, assignments, auto_assign, user_management, employees, permissions | ⏳ Pending |
+
 ---
 
-## Next task: Phase 4b Piece 89-C — bulk route migration to `req.db`
+## Next task: Phase 4b Piece 89-C/2 — second batch of route migration
 
-**Goal:** migrate the remaining ~25 protected routes off `pool.query` onto `req.db.query`, batch by batch. Once 100% of routes are on `req.db`, Stage 3 (89-E) can drop the "GUC unset = bypass" clause and RLS goes strict.
+**Goal:** continue migrating remaining ~22 protected routes off `pool.query` onto `req.db.query`, batch by batch. Target batch size: 3-5 routes per PR. Once 100% of routes are on `req.db`, Stage 3 (89-E) can drop the "GUC unset = bypass" clause and RLS goes strict.
 
-**Status entering this task** (per Section 89 in DECISIONS.md):
+**Status entering this task** (per Section 89 in DECISIONS.md, sub-section 89-C/1):
 
-- Piece 89-A (`mepuser_super` BYPASSRLS role) — ✅ deployed to prod May 7, 2026.
-- Piece 89-B (`middleware/tenant_db.js` + first route migration `/api/suppliers`) — ✅ merged to main May 7, 2026. Awaiting prod deploy.
-- The middleware (`middleware/tenant_db.js`) is already mounted in `app.js` between `auth` and the route module on `/api/suppliers`. Same pattern applies to every other route migrated next.
-- `tests/integration/tenant_db_middleware.test.js` and `tests/integration/rls.test.js` exist as the regression baseline.
+- 89-C/1 migrated `/api/bi`, `/api/project-foremen`, `/api/project-trades`. Merged to main today. Awaiting prod deploy.
+- The migration pattern is fully proven now: (a) add `tenantDb` to mount in `app.js` between `auth` and the route module, (b) drop the `pool` import in the route file, (c) replace `await pool.query(...)` with `await req.db.query(...)`, (d) keep `WHERE company_id` clauses for defense-in-depth.
 
-**Piece 89-C plan (multiple PRs over Stage 2):**
+**Suggested 89-C/2 candidates (low-risk, similar in shape to 89-C/1):**
 
-1. **Pick a small batch** (5-10 routes per PR), prioritizing low-risk read-heavy routes first. Suggested first batch: `/api/employees` GET handlers, `/api/projects` GET handlers, `/api/attendance` GET handlers. Skip routes with module-level caching tricks (e.g., `routes/employees.js` has `module._epCols` — handle that with care).
-2. **For each route in the batch:**
-   - Add `tenantDb` to its mount line in `app.js`: `app.use('/api/X', auth, tenantDb, require('./routes/X'));`
-   - In the route file: replace every `pool.query(...)` with `req.db.query(...)`. Drop the `pool` import if unused after.
-   - Keep `WHERE company_id` clauses for now (defense-in-depth — strip them in 89-E).
-3. **Add an integration test per batch** confirming that cross-tenant reads return 0 rows (modeled on `tests/integration/tenant_db_middleware.test.js`).
-4. **Plan ~5-7 batch PRs** to migrate the full backend.
+1. **`profile.js` + `push_tokens_route.js`** — both mounted on `/api/profile`. Profile.js uses a custom `q()` helper that delegates to `db.query` or `db.pool.query`, plus module-level caches keyed off DB schema queries. Migration requires refactoring the `q()` helper to take a `db` parameter, OR replacing every `q(...)` call directly with `req.db.query(...)`. The cache population queries (`information_schema.columns`) hit a global table and don't need RLS — but they currently use the `q()` helper which would need to flow through the migration cleanly. Pair with `push_tokens_route.js` since it shares the mount.
+2. **`attendance.js`** (9 queries) — straightforward CRUD shape, 5 handlers. Tenant-scoped (`attendance_records` is in the RLS table list).
+3. **`reports.js`** (11 queries) — read-heavy, similar shape to bi.js.
+
+A reasonable 89-C/2 batch: profile (+push_tokens) + attendance. Or profile-only as a self-contained batch given the helper refactor it needs.
 
 **89-D (SUPER pool wiring) and 89-E (Stage 3 graduation) come AFTER 89-C is 100% done.**
 
-> NOTE on the prior WIP: the May 5-6 session had drafted `middleware/tenant_db.js` and `tests/integration/rls.test.js` as untracked WIP. **Both shipped now** — `tenant_db.js` in PR #152 (89-B), `rls.test.js` in the follow-up PR (CI mepuser GRANTs + `BEGIN; SET LOCAL ROLE mepuser; ...; ROLLBACK;` test wrapping). The third WIP file `migrations/012_enable_rls_permissive.sql` is a duplicate of an already-shipped migration and remains untracked.
+### Backlog items surfaced during 89-C/1
+
+- **`middleware/permissions.js` `can()` uses `pool.query` directly.** Under Stage 1 permissive RLS this works (queries against `user_permissions` return rows when GUC is unset on the pool client). **Under Stage 3 strict RLS, every authenticated request will fail** because `can()` will see 0 user_permissions rows and reject. Fix planned for 89-D or 89-E: refactor `can()` to either consume `req.db` or use a SUPER-pool fallback.
+- **`routes/project_trades.js`** has a redundant top-level `router.use(auth)` (auth runs twice on every request — once from `app.js` mount, once internally). Pre-existing, harmless, but should be removed in a future cleanup PR. Out of scope for 89-C batches.
 
 ---
 
@@ -109,14 +116,13 @@ All credentials live in Hedar's password manager. Secrets repo-side:
 | Server `.env` (full contents) | Password manager secure note |
 | DigitalOcean Spaces keys | Password manager |
 | Apple Developer / Expo / GitHub | Password manager |
-
-`mepuser_super` DB password (Stage 2, not yet created): will live in password manager + `.env` on prod when Stage 2 ships.
+| `mepuser_super` DB password | Apple Passwords (`Constrai Prod - mepuser_super DB`) + `/var/www/mep/.env` (`DATABASE_URL_SUPER`) on prod |
 
 Cost inventory (services + monthly bill ~$37 USD): see `RECOVERY.md` Section 2.4.
 
 ---
 
-## Critical pitfalls (encoded from Sections 86 + 87 + 88)
+## Critical pitfalls (encoded from Sections 86 + 87 + 88 + 89)
 
 1. **Bash sandbox file sync lag** — bash may return stale file content. Always use the Read tool to verify file state, or use PowerShell from Hedar's machine.
 2. **Edit tool can silently lose changes** — after a sequence of Edit calls, verify each change with Read tool immediately. Don't assume "successfully" means "persisted on disk".
@@ -130,14 +136,15 @@ Cost inventory (services + monthly bill ~$37 USD): see `RECOVERY.md` Section 2.4
 10. **Don't open a new session before previous PRs merge** — wait for `gh pr view <num>` to show `Merged`. Otherwise the next session inherits a dirty working tree and merge conflicts.
 11. **Cherry-picking can cross feature branches** — run `git status` (or `git branch --show-current`) immediately before any `git add` / `git commit` to verify the target branch.
 12. **Replace this file at end of session, don't append** — `HANDOFF.md` is meant to be small and current. Long history goes in `DECISIONS.md`.
-13. **RLS doesn't apply to BYPASSRLS roles** (NEW Section 88) — superusers (incl. `postgres`) and roles with the BYPASSRLS attribute bypass every policy. RLS integration tests must `SET LOCAL ROLE mepuser` (or any non-super role) inside the transaction so the policy actually filters. `FORCE ROW LEVEL SECURITY` doesn't help here — it only forces RLS on table OWNERS, not on BYPASSRLS roles.
-14. **CI uses `postgres` role for tests** — see `.github/workflows/ci.yml` line 55 (`TEST_DATABASE_URL: postgres://postgres:testpass@...`). The workflow also pre-creates `mepuser` (line 75). Any RLS-specific test should switch to mepuser via `SET LOCAL ROLE mepuser` after granting it needed privileges (GRANT inside the same transaction rolls back cleanly with ROLLBACK, so no testdb pollution).
-15. **`git checkout main` fails silently with dirty tree** (NEW Section 88) — if you have uncommitted changes that conflict with the target branch, `git checkout main` quietly stays on the current branch instead of switching. A subsequent `git pull origin main` then merges main into your CURRENT branch (opening vim for the merge message). To switch cleanly: stash first (`git stash push`), then checkout, then pop. To recover from this happening: `git merge --abort` (or `:q!` in vim) → `git stash` → `git checkout` → `git stash pop`.
-16. **`git stash pop` can lose cleanly-applied files when there's a conflict in another file** (NEW Section 88) — if stash pop succeeds on most files but conflicts on one, the cleanly-applied ones may revert silently to their pre-pop state in some workflows. After a stash pop with conflict, always Read each previously-stashed file via Claude's Read tool to verify content actually changed. Don't trust the absence of a conflict marker as proof the change applied.
-17. **PowerShell's bare `>` redirect uses UTF-16 with BOM** (NEW Section 88) — files written this way come back with spaces between every character when Claude's Read tool parses them, and aren't easy to grep. Always `Out-File -Encoding utf8 -FilePath <name>.log`. See CLAUDE.md Section 4.7 for the full file-based log convention.
-18. **GitHub web "Update branch" button creates duplicate squash commits when clicked on already-merged branches** (NEW Section 89, May 7, 2026) — after `gh pr merge --squash` succeeds, the local branch should be cleaned up immediately (`git branch -D` + `git push origin --delete`) and the GitHub web UI for that branch should NOT be touched. If "Update branch" is clicked, GitHub creates a new merge commit on top of the just-merged branch, which (combined with `gh pr merge --auto` still being enabled or a "Compare & pull request" yellow banner) can produce a second PR with the same content that auto-merges into a duplicate squash commit on main. Today's main has duplicate `(#150)` and `(#151)` for the 89-A docs — file content is correct, but git history has noise. Lesson: the merge button is the LAST web interaction with a PR; everything after is local-terminal cleanup only.
-19. **`openssl rand -hex N` over `-base64 N` for connection-string passwords** (NEW Section 89, May 7, 2026) — base64 produces `+`, `/`, `=` characters that need percent-encoding inside `postgres://user:PASS@host/db` URLs, which adds friction during prod deploy. Hex is URL-safe by construction. 64 hex chars (32 bytes entropy = 256 bits) is plenty. Used for `mepuser_super` password during 89-A deployment.
-20. **Read untracked WIP files before writing fresh code** (NEW Section 89, May 7, 2026) — when HANDOFF mentions "abandoned WIP files" left untracked, they may actually be 90% production-ready. The `middleware/tenant_db.js` and `tests/integration/rls.test.js` WIPs from a prior session were both shippable as-is, saving hours of re-implementation in 89-B. Convention: at the start of any session that targets a feature with WIP files mentioned in HANDOFF, run `git status` + `Read` each untracked file first. Document any deviations from the HANDOFF naming in DECISIONS.md (e.g., 89-B kept `tenant_db.js` rather than renaming to the original `db_context.js`).
+13. **RLS doesn't apply to BYPASSRLS roles** (Section 88) — superusers (incl. `postgres`) and roles with the BYPASSRLS attribute bypass every policy. RLS integration tests must `SET LOCAL ROLE mepuser` (or any non-super role) inside the transaction so the policy actually filters. `FORCE ROW LEVEL SECURITY` doesn't help here — it only forces RLS on table OWNERS, not on BYPASSRLS roles.
+14. **CI uses `postgres` role for tests** — see `.github/workflows/ci.yml` line 55 (`TEST_DATABASE_URL: postgres://postgres:testpass@...`). The workflow also pre-creates `mepuser` (line 75) and (after PR #153) GRANTs it table privileges. Any RLS-specific test should switch to mepuser via `SET LOCAL ROLE mepuser` after granting it needed privileges.
+15. **`git checkout main` fails silently with dirty tree** (Section 88) — if you have uncommitted changes that conflict with the target branch, `git checkout main` quietly stays on the current branch instead of switching. A subsequent `git pull origin main` then merges main into your CURRENT branch (opening vim for the merge message). To switch cleanly: stash first (`git stash push`), then checkout, then pop. To recover from this happening: `git merge --abort` (or `:q!` in vim) → `git stash` → `git checkout` → `git stash pop`.
+16. **`git stash pop` can lose cleanly-applied files when there's a conflict in another file** (Section 88) — if stash pop succeeds on most files but conflicts on one, the cleanly-applied ones may revert silently to their pre-pop state in some workflows. After a stash pop with conflict, always Read each previously-stashed file via Claude's Read tool to verify content actually changed. Don't trust the absence of a conflict marker as proof the change applied.
+17. **PowerShell's bare `>` redirect uses UTF-16 with BOM** (Section 88) — files written this way come back with spaces between every character when Claude's Read tool parses them, and aren't easy to grep. Always `Out-File -Encoding utf8 -FilePath <name>.log`. See CLAUDE.md Section 4.7 for the full file-based log convention.
+18. **GitHub web "Update branch" button creates duplicate squash commits when clicked on already-merged branches** (Section 89, May 7, 2026) — after `gh pr merge --squash` succeeds, the local branch should be cleaned up immediately (`git branch -D` + `git push origin --delete`) and the GitHub web UI for that branch should NOT be touched. If "Update branch" is clicked, GitHub creates a new merge commit on top of the just-merged branch, which (combined with `gh pr merge --auto` still being enabled or a "Compare & pull request" yellow banner) can produce a second PR with the same content that auto-merges into a duplicate squash commit on main. Today's main has duplicate `(#150)` and `(#151)` for the 89-A docs — file content is correct, but git history has noise. Lesson: the merge button is the LAST web interaction with a PR; everything after is local-terminal cleanup only.
+19. **`openssl rand -hex N` over `-base64 N` for connection-string passwords** (Section 89, May 7, 2026) — base64 produces `+`, `/`, `=` characters that need percent-encoding inside `postgres://user:PASS@host/db` URLs, which adds friction during prod deploy. Hex is URL-safe by construction. 64 hex chars (32 bytes entropy = 256 bits) is plenty. Used for `mepuser_super` password during 89-A deployment.
+20. **Read untracked WIP files before writing fresh code** (Section 89, May 7, 2026) — when HANDOFF mentions "abandoned WIP files" left untracked, they may actually be 90% production-ready. The `middleware/tenant_db.js` and `tests/integration/rls.test.js` WIPs from a prior session were both shippable as-is, saving hours of re-implementation in 89-B. Convention: at the start of any session that targets a feature with WIP files mentioned in HANDOFF, run `git status` + `Read` each untracked file first. Document any deviations from the HANDOFF naming in DECISIONS.md (e.g., 89-B kept `tenant_db.js` rather than renaming to the original `db_context.js`).
+21. **`middleware/permissions.js` `can()` calls `pool.query` directly** (Section 89, 89-C/1) — under Stage 1 permissive RLS this works, but under Stage 3 strict RLS every authenticated request will be rejected because `user_permissions` queries will return 0 rows when the GUC is unset on the pool client. Refactor must happen before 89-E ships. This is currently NOT a regression — just a known gap that surfaces when permissive mode is removed.
 
 ---
 
@@ -150,15 +157,15 @@ Cost inventory (services + monthly bill ~$37 USD): see `RECOVERY.md` Section 2.4
   ```
   gh pr create --fill --base main ; gh pr merge --auto --squash --delete-branch
   ```
-- **ALWAYS delete the local branch after merge** (NEW May 6) — `--delete-branch` only deletes the REMOTE. After `gh pr view <num> --json mergedAt` shows merged, run:
+- **ALWAYS delete the local branch after merge** — `--delete-branch` only deletes the REMOTE. After `gh pr view <num> --json mergedAt` shows merged, run:
   ```
   git checkout main && git pull origin main
   git branch -D <branch-name>
   git push origin --delete <branch-name>   # safety: ensures stale remote is gone
   ```
   Skipping this leads to "Frankenstein PR" issues (Section 88 retro): if a remote branch with the same name lingers from a previous session, `git push -u origin <name>` from a recreated local branch will merge the two histories silently and your PR ends up with extra commits / wrong files.
-- **Don't put `"تم"` or any echo-only command inside PowerShell blocks** (NEW May 6) — Hedar types "تم" in chat to signal completion. Embedding it in the script just clutters his terminal without telling Claude anything.
-- **File-based log convention for large tool output** (NEW May 6) — see CLAUDE.md Section 4.7. Save big outputs (CI logs, test failures, diffs) to `<workspace>\<purpose>.log` (overwriting, UTF-8). Hedar types one-word ack in chat; Claude reads the file directly. Never paste 1000+ line outputs into chat.
+- **Don't put `"تم"` or any echo-only command inside PowerShell blocks** — Hedar types "تم" in chat to signal completion. Embedding it in the script just clutters his terminal without telling Claude anything.
+- **File-based log convention for large tool output** — see CLAUDE.md Section 4.7. Save big outputs (CI logs, test failures, diffs) to `<workspace>\<purpose>.log` (overwriting, UTF-8). Hedar types one-word ack in chat; Claude reads the file directly. Never paste 1000+ line outputs into chat.
 - **DECISIONS.md is the archive**, not the entry point — only read the 2-3 latest sections referenced in this HANDOFF.md.
 
 ---
@@ -170,11 +177,12 @@ Cost inventory (services + monthly bill ~$37 USD): see `RECOVERY.md` Section 2.4
    - "Last updated" timestamp
    - "Latest deployed to prod" / "Last merged to main" rows in Current state
    - Multi-tenant migration progress table (mark completed phase, advance NEXT)
+   - 89-C bulk route migration progress table (advance batch progress)
    - "Next task" section (rewrite for the new next task)
    - Add any new pitfalls discovered this session
-3. **DECISIONS.md** has a new Section (or extended existing one) for any non-trivial work this session. For Phase 4 stages, extend the existing Section (e.g., 88 covers Stage 1 design + closeout) until that stage is fully done; Stage 2 will get its own section once it lands.
+3. **DECISIONS.md** has a new Section (or extended existing one) for any non-trivial work this session. For Phase 4 stages, extend the existing Section (e.g., 89 covers all Stage 2 pieces) until that stage is fully done; Stage 3 will get its own section once it lands.
 4. **Push HANDOFF.md to main** — separate small PR, auto-merge enabled. **Wait for the PR to actually merge before the user closes the session.**
-5. **Brief Hedar** with: "PR merged, HANDOFF updated, Phase X done, next session starts on Phase Y."
+5. **Brief Hedar** with: "PR merged, HANDOFF updated, batch X done, next session starts on batch Y."
 
 ---
 

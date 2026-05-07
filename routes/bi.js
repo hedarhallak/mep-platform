@@ -10,8 +10,14 @@
  */
 
 const router = require('express').Router();
-const { pool } = require('../db');
 const { can } = require('../middleware/permissions');
+
+// Section 89-C/1 (Phase 4 Stage 2): this route now consumes req.db (RLS-
+// enforced via middleware/tenant_db). The pool import was removed because
+// every query is parameterized by the authenticated user's tenant via the
+// SET LOCAL app.company_id GUC. WHERE company_id clauses kept for defense-
+// in-depth — RLS does the actual filtering, the WHERE clause makes intent
+// explicit + protects against any refactor that bypasses the middleware.
 
 // NOTE: a local requireRoles + ADMIN_ONLY guard were previously defined
 // here but never wired into any route — orphan from earlier permission-
@@ -27,7 +33,7 @@ router.get('/workforce-suggestions', can('bi.access_full'), async (req, res) => 
     const today = new Date().toISOString().split('T')[0];
 
     // 1. Get all active projects with coordinates
-    const { rows: projects } = await pool.query(
+    const { rows: projects } = await req.db.query(
       `SELECT p.id, p.project_code, p.project_name, p.site_address,
               p.site_lat, p.site_lng
        FROM public.projects p
@@ -47,7 +53,7 @@ router.get('/workforce-suggestions', can('bi.access_full'), async (req, res) => 
       });
 
     // 2. Get current active assignments with employee home coords + distances
-    const { rows: current } = await pool.query(
+    const { rows: current } = await req.db.query(
       `SELECT
          ar.id          AS assignment_id,
          ar.start_date,

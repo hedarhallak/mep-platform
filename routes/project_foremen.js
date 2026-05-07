@@ -9,9 +9,12 @@
  */
 
 const router = require('express').Router();
-const { pool } = require('../db');
-
 const { can } = require('../middleware/permissions');
+
+// Section 89-C/1 (Phase 4 Stage 2): this route now consumes req.db (RLS-
+// enforced via middleware/tenant_db). The pool import was removed. WHERE
+// company_id clauses kept for defense-in-depth — RLS does the actual
+// filtering at the DB layer.
 
 // ── GET /api/project-foremen/:project_id ─────────────────────
 router.get('/:project_id', async (req, res) => {
@@ -24,7 +27,7 @@ router.get('/:project_id', async (req, res) => {
     // `phone` lives on employee_profiles (Section 19 schema audit: there is
     // no `app_users.phone` column despite the legacy SELECT alias suggesting
     // otherwise — that was the third bug uncovered while restoring this test).
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       `SELECT
          pf.project_id,
          pf.trade_code,
@@ -60,14 +63,14 @@ router.post('/:project_id', can('projects.edit'), async (req, res) => {
     if (!trade_code) return res.status(400).json({ ok: false, error: 'TRADE_REQUIRED' });
 
     // Verify project belongs to company
-    const proj = await pool.query(
+    const proj = await req.db.query(
       `SELECT id FROM public.projects WHERE id = $1 AND company_id = $2 LIMIT 1`,
       [projectId, companyId]
     );
     if (!proj.rows.length) return res.status(404).json({ ok: false, error: 'PROJECT_NOT_FOUND' });
 
     // Verify employee belongs to company
-    const emp = await pool.query(
+    const emp = await req.db.query(
       `SELECT ep.employee_id, ep.full_name, ep.contact_email
        FROM public.employee_profiles ep
        JOIN public.app_users au ON au.employee_id = ep.employee_id
@@ -77,7 +80,7 @@ router.post('/:project_id', can('projects.edit'), async (req, res) => {
     if (!emp.rows.length) return res.status(404).json({ ok: false, error: 'EMPLOYEE_NOT_FOUND' });
 
     // Upsert — replace existing foreman for this trade on this project
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       `INSERT INTO public.project_foremen (project_id, employee_id, trade_code, company_id)
        VALUES ($1, $2, $3, $4)
        ON CONFLICT (project_id, trade_code)
@@ -87,7 +90,7 @@ router.post('/:project_id', can('projects.edit'), async (req, res) => {
     );
 
     // Also update rank_code on employee_profiles to FOREMAN
-    await pool.query(
+    await req.db.query(
       `UPDATE public.employee_profiles SET rank_code = 'FOREMAN' WHERE employee_id = $1`,
       [employee_id]
     );
@@ -106,7 +109,7 @@ router.delete('/:project_id/:trade', can('projects.edit'), async (req, res) => {
     const projectId = Number(req.params.project_id);
     const trade = req.params.trade.toUpperCase();
 
-    const { rowCount } = await pool.query(
+    const { rowCount } = await req.db.query(
       `DELETE FROM public.project_foremen
        WHERE project_id = $1 AND trade_code = $2 AND company_id = $3`,
       [projectId, trade, companyId]
