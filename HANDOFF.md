@@ -1,7 +1,7 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 7, 2026 — after Phase 4 Stage 2 Piece 89-C/1 (first bulk route migration batch: bi + project-foremen + project-trades) merged to main. Awaiting prod deploy.
+> Last updated: May 7, 2026 — after Phase 4 Stage 2 Piece 89-C/1 (first bulk route migration batch: bi + project-foremen + project-trades) deployed to prod. 89-B caught up in the same deploy cycle.
 
 ---
 
@@ -45,7 +45,7 @@ When you receive the one-line command above:
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04) |
 | Backend | Node.js + Express + Postgres 16, pm2-managed at `/var/www/mep` |
 | Frontend | React + Vite + Tailwind, deployed to `/var/www/mep/mep-frontend/dist` |
-| Latest deployed to prod | **Phase 4 Stage 2 Piece 89-B (`tenant_db.js` + suppliers route)** — May 7, 2026 |
+| Latest deployed to prod | **Phase 4 Stage 2 Piece 89-C/1 (bi + project-foremen + project-trades)** — May 7, 2026 (joint deploy with 89-B catch-up) |
 | Last merged to main | Piece 89-C/1 (bi + project-foremen + project-trades) — May 7, 2026 |
 | Active program | **Multi-Tenant Migration** (Section 85, Phases 1-8) — Phase 4 in progress |
 | Mobile app | Still on legacy username login — backend keeps backward-compat |
@@ -59,7 +59,7 @@ When you receive the one-line command above:
 | Phase 2 — Tenant Resolver | ✅ No-op (Model C) | 87 |
 | Phase 3 — DB schema 011 + email login | ✅ Deployed | 87 |
 | **Phase 4a — RLS Stage 1 (permissive policies)** | ✅ **Deployed to prod** | 88 |
-| **Phase 4b — RLS Stage 2 (req.db middleware)** | ⏳ **In progress** (89-A + 89-B deployed; 89-C/1 merged, awaiting deploy; 89-C/2..N next) | 89 |
+| **Phase 4b — RLS Stage 2 (req.db middleware)** | ⏳ **In progress** (89-A + 89-B + 89-C/1 deployed; 89-C/2..N next) | 89 |
 | Phase 4c — RLS Stage 3 (strict policies) | ⏳ Pending | TBD |
 | Phase 5 — SUPER_ADMIN portal split | ⏳ Pending | TBD |
 | Phase 6 — Frontend tenant context + branding | ⏳ Pending | TBD |
@@ -72,7 +72,7 @@ When you receive the one-line command above:
 
 | Batch | Routes | Status |
 |---|---|---|
-| 89-C/1 | `/api/bi`, `/api/project-foremen`, `/api/project-trades` | ✅ **Merged to main** — awaiting prod deploy |
+| 89-C/1 | `/api/bi`, `/api/project-foremen`, `/api/project-trades` | ✅ **Deployed to prod** (May 7, 2026) |
 | 89-C/2 | TBD — likely profile + push_tokens (paired mount) | ⏳ Next |
 | 89-C/3..N | attendance, projects, reports, hub, daily_dispatch, standup, material_requests, assignments, auto_assign, user_management, employees, permissions | ⏳ Pending |
 
