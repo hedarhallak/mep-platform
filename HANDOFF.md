@@ -1,7 +1,7 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 7, 2026 — after Phase 4 Stage 2 Piece 89-C/1 (first bulk route migration batch: bi + project-foremen + project-trades) deployed to prod. 89-B caught up in the same deploy cycle.
+> Last updated: May 7, 2026 — after Phase 4 Stage 2 Piece 89-C/1 + tenantDb COMMIT-race hot-fix (89-C/1-fix) deployed to prod. 89-B caught up in the same deploy cycle.
 
 ---
 
@@ -45,8 +45,8 @@ When you receive the one-line command above:
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04) |
 | Backend | Node.js + Express + Postgres 16, pm2-managed at `/var/www/mep` |
 | Frontend | React + Vite + Tailwind, deployed to `/var/www/mep/mep-frontend/dist` |
-| Latest deployed to prod | **Phase 4 Stage 2 Piece 89-C/1 (bi + project-foremen + project-trades)** — May 7, 2026 (joint deploy with 89-B catch-up) |
-| Last merged to main | Piece 89-C/1 (bi + project-foremen + project-trades) — May 7, 2026 |
+| Latest deployed to prod | **89-C/1 + 89-C/1-fix (tenantDb COMMIT-race hot-fix)** — May 7, 2026 (joint deploy with 89-B catch-up) |
+| Last merged to main | Piece 89-C/1-fix (PR #156, squash `fcac417`) — May 7, 2026 |
 | Active program | **Multi-Tenant Migration** (Section 85, Phases 1-8) — Phase 4 in progress |
 | Mobile app | Still on legacy username login — backend keeps backward-compat |
 

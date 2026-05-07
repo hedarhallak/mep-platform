@@ -9099,9 +9099,21 @@ pm2 restart mep-backend
 | Root cause identified | ✅ COMMIT race in tenantDb's `res.on('finish')` design |
 | Fix shipped (`res.end` override) | ✅ middleware/tenant_db.js |
 | Documented | ✅ DECISIONS.md + middleware file header |
-| PR opened + CI green | ⏳ Pending |
-| Merged to main | ⏳ Pending |
-| Deployed to prod | ⏳ Pending |
+| PR opened + CI green | ✅ PR #156 (CI #421 green on main, 5m 28s) |
+| Merged to main | ✅ May 7, 2026 (squash commit `fcac417`) |
+| Deployed to prod | ✅ May 7, 2026 — `git pull` (already up-to-date via webhook) + `pm2 restart mep-backend`, startup logs clean |
+
+### Lessons captured this session — 89-C/1-fix flow
+
+The fix itself was 5 lines of middleware logic. The PR cycle hit three avoidable speed bumps; encoded here so future sessions skip them.
+
+1. **Frankenstein PR resurfaced (Pitfall #18 variant).** The fix branch was created from a local main that didn't yet have PR #155's squash commit. The branch also inherited the prior `docs/s89c1-deploy-record` branch's commit (untracked locally because the docs PR's local cleanup was skipped). When the fix was pushed, the PR went `mergeStateStatus: DIRTY` because main had a squash commit (`5a1b045`) with content equivalent to the fix branch's preceding commit (`87cfab3`) but a different hash, and git couldn't see them as equivalent. **Resolution:** `git checkout -B fix/<name>` from fresh main + `git cherry-pick <fix-commit-sha>` + `git push --force-with-lease`. **Prevention:** always run the local-branch cleanup (`git branch -D <name>` + `git push origin --delete <name>`) IMMEDIATELY after each PR auto-merges, BEFORE creating the next branch. We skipped the cleanup after PR #155 merged because we jumped straight into the deploy — and that skip cost us ~5 turns later when the next branch went Frankenstein.
+
+2. **`gh pr checks` returns "no checks reported" when the PR is in a CONFLICTING state.** The diagnostic output looked like CI didn't run at all, which led to a misdiagnosis path ("did the workflow file change?") before we surfaced the real issue (mergeStateStatus: DIRTY). **Convention:** when `gh pr checks` returns empty, ALSO run `gh pr view <num> --json mergeStateStatus,mergeable` to distinguish "CI didn't run" from "PR is conflicting and GitHub is hiding the checks UI."
+
+3. **Prettier format check is a blocking CI job; pre-commit hook saved the second push but not the first.** The first push of the fix branch (before the rebase) was committed manually without going through the lint-staged hook, so Prettier wasn't run on `middleware/tenant_db.js` and CI #419 failed in 1m 37s on the format check. After the rebase, the amend ran lint-staged (which auto-Prettier'd the file) and CI #420 passed. **Convention:** when committing manually with `git commit -m "..."` that bypasses lint-staged (rare — the husky hook should normally fire), explicitly run `npx prettier --write <changed-files>` first. Or just always trust the hook — don't commit via paths that skip it.
+
+These three together cost ~6 round-trips. Fix work itself: ~2 round-trips (read failing test, write the override). Worth the lessons.
 
 - **Today: 58 sections.** (Section 89 extended once more with Piece 89-C/1: first bulk route migration batch + joint deploy record for 89-B + 89-C/1 + post-deploy hot-fix for COMMIT race. Subsequent 89-C/N batches will continue in this section until 89-C is complete; then 89-D and 89-E open as their own pieces under Section 89.)
 
