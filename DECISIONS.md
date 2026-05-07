@@ -8722,5 +8722,79 @@ After PR merges to main:
 - Piece 89-B (`req.db` middleware) — sized for next PR.
 - Piece 89-C, D, E — pending.
 
-- **Today: 57 sections.** (Section 89 opens Phase 4 Stage 2. Piece 89-A ships in this PR; pieces B-E will open subsections as they land.)
+### Production deployment record (May 7, 2026)
+
+89-A deployed to prod via the runbook above. Step-by-step trace, kept here so the next session can audit exactly what happened (and so the next deployment in this stage has a worked example):
+
+1. **Pre-check.** SSH'd to `root@143.110.218.84`, `cd /var/www/mep && git pull origin main` → `Already up to date.` (PR #149 had merged on May 6.) Confirmed `mepuser_super` role did NOT yet exist:
+   ```
+   sudo -u postgres psql -d mepdb -c "SELECT rolname, rolbypassrls FROM pg_roles WHERE rolname = 'mepuser_super';"
+   →  (0 rows)
+   ```
+
+2. **Password generation.** `openssl rand -hex 32` (deviated from Section 89's recommended `-base64 32` because hex is URL-safe by construction — avoids percent-encoding the `+`/`/`/`=` chars that base64 can produce, which would have to be encoded inside the `DATABASE_URL_SUPER` connection string). Stored in Apple Passwords: title `Constrai Prod - mepuser_super DB`, username `mepuser_super`, notes recording the date + purpose. Password never entered chat or shell history (used `read -s -p` for interactive entry — see step 3).
+
+3. **Run the script.**
+   ```
+   read -s -p "Paste password: " MEPUSER_SUPER_PASSWORD ; echo
+   sudo -u postgres psql -d mepdb \
+     -v MEPUSER_SUPER_PASSWORD="$MEPUSER_SUPER_PASSWORD" \
+     -f scripts/postgres/setup_rls_roles.sql
+   ```
+   Output: `BEGIN`, `DO`, `GRANT ROLE`, `DO`, `COMMIT`. The script's internal sanity check (BYPASSRLS attribute landed) passed implicitly — if the BYPASSRLS guard had failed, the DO block would have RAISE EXCEPTIONed and the transaction would have ROLLBACK'd instead of COMMITting.
+
+4. **Attribute verification (post-script).**
+   ```
+   SELECT rolname, rolbypassrls, rolcanlogin FROM pg_roles WHERE rolname = 'mepuser_super';
+   →  mepuser_super | t | t  (1 row) ✅
+   ```
+
+5. **End-to-end auth test** (the non-trivial check — proves the password Hedar pasted from Apple Passwords actually authenticates, catching any copy-paste truncation):
+   ```
+   PGPASSWORD="$MEPUSER_SUPER_PASSWORD" psql -h localhost -U mepuser_super -d mepdb \
+     -c "SELECT current_user, rolbypassrls FROM pg_roles WHERE rolname = current_user;"
+   →  mepuser_super | t  (1 row) ✅
+   ```
+
+6. **Append `DATABASE_URL_SUPER` to `/var/www/mep/.env`** via a defensive idempotent block:
+   ```bash
+   if grep -q "^DATABASE_URL_SUPER=" /var/www/mep/.env; then
+     echo "Already exists in .env — skipping append"
+   else
+     echo "DATABASE_URL_SUPER=postgres://mepuser_super:$MEPUSER_SUPER_PASSWORD@localhost:5432/mepdb" >> /var/www/mep/.env
+   fi
+   ```
+   Wrote one new line to `.env`; verified with a password-masking grep (caveat: the naive `sed 's/:[^@]*@/:***@/'` matches greedily and hides the `mepuser_super` user too, so the displayed line looks like `postgres:***@localhost:5432/mepdb` — file content is correct, only the display is over-masked).
+
+7. **No `pm2 restart` performed.** Per Section 89 design + HANDOFF.md, the backend doesn't read `DATABASE_URL_SUPER` until **Piece 89-D** (SUPER pool wiring) lands in a future PR. Restarting now would be a no-op; deferred to the 89-D deploy step.
+
+8. **Cleanup.** `unset MEPUSER_SUPER_PASSWORD` in the SSH session, then `exit`. The persisted source of truth is `/var/www/mep/.env` + the Apple Passwords entry. The shell session no longer holds the secret in memory.
+
+### Status — Piece 89-A complete
+
+| Item | Status |
+|---|---|
+| Code merged to main | ✅ PRs #148 + #149 |
+| `mepuser_super` role on prod | ✅ Provisioned + verified (BYPASSRLS=t, CANLOGIN=t) |
+| `DATABASE_URL_SUPER` in prod `.env` | ✅ Appended idempotently |
+| End-to-end auth test (login as `mepuser_super`) | ✅ Pass |
+| pm2 restart | ⏳ Deferred to 89-D |
+
+Stage 2 is now ready to start consuming the new role. Next piece: **89-B (`req.db` middleware)**.
+
+### Lessons captured this session (May 7, 2026)
+
+Encoded for future deployments:
+
+1. **Stale rolled-up summary.** Today's session opened on a summary from May 4 (Section 65 closeout), missing 24 sections of work done May 4-6 (Sections 66-89). Spent ~6 messages re-discovering the actual state by reading HANDOFF.md + git log + Section 89 directly. **Convention update:** the bootstrap protocol in HANDOFF.md (lines 18-35) is the right pattern — it explicitly directs the next session to read HANDOFF.md FIRST and only the latest 2-3 DECISIONS sections. The mistake here was implicitly trusting the rolled-up summary as a substitute. Next time: ignore the rolled-up summary if HANDOFF.md exists; HANDOFF wins.
+
+2. **`openssl rand -hex N` over `-base64 N` for connection-string passwords.** `-base64` produces `+`/`/`/`=` characters that need percent-encoding in a `postgres://user:PASS@host/db` URL. `-hex` is URL-safe by construction. Document in HANDOFF.md as the convention.
+
+3. **Password manager prerequisite.** Hedar didn't have a password manager set up entering this deployment — surfaced when I asked him to save the password. Resolved by using Apple Passwords (free, integrated with iCloud Keychain). HANDOFF.md "All credentials live in Hedar's password manager" was aspirational; now it's true. Backlog item: in a future cleanup task, audit all secrets currently in `.secrets/`, `.env`, the server's `.env`, and the various API dashboards, and migrate them into the password manager.
+
+4. **`gh pr create --fill` requires a local branch ref.** When `feat/s89a-mepuser-super-role` was already merged (twice — PRs #148 + #149) and the local branch had been deleted, running `gh pr create --fill --base main --head feat/s89a-mepuser-super-role` failed with `ambiguous argument 'origin/main...feat/s89a-mepuser-super-role'` because `--fill` tries to compute the diff locally. Fix: `git fetch origin && git checkout <branch>` to materialize the local tracking branch first. Better fix in the future: check `gh pr list --head <branch>` and `git log origin/main..origin/<branch>` BEFORE attempting `gh pr create` — if the branch has no commits ahead of main, the work is already merged and we should clean up instead of trying to PR.
+
+5. **Naive password-masking regex over-matches.** `sed 's/:[^@]*@/:***@/'` against `postgres://user:PASS@host` matches `://user:PASS@` (the `[^@]*` greedily captures the `//user` portion). For correct masking that hides only the password: `sed -E 's|(://[^:]+:)[^@]+(@)|\1***\2|'`. Cosmetic-only — file content was correct. Encoded so future deployments don't waste a turn re-verifying.
+
+- **Today: 58 sections.** (Section 89 extended with Piece 89-A prod deployment record. Pieces B-E still pending; B-day is next.)
 
