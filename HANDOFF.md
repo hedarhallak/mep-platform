@@ -1,7 +1,7 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 7, 2026 — after Phase 4 Stage 2 Piece 89-A (`mepuser_super` role) deployed to prod.
+> Last updated: May 7, 2026 — after Phase 4 Stage 2 Piece 89-B (`tenant_db.js` middleware + first route migration) merged to main. Awaiting prod deploy.
 
 ---
 
@@ -46,7 +46,7 @@ When you receive the one-line command above:
 | Backend | Node.js + Express + Postgres 16, pm2-managed at `/var/www/mep` |
 | Frontend | React + Vite + Tailwind, deployed to `/var/www/mep/mep-frontend/dist` |
 | Latest deployed to prod | **Phase 4 Stage 2 Piece 89-A (`mepuser_super` BYPASSRLS role)** — May 7, 2026 |
-| Last merged to main | Piece 89-A code (PR #149) — May 6, 2026 |
+| Last merged to main | Piece 89-B (`tenant_db.js` middleware + suppliers route migration) — May 7, 2026 |
 | Active program | **Multi-Tenant Migration** (Section 85, Phases 1-8) — Phase 4 in progress |
 | Mobile app | Still on legacy username login — backend keeps backward-compat |
 
@@ -59,7 +59,7 @@ When you receive the one-line command above:
 | Phase 2 — Tenant Resolver | ✅ No-op (Model C) | 87 |
 | Phase 3 — DB schema 011 + email login | ✅ Deployed | 87 |
 | **Phase 4a — RLS Stage 1 (permissive policies)** | ✅ **Deployed to prod** | 88 |
-| **Phase 4b — RLS Stage 2 (req.db middleware)** | ⏳ **In progress** (89-A deployed; 89-B next) | 89 |
+| **Phase 4b — RLS Stage 2 (req.db middleware)** | ⏳ **In progress** (89-A deployed; 89-B middleware + suppliers migrated; 89-C bulk migration next) | 89 |
 | Phase 4c — RLS Stage 3 (strict policies) | ⏳ Pending | TBD |
 | Phase 5 — SUPER_ADMIN portal split | ⏳ Pending | TBD |
 | Phase 6 — Frontend tenant context + branding | ⏳ Pending | TBD |
@@ -70,30 +70,30 @@ When you receive the one-line command above:
 
 ---
 
-## Next task: Phase 4b Piece 89-B — `req.db` middleware
+## Next task: Phase 4b Piece 89-C — bulk route migration to `req.db`
 
-**Goal:** ship `middleware/db_context.js` exposing `req.db` — a per-request transaction wrapper that calls `SET LOCAL app.company_id = $userCompanyId` before any route logic runs. This is the piece that makes the permissive RLS policies (Stage 1) actually start filtering on a per-request basis. Once all routes consume `req.db`, Stage 3 can graduate to strict policies.
+**Goal:** migrate the remaining ~25 protected routes off `pool.query` onto `req.db.query`, batch by batch. Once 100% of routes are on `req.db`, Stage 3 (89-E) can drop the "GUC unset = bypass" clause and RLS goes strict.
 
-Stage 1 (migration 012) and 89-A (`mepuser_super` BYPASSRLS role) are both LIVE on prod (verified May 6 + May 7, 2026 — see DECISIONS.md Section 88 + 89). Stage 2 is now consumable: the `mepuser_super` role exists, `DATABASE_URL_SUPER` is in prod's `.env`, and `mepuser` continues serving every existing route as before (RLS is permissive when the GUC is unset).
+**Status entering this task** (per Section 89 in DECISIONS.md):
 
-**Piece 89-B implementation plan:**
+- Piece 89-A (`mepuser_super` BYPASSRLS role) — ✅ deployed to prod May 7, 2026.
+- Piece 89-B (`middleware/tenant_db.js` + first route migration `/api/suppliers`) — ✅ merged to main May 7, 2026. Awaiting prod deploy.
+- The middleware (`middleware/tenant_db.js`) is already mounted in `app.js` between `auth` and the route module on `/api/suppliers`. Same pattern applies to every other route migrated next.
+- `tests/integration/tenant_db_middleware.test.js` and `tests/integration/rls.test.js` exist as the regression baseline.
 
-1. **`middleware/db_context.js`** — module exporting an Express middleware that:
-   - Opens a `pool.connect()` client per request, wrapped in `BEGIN`.
-   - Sets the GUC: `SET LOCAL app.company_id = $userCompanyId` (read from `req.user.company_id` populated by the auth middleware).
-   - Attaches the client as `req.db` for downstream handlers.
-   - On response close: `COMMIT` (or `ROLLBACK` on error), then `client.release()`.
+**Piece 89-C plan (multiple PRs over Stage 2):**
 
-2. **Sample route migration** — pick 1-2 read-heavy low-risk routes (e.g. `routes/employees.js` GET handler, `routes/projects.js` list) and migrate them off `pool.query(...)` onto `req.db.query(...)` as a worked example. Don't migrate all 323 call sites in this PR — keep 89-B focused on the middleware itself.
+1. **Pick a small batch** (5-10 routes per PR), prioritizing low-risk read-heavy routes first. Suggested first batch: `/api/employees` GET handlers, `/api/projects` GET handlers, `/api/attendance` GET handlers. Skip routes with module-level caching tricks (e.g., `routes/employees.js` has `module._epCols` — handle that with care).
+2. **For each route in the batch:**
+   - Add `tenantDb` to its mount line in `app.js`: `app.use('/api/X', auth, tenantDb, require('./routes/X'));`
+   - In the route file: replace every `pool.query(...)` with `req.db.query(...)`. Drop the `pool` import if unused after.
+   - Keep `WHERE company_id` clauses for now (defense-in-depth — strip them in 89-E).
+3. **Add an integration test per batch** confirming that cross-tenant reads return 0 rows (modeled on `tests/integration/tenant_db_middleware.test.js`).
+4. **Plan ~5-7 batch PRs** to migrate the full backend.
 
-3. **Integration test** — `tests/integration/db_context_middleware.test.js` confirming:
-   - GET as user from company 5 returns only company 5 rows.
-   - The same query as user from company 6 returns only company 6 rows.
-   - Without the middleware (calling `pool.query` directly) returns rows from both — proving the GUC is what's filtering, not WHERE clauses.
+**89-D (SUPER pool wiring) and 89-E (Stage 3 graduation) come AFTER 89-C is 100% done.**
 
-4. **NOT in this PR** — bulk route migration (89-C), SUPER pool wiring for `mepuser_super` (89-D), Stage 3 graduation (89-E). Each is a separate piece.
-
-> NOTE: there are some untracked WIP files on Hedar's local working tree from a much earlier session (`middleware/tenant_db.js`, `migrations/012_enable_rls_permissive.sql`, `tests/integration/rls.test.js`). They were a prior abandoned attempt at Stage 2 — names don't match the canonical scope (`db_context.js`, not `tenant_db.js`; migration 012 is already on main). Either `git clean -df` them when starting 89-B, or leave them as untracked reference; don't reuse the names verbatim.
+> NOTE on the prior WIP: the May 5-6 session had drafted `middleware/tenant_db.js` and `tests/integration/rls.test.js` as untracked WIP. **Both were promoted to main in 89-B** (Section 89 documents the discovery + naming deviation from the original `db_context.js` HANDOFF name). The third WIP file `migrations/012_enable_rls_permissive.sql` is a duplicate of an already-shipped migration and remains untracked — `git clean -df` it locally when convenient; it doesn't affect anything.
 
 ---
 
@@ -135,6 +135,9 @@ Cost inventory (services + monthly bill ~$37 USD): see `RECOVERY.md` Section 2.4
 15. **`git checkout main` fails silently with dirty tree** (NEW Section 88) — if you have uncommitted changes that conflict with the target branch, `git checkout main` quietly stays on the current branch instead of switching. A subsequent `git pull origin main` then merges main into your CURRENT branch (opening vim for the merge message). To switch cleanly: stash first (`git stash push`), then checkout, then pop. To recover from this happening: `git merge --abort` (or `:q!` in vim) → `git stash` → `git checkout` → `git stash pop`.
 16. **`git stash pop` can lose cleanly-applied files when there's a conflict in another file** (NEW Section 88) — if stash pop succeeds on most files but conflicts on one, the cleanly-applied ones may revert silently to their pre-pop state in some workflows. After a stash pop with conflict, always Read each previously-stashed file via Claude's Read tool to verify content actually changed. Don't trust the absence of a conflict marker as proof the change applied.
 17. **PowerShell's bare `>` redirect uses UTF-16 with BOM** (NEW Section 88) — files written this way come back with spaces between every character when Claude's Read tool parses them, and aren't easy to grep. Always `Out-File -Encoding utf8 -FilePath <name>.log`. See CLAUDE.md Section 4.7 for the full file-based log convention.
+18. **GitHub web "Update branch" button creates duplicate squash commits when clicked on already-merged branches** (NEW Section 89, May 7, 2026) — after `gh pr merge --squash` succeeds, the local branch should be cleaned up immediately (`git branch -D` + `git push origin --delete`) and the GitHub web UI for that branch should NOT be touched. If "Update branch" is clicked, GitHub creates a new merge commit on top of the just-merged branch, which (combined with `gh pr merge --auto` still being enabled or a "Compare & pull request" yellow banner) can produce a second PR with the same content that auto-merges into a duplicate squash commit on main. Today's main has duplicate `(#150)` and `(#151)` for the 89-A docs — file content is correct, but git history has noise. Lesson: the merge button is the LAST web interaction with a PR; everything after is local-terminal cleanup only.
+19. **`openssl rand -hex N` over `-base64 N` for connection-string passwords** (NEW Section 89, May 7, 2026) — base64 produces `+`, `/`, `=` characters that need percent-encoding inside `postgres://user:PASS@host/db` URLs, which adds friction during prod deploy. Hex is URL-safe by construction. 64 hex chars (32 bytes entropy = 256 bits) is plenty. Used for `mepuser_super` password during 89-A deployment.
+20. **Read untracked WIP files before writing fresh code** (NEW Section 89, May 7, 2026) — when HANDOFF mentions "abandoned WIP files" left untracked, they may actually be 90% production-ready. The `middleware/tenant_db.js` and `tests/integration/rls.test.js` WIPs from a prior session were both shippable as-is, saving hours of re-implementation in 89-B. Convention: at the start of any session that targets a feature with WIP files mentioned in HANDOFF, run `git status` + `Read` each untracked file first. Document any deviations from the HANDOFF naming in DECISIONS.md (e.g., 89-B kept `tenant_db.js` rather than renaming to the original `db_context.js`).
 
 ---
 

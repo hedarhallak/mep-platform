@@ -8796,5 +8796,77 @@ Encoded for future deployments:
 
 5. **Naive password-masking regex over-matches.** `sed 's/:[^@]*@/:***@/'` against `postgres://user:PASS@host` matches `://user:PASS@` (the `[^@]*` greedily captures the `//user` portion). For correct masking that hides only the password: `sed -E 's|(://[^:]+:)[^@]+(@)|\1***\2|'`. Cosmetic-only — file content was correct. Encoded so future deployments don't waste a turn re-verifying.
 
-- **Today: 58 sections.** (Section 89 extended with Piece 89-A prod deployment record. Pieces B-E still pending; B-day is next.)
+### Piece 89-B — `tenant_db.js` middleware + first route migration (May 7, 2026)
+
+After 89-A's role bootstrap landed on prod, Piece 89-B ships the **per-request DB context middleware** that makes RLS actually filter on a per-tenant basis. This is the piece that converts "Stage 1 permissive (allow-all when GUC unset)" into "Stage 1 + middleware sets GUC = effective filtering on routes that opt in."
+
+### Discovery: existing WIP is 90% complete
+
+A prior session (May 5-6) had drafted three Phase 4 Stage 2 files that were never committed:
+
+- `middleware/tenant_db.js` — well-engineered Express middleware
+- `tests/integration/rls.test.js` — comprehensive DB-layer Stage 1 RLS test
+- `migrations/012_enable_rls_permissive.sql` — duplicate of migration 012 already on main + prod (WIP from before 88 shipped)
+
+The WIP `tenant_db.js` implementation is solid: BEGIN/COMMIT/ROLLBACK lifecycle wired to `res` events, single-fire release guard for the finish/close double-event quirk, defensive handling of missing `req.user`, super pool fallback when `DATABASE_URL_SUPER` is unset (graceful degradation under Stage 1 permissive), `SET LOCAL app.company_id` parameterized via `Number()` cast for SQL safety. We're shipping it as-is rather than rewriting from scratch.
+
+**Naming deviation from HANDOFF:** Section 89's Stage 2 plan called the middleware `db_context.js`. The existing WIP file is `tenant_db.js`. Keeping the existing name because (a) it accurately describes the middleware's job (sets tenant context on the DB connection), (b) `tenant_db.js` is more self-documenting than `db_context.js`, and (c) renaming is pure churn for no value. HANDOFF.md is being updated accordingly.
+
+The duplicate migration (`migrations/012_enable_rls_permissive.sql`) is left untracked. Cleaning it up via `git clean -df` is fine but optional; it doesn't affect anything since `scripts/migrate.js` doesn't see untracked files.
+
+### Files in this PR
+
+| File | Change |
+|---|---|
+| `middleware/tenant_db.js` | Promote untracked → tracked (no code changes — file is shipped as-is from the WIP) |
+| `tests/integration/rls.test.js` | Promote untracked → tracked (free Stage 1 RLS coverage at the DB layer) |
+| `app.js` | Import `tenantDb`, mount on `/api/suppliers` (after `auth`, before the route module) |
+| `routes/suppliers.js` | Migrate all 4 handlers (GET / POST / PATCH / DELETE) from `pool.query` → `req.db.query`. Drop the now-unused `pool` import. WHERE company_id clauses kept for defense-in-depth (RLS does the real filtering, but explicit > implicit). |
+| `tests/integration/tenant_db_middleware.test.js` | NEW — 4 tests covering middleware + suppliers route end-to-end: tenant A sees only A's rows, tenant B sees only B's, direct `pool.query` (bypassing middleware) sees both (proves GUC is what's filtering), and write-side correctness via POST. |
+
+### Why `/api/suppliers` was chosen as the first migration
+
+- **Smallest, simplest route** in the protected set: 4 handlers, ~167 lines, single-table queries, no caching tricks (unlike `routes/employees.js` which has dynamic column detection cached on `module._epCols` — that's a 89-C migration with care).
+- **Already covered** by `tests/integration/suppliers.test.js` (Section 82) — so we have a regression baseline before/after the migration.
+- **Read-heavy** — exposes the middleware to the most common request pattern first.
+- **Clean handler shapes** — every handler is `companyId = req.user.company_id` followed by a single SQL statement. Migration is mechanical: just `pool.query` → `req.db.query`.
+
+### What's NOT in this PR (deferred to later 89 pieces)
+
+- **Bulk route migration** (89-C) — the other ~25 protected routes still use `pool.query` and rely on Stage 1 permissive RLS. They keep working unchanged. Each batch of 5-10 routes gets its own PR with the same pattern.
+- **SUPER pool wiring** (89-D) — `db.js` will gain a second `pg.Pool` against `DATABASE_URL_SUPER` so `tenant_db.js`'s `superPool` import becomes a real pool instead of the current graceful-fallback `undefined`. Only matters once a SUPER_ADMIN route legitimately needs cross-tenant reads.
+- **Stage 3 graduation** (89-E) — drop the "GUC unset = bypass" clause from migration 012. Strict mode active. Has to wait until ALL routes are on `req.db`.
+
+### Pre-deploy checks (CI must pass)
+
+- `tests/integration/suppliers.test.js` (Section 82 baseline) must continue passing → confirms the `pool.query` → `req.db.query` migration is behavior-preserving.
+- `tests/integration/rls.test.js` (newly tracked) must pass → confirms Stage 1 RLS policies still match expectations on the test DB.
+- `tests/integration/tenant_db_middleware.test.js` (new) must pass → confirms the middleware sets the GUC correctly per request.
+- The pre-commit hook's route-mount audit (`scripts/check-routes.js`) must remain clean — adding `tenantDb` between `auth` and the route module shouldn't trip it (the audit looks for double-mounts, not for middleware count).
+
+### Production deploy plan (after merge)
+
+89-B is **code-only** — no DB migrations, no env var changes, no role provisioning. Standard deploy:
+
+```
+ssh root@143.110.218.84
+cd /var/www/mep
+git pull origin main
+pm2 restart mep-backend
+```
+
+Verify after restart:
+- `pm2 logs mep-backend --lines 20` — no startup errors (specifically: no "tenant_db.js" require failure, no "superPool undefined" panic).
+- `curl -s https://app.constrai.ca/api/health/deep | jq .` — overall ok=true.
+- Smoke test: `curl -s -H 'Authorization: Bearer <admin_token>' https://app.constrai.ca/api/suppliers | jq '.suppliers | length'` — confirm a real account still gets its own suppliers.
+
+### Lessons captured this session (continued from 89-A's list)
+
+6. **WIP file discovery before scratch.** When HANDOFF says "abandoned WIP files... leave them as untracked reference material," **read them first** before assuming they're throwaway. The 89-B WIP turned out to be ~90% production-ready and saved hours of re-implementation. New convention: at the start of any session that targets a feature with WIP files mentioned in HANDOFF, run `git status` + read each untracked file with the `Read` tool before opening a fresh blank file. Document any deviations from HANDOFF naming in DECISIONS (as we did above for `tenant_db.js` vs `db_context.js`).
+
+7. **Defense-in-depth WHERE clauses after RLS migration.** After moving a route from `pool.query` (which had no RLS context) to `req.db.query` (which has GUC-set RLS), the existing `WHERE company_id = $1` clauses become redundant in the sense that RLS would filter the same way. **Keep them anyway** until Stage 3 ships — they (a) make intent explicit to readers, (b) protect against any future refactor that bypasses the middleware, (c) preserve the route's behavior under Stage 1 permissive (where unset GUC means no RLS filter), (d) cost nothing at runtime since the planner can use the same index. Strip them in 89-E or later, in a single dedicated PR, never piecemeal.
+
+8. **GitHub web "Update branch" button is for behind-main branches, not for already-merged ones.** Today's PR #150 (89-A docs) merged cleanly. Then someone clicked "Update branch" on the same branch's GitHub page, which created a new merge-commit on top of the just-merged content. That triggered "Compare & pull request" → PR #151 → auto-merged because `gh pr merge --auto` was already enabled. Result: main now has duplicate squash commits (`#150` and `#151`) for the same file change. File content is correct; git history has noise. Lesson: **after `gh pr merge`, leave the PR's GitHub page alone**. The local cleanup steps (`git branch -D`, `git push origin --delete`) are the only post-merge actions needed. Add this to HANDOFF.md as Pitfall #18.
+
+- **Today: 58 sections.** (Section 89 extended again with Piece 89-B middleware shipping. Pieces C/D/E still pending; C is next.)
 

@@ -131,6 +131,12 @@ function loadRouter(modPath) {
 
 const auth = require('./middleware/auth');
 const superAdmin = require('./middleware/super_admin');
+// Section 89-B (Phase 4 Stage 2): per-request tenant DB context. Mount AFTER
+// auth so req.user.company_id is populated. Routes that opt in by querying
+// req.db (instead of pool) get RLS-enforced reads/writes for free. Routes
+// that still use pool.query() rely on the permissive policies from Stage 1
+// (migration 012) until they're migrated. See DECISIONS.md Section 89.
+const tenantDb = require('./middleware/tenant_db');
 if (typeof auth !== 'function') {
   throw new Error(`"./middleware/auth" must export a middleware function, got ${typeof auth}`);
 }
@@ -265,7 +271,10 @@ app.use('/api/super/ccq-rates', auth, superAdmin, require('./routes/ccq_rates'))
 // ── Core business routes ──────────────────────────────────────
 app.use('/api/employees', auth, loadRouter('./routes/employees'));
 app.use('/api/projects', auth, loadRouter('./routes/projects'));
-app.use('/api/suppliers', auth, require('./routes/suppliers'));
+// Section 89-B sample migration: /api/suppliers is the first production
+// route to consume req.db (RLS-enforced). Other routes still use pool.query
+// + permissive RLS until they migrate in subsequent PRs (89-C).
+app.use('/api/suppliers', auth, tenantDb, require('./routes/suppliers'));
 app.use('/api/assignments', auth, loadRouter('./routes/assignments'));
 app.use('/api/assignments', auth, require('./routes/auto_assign'));
 app.use('/api/attendance', auth, loadRouter('./routes/attendance'));
