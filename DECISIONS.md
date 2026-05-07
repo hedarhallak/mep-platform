@@ -9027,5 +9027,81 @@ Both 89-B (originally awaiting deploy from earlier in the day) and 89-C/1 shippe
 
 Stage 2 progress: ~12% of the protected route surface migrated to `req.db` (4 of ~25 protected routes: suppliers, bi, project-foremen, project-trades). Next batches (89-C/2 through 89-C/N) continue the pattern.
 
-- **Today: 58 sections.** (Section 89 extended once more with Piece 89-C/1: first bulk route migration batch + joint deploy record for 89-B + 89-C/1. Subsequent 89-C/N batches will continue in this section until 89-C is complete; then 89-D and 89-E open as their own pieces under Section 89.)
+### Piece 89-C/1-fix — tenantDb COMMIT race (May 7, 2026, post-deploy)
+
+After 89-B + 89-C/1 deployed and the docs PR (#155) merged, CI #418 on main turned **red** on `tests/integration/project_foremen.test.js` — the pre-existing "DELETE removes the foreman" test (line 294). The test pattern is:
+
+1. INSERT a `project_foremen` row directly via `getPool().query(...)` — auto-committed.
+2. `DELETE /api/project-foremen/:project_id/:trade` via supertest — goes through `tenantDb` middleware (BEGIN → DELETE via `req.db.query` → response).
+3. `SELECT 1 FROM project_foremen WHERE ...` directly via `getPool().query(...)` — expects 0 rows.
+
+CI saw 1 row in step 3 (with `?column?: 1` from the bare `SELECT 1`).
+
+**Root cause.** The original `tenantDb` middleware calls `release('commit')` from a `res.on('finish')` listener. 'finish' fires AFTER the response body has been flushed to the client. Sequence:
+
+1. Route handler calls `res.json({ ok: true })`, which internally calls `res.end()`.
+2. Response body is flushed to the supertest client.
+3. supertest's `await request(...).delete(...)` resolves.
+4. Test code immediately runs the next `await getPool().query(...)`.
+5. Server's `res.on('finish')` fires (asynchronously) and starts `client.query('COMMIT')`.
+6. At some point, the COMMIT lands on Postgres.
+
+If step 4's SELECT executes before step 6's COMMIT lands, Postgres MVCC (READ COMMITTED default) returns the pre-DELETE snapshot and the test sees the row still present. CI #416 (the 89-C/1 PR's own CI) won this race by luck; CI #418 on main lost it. Same code, same fixtures, different timing.
+
+The race is not specific to project_foremen — it's a fundamental property of the "commit on finish" middleware design. The 89-C/1 batch's own integration test (`tenant_db_89c1.test.js`) didn't surface it because none of its assertions read from a separate pool connection after a write.
+
+**The fix.** Replace the `res.on('finish')` COMMIT trigger with an `res.end` override. The override:
+- captures the full `res.end(...args)` argument signature (handles `res.end()`, `res.end(chunk)`, `res.end(chunk, encoding)`, `res.end(callback)`, etc.);
+- calls `release('commit')`, awaiting the actual `client.query('COMMIT')`;
+- only after the COMMIT resolves (or fails) forwards to the captured original `res.end(...args)`.
+
+Net effect: the response body flush is **deferred** until after Postgres acknowledges COMMIT. supertest's `await request(...)` only resolves once the response stream completes — which now happens strictly after COMMIT. No race.
+
+The 'close' listener stays as the rollback path for premature disconnects (client closed connection mid-response, uncaught error before res.end was called).
+
+**Trade-offs.** The override slightly delays the response flush by the duration of one PG round-trip (typically <2ms on localhost, <10ms on prod with shared DB on same host). For normal users this is invisible. For tests, it's the difference between green and red.
+
+The COMMIT-failure path now logs and flushes anyway (best-effort delivery rather than hanging the client). Future refinement: if COMMIT fails, we could emit a 5xx response by injecting an error body before calling originalEnd — but that's a Stage 3 concern, not a Stage 2 hot-fix.
+
+**Files changed.**
+
+| File | Change |
+|---|---|
+| `middleware/tenant_db.js` | Replace `res.on('finish', () => release('commit'))` with `res.end` override that awaits COMMIT before forwarding. Update file-header docs to explain the race + fix rationale (~40 lines of new comments). 'close' rollback listener stays unchanged. |
+| `DECISIONS.md` | This sub-section (89-C/1-fix). |
+
+**No test changes.** The fix targets the middleware. Existing tests now consistently see committed state after API write calls.
+
+**Pre-deploy checks.** CI must pass on the fix PR — specifically:
+- `tests/integration/project_foremen.test.js` "DELETE removes the foreman" must be green (the regression).
+- `tests/integration/tenant_db_middleware.test.js` (89-B canary) must continue passing.
+- `tests/integration/tenant_db_89c1.test.js` (89-C/1 batch tests) must continue passing.
+- `tests/integration/suppliers.test.js`, `tests/integration/project_trades.test.js` (any pre-existing tests for migrated routes) must continue passing.
+
+**Production deploy plan.** Code-only change, no DB migration, no env vars. Standard deploy:
+
+```
+ssh root@143.110.218.84
+```
+
+Then on the server:
+```bash
+cd /var/www/mep
+git pull origin main
+pm2 restart mep-backend
+```
+
+**Status — Piece 89-C/1-fix.**
+
+| Item | Status |
+|---|---|
+| Bug surfaced | ✅ CI #418 red on main (project_foremen DELETE test) |
+| Root cause identified | ✅ COMMIT race in tenantDb's `res.on('finish')` design |
+| Fix shipped (`res.end` override) | ✅ middleware/tenant_db.js |
+| Documented | ✅ DECISIONS.md + middleware file header |
+| PR opened + CI green | ⏳ Pending |
+| Merged to main | ⏳ Pending |
+| Deployed to prod | ⏳ Pending |
+
+- **Today: 58 sections.** (Section 89 extended once more with Piece 89-C/1: first bulk route migration batch + joint deploy record for 89-B + 89-C/1 + post-deploy hot-fix for COMMIT race. Subsequent 89-C/N batches will continue in this section until 89-C is complete; then 89-D and 89-E open as their own pieces under Section 89.)
 

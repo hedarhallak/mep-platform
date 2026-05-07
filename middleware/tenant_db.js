@@ -19,9 +19,10 @@
 //      not yet migrated continue to use pool.query() and rely on permissive
 //      RLS (Stage 1, migration 012) until they switch over.
 //
-//   4. Wires res lifecycle hooks so the client is always released exactly
-//      once: COMMIT on res 'finish' (clean response), ROLLBACK on res 'close'
-//      before finish (client disconnect mid-response or thrown error).
+//   4. Wraps res.end so that COMMIT happens BEFORE the response body is
+//      flushed to the client. ROLLBACK is wired to res 'close' for the
+//      premature-disconnect / thrown-error path. See "Why we override
+//      res.end instead of listening on 'finish'" below.
 //
 // Mount AFTER ./middleware/auth so req.user is populated. Public routes
 // (login, onboarding, activate, /api/health, /api/health/deep) MUST NOT
@@ -35,6 +36,32 @@
 // works — SUPER_ADMIN reads succeed because the policies allow unset.
 // Migration 013 will tighten this and SUPER_ADMIN will require the super
 // pool from then on.
+//
+// Why we override res.end instead of listening on 'finish' (Section 89-C/1
+// fix, May 7, 2026): the original implementation called release('commit')
+// from a `res.on('finish')` listener. 'finish' fires AFTER the response
+// has been flushed to the client. That introduces a race for tests (and
+// in theory any client) that performs a follow-up read on a separate pool
+// connection immediately after the API call returns: the client sees the
+// response, runs its next query, and that query may execute BEFORE the
+// COMMIT lands on Postgres. Postgres's MVCC (READ COMMITTED default) then
+// returns the pre-DELETE snapshot, breaking the test's assertion.
+//
+// CI #418 surfaced this: tests/integration/project_foremen.test.js's
+// "DELETE removes the foreman" test does INSERT direct → DELETE via API
+// → SELECT direct, and on that run the SELECT raced ahead of the COMMIT
+// and saw the row still present. CI #416 (the 89-C/1 PR's own CI) won
+// the race by luck — same code, same fixture, different timing.
+//
+// The fix: override res.end so that the response body is held until COMMIT
+// lands. Concretely:
+//   - res.end captures its arguments
+//   - calls release('commit') which awaits client.query('COMMIT')
+//   - then forwards to the original res.end with the captured arguments
+// supertest (and any HTTP client) only resolves its `await` once the
+// response stream completes — which now happens AFTER COMMIT, eliminating
+// the race entirely. The 'close' listener stays as the rollback path for
+// premature disconnects.
 
 const { pool, superPool } = require('../db');
 
@@ -111,17 +138,48 @@ module.exports = async function tenantDb(req, res, next) {
 
     req.db = client;
 
-    // Wire release on response lifecycle. We listen to both events because:
-    //   - 'finish' fires when the response is fully flushed → COMMIT
-    //   - 'close' fires if the underlying connection is destroyed before
-    //     'finish' (client disconnected, error, etc.) → ROLLBACK
-    res.on('finish', () => {
-      // Ignore the resulting promise — we can't await inside an event handler.
-      release('commit');
-    });
+    // Override res.end so COMMIT lands BEFORE the response body is flushed.
+    // See the "Why we override res.end" section in the file header for the
+    // race-condition rationale (Section 89-C/1, CI #418).
+    //
+    // res.end signatures (from Node's http.ServerResponse + Express):
+    //   res.end()
+    //   res.end(chunk)
+    //   res.end(chunk, encoding)
+    //   res.end(chunk, encoding, callback)
+    //   res.end(callback)
+    // We capture all arguments verbatim and forward them to the original.
+    const originalEnd = res.end.bind(res);
+    res.end = function tenantDbEnd(...args) {
+      // If we've already released (e.g., an early-return path called
+      // release('rollback') before res.json), don't try to commit again —
+      // just call the real end.
+      if (released) {
+        return originalEnd(...args);
+      }
+      // Defer the actual end until COMMIT resolves. Errors during COMMIT
+      // are logged but we still flush the response so the client doesn't
+      // hang — by that point the route handler has already decided what
+      // body to send.
+      release('commit')
+        .catch((err) => {
+          console.error('tenantDb: COMMIT failed; flushing response anyway:', err);
+        })
+        .finally(() => {
+          originalEnd(...args);
+        });
+      return res;
+    };
+
+    // Defense-in-depth: if the underlying connection is destroyed before
+    // res.end is called (client disconnected, uncaught error mid-handler),
+    // roll back. The released guard prevents a double-fire when res.end's
+    // wrapper has already committed.
     res.on('close', () => {
-      // If we already committed in 'finish', the guard prevents a double-fire.
-      release('rollback');
+      if (!released) {
+        // Fire and forget — we can't await inside an event handler.
+        release('rollback');
+      }
     });
 
     return next();
