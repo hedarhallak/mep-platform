@@ -7,10 +7,16 @@
  * POST   /api/suppliers          — create supplier (admin only)
  * PATCH  /api/suppliers/:id      — update supplier (admin only)
  * DELETE /api/suppliers/:id      — deactivate supplier (admin only)
+ *
+ * Section 89-B (Phase 4 Stage 2): this route was the first production migration
+ * onto req.db.query (RLS-enforced via middleware/tenant_db). Reads + writes
+ * still keep their WHERE company_id clauses as defense-in-depth — RLS does the
+ * real filtering at the DB layer once tenant_db sets app.company_id GUC, but
+ * leaving the WHERE makes intent explicit + protects against any future
+ * refactor that bypasses the middleware. Section 89-C migrates more routes.
  */
 
 const router = require('express').Router();
-const { pool } = require('../db');
 const { can } = require('../middleware/permissions');
 
 // NOTE: a local requireRoles + ANY + ADMIN_ONLY guards were previously
@@ -39,7 +45,7 @@ router.get('/', can('suppliers.view'), async (req, res) => {
     }
 
     q += ' ORDER BY name ASC';
-    const { rows } = await pool.query(q, params);
+    const { rows } = await req.db.query(q, params);
     return res.json({ ok: true, suppliers: rows });
   } catch (err) {
     console.error('GET /suppliers error:', err);
@@ -63,7 +69,7 @@ router.post('/', can('suppliers.create'), async (req, res) => {
 
     const {
       rows: [supplier],
-    } = await pool.query(
+    } = await req.db.query(
       `INSERT INTO public.suppliers (company_id, name, email, phone, address, trade_code, note)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
@@ -97,7 +103,7 @@ router.patch('/:id', can('suppliers.edit'), async (req, res) => {
     const id = Number(req.params.id);
     const { name, email, phone, address, trade_code, note, is_active } = req.body || {};
 
-    const existing = await pool.query(
+    const existing = await req.db.query(
       `SELECT id FROM public.suppliers WHERE id = $1 AND company_id = $2 LIMIT 1`,
       [id, companyId]
     );
@@ -109,7 +115,7 @@ router.patch('/:id', can('suppliers.edit'), async (req, res) => {
 
     const {
       rows: [updated],
-    } = await pool.query(
+    } = await req.db.query(
       `UPDATE public.suppliers SET
          name       = COALESCE($1, name),
          email      = COALESCE($2, email),
@@ -153,7 +159,7 @@ router.delete('/:id', can('suppliers.delete'), async (req, res) => {
 
     const {
       rows: [updated],
-    } = await pool.query(
+    } = await req.db.query(
       `UPDATE public.suppliers SET is_active = FALSE
        WHERE id = $1 AND company_id = $2 RETURNING id`,
       [id, companyId]
