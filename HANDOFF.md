@@ -1,7 +1,7 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 6, 2026, ~12:50 UTC — after Phase 4 Stage 1 deployed to prod.
+> Last updated: May 7, 2026 — after Phase 4 Stage 2 Piece 89-A (`mepuser_super` role) deployed to prod.
 
 ---
 
@@ -27,7 +27,7 @@ When you receive the one-line command above:
    - `RECOVERY.md` Section 2.4 only (cost inventory) if relevant to today's task
 3. **Echo this exact line** as the first line of your reply so Hedar knows bootstrap completed:
    ```
-   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 88)
+   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 89)
    ```
 4. **Confirm the next task** in 1-2 lines (from "Next task" below).
 5. **Ask if Hedar is ready to start**, then wait.
@@ -45,8 +45,8 @@ When you receive the one-line command above:
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04) |
 | Backend | Node.js + Express + Postgres 16, pm2-managed at `/var/www/mep` |
 | Frontend | React + Vite + Tailwind, deployed to `/var/www/mep/mep-frontend/dist` |
-| Latest deployed to prod | **Phase 4 Stage 1 (migration 012, permissive RLS)** — May 6, 2026, ~12:50 UTC |
-| Last merged to main | Phase 4 Stage 1 closeout (PR #146) — May 6, 2026, 12:26 UTC |
+| Latest deployed to prod | **Phase 4 Stage 2 Piece 89-A (`mepuser_super` BYPASSRLS role)** — May 7, 2026 |
+| Last merged to main | Piece 89-A code (PR #149) — May 6, 2026 |
 | Active program | **Multi-Tenant Migration** (Section 85, Phases 1-8) — Phase 4 in progress |
 | Mobile app | Still on legacy username login — backend keeps backward-compat |
 
@@ -59,7 +59,7 @@ When you receive the one-line command above:
 | Phase 2 — Tenant Resolver | ✅ No-op (Model C) | 87 |
 | Phase 3 — DB schema 011 + email login | ✅ Deployed | 87 |
 | **Phase 4a — RLS Stage 1 (permissive policies)** | ✅ **Deployed to prod** | 88 |
-| **Phase 4b — RLS Stage 2 (req.db middleware)** | ⏳ **In progress** (89-A: mepuser_super role bootstrap) | 89 |
+| **Phase 4b — RLS Stage 2 (req.db middleware)** | ⏳ **In progress** (89-A deployed; 89-B next) | 89 |
 | Phase 4c — RLS Stage 3 (strict policies) | ⏳ Pending | TBD |
 | Phase 5 — SUPER_ADMIN portal split | ⏳ Pending | TBD |
 | Phase 6 — Frontend tenant context + branding | ⏳ Pending | TBD |
@@ -70,26 +70,30 @@ When you receive the one-line command above:
 
 ---
 
-## Next task: Phase 4b — RLS Stage 2 (req.db middleware)
+## Next task: Phase 4b Piece 89-B — `req.db` middleware
 
-**Goal:** introduce a per-request transaction wrapper that calls `SET LOCAL app.company_id = $userCompanyId` so backend routes start setting the GUC. Once all routes are migrated, Stage 3 can drop the permissive bypass clause.
+**Goal:** ship `middleware/db_context.js` exposing `req.db` — a per-request transaction wrapper that calls `SET LOCAL app.company_id = $userCompanyId` before any route logic runs. This is the piece that makes the permissive RLS policies (Stage 1) actually start filtering on a per-request basis. Once all routes consume `req.db`, Stage 3 can graduate to strict policies.
 
-Stage 1 (migration 012) is now LIVE on prod (verified May 6, 2026, ~12:50 UTC — `mepuser` queries with GUC=999999 return 0 rows; with GUC=5 return 50 rows; without GUC return 50 rows). So Stage 2 work can start immediately on top.
+Stage 1 (migration 012) and 89-A (`mepuser_super` BYPASSRLS role) are both LIVE on prod (verified May 6 + May 7, 2026 — see DECISIONS.md Section 88 + 89). Stage 2 is now consumable: the `mepuser_super` role exists, `DATABASE_URL_SUPER` is in prod's `.env`, and `mepuser` continues serving every existing route as before (RLS is permissive when the GUC is unset).
 
-**Stage 2 implementation plan:**
+**Piece 89-B implementation plan:**
 
-1. **`mepuser_super` role** — create in Stage 2 first PR (deferred from Stage 1). BYPASSRLS DB role used by SUPER_ADMIN routes that legitimately span tenants (e.g. cross-tenant company listings, billing dashboards). Migration 013 ships this.
+1. **`middleware/db_context.js`** — module exporting an Express middleware that:
+   - Opens a `pool.connect()` client per request, wrapped in `BEGIN`.
+   - Sets the GUC: `SET LOCAL app.company_id = $userCompanyId` (read from `req.user.company_id` populated by the auth middleware).
+   - Attaches the client as `req.db` for downstream handlers.
+   - On response close: `COMMIT` (or `ROLLBACK` on error), then `client.release()`.
 
-2. **`middleware/db_context.js` exposing `req.db`** — per-request transaction wrapper that calls `SET LOCAL app.company_id = $userCompanyId` before any route logic runs. SUPER_ADMIN routes use the `mepuser_super` connection instead.
+2. **Sample route migration** — pick 1-2 read-heavy low-risk routes (e.g. `routes/employees.js` GET handler, `routes/projects.js` list) and migrate them off `pool.query(...)` onto `req.db.query(...)` as a worked example. Don't migrate all 323 call sites in this PR — keep 89-B focused on the middleware itself.
 
-3. **Migrate routes batch by batch** (5-10 routes per PR, lowest-risk read-heavy first). For each batch:
-   - Replace `pool.query(...)` with `req.db.query(...)`.
-   - Add an integration test that confirms cross-tenant queries return 0 rows after middleware sets the GUC.
-   - Plan ~5-7 batch PRs over Stage 2.
+3. **Integration test** — `tests/integration/db_context_middleware.test.js` confirming:
+   - GET as user from company 5 returns only company 5 rows.
+   - The same query as user from company 6 returns only company 6 rows.
+   - Without the middleware (calling `pool.query` directly) returns rows from both — proving the GUC is what's filtering, not WHERE clauses.
 
-4. **Stage 3 graduation** — once all 323 call sites are migrated, ship migration 014 that drops the "GUC unset = bypass" clause. Strict mode active.
+4. **NOT in this PR** — bulk route migration (89-C), SUPER pool wiring for `mepuser_super` (89-D), Stage 3 graduation (89-E). Each is a separate piece.
 
-> NOTE: there are some untracked WIP files on Hedar's local working tree from a previous session (`middleware/tenant_db.js`, `migrations/012_enable_rls_permissive.sql`, `tests/integration/rls.test.js`, `scripts/postgres/`). They were a prior attempt at Stage 2 that didn't ship. The names differ from the canonical ones above (`db_context.js`, not `tenant_db.js`); leave them as untracked reference material or `git clean -df` them when starting Stage 2 fresh.
+> NOTE: there are some untracked WIP files on Hedar's local working tree from a much earlier session (`middleware/tenant_db.js`, `migrations/012_enable_rls_permissive.sql`, `tests/integration/rls.test.js`). They were a prior abandoned attempt at Stage 2 — names don't match the canonical scope (`db_context.js`, not `tenant_db.js`; migration 012 is already on main). Either `git clean -df` them when starting 89-B, or leave them as untracked reference; don't reuse the names verbatim.
 
 ---
 
