@@ -9383,3 +9383,40 @@ For routes that *legitimately* need to recover from a query error inside a trans
 
 - **Today: 58 sections.** (Section 89 extended again with Piece 89-C/9: daily_dispatch migration + the `try/catch INSERT` lesson. 12 of ~25 protected routes now consume req.db — Phase 4b is ~48% done.)
 
+### Piece 89-C/10 — material_requests route migration (May 8, 2026)
+
+After 89-C/9 (`/api/daily-dispatch`) deployed, 89-C/10 migrates **`routes/material_requests.js`** — material requests + surplus declarations + purchase-order generation. 26 in-handler `pool.query` calls + 1 helper query in `resolveEmployeeId` + **3 manual `pool.connect()/BEGIN/COMMIT` blocks** (POST /requests, PATCH /:id/review, POST /returns).
+
+#### Why drop the manual transactions
+
+Three handlers used `pool.connect() + BEGIN/COMMIT` so the multi-row INSERT loop (request → items → catalog upsert; or return → return-items) was atomic. Under tenantDb that wrapper is redundant: the middleware already opens **one transaction per request** with `app.company_id` set on the GUC, so every `req.db.query` call inside the handler runs in that same tx. A nested `BEGIN` would either be a no-op or, in some Postgres configs, raise `WARNING: there is already a transaction in progress`. The collapse is purely a simplification — atomicity is preserved.
+
+This is the same conclusion as Section 89-C/4 (auto_assign) and 89-C/9 (daily_dispatch). Encoding the pattern explicitly here so future migrations know: **manual `pool.connect()` blocks should always be flattened to plain `req.db.query` sequences when migrating a route into tenantDb**, unless a specific reason (e.g. needing to escape the tx for a side-effect on a different connection) is documented.
+
+#### Pitfall #23 audit
+
+Material request creation does not use a `try { INSERT } catch { SELECT existing }` pattern — INSERTs into `material_requests`, `material_request_items`, `material_returns`, `material_return_items` and `purchase_orders` either have no UNIQUE constraint to violate, or already use `ON CONFLICT` (the `material_catalog` upsert does). No refactor needed here, but the explicit audit is now part of the per-route checklist.
+
+#### Files touched
+
+| File | Change |
+|---|---|
+| `routes/material_requests.js` | 26 `pool.query` → `req.db.query`; helper updated; 3 manual tx flattened; `pool` import dropped (no remaining direct refs); `module.exports` moved to end (was orphaning POST /send-order after a misplaced early export) |
+| `app.js` | `/api/materials` mount line: insert `tenantDb` + add 89-C/10 comment |
+| `tests/integration/tenant_db_89c10.test.js` (new) | 5 cross-tenant isolation tests using `seedMaterialRequest` helper: list scoping (×2), `:id` cross-tenant 404 + own 200, `:id/cancel` cross-tenant 404 |
+| `HANDOFF.md` | Latest deployed → 89-C/10; progress 13/~25 (~52%); next batch row updated |
+| `DECISIONS.md` (this Piece) | — |
+
+#### Status — Piece 89-C/10
+
+| Item | Status |
+|---|---|
+| Code migrated | ✅ 1 file, 26 handler queries + 1 helper + 3 manual tx → req.db; `pool` import dropped |
+| Cross-tenant integration test | ✅ 5 new tests in `tenant_db_89c10.test.js` |
+| PR opened + CI green | ✅ PR #175, CI #458 (5m 18s) green on first push |
+| Merged to main | ✅ Squash `0715ddc` (May 8, 2026) |
+| Deployed to prod | ✅ `pm2 restart mep-backend` — pid 712514 online, Sentry initialized, jobs scheduled (May 8, 2026) |
+| Next batch (89-C/11) | ⏳ Pending — candidates: profile + push_tokens (paired mount, q() helper refactor), assignments.js (30 queries), employees.js (caching tricks), permissions.js (mostly global tables) |
+
+- **Today: 58 sections.** (Section 89 extended again with Piece 89-C/10: material_requests migration + manual-tx flattening pattern encoded. 13 of ~25 protected routes now consume req.db — Phase 4b is ~52% done.)
+
