@@ -1,7 +1,7 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 8, 2026 — after Phase 4 Stage 2 Piece 89-C/3 (`/api/reports`) deployed to prod. 6 of ~25 protected routes now consume req.db (~24% of Phase 4b).
+> Last updated: May 8, 2026 — after Phase 4 Stage 2 Piece 89-C/4 (`/api/assignments/auto-*`) deployed to prod. 7 of ~25 protected routes now consume req.db (~28% of Phase 4b).
 
 ---
 
@@ -45,8 +45,8 @@ When you receive the one-line command above:
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04) |
 | Backend | Node.js + Express + Postgres 16, pm2-managed at `/var/www/mep` |
 | Frontend | React + Vite + Tailwind, deployed to `/var/www/mep/mep-frontend/dist` |
-| Latest deployed to prod | **Phase 4 Stage 2 Piece 89-C/3 (`/api/reports`)** — May 8, 2026 |
-| Last merged to main | Piece 89-C/3 (PR #161, squash `463f00a`) — May 8, 2026 |
+| Latest deployed to prod | **Phase 4 Stage 2 Piece 89-C/4 (auto_assign.js)** — May 8, 2026 |
+| Last merged to main | Piece 89-C/4 (PR #163, squash `304433e`) — May 8, 2026 |
 | Active program | **Multi-Tenant Migration** (Section 85, Phases 1-8) — Phase 4 in progress |
 | Mobile app | Still on legacy username login — backend keeps backward-compat |
 
@@ -75,7 +75,7 @@ When you receive the one-line command above:
 | 89-C/1 | `/api/bi`, `/api/project-foremen`, `/api/project-trades` | ✅ **Deployed to prod** (May 7, 2026) |
 | 89-C/2 | `/api/attendance` (single-route batch — see DECISIONS.md 89-C/2) | ✅ **Deployed to prod** (May 7, 2026) |
 | 89-C/3 | `/api/reports` (single-route batch — see DECISIONS.md 89-C/3) | ✅ **Deployed to prod** (May 8, 2026) |
-| 89-C/4 | `/api/assignments/auto-*` (auto_assign.js — see DECISIONS.md 89-C/4) | ✅ **Merged to main** — awaiting prod deploy |
+| 89-C/4 | `/api/assignments/auto-*` (auto_assign.js — see DECISIONS.md 89-C/4) | ✅ **Deployed to prod** (May 8, 2026) |
 | 89-C/5..N | profile + push_tokens (paired), projects, hub, daily_dispatch, standup, material_requests, assignments, user_management, employees, permissions | ⏳ Pending |
 
 ---

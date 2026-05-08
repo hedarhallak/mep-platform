@@ -9205,9 +9205,9 @@ After 89-C/3 (`/api/reports`) deployed, we kept the single-route batch cadence a
 |---|---|
 | Code migrated | ✅ 1 file, 6 handler queries → req.db; manual transaction kept on pool with TODO |
 | Cross-tenant integration test | ✅ 3 new tests in `tenant_db_89c4.test.js` |
-| PR opened + CI green | ⏳ Pending |
-| Merged to main | ⏳ Pending |
-| Deployed to prod | ⏳ Pending |
+| PR opened + CI green | ✅ PR #163 (CI #433, 5m 18s) |
+| Merged to main | ✅ May 8, 2026 (squash `304433e`) |
+| Deployed to prod | ✅ May 8, 2026 — `git pull` (already up-to-date via webhook), `pm2 restart mep-backend`, startup logs clean (↺653 pid 706294) |
 | Next batch (89-C/5) | ⏳ Pending — candidates: profile + push_tokens (paired mount, q() helper refactor), hub.js (11 queries), user_management.js (9 queries) |
 
 - **Today: 58 sections.** (Section 89 extended again with Piece 89-C/4: auto_assign migration. 7 of ~25 protected routes now consume req.db — Phase 4b is ~28% done.)
