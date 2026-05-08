@@ -9173,9 +9173,9 @@ No new Stage 3 backlog from this batch. The `ccqZoneFromDB` helper is permanent 
 |---|---|
 | Code migrated | ✅ 1 file, 9 handler queries → req.db; 2 helper queries kept on pool (global table) |
 | Cross-tenant integration test | ✅ 5 new tests in `tenant_db_89c3.test.js` |
-| PR opened + CI green | ⏳ Pending |
-| Merged to main | ⏳ Pending |
-| Deployed to prod | ⏳ Pending |
+| PR opened + CI green | ✅ PR #161 (CI #429, 5m 21s) |
+| Merged to main | ✅ May 8, 2026 (squash `463f00a`) |
+| Deployed to prod | ✅ May 8, 2026 — `git pull` (already up-to-date via webhook), `pm2 restart mep-backend`, startup logs clean (↺646 pid 705171) |
 | Next batch (89-C/4) | ⏳ Pending — candidates: auto_assign.js (6 queries, mounted alongside assignments.js), profile + push_tokens (paired mount, q() helper refactor), or hub.js (11 queries) |
 
 - **Today: 58 sections.** (Section 89 extended again with Piece 89-C/3: reports migration. 6 of ~25 protected routes now consume req.db — Phase 4b is ~24% done.)
