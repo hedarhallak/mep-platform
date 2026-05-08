@@ -9279,5 +9279,28 @@ After 89-C/6 (`/api/hub`) deployed, 89-C/7 migrates **`routes/standup.js`** — 
 | Deployed to prod | ✅ May 8, 2026 — `git pull` (already up-to-date via webhook), `pm2 restart`, startup logs clean (↺674 pid 708149) |
 | Next batch (89-C/8) | ⏳ Pending — candidates: profile + push_tokens (paired mount, q() helper refactor), daily_dispatch.js (19 queries), material_requests.js (26 queries), projects.js (20 queries) |
 
-- **Today: 58 sections.** (Section 89 extended again with Piece 89-C/7: standup migration. 10 of ~25 protected routes now consume req.db — Phase 4b is ~40% done.)
+### Piece 89-C/8 — projects route migration (May 8, 2026)
+
+After 89-C/7 (`/api/standup`) deployed, 89-C/8 migrates **`routes/projects.js`** — projects CRUD + clients sub-resource. 20 in-handler `pool.query` calls + 3 `audit(pool, ...)` calls.
+
+### What this batch shipped
+
+| File | Change |
+|---|---|
+| `app.js` | `/api/projects` mount adds `tenantDb`. |
+| `routes/projects.js` | (a) Drop `pool` import (unused after migration). (b) 20 in-handler `pool.query(...)` → `req.db.query(...)` (covers list, map, single, create, update, delete + clients sub-resource + meta dropdowns). (c) 3 `audit(pool, req, ...)` → `audit(req.db, req, ...)` (forward-compatible with Stage 3). (d) Header comment block notes the clean migration shape. |
+| `tests/integration/tenant_db_89c8.test.js` | NEW — 4 tests: GET `/api/projects` cross-tenant in both directions + GET `/api/projects/:id` cross-tenant 404 + happy-path own project read. PATCH/POST/DELETE follow same data path → transitively covered. |
+
+### Status — Piece 89-C/8
+
+| Item | Status |
+|---|---|
+| Code migrated | ✅ 1 file, 20 handler queries → req.db, 3 audit calls migrated, pool import dropped |
+| Cross-tenant integration test | ✅ 4 new tests in `tenant_db_89c8.test.js` |
+| PR opened + CI green | ⏳ Pending |
+| Merged to main | ⏳ Pending |
+| Deployed to prod | ⏳ Pending |
+| Next batch (89-C/9) | ⏳ Pending — candidates: profile + push_tokens (paired mount, q() helper refactor), daily_dispatch.js (19 queries), material_requests.js (26 queries), assignments.js (30 queries) |
+
+- **Today: 58 sections.** (Section 89 extended again with Piece 89-C/8: projects migration. 11 of ~25 protected routes now consume req.db — Phase 4b is ~44% done.)
 
