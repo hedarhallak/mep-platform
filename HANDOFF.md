@@ -1,7 +1,7 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 7, 2026 — after Phase 4 Stage 2 Piece 89-C/1 (first bulk route migration batch: bi + project-foremen + project-trades) deployed to prod. 89-B caught up in the same deploy cycle.
+> Last updated: May 7, 2026 — after Phase 4 Stage 2 Pieces 89-C/1 + 89-C/1-fix + 89-C/2 (`/api/attendance`) all deployed to prod. 5 of ~25 protected routes now consume req.db.
 
 ---
 
@@ -45,8 +45,8 @@ When you receive the one-line command above:
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04) |
 | Backend | Node.js + Express + Postgres 16, pm2-managed at `/var/www/mep` |
 | Frontend | React + Vite + Tailwind, deployed to `/var/www/mep/mep-frontend/dist` |
-| Latest deployed to prod | **Phase 4 Stage 2 Piece 89-C/1 (bi + project-foremen + project-trades)** — May 7, 2026 (joint deploy with 89-B catch-up) |
-| Last merged to main | Piece 89-C/1 (bi + project-foremen + project-trades) — May 7, 2026 |
+| Latest deployed to prod | **Phase 4 Stage 2 Piece 89-C/2 (`/api/attendance`)** — May 7, 2026 (after 89-B + 89-C/1 + 89-C/1-fix earlier same day) |
+| Last merged to main | Piece 89-C/2 (PR #159, squash `da5c2ab`) — May 7, 2026 |
 | Active program | **Multi-Tenant Migration** (Section 85, Phases 1-8) — Phase 4 in progress |
 | Mobile app | Still on legacy username login — backend keeps backward-compat |
 
@@ -73,7 +73,7 @@ When you receive the one-line command above:
 | Batch | Routes | Status |
 |---|---|---|
 | 89-C/1 | `/api/bi`, `/api/project-foremen`, `/api/project-trades` | ✅ **Deployed to prod** (May 7, 2026) |
-| 89-C/2 | `/api/attendance` (single-route batch — see DECISIONS.md 89-C/2) | ✅ **Merged to main** — awaiting prod deploy |
+| 89-C/2 | `/api/attendance` (single-route batch — see DECISIONS.md 89-C/2) | ✅ **Deployed to prod** (May 7, 2026) |
 | 89-C/3..N | profile + push_tokens (paired), projects, reports, hub, daily_dispatch, standup, material_requests, assignments, auto_assign, user_management, employees, permissions | ⏳ Pending |
 
 ---
