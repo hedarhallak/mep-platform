@@ -1,7 +1,7 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 8, 2026 — after Phase 4 Stage 2 Piece 89-C/13 (`/api/profile` + push-token, paired) deployed to prod. 18 of ~25 protected routes now consume req.db (~72% of Phase 4b).
+> Last updated: May 8, 2026 — after Phase 4 Stage 2 Piece 89-C/14 (`/api/invite-employee` + `/api/admin/users`, bundled) deployed to prod. 20 of ~25 protected routes now consume req.db (~80% of Phase 4b).
 
 ---
 
@@ -45,8 +45,8 @@ When you receive the one-line command above:
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04) |
 | Backend | Node.js + Express + Postgres 16, pm2-managed at `/var/www/mep` |
 | Frontend | React + Vite + Tailwind, deployed to `/var/www/mep/mep-frontend/dist` |
-| Latest deployed to prod | **Phase 4 Stage 2 Piece 89-C/13 (profile.js + push_tokens_route.js, paired)** — May 8, 2026 |
-| Last merged to main | Piece 89-C/13 (squash `9979495`) — May 8, 2026 |
+| Latest deployed to prod | **Phase 4 Stage 2 Piece 89-C/14 (invite_employee.js + admin_users.js, bundled)** — May 8, 2026 |
+| Last merged to main | Piece 89-C/14 (squash `646c665`) — May 8, 2026 |
 | Active program | **Multi-Tenant Migration** (Section 85, Phases 1-8) — Phase 4 in progress |
 | Mobile app | Still on legacy username login — backend keeps backward-compat |
 
@@ -85,11 +85,12 @@ When you receive the one-line command above:
 | 89-C/11 | `/api/assignments` + `/api/permissions` (bundled — see DECISIONS.md 89-C/11) | ✅ **Deployed to prod** (May 8, 2026) |
 | 89-C/12 | `/api/employees` (employees.js — see DECISIONS.md 89-C/12) | ✅ **Deployed to prod** (May 8, 2026) |
 | 89-C/13 | `/api/profile` + push-token (paired, q() helper refactor — see DECISIONS.md 89-C/13) | ✅ **Deployed to prod** (May 8, 2026) |
-| 89-C/14..N | remaining ~7 routes (TBD — enumerate at start of next session) | ⏳ Pending |
+| 89-C/14 | `/api/invite-employee` + `/api/admin/users` (bundled — see DECISIONS.md 89-C/14) | ✅ **Deployed to prod** (May 8, 2026) |
+| 89-C/15..N | remaining: `/api/super` + `/api/super/ccq-rates` (SUPER_ADMIN routes, special handling) + any others surfaced by audit | ⏳ Pending |
 
 ---
 
-## Next task: Phase 4b Piece 89-C/14 — fourteenth batch of route migration
+## Next task: Phase 4b Piece 89-C/15 — SUPER_ADMIN routes (special handling)
 
 **Goal:** continue migrating remaining ~21 protected routes off `pool.query` onto `req.db.query`, batch by batch. Target batch size: 1-3 routes per PR (smaller is easier — see lessons captured in DECISIONS Section 89-C/1-fix). Once 100% of routes are on `req.db`, Stage 3 (89-E) can drop the "GUC unset = bypass" clause and RLS goes strict.
 
