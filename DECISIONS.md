@@ -9210,5 +9210,28 @@ After 89-C/3 (`/api/reports`) deployed, we kept the single-route batch cadence a
 | Deployed to prod | ✅ May 8, 2026 — `git pull` (already up-to-date via webhook), `pm2 restart mep-backend`, startup logs clean (↺653 pid 706294) |
 | Next batch (89-C/5) | ⏳ Pending — candidates: profile + push_tokens (paired mount, q() helper refactor), hub.js (11 queries), user_management.js (9 queries) |
 
-- **Today: 58 sections.** (Section 89 extended again with Piece 89-C/4: auto_assign migration. 7 of ~25 protected routes now consume req.db — Phase 4b is ~28% done.)
+### Piece 89-C/5 — user_management route migration (May 8, 2026)
+
+After 89-C/4 (`/api/assignments/auto-*`) deployed, 89-C/5 migrates **`routes/user_management.js`** — the user-admin surface (list, role change, status toggle, resend invite). Single-route batch, 9 `pool.query` calls.
+
+### What this batch shipped
+
+| File | Change |
+|---|---|
+| `app.js` | `/api/users` mount adds `tenantDb` between `auth` and the route module. |
+| `routes/user_management.js` | (a) Drop the `pool` import (unused after migration). (b) 9 in-handler `await pool.query(...)` → `await req.db.query(...)`. (c) `logAudit(req, ...)` calls (from `middleware/permissions.js`) are LEFT untouched — they're fire-and-forget and use the middleware's internal `pool.query` to write to `audit_logs`. That path is the same Stage 3 backlog item already filed for `can()` in HANDOFF Pitfall #21 — the whole `middleware/permissions.js` will be migrated as one piece before 89-E ships. (d) File-header comment block explains the migration + the audit handoff. |
+| `tests/integration/tenant_db_89c5.test.js` | NEW — 3 tests: GET `/api/users` cross-tenant for both directions (companyA / companyB) + PATCH `/:id/role` cross-tenant rejection (accepts 403 CROSS_COMPANY OR 404 USER_NOT_FOUND — RLS may filter the SELECT before the explicit comparison runs). PATCH `/:id/status`, POST `/:id/resend` follow the same data path through `app_users.company_id` and are transitively covered. |
+
+### Status — Piece 89-C/5
+
+| Item | Status |
+|---|---|
+| Code migrated | ✅ 1 file, 9 handler queries → req.db, pool import dropped |
+| Cross-tenant integration test | ✅ 3 new tests in `tenant_db_89c5.test.js` |
+| PR opened + CI green | ⏳ Pending |
+| Merged to main | ⏳ Pending |
+| Deployed to prod | ⏳ Pending |
+| Next batch (89-C/6) | ⏳ Pending — candidates: hub.js (11 queries), profile + push_tokens (paired mount, q() helper refactor), daily_dispatch.js (19 queries), standup.js (15 queries) |
+
+- **Today: 58 sections.** (Section 89 extended again with Piece 89-C/5: user_management migration. 8 of ~25 protected routes now consume req.db — Phase 4b is ~32% done.)
 

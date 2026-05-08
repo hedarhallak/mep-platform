@@ -10,10 +10,22 @@ const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
 const sgMail = require('@sendgrid/mail');
-const { pool } = require('../db');
 const { can, logAudit } = require('../middleware/permissions');
 const { normalizeRole } = require('../middleware/roles');
 const { escapeHtml } = require('../lib/email');
+
+// Section 89-C/5 (Phase 4 Stage 2): in-handler queries migrated to req.db
+// (RLS-enforced via middleware/tenant_db). The `pool` import was removed —
+// every business query in this file uses `req.db.query(...)`.
+//
+// `logAudit(req, ...)` (from middleware/permissions.js) is fire-and-forget
+// and uses its own internal `pool.query` to insert into audit_logs. That
+// path will be addressed when middleware/permissions.js itself is migrated
+// for Stage 3 (see HANDOFF.md Pitfall #21). For Stage 1+2 permissive RLS
+// the audit INSERT works fine on the unset-GUC pool client.
+//
+// WHERE company_id clauses are kept for defense-in-depth — RLS does the
+// actual filtering at the DB layer once tenant_db sets the GUC.
 
 const ALLOWED_ROLES = [
   'IT_ADMIN',
@@ -50,7 +62,7 @@ router.get('/', can('settings.user_management'), async (req, res) => {
   try {
     const companyId = req.user.company_id;
 
-    const result = await pool.query(
+    const result = await req.db.query(
       `
       SELECT
         au.id,
@@ -97,7 +109,7 @@ router.patch('/:id/role', can('settings.user_management'), async (req, res) => {
     }
 
     // Load target user
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       `SELECT id, role, company_id FROM public.app_users WHERE id = $1 LIMIT 1`,
       [targetId]
     );
@@ -120,7 +132,7 @@ router.patch('/:id/role', can('settings.user_management'), async (req, res) => {
       return res.status(403).json({ ok: false, error: 'CANNOT_ASSIGN_HIGHER_ROLE' });
     }
 
-    await pool.query(`UPDATE public.app_users SET role = $1 WHERE id = $2`, [newRole, targetId]);
+    await req.db.query(`UPDATE public.app_users SET role = $1 WHERE id = $2`, [newRole, targetId]);
 
     logAudit(req, 'CHANGE_ROLE', 'app_users', targetId, { role: target.role }, { role: newRole });
 
@@ -139,7 +151,7 @@ router.patch('/:id/status', can('settings.user_management'), async (req, res) =>
     const isActive = Boolean(req.body?.is_active);
     const companyId = req.user.company_id;
 
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       `SELECT id, role, is_active, company_id FROM public.app_users WHERE id = $1 LIMIT 1`,
       [targetId]
     );
@@ -161,7 +173,7 @@ router.patch('/:id/status', can('settings.user_management'), async (req, res) =>
       return res.status(403).json({ ok: false, error: 'INSUFFICIENT_PRIVILEGE' });
     }
 
-    await pool.query(`UPDATE public.app_users SET is_active = $1 WHERE id = $2`, [
+    await req.db.query(`UPDATE public.app_users SET is_active = $1 WHERE id = $2`, [
       isActive,
       targetId,
     ]);
@@ -197,7 +209,7 @@ router.post('/:id/resend', can('settings.user_management'), async (req, res) => 
       return res.status(500).json({ ok: false, error: 'EMAIL_NOT_CONFIGURED' });
     }
 
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       `SELECT id, email, username, role, activated_at, company_id
        FROM public.app_users WHERE id = $1 LIMIT 1`,
       [targetId]
@@ -218,7 +230,7 @@ router.post('/:id/resend', can('settings.user_management'), async (req, res) => 
     }
 
     // Revoke old invites + generate new token
-    await pool.query(
+    await req.db.query(
       `UPDATE public.user_invites SET status='REVOKED', revoked_at=NOW()
        WHERE company_id = $1 AND lower(email) = lower($2) AND status='ACTIVE'`,
       [companyId, target.email]
@@ -228,7 +240,7 @@ router.post('/:id/resend', can('settings.user_management'), async (req, res) => 
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
     const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
 
-    await pool.query(
+    await req.db.query(
       `INSERT INTO public.user_invites
         (company_id, email, role, token_hash, status, created_by_user_id, expires_at)
        VALUES ($1, $2, $3, $4, 'ACTIVE', $5, $6)`,
@@ -252,7 +264,7 @@ router.post('/:id/resend', can('settings.user_management'), async (req, res) => 
       `,
     });
 
-    await pool.query(`UPDATE public.app_users SET activation_sent_at = NOW() WHERE id = $1`, [
+    await req.db.query(`UPDATE public.app_users SET activation_sent_at = NOW() WHERE id = $1`, [
       targetId,
     ]);
 

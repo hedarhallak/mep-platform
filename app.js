@@ -322,7 +322,8 @@ app.use('/api/invite-employee', auth, require('./routes/invite_employee'));
 app.use('/api/admin/users', auth, loadRouter('./routes/admin_users'));
 
 // ── RBAC Permissions ──────────────────────────────────────────
-app.use('/api/users', auth, require('./routes/user_management'));
+// Section 89-C/5: user_management migrated to req.db (RLS-enforced).
+app.use('/api/users', auth, tenantDb, require('./routes/user_management'));
 app.use('/api/permissions', auth, require('./routes/permissions'));
 
 // ── Hub (Tasks & Blueprints) ──────────────────────────────────
