@@ -9233,5 +9233,28 @@ After 89-C/4 (`/api/assignments/auto-*`) deployed, 89-C/5 migrates **`routes/use
 | Deployed to prod | ✅ May 8, 2026 — `git pull` (already up-to-date via webhook), `pm2 restart mep-backend`, startup logs clean (↺660 pid 706821) |
 | Next batch (89-C/6) | ⏳ Pending — candidates: hub.js (11 queries), profile + push_tokens (paired mount, q() helper refactor), daily_dispatch.js (19 queries), standup.js (15 queries) |
 
-- **Today: 58 sections.** (Section 89 extended again with Piece 89-C/5: user_management migration. 8 of ~25 protected routes now consume req.db — Phase 4b is ~32% done.)
+### Piece 89-C/6 — hub route migration (May 8, 2026)
+
+After 89-C/5 (`/api/users`) deployed, 89-C/6 migrates **`routes/hub.js`** — task & blueprint messaging system. 11 in-handler `pool.query` calls + 1 `pool.connect()` manual transaction in POST /messages (same pattern as auto_assign's /auto-confirm).
+
+### What this batch shipped
+
+| File | Change |
+|---|---|
+| `app.js` | `/api/hub` mount adds `tenantDb` between `auth` and the route module. |
+| `routes/hub.js` | (a) 11 in-handler `await pool.query(...)` → `await req.db.query(...)`. (b) The `pool.connect() + client.query(BEGIN/COMMIT/ROLLBACK)` manual-transaction block inside POST /messages was kept — it needs all-or-nothing atomicity across `task_messages` INSERT + the loop of `task_recipients` INSERTs. Same Stage 3 TODO as 89-C/4 (auto_assign): SET LOCAL inside the manual BEGIN. (c) `logAudit` untouched (fire-and-forget, same Stage 3 backlog as Pitfall #21). (d) File-header comment block explains the partial migration + Stage 3 TODO. |
+| `tests/integration/tenant_db_89c6.test.js` | NEW — 3 tests: GET `/api/hub/workers` cross-tenant for both directions (companyA / companyB) + GET `/api/hub/messages/sent` smoke test. POST `/messages` deferred until Stage 3 manual-transaction refactor. |
+
+### Status — Piece 89-C/6
+
+| Item | Status |
+|---|---|
+| Code migrated | ✅ 1 file, 11 handler queries → req.db; manual transaction kept on pool with TODO |
+| Cross-tenant integration test | ✅ 3 new tests in `tenant_db_89c6.test.js` |
+| PR opened + CI green | ⏳ Pending |
+| Merged to main | ⏳ Pending |
+| Deployed to prod | ⏳ Pending |
+| Next batch (89-C/7) | ⏳ Pending — candidates: profile + push_tokens (paired mount, q() helper refactor), standup.js (15 queries), daily_dispatch.js (19 queries), material_requests.js (26 queries) |
+
+- **Today: 58 sections.** (Section 89 extended again with Piece 89-C/6: hub migration. 9 of ~25 protected routes now consume req.db — Phase 4b is ~36% done.)
 

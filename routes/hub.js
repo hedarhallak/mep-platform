@@ -21,6 +21,28 @@ const multer = require('multer');
 const { pool } = require('../db');
 const { can, logAudit } = require('../middleware/permissions');
 
+// Section 89-C/6 (Phase 4 Stage 2): in-handler queries migrated to req.db
+// (RLS-enforced via middleware/tenant_db). The `pool` import is retained
+// ONLY for the explicit `pool.connect()` transaction block inside
+// POST /messages — that handler needs all-or-nothing atomicity across the
+// task_messages INSERT + the loop of task_recipients INSERTs, and uses
+// BEGIN/COMMIT/ROLLBACK on a manually-acquired client. Same pattern as
+// auto_assign.js's /auto-confirm (Section 89-C/4).
+//
+// TODO Stage 3 (Section 89-E): the manual transaction client doesn't have
+// `app.company_id` GUC set, so under strict RLS the INSERTs into
+// `task_messages` + `task_recipients` would fail. Refactor pattern: either
+// (a) drop the manual transaction and trust the per-request middleware
+// transaction, or (b) call `client.query("SET LOCAL app.company_id = ...")`
+// immediately after BEGIN. Plan B is the smaller delta — same as the
+// 89-C/4 auto_assign deferred refactor.
+//
+// `logAudit(req, ...)` (from middleware/permissions.js) is fire-and-forget
+// and uses its own internal pool.query — same Stage 3 backlog item already
+// filed (HANDOFF Pitfall #21).
+//
+// WHERE company_id clauses are kept for defense-in-depth.
+
 // ── Constants ─────────────────────────────────────────────────
 const MAX_RECIPIENTS_PER_MESSAGE = 200; // hard cap to prevent batch DoS
 const ALLOWED_UPLOAD_MIMES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
@@ -127,7 +149,7 @@ router.get('/my-projects', can('hub.send_tasks'), async (req, res) => {
     const employeeId = req.user.employee_id;
 
     // Get projects where sender has active assignment OR is a foreman
-    const result = await pool.query(
+    const result = await req.db.query(
       `
       SELECT DISTINCT
         p.id,
@@ -156,7 +178,7 @@ router.get('/my-projects', can('hub.send_tasks'), async (req, res) => {
 
     // If no projects found (e.g. COMPANY_ADMIN), return all active projects
     if (result.rows.length === 0) {
-      const all = await pool.query(
+      const all = await req.db.query(
         `
         SELECT id, project_code, project_name
         FROM public.projects
@@ -182,7 +204,7 @@ router.get('/workers', can('hub.send_tasks'), async (req, res) => {
     const companyId = req.user.company_id;
     const projectId = req.query.project_id ? Number(req.query.project_id) : null;
 
-    const result = await pool.query(
+    const result = await req.db.query(
       `
       SELECT
         au.id,
@@ -292,7 +314,7 @@ router.post('/messages', can('hub.send_tasks'), upload.single('file'), async (re
     // Check which recipients are currently assigned to this project
     let assignedEmployees = new Set();
     if (projectIdNum) {
-      const assigned = await pool.query(
+      const assigned = await req.db.query(
         `
         SELECT a.requested_for_employee_id
         FROM public.assignment_requests a
@@ -422,7 +444,7 @@ router.get('/messages/sent', can('hub.send_tasks'), async (req, res) => {
     const senderId = req.user.user_id;
     const limit = Math.min(Number(req.query.limit) || 50, 200);
 
-    const result = await pool.query(
+    const result = await req.db.query(
       `
       SELECT
         tm.id,
@@ -457,7 +479,7 @@ router.get('/messages/sent', can('hub.send_tasks'), async (req, res) => {
     // For each message, get recipient details
     const messages = [];
     for (const msg of result.rows) {
-      const recipients = await pool.query(
+      const recipients = await req.db.query(
         `
         SELECT
           tr.status,
@@ -495,7 +517,7 @@ router.get('/messages/inbox', can('hub.receive_tasks'), async (req, res) => {
     const recipientId = req.user.user_id;
     const limit = Math.min(Number(req.query.limit) || 50, 200);
 
-    const result = await pool.query(
+    const result = await req.db.query(
       `
       SELECT
         tm.id,
@@ -541,7 +563,7 @@ router.get('/messages/inbox', can('hub.receive_tasks'), async (req, res) => {
 router.get('/messages/unread-count', can('hub.receive_tasks'), async (req, res) => {
   try {
     const recipientId = req.user.user_id;
-    const result = await pool.query(
+    const result = await req.db.query(
       `
       SELECT COUNT(*) AS count
       FROM public.task_recipients
@@ -558,7 +580,7 @@ router.get('/messages/unread-count', can('hub.receive_tasks'), async (req, res) 
 // ── PATCH /api/hub/messages/:id/read ─────────────────────────
 router.patch('/messages/:id/read', can('hub.receive_tasks'), async (req, res) => {
   try {
-    await pool.query(
+    await req.db.query(
       `
       UPDATE public.task_recipients
       SET status = 'READ', read_at = NOW()
@@ -575,7 +597,7 @@ router.patch('/messages/:id/read', can('hub.receive_tasks'), async (req, res) =>
 // ── PATCH /api/hub/messages/:id/ack ──────────────────────────
 router.patch('/messages/:id/ack', can('hub.receive_tasks'), async (req, res) => {
   try {
-    await pool.query(
+    await req.db.query(
       `
       UPDATE public.task_recipients
       SET status = 'ACKNOWLEDGED',
@@ -599,7 +621,7 @@ router.patch(
   async (req, res) => {
     try {
       const fileUrl = req.file ? `/hub/${req.file.filename}` : null;
-      await pool.query(
+      await req.db.query(
         `UPDATE public.task_recipients SET status = 'ACKNOWLEDGED', acknowledged_at = NOW(), completed_at = NOW(), completion_image_url = COALESCE($3, completion_image_url), completion_note = COALESCE($4, completion_note), read_at = COALESCE(read_at, NOW()) WHERE message_id = $1 AND recipient_id = $2`,
         [Number(req.params.id), req.user.user_id, fileUrl, req.body.completion_note || null]
       );

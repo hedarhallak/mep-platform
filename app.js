@@ -327,7 +327,8 @@ app.use('/api/users', auth, tenantDb, require('./routes/user_management'));
 app.use('/api/permissions', auth, require('./routes/permissions'));
 
 // ── Hub (Tasks & Blueprints) ──────────────────────────────────
-app.use('/api/hub', auth, require('./routes/hub'));
+// Section 89-C/6: hub migrated to req.db (RLS-enforced).
+app.use('/api/hub', auth, tenantDb, require('./routes/hub'));
 
 // ── Daily Standup ─────────────────────────────────────────────
 app.use('/api/standup', auth, require('./routes/standup'));
