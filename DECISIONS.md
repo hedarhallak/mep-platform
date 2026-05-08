@@ -9141,9 +9141,9 @@ Filed both as backlog items in HANDOFF.md.
 | Code migrated | ✅ 1 file, 8 handler queries + 3 audit calls + helper rename → req.db |
 | Cross-tenant integration test | ✅ 5 new tests in `tenant_db_89c2.test.js` |
 | Pool import retained (only for `notifyForeman` fire-and-forget) | ✅ documented in file header |
-| PR opened + CI green | ⏳ Pending |
-| Merged to main | ⏳ Pending |
-| Deployed to prod | ⏳ Pending |
+| PR opened + CI green | ✅ PR #159 (CI #425, 5m 33s) |
+| Merged to main | ✅ May 7, 2026 (squash `da5c2ab`) |
+| Deployed to prod | ✅ May 7, 2026 — `git pull` (already up-to-date via webhook), `pm2 restart mep-backend`, startup logs clean (no errors, ↺639) |
 | Next batch (89-C/3) | ⏳ Pending — candidates: profile + push_tokens (paired mount, q() helper refactor), reports.js (read-heavy), or auto_assign.js (small) |
 
 - **Today: 58 sections.** (Section 89 extended again with Piece 89-C/2: attendance migration. The pattern of "migrate, test, ship, deploy, document" is now fully runnable — subsequent 89-C/N batches should be smaller PR cycles since lessons #1-#3 from 89-C/1-fix are encoded.)
