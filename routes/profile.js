@@ -6,21 +6,30 @@
  * - GET  /api/profile/dropdowns -> trades + ranks
  * - GET  /api/profile/me        -> canonical profile shape (handles legacy columns)
  * - POST /api/profile           -> accepts aliases, stores canonical columns safely (if present)
+ *
+ * Section 89-C/13: migrated from a `q(text, params)` helper that
+ * resolved against `db.query | db.pool.query | db.client.query`
+ * graceful-fallback chain to `q(req, text, params)` that runs on
+ * `req.db.query`. The fallback chain was a pre-tenantDb workaround
+ * for "find any DB connection" — under tenantDb every authenticated
+ * request has a live `req.db` client with the GUC set, so the
+ * fallback is no longer needed.
+ *
+ * Helpers `getHomeLocationExpr` and `detectEmployeeProfileColumns`
+ * each accept `req` so their schema-introspection lookups also flow
+ * through `req.db`. Both cache their result on a module-level
+ * variable; the cache itself is tenant-agnostic (column metadata
+ * doesn't change per tenant), so per-request GUC is irrelevant to
+ * the cached value — the first request that triggers the lookup
+ * just happens to run it on its own request-scoped client.
  */
 
 const express = require('express');
 const router = express.Router();
 const https = require('https');
 
-const db = require('../db');
-
-// Support different db exports without breaking baseline.
-async function q(text, params) {
-  if (db && typeof db.query === 'function') return db.query(text, params);
-  if (db && db.pool && typeof db.pool.query === 'function') return db.pool.query(text, params);
-  if (db && db.client && typeof db.client.query === 'function')
-    return db.client.query(text, params);
-  throw new Error('DB_QUERY_NOT_FOUND: expected db.query or db.pool.query');
+async function q(req, text, params) {
+  return req.db.query(text, params);
 }
 
 // Profile dropdowns (Single Source of Truth for UI selects)
@@ -44,10 +53,11 @@ const PROFILE_RANKS = [
 
 let _homeLocationUdt = null;
 
-async function getHomeLocationExpr(lngPlaceholder, latPlaceholder) {
+async function getHomeLocationExpr(req, lngPlaceholder, latPlaceholder) {
   // Determine column type once (geometry vs geography)
   if (_homeLocationUdt === null) {
     const t = await q(
+      req,
       "SELECT udt_name FROM information_schema.columns WHERE table_schema='public' AND table_name='employee_profiles' AND column_name='home_location'",
       []
     );
@@ -174,10 +184,11 @@ function normalizeProfileRow(row) {
 
 let EMP_PROF_COLS_CACHE = null;
 
-async function detectEmployeeProfileColumns() {
+async function detectEmployeeProfileColumns(req) {
   if (EMP_PROF_COLS_CACHE) return EMP_PROF_COLS_CACHE;
 
   const { rows } = await q(
+    req,
     `
     SELECT column_name
     FROM information_schema.columns
@@ -216,7 +227,7 @@ router.get('/me', async (req, res) => {
         WHERE id = $1
         LIMIT 1
       `;
-      const adminResult = await q(adminSql, [userId]);
+      const adminResult = await q(req, adminSql, [userId]);
       const adminRow = (adminResult.rows && adminResult.rows[0]) || null;
 
       if (!adminRow) {
@@ -265,7 +276,7 @@ router.get('/me', async (req, res) => {
       LIMIT 1
     `;
 
-    const result = await q(sql, [employee_id]);
+    const result = await q(req, sql, [employee_id]);
     const row = (result.rows && result.rows[0]) || null;
     if (!row) return res.status(404).json({ ok: false, error: 'NOT_FOUND' });
 
@@ -395,6 +406,7 @@ router.post('/', async (req, res) => {
     }
 
     const emp = await q(
+      req,
       "SELECT COALESCE(first_name,'') AS first_name, COALESCE(last_name,'') AS last_name FROM public.employees WHERE id = $1",
       [employee_id]
     );
@@ -402,7 +414,7 @@ router.post('/', async (req, res) => {
     const last = (emp.rows[0]?.last_name || '').trim();
     const full_name = first || last ? `${first} ${last}`.trim() : 'Employee';
 
-    const profCols = await detectEmployeeProfileColumns();
+    const profCols = await detectEmployeeProfileColumns(req);
 
     const insertCols = ['employee_id'];
     const insertVals = ['$1'];
@@ -448,7 +460,7 @@ router.post('/', async (req, res) => {
       params.push(geo.lat);
       idx += 1;
 
-      const homeLocationExpr = await getHomeLocationExpr(lngPh, latPh);
+      const homeLocationExpr = await getHomeLocationExpr(req, lngPh, latPh);
 
       insertCols.push('home_location');
       insertVals.push(homeLocationExpr);
@@ -463,20 +475,22 @@ router.post('/', async (req, res) => {
       RETURNING employee_id;
     `;
 
-    const r = await q(sql, params);
+    const r = await q(req, sql, params);
 
     try {
       const userIdRaw = (req.user && (req.user.user_id || req.user.id || req.user.userId)) || null;
       const user_id = userIdRaw ? String(userIdRaw) : null;
 
       if (user_id) {
-        await q("UPDATE public.app_users SET profile_status = 'COMPLETED' WHERE id = $1", [
+        await q(req, "UPDATE public.app_users SET profile_status = 'COMPLETED' WHERE id = $1", [
           user_id,
         ]);
       } else {
-        await q("UPDATE public.app_users SET profile_status = 'COMPLETED' WHERE employee_id = $1", [
-          employee_id,
-        ]);
+        await q(
+          req,
+          "UPDATE public.app_users SET profile_status = 'COMPLETED' WHERE employee_id = $1",
+          [employee_id]
+        );
       }
     } catch (e2) {
       console.warn('PROFILE_STATUS_UPDATE failed:', e2?.message || e2);
