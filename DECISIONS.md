@@ -9641,3 +9641,71 @@ No `try { INSERT } catch { handle dup }` patterns in either route. Email-already
 
 - **Today: 58 sections.** (Section 89 extended with Piece 89-C/14: invite_employee + admin_users bundle. Email-inside-tx semantics documented per-route. 20 of ~25 protected routes now consume req.db — Phase 4b is ~80% done.)
 
+### Piece 89-C/15 — SUPER_ADMIN routes, bundled (May 8, 2026)
+
+After 89-C/14, the only remaining unmigrated authenticated mounts in `app.js` were the two SUPER_ADMIN routes: `/api/super` (super_admin.js) + `/api/super/ccq-rates` (ccq_rates.js). Bundled per Section 4.5 — same shape (single CI run, single deploy, per-route commits 15a/15b/15c).
+
+#### Why these were deferred until last
+
+`tenantDb` already had branch logic for SUPER_ADMIN at `middleware/tenant_db.js` lines 78-80:
+
+```js
+const isSuper = req.user.role === SUPER_ADMIN_ROLE;
+const usingSuperPool = isSuper && superPool != null;
+const acquirePool = usingSuperPool ? superPool : pool;
+```
+
+The middleware routes SUPER_ADMIN through **`superPool`** (BYPASSRLS role) when configured, so cross-company queries — the entire purpose of these routes — work naturally without per-query bypass. This made the migration mechanically simple, but we deferred it to last because:
+1. The migration is a forcing function for an end-to-end test of the superPool path. If superPool isn't reachable, the route fails at startup or first request.
+2. CCQ rates is a global config table; super_admin is intentionally cross-tenant. Both are conceptually opposite to the "tenant scoping" theme of 89-C, so they were better grouped together at the end.
+
+#### CI #480 first-push failure: SUPER_ADMIN PIN format gotcha
+
+CI #480 failed on `tenant_db_89c15.test.js` setup with `INVALID_PIN_FORMAT`. Root cause: `routes/auth.js#isValidPin` enforces a stricter PIN length for SUPER_ADMIN (8-32 chars) vs other roles (4-8 chars). The default `seedUser` PIN `'1234'` is rejected for SA login.
+
+This was actually a **previously-encoded gotcha** (DECISIONS.md from CI #73 era) but the lesson hadn't been encoded into HANDOFF's pitfalls list. Re-encoding here as **Pitfall #25** so future SA tests don't re-hit it.
+
+Fix: seed SA with `pin: 'sa-pin-1234'` (11 chars). Pushed as commit `eed28a0`. CI #482 green on retry.
+
+#### Pitfall #25 — SUPER_ADMIN seedUser needs an 8+ char PIN
+
+Encoding as the standing rule for any future test that logs in as SUPER_ADMIN: **always seed with an explicit `pin` override of length 8-32 chars**, otherwise login fails at the auth layer with `INVALID_PIN_FORMAT` before any test logic runs. Default `seedUser` PIN of `'1234'` works for every other role but not SA.
+
+```js
+// CORRECT
+const sa = await seedUser({ role: 'SUPER_ADMIN', pin: 'sa-pin-1234' });
+
+// WRONG — fails login with INVALID_PIN_FORMAT
+const sa = await seedUser({ role: 'SUPER_ADMIN' });
+```
+
+This belongs alongside Pitfall #24 in HANDOFF.md (orphan-account 401) — both are middleware-vs-fixture mismatches that surface only at first SA test write. Encoded for the next reader.
+
+#### Pitfall #23 audit
+
+No `try { INSERT } catch { handle dup }` patterns. Username uniqueness in POST /companies uses SELECT-first (`userExists.rows.length`). Safe under tenantDb.
+
+#### Files touched
+
+| File | Change |
+|---|---|
+| `routes/super_admin.js` | All in-handler `pool.query` / `client.query` → `req.db.query`; `uniqueCompanyCode(req, name)` accepts `req`; manual tx in POST /companies flattened; `audit(pool, …)` calls retained on `pool` (fire-and-forget pattern) |
+| `routes/ccq_rates.js` | All 6 `pool.query` → `req.db.query`; `pool` import dropped |
+| `app.js` | `tenantDb` added (after `superAdmin` middleware) to `/api/super` + `/api/super/ccq-rates` mount lines + 89-C/15 comment |
+| `tests/integration/tenant_db_89c15.test.js` (new) | 5 smoke tests: super/stats cross-company aggregates, super/companies BYPASSRLS path, regular admin → 403 (×2 routes), ccq-rates list. SUPER_ADMIN seeded with explicit 11-char PIN |
+| `HANDOFF.md` | Latest deployed → 89-C/15; progress 22/~25 (~88%); add Pitfall #25 to the encoded list |
+| `DECISIONS.md` (this Piece) | — |
+
+#### Status — Piece 89-C/15
+
+| Item | Status |
+|---|---|
+| Code migrated | ✅ 2 SUPER_ADMIN routes; manual tx flattened; helper signature updated |
+| Smoke + RBAC tests | ✅ 5 tests in `tenant_db_89c15.test.js` |
+| PR opened + CI green | ✅ CI #482 green after PIN fix push (CI #480 failed on PIN-format trap) |
+| Merged to main | ✅ Squash `eed28a0` (May 8, 2026) |
+| Deployed to prod | ✅ `pm2 restart mep-backend` — pid 717285 online, Sentry initialized, jobs scheduled (May 8, 2026) |
+| Phase 4b status | ⏳ 22/~25 (~88%); 3 routes remaining (audit at next session start; likely small) |
+
+- **Today: 58 sections.** (Section 89 extended with Piece 89-C/15: SUPER_ADMIN routes bundle + Pitfall #25 — SUPER_ADMIN PIN format trap. 22 of ~25 protected routes now consume req.db — Phase 4b is ~88% done.)
+

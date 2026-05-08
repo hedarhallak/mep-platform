@@ -1,7 +1,7 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 8, 2026 — after Phase 4 Stage 2 Piece 89-C/14 (`/api/invite-employee` + `/api/admin/users`, bundled) deployed to prod. 20 of ~25 protected routes now consume req.db (~80% of Phase 4b).
+> Last updated: May 8, 2026 — after Phase 4 Stage 2 Piece 89-C/15 (`/api/super` + `/api/super/ccq-rates`, bundled SUPER_ADMIN routes) deployed to prod. 22 of ~25 protected routes now consume req.db (~88% of Phase 4b).
 
 ---
 
@@ -45,8 +45,8 @@ When you receive the one-line command above:
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04) |
 | Backend | Node.js + Express + Postgres 16, pm2-managed at `/var/www/mep` |
 | Frontend | React + Vite + Tailwind, deployed to `/var/www/mep/mep-frontend/dist` |
-| Latest deployed to prod | **Phase 4 Stage 2 Piece 89-C/14 (invite_employee.js + admin_users.js, bundled)** — May 8, 2026 |
-| Last merged to main | Piece 89-C/14 (squash `646c665`) — May 8, 2026 |
+| Latest deployed to prod | **Phase 4 Stage 2 Piece 89-C/15 (super_admin.js + ccq_rates.js, bundled SUPER_ADMIN)** — May 8, 2026 |
+| Last merged to main | Piece 89-C/15 (squash `eed28a0`) — May 8, 2026 |
 | Active program | **Multi-Tenant Migration** (Section 85, Phases 1-8) — Phase 4 in progress |
 | Mobile app | Still on legacy username login — backend keeps backward-compat |
 
@@ -86,11 +86,12 @@ When you receive the one-line command above:
 | 89-C/12 | `/api/employees` (employees.js — see DECISIONS.md 89-C/12) | ✅ **Deployed to prod** (May 8, 2026) |
 | 89-C/13 | `/api/profile` + push-token (paired, q() helper refactor — see DECISIONS.md 89-C/13) | ✅ **Deployed to prod** (May 8, 2026) |
 | 89-C/14 | `/api/invite-employee` + `/api/admin/users` (bundled — see DECISIONS.md 89-C/14) | ✅ **Deployed to prod** (May 8, 2026) |
-| 89-C/15..N | remaining: `/api/super` + `/api/super/ccq-rates` (SUPER_ADMIN routes, special handling) + any others surfaced by audit | ⏳ Pending |
+| 89-C/15 | `/api/super` + `/api/super/ccq-rates` (bundled SUPER_ADMIN routes — see DECISIONS.md 89-C/15) | ✅ **Deployed to prod** (May 8, 2026) |
+| Phase 4b status | ⏳ ~88% — last 3 routes pending audit at start of next session (likely small / opportunistic) |
 
 ---
 
-## Next task: Phase 4b Piece 89-C/15 — SUPER_ADMIN routes (special handling)
+## Next task: Phase 4b final audit (~3 routes remaining) OR start Phase 4c (Stage 3 strict RLS)
 
 **Goal:** continue migrating remaining ~21 protected routes off `pool.query` onto `req.db.query`, batch by batch. Target batch size: 1-3 routes per PR (smaller is easier — see lessons captured in DECISIONS Section 89-C/1-fix). Once 100% of routes are on `req.db`, Stage 3 (89-E) can drop the "GUC unset = bypass" clause and RLS goes strict.
 
@@ -161,6 +162,7 @@ Cost inventory (services + monthly bill ~$37 USD): see `RECOVERY.md` Section 2.4
 22. **Per-request transaction middleware MUST commit BEFORE the response is flushed** (Section 89, 89-C/1-fix, May 7, 2026) — the original `tenantDb` design used `res.on('finish', () => release('commit'))`, which fires AFTER the response body reaches the client. Tests (and any client) doing a write via the API followed immediately by a read on a separate pool connection can see stale data because the SELECT executes BEFORE the COMMIT lands. Fix: override `res.end` so the response body is held until COMMIT resolves. Surfaced when CI #418 on main went red on `tests/integration/project_foremen.test.js` "DELETE removes the foreman" — same code that passed CI #416 on the 89-C/1 PR (race won that time). Convention: any future per-request transaction middleware (e.g., a future `req.db.write` or a refactor of `tenantDb` for SUPER pool) MUST follow the `res.end` override pattern, not 'finish' / 'close' listeners alone, to avoid resurrecting this race.
 23. **`try { INSERT } catch { handle dup }` patterns DO NOT survive inside a tenantDb transaction** (Section 89, 89-C/9, May 8, 2026) — under `pool.query` each query auto-commits, so an INSERT that fails on UNIQUE violation can be caught and the catch block can run a fresh SELECT. Under `req.db.query` (per-request transaction wrapping the whole handler), the INSERT failure aborts the transaction; subsequent queries fail with `current transaction is aborted, commands ignored until end of transaction block`. Refactor to `INSERT ... ON CONFLICT DO NOTHING RETURNING *` and check `rows.length` instead of catching. CI #452 on the 89-C/9 PR caught this — `daily_dispatch.test.js` "POST /prepare twice on same date returns 409 already_prepared" failed because the catch-block SELECT couldn't run after the dup INSERT poisoned the transaction. **Convention:** when migrating any route, grep for `try ... catch.*query|UNIQUE|ON CONFLICT` patterns BEFORE pushing the migration PR. Other patterns to watch: `try { UPDATE } catch { /* assume not found */ }` → use `RETURNING * + check rows.length`. For rare cases where catching a query error is unavoidable, use `SAVEPOINT` to wall off the failing query.
 24. **Orphan-account 401 from tenantDb is the cross-route contract — route-level 403 for missing company_id becomes dead code** (Section 89, 89-C/12, May 8, 2026) — when a route had its own `if (!companyId) return res.status(403).json({ error: 'COMPANY_CONTEXT_REQUIRED' })` defensive branch (e.g. `routes/employees.js` line 35), migrating onto tenantDb makes that branch unreachable: tenantDb's own missing-company guard returns **401 NO_TENANT_IN_TOKEN** before the route handler ever runs. Existing tests in `tenant_isolation.test.js` written around the 403 contract will fail with `Expected: 403, Received: 401`. **Convention:** before pushing a migration PR for a route that has its own 403 for missing company_id, grep `tests/integration/tenant_isolation.test.js` for the route's path + 403 expectation, and update the test to expect 401 NO_TENANT_IN_TOKEN. Keep the route-level 403 in code as defense-in-depth (in case anything ever bypasses tenantDb), but document it as dead code under the normal middleware chain. CI #465 on the 89-C/12 PR caught this; fixed in commit `c0c2c8f`.
+25. **SUPER_ADMIN seedUser needs an explicit 8+ char PIN** (Section 89, 89-C/15, May 8, 2026) — `routes/auth.js#isValidPin` enforces stricter format for SUPER_ADMIN: length 8-32 vs 4-8 for other roles. The default `seedUser` PIN `'1234'` (4 chars) is rejected by the auth/login endpoint with **400 INVALID_PIN_FORMAT** for SA, before any test logic runs. Surfaced when CI #480 on the 89-C/15 PR failed at test setup. Already documented in DECISIONS.md from CI #73 era but not previously encoded in HANDOFF's pitfalls list — re-encoding here. **Convention:** any test that logs in as SUPER_ADMIN must seed with an explicit `pin` override of length 8-32 chars: ``await seedUser({ role: 'SUPER_ADMIN', pin: 'sa-pin-1234' })``. Default `'1234'` works for every other role but not SA. Same gotcha applies if production ever ships a UI flow that creates SA accounts — the create endpoint must enforce ≥8 chars or the login will silently break.
 
 ---
 
