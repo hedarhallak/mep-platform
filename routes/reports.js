@@ -20,6 +20,19 @@ const router = express.Router();
 const { pool } = require('../db');
 const { can, canAny } = require('../middleware/permissions');
 
+// Section 89-C/3 (Phase 4 Stage 2): in-handler queries migrated to req.db
+// (RLS-enforced via middleware/tenant_db). The `pool` import is kept ONLY
+// for the `ccqZoneFromDB` helper which queries `ccq_travel_rates` — a
+// GLOBAL lookup table that intentionally has NO RLS (managed by SUPER_ADMIN,
+// shared across all tenants). The helper's parameter was renamed from
+// `pool` to `db` so the file-level `pool.query` text only matches the
+// imported pool, not the parameter; callers still pass the imported pool
+// (it doesn't matter for global-table queries — Stage 1 / Stage 2 / Stage 3
+// all let the SELECT through, since `ccq_travel_rates` has no RLS policy).
+//
+// WHERE company_id clauses are kept for defense-in-depth — RLS does the
+// actual filtering at the DB layer once tenant_db sets the GUC.
+
 // ── Date helpers ───────────────────────────────────────────────
 function parseRange(req, res) {
   const { from, to } = req.query;
@@ -37,7 +50,11 @@ function parseRange(req, res) {
 // ── CCQ Zone lookup from DB ───────────────────────────────────
 // Fetches rate from ccq_travel_rates table (managed by SUPER_ADMIN)
 // Falls back to tax form for 41-65km, returns 0 if no rate found
-async function ccqZoneFromDB(pool, km, tradeCode, sector, dateStr) {
+async function ccqZoneFromDB(db, km, tradeCode, sector, dateStr) {
+  // Param renamed from `pool` to `db` so the file-level `pool.query` text
+  // only refers to the imported pool, not this parameter. Caller still
+  // passes the imported pool (this helper queries `ccq_travel_rates` — a
+  // global lookup table with no RLS, so any pg client works).
   const distKm = parseFloat(km || 0);
   if (distKm < 41) return { zone: null, rate: 0, label: 'Not eligible (<41 km)', tax_form: null };
 
@@ -56,7 +73,7 @@ async function ccqZoneFromDB(pool, km, tradeCode, sector, dateStr) {
 
   try {
     // Find the highest min_km threshold that applies for this distance (65km+)
-    const { rows } = await pool.query(
+    const { rows } = await db.query(
       `
       SELECT rate_cad, tax_form, min_km
       FROM public.ccq_travel_rates
@@ -74,7 +91,7 @@ async function ccqZoneFromDB(pool, km, tradeCode, sector, dateStr) {
 
     if (!rows.length) {
       // Try GENERAL as fallback
-      const { rows: fallback } = await pool.query(
+      const { rows: fallback } = await db.query(
         `
         SELECT rate_cad, tax_form, min_km
         FROM public.ccq_travel_rates
@@ -139,7 +156,7 @@ router.get('/hours', canAny(['reports.view', 'reports.view_self']), async (req, 
     // view_self: force filter to own employee_id only
     const isSelfOnly = !req.user.permissions?.reports?.view;
     if (isSelfOnly) {
-      const { rows: emp } = await pool.query(
+      const { rows: emp } = await req.db.query(
         `SELECT employee_id FROM public.app_users WHERE id = $1 LIMIT 1`,
         [req.user.user_id]
       );
@@ -164,7 +181,7 @@ router.get('/hours', canAny(['reports.view', 'reports.view_self']), async (req, 
       }
     }
 
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       `
       SELECT
         ep.employee_id,
@@ -227,7 +244,7 @@ router.get('/attendance', can('reports.view'), async (req, res) => {
       extra += ` AND ar.project_id = $${params.length}`;
     }
 
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       `
       SELECT
         p.id AS project_id,
@@ -294,7 +311,7 @@ router.get('/travel', canAny(['reports.view', 'reports.view_self']), async (req,
 
     const isSelfOnly = !req.user.permissions?.reports?.view;
     if (isSelfOnly) {
-      const { rows: emp } = await pool.query(
+      const { rows: emp } = await req.db.query(
         `SELECT employee_id FROM public.app_users WHERE id = $1 LIMIT 1`,
         [req.user.user_id]
       );
@@ -313,7 +330,7 @@ router.get('/travel', canAny(['reports.view', 'reports.view_self']), async (req,
       }
     }
 
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       `
       SELECT
         ep.employee_id,
@@ -390,7 +407,7 @@ router.get('/assignments', can('reports.view'), async (req, res) => {
       extra += ` AND ar.requested_for_employee_id = $${params.length}`;
     }
 
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       `
       SELECT
         ar.id AS assignment_id,
@@ -446,7 +463,7 @@ router.get('/distance', can('reports.view'), async (req, res) => {
       extra += ` AND ar.project_id = $${params.length}`;
     }
 
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       `
       SELECT
         ep.employee_id,
@@ -526,7 +543,7 @@ router.get('/my-daily', canAny(['reports.view', 'reports.view_self']), async (re
     const companyId = req.user.company_id;
 
     // Get current user's employee_id
-    const { rows: empRows } = await pool.query(
+    const { rows: empRows } = await req.db.query(
       `SELECT employee_id FROM public.app_users WHERE id = $1 LIMIT 1`,
       [req.user.user_id]
     );
@@ -535,7 +552,7 @@ router.get('/my-daily', canAny(['reports.view', 'reports.view_self']), async (re
 
     const employeeId = empRows[0].employee_id;
 
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       `
       SELECT
         atr.attendance_date::text,

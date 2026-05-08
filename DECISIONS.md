@@ -9146,5 +9146,37 @@ Filed both as backlog items in HANDOFF.md.
 | Deployed to prod | ✅ May 7, 2026 — `git pull` (already up-to-date via webhook), `pm2 restart mep-backend`, startup logs clean (no errors, ↺639) |
 | Next batch (89-C/3) | ⏳ Pending — candidates: profile + push_tokens (paired mount, q() helper refactor), reports.js (read-heavy), or auto_assign.js (small) |
 
-- **Today: 58 sections.** (Section 89 extended again with Piece 89-C/2: attendance migration. The pattern of "migrate, test, ship, deploy, document" is now fully runnable — subsequent 89-C/N batches should be smaller PR cycles since lessons #1-#3 from 89-C/1-fix are encoded.)
+### Piece 89-C/3 — reports route migration (May 8, 2026, morning)
+
+After 89-C/2 (`/api/attendance`) deployed cleanly and the pattern was fully runnable, 89-C/3 is the third single-route batch. We picked **`routes/reports.js`** (11 `pool.query` calls — 6 reporting endpoints across `/hours`, `/attendance`, `/travel`, `/assignments`, `/distance`, `/my-daily`).
+
+### What this batch shipped
+
+| File | Change |
+|---|---|
+| `app.js` | `/api/reports` mount line gains `tenantDb` between `auth` and the route module. |
+| `routes/reports.js` | (a) 9 in-handler `await pool.query(...)` → `await req.db.query(...)`. (b) `ccqZoneFromDB(pool, ...)` parameter renamed `pool` → `db` so the file-level `pool.query` text is unambiguous; the helper queries `ccq_travel_rates` which is a GLOBAL table (no RLS), so any pg client works — callers still pass the imported `pool`. (c) File-header comment block explains the migration + the helper-keep-on-pool rationale (global lookup table). No `audit()` calls in this file → no audit changes. |
+| `tests/integration/tenant_db_89c3.test.js` | NEW — 5 tests: 3 cross-tenant assertions for `/reports/assignments` (the cleanest endpoint to assert on), 1 cross-tenant assertion for `/reports/attendance`, 1 smoke test for `/reports/hours` (the others share the same data path through `assignment_requests.company_id` so transitively covered). |
+
+### Why this batch was chosen
+
+- 11 queries, single mount, similar shape to bi.js (which was the simplest 89-C/1 route). Read-heavy. No write-side complexity.
+- Helper-on-global-table pattern (`ccqZoneFromDB`) gave us a chance to encode "keep helpers querying global tables on the pool, rename the param to disambiguate" — same technique used for `notifyForeman` in 89-C/2's `attendance.js`. This is now a documented convention applicable to future batches with similar helpers.
+
+### Stage 3 prep notes
+
+No new Stage 3 backlog from this batch. The `ccqZoneFromDB` helper is permanent on `pool` — the table it queries is global, has no RLS policy, and works under any stage. (Unlike `notifyForeman` from 89-C/2 and `can()` from middleware/permissions.js, which DO need refactoring before strict RLS ships.)
+
+### Status — Piece 89-C/3
+
+| Item | Status |
+|---|---|
+| Code migrated | ✅ 1 file, 9 handler queries → req.db; 2 helper queries kept on pool (global table) |
+| Cross-tenant integration test | ✅ 5 new tests in `tenant_db_89c3.test.js` |
+| PR opened + CI green | ⏳ Pending |
+| Merged to main | ⏳ Pending |
+| Deployed to prod | ⏳ Pending |
+| Next batch (89-C/4) | ⏳ Pending — candidates: auto_assign.js (6 queries, mounted alongside assignments.js), profile + push_tokens (paired mount, q() helper refactor), or hub.js (11 queries) |
+
+- **Today: 58 sections.** (Section 89 extended again with Piece 89-C/3: reports migration. 6 of ~25 protected routes now consume req.db — Phase 4b is ~24% done.)
 
