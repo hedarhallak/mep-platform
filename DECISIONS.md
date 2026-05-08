@@ -9103,5 +9103,48 @@ pm2 restart mep-backend
 | Merged to main | ⏳ Pending |
 | Deployed to prod | ⏳ Pending |
 
-- **Today: 58 sections.** (Section 89 extended once more with Piece 89-C/1: first bulk route migration batch + joint deploy record for 89-B + 89-C/1 + post-deploy hot-fix for COMMIT race. Subsequent 89-C/N batches will continue in this section until 89-C is complete; then 89-D and 89-E open as their own pieces under Section 89.)
+### Piece 89-C/2 — attendance route migration (May 7, 2026, late session)
+
+After 89-C/1 + 89-C/1-fix shipped + deployed, 89-C/2 is the second batch in the bulk route migration line. We picked **`routes/attendance.js`** as a single-route batch:
+
+- 9 `pool.query` calls in the file: 8 are inside route handlers (clean tenant-scoped queries against `attendance_records`, `assignment_requests`, `app_users`, `employee_profiles`, `projects`), 1 is inside the fire-and-forget `notifyForeman` helper.
+- 3 `audit(pool, req, ...)` calls.
+
+### What this batch shipped
+
+| File | Change |
+|---|---|
+| `app.js` | `/api/attendance` now mounts `auth, tenantDb, ...` (one new word on one line, plus a comment marking the migration). |
+| `routes/attendance.js` | (a) 8 in-handler `await pool.query(...)` → `await req.db.query(...)`. (b) `notifyForeman(pool, ...)` parameter renamed `pool` → `db` so its inner `await db.query(...)` is unambiguous; both call sites still pass the imported `pool` (fire-and-forget can't use req.db — the per-request transaction is already committed by the time the helper runs). (c) `audit(pool, req, {...})` → `audit(req.db, req, {...})` (×3) so audit_log INSERTs flow through the same per-request transaction (forward-compatible with Stage 3 strict). (d) File-header comment block explains the 89-C/2 migration + a TODO Stage 3 note about `notifyForeman` needing a prefetch-then-fire-and-forget refactor before strict RLS ships. |
+| `tests/integration/tenant_db_89c2.test.js` | NEW — 5 tests covering both GET endpoints (`/api/attendance/projects` and `/api/attendance`) for cross-tenant isolation, plus an explicit cross-tenant `project_id` smuggling test. POST/PATCH not covered here — middleware regression already proved by 89-B's tenant_db_middleware.test.js. |
+
+### Why a single-route batch this time
+
+89-C/1 was 3 routes (bi + project-foremen + project-trades, 17 query conversions) and the PR cycle hit three speed bumps (Frankenstein branch, gh checks empty, Prettier format). Single-route batches:
+- Smaller diff → easier review.
+- If something flakes, smaller blast radius.
+- Faster time to "merge + deploy + observe" cycle.
+
+We can re-batch 3-route-per-PR once we've migrated 5-6 more single-route batches and the pattern is fully muscle memory.
+
+### Stage 3 prep items surfaced
+
+- `notifyForeman` runs after the per-request transaction commits and uses the shared pool (no GUC). Stage 3 strict policies would block its SELECT. Refactor pattern: prefetch the email-data fields via `req.db` BEFORE `res.json`, then do the SendGrid send fire-and-forget afterwards (no DB).
+- (Pre-existing from 89-C/1's lessons) `middleware/permissions.js` `can()` still uses `pool.query` directly. Same Stage 3 break — refactor before 89-E ships.
+
+Filed both as backlog items in HANDOFF.md.
+
+### Status — Piece 89-C/2
+
+| Item | Status |
+|---|---|
+| Code migrated | ✅ 1 file, 8 handler queries + 3 audit calls + helper rename → req.db |
+| Cross-tenant integration test | ✅ 5 new tests in `tenant_db_89c2.test.js` |
+| Pool import retained (only for `notifyForeman` fire-and-forget) | ✅ documented in file header |
+| PR opened + CI green | ⏳ Pending |
+| Merged to main | ⏳ Pending |
+| Deployed to prod | ⏳ Pending |
+| Next batch (89-C/3) | ⏳ Pending — candidates: profile + push_tokens (paired mount, q() helper refactor), reports.js (read-heavy), or auto_assign.js (small) |
+
+- **Today: 58 sections.** (Section 89 extended again with Piece 89-C/2: attendance migration. The pattern of "migrate, test, ship, deploy, document" is now fully runnable — subsequent 89-C/N batches should be smaller PR cycles since lessons #1-#3 from 89-C/1-fix are encoded.)
 

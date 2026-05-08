@@ -24,6 +24,24 @@ const { pool } = require('../db');
 const { can, canAny } = require('../middleware/permissions');
 const { audit, ACTIONS } = require('../lib/audit');
 
+// Section 89-C/2 (Phase 4 Stage 2): in-handler queries migrated to req.db
+// (RLS-enforced via middleware/tenant_db). The `pool` import is kept ONLY
+// for the fire-and-forget notifyForeman helper below — that function runs
+// after the request transaction has already committed (its caller does NOT
+// await it), so it cannot use req.db. WHERE company_id clauses are kept
+// for defense-in-depth — RLS does the actual filtering at the DB layer.
+//
+// audit() calls switched from `audit(pool, req, ...)` to `audit(req.db, ...)`
+// so the audit_logs INSERT is part of the same per-request transaction
+// (forward-compatible with Stage 3 strict RLS).
+//
+// TODO Stage 3 (Section 89-E): notifyForeman currently SELECTs via the
+// shared `pool`, which has no app.company_id GUC set. Under Stage 1
+// permissive RLS the SELECT returns rows; under strict RLS it would return
+// 0 rows and the email would silently not send. Refactor pattern: prefetch
+// the email-data fields via req.db BEFORE res.json, then fire-and-forget
+// the SendGrid send (no DB) afterwards.
+
 // ── Hours calculation ─────────────────────────────────────────
 function timeToMin(t) {
   if (!t) return 0;
@@ -53,9 +71,15 @@ function calcHours(shiftStart, checkInTime, checkOutTime) {
 }
 
 // ── Foreman notification (fire and forget) ────────────────────
-async function notifyForeman(pool, attendanceId, eventType) {
+// Param renamed from `pool` to `db` so the file-level `pool.query` text
+// only refers to the imported module pool, not this parameter. Caller
+// still passes the imported pool (notifyForeman is fire-and-forget and
+// must use a separate connection from req.db for the reasons described
+// in the file header — req.db is released back to the pool when the
+// per-request transaction commits).
+async function notifyForeman(db, attendanceId, eventType) {
   try {
-    const { rows } = await pool.query(
+    const { rows } = await db.query(
       `SELECT
          atr.check_in_time, atr.check_out_time,
          atr.regular_hours, atr.overtime_hours,
@@ -111,7 +135,7 @@ router.get('/projects', can('attendance.view'), async (req, res) => {
     const companyId = req.user.company_id;
     const date = req.query.date || new Date().toISOString().split('T')[0];
 
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       `SELECT DISTINCT p.id, p.project_code, p.project_name
        FROM public.assignment_requests ar
        JOIN public.projects p ON p.id = ar.project_id
@@ -153,7 +177,7 @@ router.get('/', canAny(['attendance.view', 'attendance.view_self']), async (req,
       extraFilters += ' AND au.id = $3';
     }
 
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       `SELECT
          ar.id              AS assignment_request_id,
          ar.requested_for_employee_id AS employee_id,
@@ -233,7 +257,7 @@ router.post('/checkin', can('attendance.checkin'), async (req, res) => {
       return res.status(400).json({ ok: false, error: 'ASSIGNMENT_REQUIRED' });
 
     // Verify assignment belongs to current user and is active today
-    const asgn = await pool.query(
+    const asgn = await req.db.query(
       `SELECT ar.id, ar.project_id, ar.requested_for_employee_id AS employee_id,
               ar.shift_start, ar.company_id
        FROM public.assignment_requests ar
@@ -284,7 +308,7 @@ router.post('/checkin', can('attendance.checkin'), async (req, res) => {
     // ─────────────────────────────────────────────────────────
 
     // Upsert attendance record
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       `INSERT INTO public.attendance_records
          (company_id, project_id, assignment_request_id, employee_id,
           attendance_date, shift_start, check_in_time, status, created_at, updated_at)
@@ -298,7 +322,7 @@ router.post('/checkin', can('attendance.checkin'), async (req, res) => {
       [companyId, a.project_id, a.id, a.employee_id, today, a.shift_start || null, checkInTime]
     );
 
-    await audit(pool, req, {
+    await audit(req.db, req, {
       action: ACTIONS.ATTENDANCE_CHECKIN || 'ATTENDANCE_CHECKIN',
       entity_type: 'attendance_record',
       entity_id: rows[0].id,
@@ -322,7 +346,7 @@ router.patch('/:id/checkout', can('attendance.checkin'), async (req, res) => {
     const currentUserId = Number(req.user.user_id);
 
     // Verify record belongs to current user
-    const existing = await pool.query(
+    const existing = await req.db.query(
       `SELECT atr.*, au.id AS user_id
        FROM public.attendance_records atr
        JOIN public.app_users au ON au.employee_id = atr.employee_id
@@ -348,7 +372,7 @@ router.patch('/:id/checkout', can('attendance.checkin'), async (req, res) => {
       checkOutTime
     );
 
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       `UPDATE public.attendance_records
        SET check_out_time = $1,
            raw_minutes    = $2,
@@ -372,7 +396,7 @@ router.patch('/:id/checkout', can('attendance.checkin'), async (req, res) => {
       ]
     );
 
-    await audit(pool, req, {
+    await audit(req.db, req, {
       action: ACTIONS.ATTENDANCE_CHECKOUT || 'ATTENDANCE_CHECKOUT',
       entity_type: 'attendance_record',
       entity_id: recordId,
@@ -400,7 +424,7 @@ router.patch('/:id/confirm', can('attendance.approve'), async (req, res) => {
     const companyId = req.user.company_id;
     const { regular_hours, overtime_hours, note } = req.body || {};
 
-    const existing = await pool.query(
+    const existing = await req.db.query(
       'SELECT * FROM public.attendance_records WHERE id = $1 AND company_id = $2 LIMIT 1',
       [recordId, companyId]
     );
@@ -426,7 +450,7 @@ router.patch('/:id/confirm', can('attendance.approve'), async (req, res) => {
       overtime_hours !== undefined ? parseFloat(overtime_hours) : rec.overtime_hours;
     const newStatus = isAdjusted ? 'ADJUSTED' : 'CONFIRMED';
 
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       `UPDATE public.attendance_records
        SET confirmed_by             = $1,
            confirmed_at             = NOW(),
@@ -448,7 +472,7 @@ router.patch('/:id/confirm', can('attendance.approve'), async (req, res) => {
       ]
     );
 
-    await audit(pool, req, {
+    await audit(req.db, req, {
       action: ACTIONS.ATTENDANCE_CONFIRMED || 'ATTENDANCE_CONFIRMED',
       entity_type: 'attendance_record',
       entity_id: recordId,
