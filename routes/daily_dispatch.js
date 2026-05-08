@@ -5,23 +5,20 @@
 const express = require('express');
 const router = express.Router();
 
-const db = require('../db');
-const pool = db && db.pool ? db.pool : db;
-
-function assertPool(p) {
-  return p && typeof p.query === 'function';
-}
+// Section 89-C/9 (Phase 4 Stage 2): in-handler queries migrated to req.db
+// (RLS-enforced via middleware/tenant_db). The previous `pool` import +
+// `assertPool` runtime check were removed — the middleware now guarantees
+// `req.db` exists with a `.query` method on every authenticated request.
+// 19 `pool.query` calls → `req.db.query`. No manual transactions, no
+// fire-and-forget helpers — clean migration.
+//
+// WHERE company_id clauses are kept for defense-in-depth.
 
 // POST /api/daily-dispatch/prepare?date=YYYY-MM-DD
 // Creates a STARTED run and stores per-employee snapshot in employee_daily_dispatch_state (last_sent_payload_json)
 // Does NOT approve requests and does NOT send emails.
 router.post('/prepare', async (req, res) => {
   try {
-    if (!assertPool(pool)) {
-      console.error('DB pool invalid in routes/daily_dispatch.js:', db);
-      return res.status(500).json({ ok: false, error: 'internal_error' });
-    }
-
     const qDate = String(req.query.date || '').trim();
     const date = qDate || new Date().toISOString().slice(0, 10); // YYYY-MM-DD (server local/utc)
     const companyId = req.user && req.user.company_id ? Number(req.user.company_id) : null;
@@ -29,49 +26,45 @@ router.post('/prepare', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'company_required' });
     }
 
-    // If company_id is NULL in this baseline, enforce "one run per date" at the application layer.
-    // Otherwise Postgres UNIQUE(company_id, dispatch_date) allows duplicates when company_id is NULL.
-    if (companyId === null) {
-      const { rows: existingRows } = await pool.query(
-        `SELECT * FROM public.daily_dispatch_runs
-     WHERE company_id IS NULL AND dispatch_date = $1::date
-     ORDER BY started_at DESC
-     LIMIT 1`,
-        [date, companyId]
-      );
-      const existing = existingRows[0] || null;
-      if (existing && String(existing.status).toUpperCase() !== 'FAILED') {
-        return res.status(409).json({
-          ok: false,
-          error: 'already_prepared',
-          run: {
-            id: existing.id,
-            company_id: existing.company_id,
-            dispatch_date: existing.dispatch_date,
-            status: existing.status,
-          },
-        });
-      }
-    }
+    // NOTE (89-C/9): the previous `if (companyId === null)` SELECT-first
+    // branch right below was dead code (the early-return above already
+    // covered the null case). The "create or detect existing" logic moved
+    // into the INSERT below using ON CONFLICT DO NOTHING — see why next.
 
     const triggeredBy = req.user && req.user.user_id ? Number(req.user.user_id) : null;
 
-    // 1) Create run (STARTED). If already exists for company/date, return 409 with run id.
-    let runRow = null;
-    try {
-      const ins = await pool.query(
-        `
-        INSERT INTO public.daily_dispatch_runs (company_id, dispatch_date, status, triggered_by_user_id, summary_json)
-        VALUES ($1, $2::date, 'STARTED', $3, '{}'::jsonb)
-        RETURNING *
-        `,
-        [companyId, date, triggeredBy]
-      );
-      runRow = ins.rows[0] || null;
-    } catch (e) {
-      // Unique per company/day may throw; handle gracefully.
-      const { rows } = await pool.query(
-        `SELECT * FROM public.daily_dispatch_runs WHERE company_id IS NOT DISTINCT FROM $1 AND dispatch_date = $2::date LIMIT 1`,
+    // 1) Create run (STARTED). If already exists for company/date, return 409.
+    //
+    // 89-C/9 refactor: the previous implementation used `try { INSERT }
+    // catch { SELECT existing }` which relied on the UNIQUE constraint
+    // throwing on duplicate. Under the per-request `tenantDb` transaction
+    // (Section 89-B), a constraint violation poisons the entire
+    // transaction — any subsequent query (including the catch-block
+    // SELECT) errors with `current transaction is aborted, commands
+    // ignored until end of transaction block`. CI #452 surfaced this
+    // (the integration test "/prepare twice on same date returns 409"
+    // started failing because the catch-block SELECT couldn't run).
+    //
+    // The fix is to use Postgres's native ON CONFLICT DO NOTHING — no
+    // exception is raised on conflict, so the transaction stays alive.
+    // If the row already exists, the INSERT returns 0 rows and we SELECT
+    // the existing one in the same transaction.
+    const ins = await req.db.query(
+      `
+      INSERT INTO public.daily_dispatch_runs (company_id, dispatch_date, status, triggered_by_user_id, summary_json)
+      VALUES ($1, $2::date, 'STARTED', $3, '{}'::jsonb)
+      ON CONFLICT (company_id, dispatch_date) DO NOTHING
+      RETURNING *
+      `,
+      [companyId, date, triggeredBy]
+    );
+    let runRow = ins.rows[0] || null;
+    if (!runRow) {
+      // Conflict — fetch existing run.
+      const { rows } = await req.db.query(
+        `SELECT * FROM public.daily_dispatch_runs
+         WHERE company_id = $1 AND dispatch_date = $2::date
+         LIMIT 1`,
         [companyId, date]
       );
       const existing = rows[0] || null;
@@ -87,7 +80,8 @@ router.post('/prepare', async (req, res) => {
           },
         });
       }
-      throw e;
+      // Should not reach — ON CONFLICT only triggers when a row exists.
+      return res.status(500).json({ ok: false, error: 'INTERNAL_INSERT_FAILED' });
     }
 
     // 2) Build snapshot from APPROVED assignments that cover the date.
@@ -99,7 +93,7 @@ router.post('/prepare', async (req, res) => {
     // string for downstream consumers (preview / commit) that still read
     // `task.shift`. We also filter to APPROVED — PENDING/REJECTED/CANCELLED
     // requests are not real assignments.
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       `
       SELECT
         a.id AS assignment_id,
@@ -152,7 +146,7 @@ router.post('/prepare', async (req, res) => {
     let upserted = 0;
     for (const emp of byEmp.values()) {
       const payload = JSON.stringify(emp.tasks);
-      await pool.query(
+      await req.db.query(
         `
         INSERT INTO public.employee_daily_dispatch_state
           (company_id, employee_id, work_date, last_sent_version, last_sent_payload_json, last_sent_at)
@@ -171,7 +165,7 @@ router.post('/prepare', async (req, res) => {
     }
 
     // 5) Update run summary
-    await pool.query(
+    await req.db.query(
       `
       UPDATE public.daily_dispatch_runs
       SET summary_json = jsonb_build_object(
@@ -263,8 +257,11 @@ function buildDigestHtml({ date, employeeName, tasks }) {
   `;
 }
 
-async function getEmployeesEmailColumn(pool) {
-  const { rows } = await pool.query(
+// Helper: detects which email column exists on public.employees. Param
+// renamed `pool` → `db` post-89-C/9 migration so the route can pass req.db.
+// Queries information_schema (global, no RLS) so any pg client works.
+async function getEmployeesEmailColumn(db) {
+  const { rows } = await db.query(
     `SELECT column_name
      FROM information_schema.columns
      WHERE table_schema='public' AND table_name='employees'`
@@ -283,11 +280,6 @@ async function getEmployeesEmailColumn(pool) {
 router.post('/commit', async (req, res) => {
   const startedAt = Date.now();
   try {
-    if (!assertPool(pool)) {
-      console.error('DB pool invalid in routes/daily_dispatch.js:', db);
-      return res.status(500).json({ ok: false, error: 'internal_error' });
-    }
-
     const SENDGRID_API_KEY = mustEnv('SENDGRID_API_KEY');
     const SENDGRID_FROM_EMAIL = mustEnv('SENDGRID_FROM_EMAIL');
     if (!SENDGRID_API_KEY || !SENDGRID_FROM_EMAIL) {
@@ -311,7 +303,7 @@ router.post('/commit', async (req, res) => {
     const triggeredBy = req.user && req.user.user_id ? Number(req.user.user_id) : null;
 
     // 1) Find run
-    const runSel = await pool.query(
+    const runSel = await req.db.query(
       `SELECT * FROM public.daily_dispatch_runs
    WHERE company_id IS NOT DISTINCT FROM $1 AND dispatch_date = $2::date
    ORDER BY (CASE WHEN UPPER(status) = 'SENT' THEN 1 ELSE 0 END), started_at DESC
@@ -328,7 +320,7 @@ router.post('/commit', async (req, res) => {
     }
 
     // 2) Load snapshots for this date
-    const snapSel = await pool.query(
+    const snapSel = await req.db.query(
       `SELECT employee_id, work_date, last_sent_payload_json, last_sent_version
        FROM public.employee_daily_dispatch_state
        WHERE company_id IS NOT DISTINCT FROM $1 AND work_date = $2::date
@@ -341,13 +333,13 @@ router.post('/commit', async (req, res) => {
     }
 
     // 3) Load employee emails
-    const emailCol = await getEmployeesEmailColumn(pool);
+    const emailCol = await getEmployeesEmailColumn(req.db);
     if (!emailCol) {
       return res.status(500).json({ ok: false, error: 'employees_email_column_missing' });
     }
 
     const empIds = snaps.map((s) => Number(s.employee_id));
-    const empSel = await pool.query(
+    const empSel = await req.db.query(
       `
       SELECT id AS employee_id,
              employee_code,
@@ -400,7 +392,7 @@ router.post('/commit', async (req, res) => {
       });
 
       // Mark sent time for that employee snapshot row
-      await pool.query(
+      await req.db.query(
         `UPDATE public.employee_daily_dispatch_state
          SET last_sent_at = NOW()
          WHERE company_id IS NOT DISTINCT FROM $3 AND employee_id = $1 AND work_date = $2::date`,
@@ -411,7 +403,7 @@ router.post('/commit', async (req, res) => {
     }
 
     // 5) Mark run SENT
-    await pool.query(
+    await req.db.query(
       `
       UPDATE public.daily_dispatch_runs
       SET status='SENT',
@@ -454,7 +446,7 @@ router.post('/commit', async (req, res) => {
         return res.status(400).json({ ok: false, error: 'company_required' });
       }
 
-      await pool.query(
+      await req.db.query(
         `
         UPDATE public.daily_dispatch_runs
         SET status='FAILED',
@@ -476,11 +468,6 @@ router.post('/commit', async (req, res) => {
 // F1: Preview the digest content BEFORE commit (no emails, no status changes).
 router.get('/preview', async (req, res) => {
   try {
-    if (!assertPool(pool)) {
-      console.error('DB pool invalid in routes/daily_dispatch.js:', db);
-      return res.status(500).json({ ok: false, error: 'internal_error' });
-    }
-
     const qDate = String(req.query.date || '').trim();
     const date = qDate || new Date().toISOString().slice(0, 10);
     const view = String(req.query.view || 'summary')
@@ -505,7 +492,7 @@ router.get('/preview', async (req, res) => {
     }
 
     // Load run status (latest, prefer non-SENT first; otherwise most recent)
-    const runSel = await pool.query(
+    const runSel = await req.db.query(
       `SELECT * FROM public.daily_dispatch_runs
        WHERE company_id IS NOT DISTINCT FROM $1 AND dispatch_date = $2::date
        ORDER BY (CASE WHEN UPPER(status) = 'SENT' THEN 1 ELSE 0 END), started_at DESC
@@ -517,7 +504,7 @@ router.get('/preview', async (req, res) => {
 
     // Helpers to detect schema columns safely
     async function getEmployeesEmailColumn() {
-      const { rows } = await pool.query(
+      const { rows } = await req.db.query(
         `SELECT column_name
          FROM information_schema.columns
          WHERE table_schema='public' AND table_name='employees'`
@@ -530,7 +517,7 @@ router.get('/preview', async (req, res) => {
     }
 
     async function hasEmployeesIsActive() {
-      const { rows } = await pool.query(
+      const { rows } = await req.db.query(
         `SELECT 1
          FROM information_schema.columns
          WHERE table_schema='public' AND table_name='employees' AND column_name='is_active'
@@ -549,7 +536,7 @@ router.get('/preview', async (req, res) => {
     }
 
     // Load snapshots/state for that date (prepared via /prepare)
-    const snapSel = await pool.query(
+    const snapSel = await req.db.query(
       `SELECT employee_id, work_date, last_sent_payload_json, last_sent_version, last_sent_at
        FROM public.employee_daily_dispatch_state
        WHERE company_id IS NOT DISTINCT FROM $1 AND work_date = $2::date
@@ -564,7 +551,7 @@ router.get('/preview', async (req, res) => {
     let empRows = [];
     if (empIds.length) {
       const emailSelect = emailCol ? `${emailCol} AS email` : `NULL::text AS email`;
-      const { rows } = await pool.query(
+      const { rows } = await req.db.query(
         `
         SELECT id AS employee_id,
                employee_code,
@@ -625,7 +612,7 @@ router.get('/preview', async (req, res) => {
     try {
       const hasActive = await hasEmployeesIsActive();
       if (hasActive) {
-        const { rows } = await pool.query(
+        const { rows } = await req.db.query(
           `SELECT COUNT(*)::int AS n
            FROM public.employees
            WHERE is_active = true`
