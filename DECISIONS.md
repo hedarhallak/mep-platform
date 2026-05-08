@@ -9256,5 +9256,28 @@ After 89-C/5 (`/api/users`) deployed, 89-C/6 migrates **`routes/hub.js`** — ta
 | Deployed to prod | ✅ May 8, 2026 — `git pull` (already up-to-date via webhook), `pm2 restart`, startup logs clean (↺667 pid 707621) |
 | Next batch (89-C/7) | ⏳ Pending — candidates: profile + push_tokens (paired mount, q() helper refactor), standup.js (15 queries), daily_dispatch.js (19 queries), material_requests.js (26 queries) |
 
-- **Today: 58 sections.** (Section 89 extended again with Piece 89-C/6: hub migration. 9 of ~25 protected routes now consume req.db — Phase 4b is ~36% done.)
+### Piece 89-C/7 — standup route migration (May 8, 2026)
+
+After 89-C/6 (`/api/hub`) deployed, 89-C/7 migrates **`routes/standup.js`** — daily standup workflow (review tomorrow's plan + material requests). Clean migration: 15 in-handler `pool.query` calls, no manual transactions, no fire-and-forget helpers.
+
+### What this batch shipped
+
+| File | Change |
+|---|---|
+| `app.js` | `/api/standup` mount adds `tenantDb`. |
+| `routes/standup.js` | (a) Drop `pool` import (unused after migration). (b) 15 in-handler `await pool.query(...)` → `await req.db.query(...)`. (c) File-header comment block notes the clean shape (no manual tx, no fire-and-forget). |
+| `tests/integration/tenant_db_89c7.test.js` | NEW — 2 tests covering GET `/api/standup/tomorrow` cross-tenant in both directions. Other endpoints (POST /session, materials CRUD) follow the same `assignment_requests`/`material_requests` data path through company_id → transitively covered. |
+
+### Status — Piece 89-C/7
+
+| Item | Status |
+|---|---|
+| Code migrated | ✅ 1 file, 15 handler queries → req.db, pool import dropped |
+| Cross-tenant integration test | ✅ 2 new tests in `tenant_db_89c7.test.js` |
+| PR opened + CI green | ⏳ Pending |
+| Merged to main | ⏳ Pending |
+| Deployed to prod | ⏳ Pending |
+| Next batch (89-C/8) | ⏳ Pending — candidates: profile + push_tokens (paired mount, q() helper refactor), daily_dispatch.js (19 queries), material_requests.js (26 queries), projects.js (20 queries) |
+
+- **Today: 58 sections.** (Section 89 extended again with Piece 89-C/7: standup migration. 10 of ~25 protected routes now consume req.db — Phase 4b is ~40% done.)
 

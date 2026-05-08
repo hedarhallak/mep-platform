@@ -15,8 +15,14 @@
 
 const express = require('express');
 const router = express.Router();
-const { pool } = require('../db');
 const { can } = require('../middleware/permissions');
+
+// Section 89-C/7 (Phase 4 Stage 2): in-handler queries migrated to req.db
+// (RLS-enforced via middleware/tenant_db). The `pool` import was removed —
+// every query is parameterized by the authenticated user's tenant via
+// SET LOCAL app.company_id. No manual transactions, no fire-and-forget
+// helpers — clean migration. WHERE company_id clauses kept for defense-
+// in-depth.
 
 const tomorrow = () => {
   const d = new Date();
@@ -43,7 +49,7 @@ router.get('/tomorrow', can('standup.manage'), async (req, res) => {
 
     // Get projects where there are workers assigned tomorrow
     // COMPANY_ADMIN sees all, TRADE_ADMIN sees only their projects
-    const projectsRes = await pool.query(
+    const projectsRes = await req.db.query(
       `
       SELECT DISTINCT
         p.id,
@@ -85,7 +91,7 @@ router.get('/tomorrow', can('standup.manage'), async (req, res) => {
 
     for (const proj of projectsRes.rows) {
       // Get team for tomorrow
-      const teamRes = await pool.query(
+      const teamRes = await req.db.query(
         `
         SELECT
           e.id AS employee_id,
@@ -112,7 +118,7 @@ router.get('/tomorrow', can('standup.manage'), async (req, res) => {
       );
 
       // Get or find material request for tomorrow
-      const matRes = await pool.query(
+      const matRes = await req.db.query(
         `
         SELECT
           mr.id,
@@ -142,7 +148,7 @@ router.get('/tomorrow', can('standup.manage'), async (req, res) => {
       );
 
       // Get standup session if exists
-      const sessionRes = await pool.query(
+      const sessionRes = await req.db.query(
         `
         SELECT id, status, note, completed_at
         FROM public.standup_sessions
@@ -178,7 +184,7 @@ router.post('/session', can('standup.manage'), async (req, res) => {
     const userId = req.user.user_id;
     const tmrw = tomorrow();
 
-    const result = await pool.query(
+    const result = await req.db.query(
       `
       INSERT INTO public.standup_sessions
         (company_id, project_id, foreman_id, standup_date, status)
@@ -203,7 +209,7 @@ router.post('/session/:id/complete', can('standup.manage'), async (req, res) => 
     const { note } = req.body;
     const companyId = req.user.company_id;
 
-    const result = await pool.query(
+    const result = await req.db.query(
       `
       UPDATE public.standup_sessions
       SET status = 'COMPLETED', note = $1, completed_at = NOW(), updated_at = NOW()
@@ -231,7 +237,7 @@ router.get('/materials/:project_id', can('standup.manage'), async (req, res) => 
     const tmrw = tomorrow();
 
     // Try to find existing request for tomorrow
-    const existing = await pool.query(
+    const existing = await req.db.query(
       `
       SELECT
         mr.id, mr.status, mr.note,
@@ -262,7 +268,7 @@ router.get('/materials/:project_id', can('standup.manage'), async (req, res) => 
     }
 
     // Find foreman for this project
-    const foremanRes = await pool.query(
+    const foremanRes = await req.db.query(
       `SELECT ar.requested_for_employee_id AS foreman_employee_id
        FROM public.assignment_requests ar
        WHERE ar.project_id   = $1
@@ -277,7 +283,7 @@ router.get('/materials/:project_id', can('standup.manage'), async (req, res) => 
     const foremanId = foremanRes.rows[0]?.foreman_employee_id || null;
 
     // Create new request with foreman_employee_id
-    const newReq = await pool.query(
+    const newReq = await req.db.query(
       `
       INSERT INTO public.material_requests
         (company_id, project_id, requested_by, foreman_employee_id, status, note)
@@ -303,7 +309,7 @@ router.post('/materials/:request_id/items', can('standup.manage'), async (req, r
     const companyId = req.user.company_id;
 
     // Verify request belongs to company
-    const check = await pool.query(
+    const check = await req.db.query(
       'SELECT id FROM public.material_requests WHERE id = $1 AND company_id = $2',
       [requestId, companyId]
     );
@@ -314,7 +320,7 @@ router.post('/materials/:request_id/items', can('standup.manage'), async (req, r
       return res.status(400).json({ ok: false, error: 'INVALID_QUANTITY' });
     if (!unit?.trim()) return res.status(400).json({ ok: false, error: 'UNIT_REQUIRED' });
 
-    const result = await pool.query(
+    const result = await req.db.query(
       `
       INSERT INTO public.material_request_items
         (request_id, item_name, item_name_raw, quantity, unit, note)
@@ -340,13 +346,13 @@ router.patch('/materials/:request_id/items/:item_id', can('standup.manage'), asy
     const requestId = Number(req.params.request_id);
     const itemId = Number(req.params.item_id);
 
-    const check = await pool.query(
+    const check = await req.db.query(
       'SELECT id FROM public.material_requests WHERE id = $1 AND company_id = $2',
       [requestId, companyId]
     );
     if (!check.rows.length) return res.status(404).json({ ok: false, error: 'REQUEST_NOT_FOUND' });
 
-    const result = await pool.query(
+    const result = await req.db.query(
       `
       UPDATE public.material_request_items
       SET
@@ -381,13 +387,13 @@ router.delete('/materials/:request_id/items/:item_id', can('standup.manage'), as
     const requestId = Number(req.params.request_id);
     const itemId = Number(req.params.item_id);
 
-    const check = await pool.query(
+    const check = await req.db.query(
       'SELECT id FROM public.material_requests WHERE id = $1 AND company_id = $2',
       [requestId, companyId]
     );
     if (!check.rows.length) return res.status(404).json({ ok: false, error: 'REQUEST_NOT_FOUND' });
 
-    await pool.query(
+    await req.db.query(
       'DELETE FROM public.material_request_items WHERE id = $1 AND request_id = $2',
       [itemId, requestId]
     );

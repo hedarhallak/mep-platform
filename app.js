@@ -331,7 +331,8 @@ app.use('/api/permissions', auth, require('./routes/permissions'));
 app.use('/api/hub', auth, tenantDb, require('./routes/hub'));
 
 // ── Daily Standup ─────────────────────────────────────────────
-app.use('/api/standup', auth, require('./routes/standup'));
+// Section 89-C/7: standup migrated to req.db (RLS-enforced).
+app.use('/api/standup', auth, tenantDb, require('./routes/standup'));
 app.use('/uploads/hub', require('express').static(path.join(__dirname, 'uploads/hub')));
 
 // ── Sentry error handler ──────────────────────────────────────
