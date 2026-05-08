@@ -300,7 +300,8 @@ app.use('/api/materials', auth, require('./routes/material_requests'));
 // ── Business Intelligence ─────────────────────────────────────
 // Section 89-C/1: bi route migrated to req.db.
 app.use('/api/bi', auth, tenantDb, require('./routes/bi'));
-app.use('/api/reports', auth, loadRouter('./routes/reports'));
+// Section 89-C/3: reports migrated to req.db (RLS-enforced).
+app.use('/api/reports', auth, tenantDb, loadRouter('./routes/reports'));
 
 // ── Daily operations ──────────────────────────────────────────
 app.use('/api/daily-dispatch', auth, loadRouter('./routes/daily_dispatch'));

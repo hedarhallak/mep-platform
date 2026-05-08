@@ -74,11 +74,12 @@ When you receive the one-line command above:
 |---|---|---|
 | 89-C/1 | `/api/bi`, `/api/project-foremen`, `/api/project-trades` | ✅ **Deployed to prod** (May 7, 2026) |
 | 89-C/2 | `/api/attendance` (single-route batch — see DECISIONS.md 89-C/2) | ✅ **Deployed to prod** (May 7, 2026) |
-| 89-C/3..N | profile + push_tokens (paired), projects, reports, hub, daily_dispatch, standup, material_requests, assignments, auto_assign, user_management, employees, permissions | ⏳ Pending |
+| 89-C/3 | `/api/reports` (single-route batch — see DECISIONS.md 89-C/3) | ✅ **Merged to main** — awaiting prod deploy |
+| 89-C/4..N | profile + push_tokens (paired), projects, hub, daily_dispatch, standup, material_requests, assignments, auto_assign, user_management, employees, permissions | ⏳ Pending |
 
 ---
 
-## Next task: Phase 4b Piece 89-C/3 — third batch of route migration
+## Next task: Phase 4b Piece 89-C/4 — fourth batch of route migration
 
 **Goal:** continue migrating remaining ~21 protected routes off `pool.query` onto `req.db.query`, batch by batch. Target batch size: 1-3 routes per PR (smaller is easier — see lessons captured in DECISIONS Section 89-C/1-fix). Once 100% of routes are on `req.db`, Stage 3 (89-E) can drop the "GUC unset = bypass" clause and RLS goes strict.
 
