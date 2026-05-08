@@ -73,33 +73,34 @@ When you receive the one-line command above:
 | Batch | Routes | Status |
 |---|---|---|
 | 89-C/1 | `/api/bi`, `/api/project-foremen`, `/api/project-trades` | ✅ **Deployed to prod** (May 7, 2026) |
-| 89-C/2 | TBD — likely profile + push_tokens (paired mount) | ⏳ Next |
-| 89-C/3..N | attendance, projects, reports, hub, daily_dispatch, standup, material_requests, assignments, auto_assign, user_management, employees, permissions | ⏳ Pending |
+| 89-C/2 | `/api/attendance` (single-route batch — see DECISIONS.md 89-C/2) | ✅ **Merged to main** — awaiting prod deploy |
+| 89-C/3..N | profile + push_tokens (paired), projects, reports, hub, daily_dispatch, standup, material_requests, assignments, auto_assign, user_management, employees, permissions | ⏳ Pending |
 
 ---
 
-## Next task: Phase 4b Piece 89-C/2 — second batch of route migration
+## Next task: Phase 4b Piece 89-C/3 — third batch of route migration
 
-**Goal:** continue migrating remaining ~22 protected routes off `pool.query` onto `req.db.query`, batch by batch. Target batch size: 3-5 routes per PR. Once 100% of routes are on `req.db`, Stage 3 (89-E) can drop the "GUC unset = bypass" clause and RLS goes strict.
+**Goal:** continue migrating remaining ~21 protected routes off `pool.query` onto `req.db.query`, batch by batch. Target batch size: 1-3 routes per PR (smaller is easier — see lessons captured in DECISIONS Section 89-C/1-fix). Once 100% of routes are on `req.db`, Stage 3 (89-E) can drop the "GUC unset = bypass" clause and RLS goes strict.
 
-**Status entering this task** (per Section 89 in DECISIONS.md, sub-section 89-C/1):
+**Status entering this task** (per Section 89 in DECISIONS.md, sub-sections 89-C/1, 89-C/1-fix, 89-C/2):
 
-- 89-C/1 migrated `/api/bi`, `/api/project-foremen`, `/api/project-trades`. Merged to main today. Awaiting prod deploy.
-- The migration pattern is fully proven now: (a) add `tenantDb` to mount in `app.js` between `auth` and the route module, (b) drop the `pool` import in the route file, (c) replace `await pool.query(...)` with `await req.db.query(...)`, (d) keep `WHERE company_id` clauses for defense-in-depth.
+- 89-C/1 migrated `/api/bi`, `/api/project-foremen`, `/api/project-trades`. Deployed to prod May 7, 2026.
+- 89-C/1-fix corrected the tenantDb COMMIT race (override `res.end` instead of `res.on('finish')`). Deployed to prod same day.
+- 89-C/2 migrated `/api/attendance`. Merged to main, awaiting prod deploy.
+- The migration pattern is now fully proven across both small (1-handler) and medium (5-handler) routes, including helpers that need to retain pool access for fire-and-forget paths (notifyForeman pattern).
 
-**Suggested 89-C/2 candidates (low-risk, similar in shape to 89-C/1):**
+**Suggested 89-C/3 candidates (low-risk):**
 
-1. **`profile.js` + `push_tokens_route.js`** — both mounted on `/api/profile`. Profile.js uses a custom `q()` helper that delegates to `db.query` or `db.pool.query`, plus module-level caches keyed off DB schema queries. Migration requires refactoring the `q()` helper to take a `db` parameter, OR replacing every `q(...)` call directly with `req.db.query(...)`. The cache population queries (`information_schema.columns`) hit a global table and don't need RLS — but they currently use the `q()` helper which would need to flow through the migration cleanly. Pair with `push_tokens_route.js` since it shares the mount.
-2. **`attendance.js`** (9 queries) — straightforward CRUD shape, 5 handlers. Tenant-scoped (`attendance_records` is in the RLS table list).
-3. **`reports.js`** (11 queries) — read-heavy, similar shape to bi.js.
-
-A reasonable 89-C/2 batch: profile (+push_tokens) + attendance. Or profile-only as a self-contained batch given the helper refactor it needs.
+1. **`auto_assign.js`** (6 queries) — small, mounted under `/api/assignments` alongside `assignments.js`. Both share the prefix; if migrating either, both mount lines need `tenantDb`. auto_assign alone is the smallest practical batch.
+2. **`reports.js`** (11 queries) — read-heavy, similar shape to bi.js. Single-route batch.
+3. **`profile.js` + `push_tokens_route.js`** — both mounted on `/api/profile`. profile.js uses a custom `q()` helper + module-level caches that need refactoring. Mid-complexity batch, do alone.
 
 **89-D (SUPER pool wiring) and 89-E (Stage 3 graduation) come AFTER 89-C is 100% done.**
 
-### Backlog items surfaced during 89-C/1
+### Backlog items surfaced during 89-C/1 + 89-C/2
 
 - **`middleware/permissions.js` `can()` uses `pool.query` directly.** Under Stage 1 permissive RLS this works (queries against `user_permissions` return rows when GUC is unset on the pool client). **Under Stage 3 strict RLS, every authenticated request will fail** because `can()` will see 0 user_permissions rows and reject. Fix planned for 89-D or 89-E: refactor `can()` to either consume `req.db` or use a SUPER-pool fallback.
+- **`routes/attendance.js` `notifyForeman` helper** still uses pool.query (fire-and-forget after `res.json`). Stage 3 strict would block its SELECT (no GUC on the shared pool connection). Refactor pattern: prefetch the email-data fields via `req.db` BEFORE `res.json`, then fire-and-forget the SendGrid send (no DB) afterwards. Same pattern will apply to any future fire-and-forget DB-backed helper.
 - **`routes/project_trades.js`** has a redundant top-level `router.use(auth)` (auth runs twice on every request — once from `app.js` mount, once internally). Pre-existing, harmless, but should be removed in a future cleanup PR. Out of scope for 89-C batches.
 
 ---

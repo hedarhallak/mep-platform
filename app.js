@@ -279,7 +279,8 @@ app.use('/api/projects', auth, loadRouter('./routes/projects'));
 app.use('/api/suppliers', auth, tenantDb, require('./routes/suppliers'));
 app.use('/api/assignments', auth, loadRouter('./routes/assignments'));
 app.use('/api/assignments', auth, require('./routes/auto_assign'));
-app.use('/api/attendance', auth, loadRouter('./routes/attendance'));
+// Section 89-C/2: attendance migrated to req.db (RLS-enforced).
+app.use('/api/attendance', auth, tenantDb, loadRouter('./routes/attendance'));
 app.use('/api/profile', auth, loadRouter('./routes/profile'));
 app.use('/api/profile', auth, require('./routes/push_tokens_route'));
 
