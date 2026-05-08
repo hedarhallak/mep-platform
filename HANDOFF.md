@@ -1,7 +1,7 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 8, 2026 — after Phase 4 Stage 2 Piece 89-C/7 (`/api/standup`) deployed to prod. 10 of ~25 protected routes now consume req.db (~40% of Phase 4b).
+> Last updated: May 8, 2026 — after Phase 4 Stage 2 Piece 89-C/8 (`/api/projects`) deployed to prod. 11 of ~25 protected routes now consume req.db (~44% of Phase 4b).
 
 ---
 
@@ -45,8 +45,8 @@ When you receive the one-line command above:
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04) |
 | Backend | Node.js + Express + Postgres 16, pm2-managed at `/var/www/mep` |
 | Frontend | React + Vite + Tailwind, deployed to `/var/www/mep/mep-frontend/dist` |
-| Latest deployed to prod | **Phase 4 Stage 2 Piece 89-C/7 (standup.js)** — May 8, 2026 |
-| Last merged to main | Piece 89-C/7 (PR #169, squash `4150499`) — May 8, 2026 |
+| Latest deployed to prod | **Phase 4 Stage 2 Piece 89-C/8 (projects.js)** — May 8, 2026 |
+| Last merged to main | Piece 89-C/8 (PR #171, squash `479a22b`) — May 8, 2026 |
 | Active program | **Multi-Tenant Migration** (Section 85, Phases 1-8) — Phase 4 in progress |
 | Mobile app | Still on legacy username login — backend keeps backward-compat |
 
@@ -79,7 +79,7 @@ When you receive the one-line command above:
 | 89-C/5 | `/api/users` (user_management.js — see DECISIONS.md 89-C/5) | ✅ **Deployed to prod** (May 8, 2026) |
 | 89-C/6 | `/api/hub` (hub.js — see DECISIONS.md 89-C/6) | ✅ **Deployed to prod** (May 8, 2026) |
 | 89-C/7 | `/api/standup` (standup.js — see DECISIONS.md 89-C/7) | ✅ **Deployed to prod** (May 8, 2026) |
-| 89-C/8 | `/api/projects` (projects.js — see DECISIONS.md 89-C/8) | ✅ **Merged to main** — awaiting prod deploy |
+| 89-C/8 | `/api/projects` (projects.js — see DECISIONS.md 89-C/8) | ✅ **Deployed to prod** (May 8, 2026) |
 | 89-C/9..N | profile + push_tokens (paired), daily_dispatch, material_requests, assignments, employees, permissions | ⏳ Pending |
 
 ---
