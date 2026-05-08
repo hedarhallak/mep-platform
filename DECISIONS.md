@@ -9475,3 +9475,63 @@ Two manual transactions (`PUT /role/:role`, `POST /reset/:role`) flattened to `r
 
 - **Today: 58 sections.** (Section 89 extended with Piece 89-C/11: first bundled batch — assignments + permissions in one PR. Fire-and-forget pattern documented. 15 of ~25 protected routes now consume req.db — Phase 4b is ~60% done.)
 
+### Piece 89-C/12 — employees route migration (May 8, 2026)
+
+After 89-C/11 (`/api/assignments` + `/api/permissions`) deployed, 89-C/12 migrates **`routes/employees.js`** — list/get/patch with two route-specific concerns: a module-level schema cache (`module._epCols`) and SUPER_ADMIN cross-company logic. ~9 in-handler queries + 1 manual transaction (PATCH /:id).
+
+#### Why CI failed on first push
+
+The first CI run (#465) failed on a single test: `tests/integration/tenant_isolation.test.js` line 69 — "user without a company_id (e.g. orphaned account) is rejected with 403". Expected 403, got 401.
+
+This was the first time a 89-C migration touched a route that had its **own** `COMPANY_CONTEXT_REQUIRED` 403 branch. The route's check (line 35: `if (userRole !== 'SUPER_ADMIN' && !filterCompanyId) return 403 …`) became unreachable once tenantDb went in front of it — tenantDb's own missing-company guard returns **401 NO_TENANT_IN_TOKEN** before the route handler even runs.
+
+Two semantically-defensible choices:
+1. Loosen tenantDb to let orphan tokens through and let routes 403 on their own.
+2. Update the test to reflect the new authoritative cross-route contract: orphan tokens → 401 from tenantDb.
+
+Picked option 2. Reasoning: every route migrated in 89-C/1..11 already inherits the 401 behavior; making /api/employees the odd one out — keeping its 403 contract — would fragment the API surface. The route's 403 stays in the code as defense-in-depth (in case something ever bypasses tenantDb), but under the normal middleware chain it's now dead code.
+
+#### Pitfall #24 — orphan-account 401 is the cross-route contract
+
+Encoding this as the standing rule for future migrations: **when migrating a route that has its own missing-company_id 403 check, expect a pre-existing test (typically in `tenant_isolation.test.js`) to flip from 403 to 401 the moment tenantDb mounts in front of it. Update the test, keep the route-level 403 as defense-in-depth, and do not loosen tenantDb to preserve the old 403.**
+
+This is the third middleware-vs-route-handler interaction we've encoded:
+- Pitfall #22: `res.on('finish')` race → override `res.end` (89-C/1-fix)
+- Pitfall #23: `try/catch INSERT` poisons the tx → use `ON CONFLICT` (89-C/9)
+- Pitfall #24: route-level 403 for missing company_id is unreachable → tenantDb's 401 is the contract (89-C/12, this Piece)
+
+Each one was discovered the first time a route shape ran into it. Listing them up front in HANDOFF.md so future batches don't re-discover them.
+
+#### Notes specific to this route
+
+1. **`module._epCols` schema cache.** The list handler reads `information_schema.columns` once per process startup to discover which optional columns exist on `employee_profiles`. Cached on the `module` object. Migrated lookup runs on `req.db.query`; the cache is module-level, so the per-request GUC has no effect on the cached value (it's column metadata, not row data).
+
+2. **SUPER_ADMIN cross-company.** SUPER_ADMIN can pass `?company_id=X` to scope or omit it to see all. Works under Stage 2 permissive RLS. Stage 3 will need a separate mechanism (e.g. `mepuser_super` pool that bypasses RLS by role) — Phase 4c concern.
+
+3. **Manual transaction in PATCH /:id flattened.** Same pattern as 89-C/4..11.
+
+#### Files touched
+
+| File | Change |
+|---|---|
+| `routes/employees.js` | All `pool.query` → `req.db.query`; manual tx in PATCH flattened; `module._epCols` cache lookup migrated; defensive 403 retained as DiD |
+| `app.js` | `tenantDb` added to `/api/employees` mount + 89-C/12 comment |
+| `tests/integration/tenant_db_89c12.test.js` (new) | 5 tests: list scoping ×2, `/:id` 404 + 200, PATCH `/:id` 404 |
+| `tests/integration/tenant_isolation.test.js` | Orphan test: 403 → 401 NO_TENANT_IN_TOKEN with explanatory comment |
+| `HANDOFF.md` | Latest deployed → 89-C/12; progress 16/~25 (~64%) |
+| `DECISIONS.md` (this Piece) | — |
+
+#### Status — Piece 89-C/12
+
+| Item | Status |
+|---|---|
+| Code migrated | ✅ 1 file, ~9 handler queries → req.db, 1 manual tx flattened |
+| Cross-tenant integration test | ✅ 5 tests in `tenant_db_89c12.test.js` |
+| Pre-existing orphan test | ✅ Updated to expect 401 (was 403) — Pitfall #24 encoded |
+| PR opened + CI green | ✅ CI #467 green after orphan-test fix push (CI #465 failed on first push) |
+| Merged to main | ✅ Squash `c0c2c8f` (May 8, 2026) |
+| Deployed to prod | ✅ `pm2 restart mep-backend` — pid 714656 online, Sentry initialized, jobs scheduled (May 8, 2026) |
+| Next batch (89-C/13) | ⏳ Pending — candidates: profile + push_tokens (paired mount, q() helper refactor) + remaining ~9 routes |
+
+- **Today: 58 sections.** (Section 89 extended with Piece 89-C/12: employees migration + Pitfall #24 — orphan-account 401 is the cross-route contract. 16 of ~25 protected routes now consume req.db — Phase 4b is ~64% done.)
+
