@@ -1,14 +1,29 @@
-﻿'use strict';
+'use strict';
 
 /**
  * routes/assignments.js
  * Assignment request workflow:
- *   PM  â†’ POST /api/assignments/requests        (create request)
- *   ADMIN â†’ PATCH /api/assignments/requests/:id/approve
- *   ADMIN â†’ PATCH /api/assignments/requests/:id/reject
- *   ALL  â†’ GET  /api/assignments/requests        (list requests)
- *   ALL  â†’ GET  /api/assignments                 (list active assignments)
- *   ADMIN â†’ DELETE /api/assignments/:id          (cancel assignment)
+ *   PM    → POST   /api/assignments/requests        (create request)
+ *   ADMIN → PATCH  /api/assignments/requests/:id/approve
+ *   ADMIN → PATCH  /api/assignments/requests/:id/reject
+ *   ALL   → GET    /api/assignments/requests        (list requests)
+ *   ALL   → GET    /api/assignments                 (list active assignments)
+ *   ADMIN → DELETE /api/assignments/:id             (cancel assignment)
+ *
+ * Section 89-C/11: in-handler queries migrated from `pool.query` to
+ * `req.db.query`. The `tenantDb` middleware (mounted in app.js) wraps
+ * every request in a per-request transaction with `app.company_id` set
+ * on the GUC, so RLS policies enforce cross-tenant isolation
+ * automatically. Three pre-existing manual `pool.connect()/BEGIN/COMMIT`
+ * blocks (PATCH /:id/reassign, PATCH /:id/move, POST /repeat-confirm)
+ * collapsed to plain sequences of `req.db.query` calls — same pattern
+ * as 89-C/4 (auto_assign), 89-C/9 (daily_dispatch), 89-C/10
+ * (material_requests). The fire-and-forget helpers
+ * (`notifyAssignment`, `calcDistanceKm`, `audit(pool, …)`) stay on
+ * `pool` because they run **after** `res.end()` has fired, by which
+ * point tenantDb has already committed and released the connection.
+ * They each pass `companyId` and filter on `WHERE company_id = $…` so
+ * tenant scoping is preserved without RLS.
  */
 
 const express = require('express');
@@ -18,9 +33,15 @@ const { audit, ACTIONS } = require('../lib/audit');
 const { can } = require('../middleware/permissions');
 const { sendAssignmentEmployee, sendAssignmentForeman } = require('../lib/email');
 
-// â”€â”€ notifyAssignment â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── notifyAssignment ──────────────────────────────────────────────
 // Sends email to the assigned employee + foreman (same project, same trade)
-// Never throws â€” errors are logged only.
+// Never throws — errors are logged only.
+//
+// Fire-and-forget: callers invoke `notifyAssignment(pool, id, companyId)`
+// **without await**, so this runs after res.end() — i.e. after tenantDb
+// has committed and released the request-scoped connection. We must use
+// the global `pool` here, not req.db. The WHERE company_id filter
+// preserves tenant scoping.
 async function notifyAssignment(pool, assignmentRequestId, companyId) {
   try {
     // Load this assignment's details
@@ -49,7 +70,7 @@ async function notifyAssignment(pool, assignmentRequestId, companyId) {
     const teamRes = await pool.query(
       `SELECT
          ep.full_name    AS name,
- 
+
          ep.contact_email,
          ar.assignment_role,
          ar.id
@@ -69,7 +90,7 @@ async function notifyAssignment(pool, assignmentRequestId, companyId) {
     const foreman = team.find((t) => t.assignment_role === 'FOREMAN');
 
     if (a.assignment_role === 'FOREMAN') {
-      // â”€â”€ Foreman assigned â”€â”€
+      // ── Foreman assigned ──
       // 1) Send foreman their own assignment details + list of workers
       const workers = team.filter((t) => t.assignment_role !== 'FOREMAN');
       if (a.employee_email) {
@@ -89,7 +110,7 @@ async function notifyAssignment(pool, assignmentRequestId, companyId) {
           isSelfNotice: true,
         });
       }
-      // 2) Notify existing workers â€” update them with foreman contact
+      // 2) Notify existing workers — update them with foreman contact
       for (const worker of workers) {
         if (worker.contact_email) {
           await sendAssignmentEmployee({
@@ -109,7 +130,7 @@ async function notifyAssignment(pool, assignmentRequestId, companyId) {
         }
       }
     } else {
-      // â”€â”€ Worker / Journeyman assigned â”€â”€
+      // ── Worker / Journeyman assigned ──
       // 1) Send worker their assignment + foreman info if available
       if (a.employee_email) {
         await sendAssignmentEmployee({
@@ -127,7 +148,7 @@ async function notifyAssignment(pool, assignmentRequestId, companyId) {
           foremanPhone: foreman?.phone || null,
         });
       }
-      // 2) Notify foreman â€” new team member added
+      // 2) Notify foreman — new team member added
       if (foreman?.contact_email) {
         await sendAssignmentForeman({
           to: foreman.contact_email,
@@ -151,7 +172,7 @@ async function notifyAssignment(pool, assignmentRequestId, companyId) {
   }
 }
 
-// â”€â”€ Role helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Role helpers ──────────────────────────────────────────────────
 const { normalizeRole } = require('../middleware/roles');
 
 // NOTE: a local requireRoles + ADMIN_ONLY + ADMIN_PM guards were
@@ -159,7 +180,7 @@ const { normalizeRole } = require('../middleware/roles');
 // earlier permission-system refactors. Removed in Phase 11a cleanup.
 // Use can('permission_code') from middleware/permissions.js for new routes.
 
-// â”€â”€ Time slots helper (every 30 min) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Time slots helper (every 30 min) ──────────────────────────────
 function generateTimeSlots() {
   const slots = [];
   for (let h = 0; h < 24; h++) {
@@ -177,24 +198,24 @@ function generateTimeSlots() {
   return slots;
 }
 
-// â”€â”€ GET /api/assignments/timeslots â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── GET /api/assignments/timeslots ────────────────────────────────
 router.get('/timeslots', can('assignments.view'), (req, res) => {
   return res.json({ ok: true, slots: generateTimeSlots() });
 });
 
-// â”€â”€ GET /api/assignments/employees-map â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── GET /api/assignments/employees-map ────────────────────────────
 // Employees with home coords + availability for given period
 router.get('/employees-map', can('assignments.view'), async (req, res) => {
   try {
     const { start, end } = req.query;
     const companyId = req.user.company_id;
 
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       `SELECT
          ep.employee_id AS id,
          ep.full_name,
          ep.trade_code,
- 
+
          ST_X(ep.home_location::geometry) AS home_lng,
          ST_Y(ep.home_location::geometry) AS home_lat,
          CASE
@@ -228,7 +249,7 @@ router.get('/employees-map', can('assignments.view'), async (req, res) => {
 // List employees that have a profile (employee_id not null)
 router.get('/employees', can('assignments.view'), async (req, res) => {
   try {
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       `SELECT ep.employee_id AS id, ep.full_name, ep.trade_code, ep.role_code, ep.rank_code,
               au.username
        FROM public.app_users au
@@ -246,11 +267,11 @@ router.get('/employees', can('assignments.view'), async (req, res) => {
   }
 });
 
-// â”€â”€ GET /api/assignments/defaults â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── GET /api/assignments/defaults ─────────────────────────────────
 // Returns company default shift times
 router.get('/defaults', can('assignments.view'), async (req, res) => {
   try {
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       `SELECT default_shift_start, default_shift_end
        FROM public.companies WHERE company_id = $1 LIMIT 1`,
       [req.user.company_id]
@@ -267,7 +288,7 @@ router.get('/defaults', can('assignments.view'), async (req, res) => {
   }
 });
 
-// â”€â”€ GET /api/assignments/my-today â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── GET /api/assignments/my-today ─────────────────────────────────
 // Returns the current user's active assignment for today
 // Used by MaterialRequest, TaskRequest, Standup to auto-select project
 router.get('/my-today', async (req, res) => {
@@ -276,7 +297,7 @@ router.get('/my-today', async (req, res) => {
     const userId = req.user.user_id;
     const today = new Date().toISOString().split('T')[0];
 
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       `SELECT
          ar.id AS assignment_id,
          ar.project_id,
@@ -309,7 +330,7 @@ router.get('/my-today', async (req, res) => {
   }
 });
 
-// â”€â”€ GET /api/assignments/requests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── GET /api/assignments/requests ─────────────────────────────────
 router.get('/requests', can('assignments.view'), async (req, res) => {
   try {
     const { status } = req.query;
@@ -356,7 +377,7 @@ router.get('/requests', can('assignments.view'), async (req, res) => {
 
     query += ' ORDER BY ar.created_at DESC';
 
-    const { rows } = await pool.query(query, params);
+    const { rows } = await req.db.query(query, params);
     return res.json({ ok: true, requests: rows });
   } catch (err) {
     console.error('GET /assignments/requests error:', err);
@@ -364,7 +385,7 @@ router.get('/requests', can('assignments.view'), async (req, res) => {
   }
 });
 
-// â”€â”€ POST /api/assignments/requests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── POST /api/assignments/requests ────────────────────────────────
 router.post('/requests', can('assignments.create'), async (req, res) => {
   try {
     const companyId = req.user.company_id;
@@ -395,7 +416,7 @@ router.post('/requests', can('assignments.create'), async (req, res) => {
       return res.status(400).json({ ok: false, error: 'END_DATE_BEFORE_START' });
 
     // Verify project belongs to company and is ACTIVE
-    const project = await pool.query(
+    const project = await req.db.query(
       `SELECT p.id, p.project_name, ps.code AS status_code
        FROM public.projects p
        JOIN public.project_statuses ps ON ps.id = p.status_id
@@ -408,7 +429,7 @@ router.post('/requests', can('assignments.create'), async (req, res) => {
       return res.status(400).json({ ok: false, error: 'PROJECT_NOT_ACTIVE' });
 
     // Verify employee belongs to company
-    const employee = await pool.query(
+    const employee = await req.db.query(
       `SELECT ep.employee_id, ep.full_name
        FROM public.employee_profiles ep
        JOIN public.app_users au ON au.employee_id = ep.employee_id
@@ -419,7 +440,7 @@ router.post('/requests', can('assignments.create'), async (req, res) => {
       return res.status(400).json({ ok: false, error: 'EMPLOYEE_NOT_FOUND' });
 
     // Check for overlapping APPROVED assignments for this employee
-    const overlap = await pool.query(
+    const overlap = await req.db.query(
       `SELECT ar.id FROM public.assignment_requests ar
        WHERE ar.requested_for_employee_id = $1
          AND ar.company_id = $2
@@ -436,7 +457,7 @@ router.post('/requests', can('assignments.create'), async (req, res) => {
       });
 
     // Also check for PENDING requests that overlap
-    const pendingOverlap = await pool.query(
+    const pendingOverlap = await req.db.query(
       `SELECT ar.id FROM public.assignment_requests ar
        WHERE ar.requested_for_employee_id = $1
          AND ar.company_id = $2
@@ -458,7 +479,7 @@ router.post('/requests', can('assignments.create'), async (req, res) => {
     const isAdmin = autoApproveRoles.includes(normalizeRole(req.user.role));
     const status = isAdmin ? 'APPROVED' : 'PENDING';
 
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       `INSERT INTO public.assignment_requests
          (company_id, project_id, requested_for_employee_id, requested_by_user_id,
           start_date, end_date, shift_start, shift_end, decision_note, assignment_role,
@@ -488,7 +509,7 @@ router.post('/requests', can('assignments.create'), async (req, res) => {
       action: ACTIONS.ASSIGNMENT_CREATED,
       entity_type: 'assignment_request',
       entity_id: rows[0].id,
-      entity_name: `${employee.rows[0].full_name} â†’ ${project.rows[0].project_name}`,
+      entity_name: `${employee.rows[0].full_name} → ${project.rows[0].project_name}`,
       new_values: { status, start_date, end_date, shift_start, shift_end },
     });
 
@@ -515,7 +536,10 @@ router.post('/requests', can('assignments.create'), async (req, res) => {
   }
 });
 
-// â”€â”€ Mapbox Distance Helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Mapbox Distance Helper ────────────────────────────────────────
+//
+// Fire-and-forget — invoked without await after res.end() has fired.
+// Stays on global `pool` for the same reason as notifyAssignment.
 const MAPBOX_TOKEN = process.env.MAPBOX_ACCESS_TOKEN || '';
 
 async function calcDistanceKm(employeeId, projectId, companyId) {
@@ -575,13 +599,13 @@ async function calcDistanceKm(employeeId, projectId, companyId) {
   }
 }
 
-// â”€â”€ PATCH /api/assignments/requests/:id/approve â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── PATCH /api/assignments/requests/:id/approve ──────────────────
 router.patch('/requests/:id/approve', can('assignments.edit'), async (req, res) => {
   try {
     const reqId = Number(req.params.id);
     const companyId = req.user.company_id;
 
-    const existing = await pool.query(
+    const existing = await req.db.query(
       'SELECT * FROM public.assignment_requests WHERE id = $1 AND company_id = $2 LIMIT 1',
       [reqId, companyId]
     );
@@ -594,7 +618,7 @@ router.patch('/requests/:id/approve', can('assignments.edit'), async (req, res) 
     const r = existing.rows[0];
 
     // Re-check overlap before approving
-    const overlap = await pool.query(
+    const overlap = await req.db.query(
       `SELECT id FROM public.assignment_requests
        WHERE requested_for_employee_id = $1
          AND company_id = $2
@@ -607,7 +631,7 @@ router.patch('/requests/:id/approve', can('assignments.edit'), async (req, res) 
     if (overlap.rows.length > 0)
       return res.status(409).json({ ok: false, error: 'EMPLOYEE_ALREADY_ASSIGNED' });
 
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       `UPDATE public.assignment_requests
        SET status = 'APPROVED', decision_by_user_id = $1, decision_at = NOW(), updated_at = NOW()
        WHERE id = $2 AND company_id = $3
@@ -644,14 +668,14 @@ router.patch('/requests/:id/approve', can('assignments.edit'), async (req, res) 
   }
 });
 
-// â”€â”€ PATCH /api/assignments/requests/:id/reject â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── PATCH /api/assignments/requests/:id/reject ───────────────────
 router.patch('/requests/:id/reject', can('assignments.edit'), async (req, res) => {
   try {
     const reqId = Number(req.params.id);
     const companyId = req.user.company_id;
     const { reason } = req.body || {};
 
-    const existing = await pool.query(
+    const existing = await req.db.query(
       'SELECT id, status FROM public.assignment_requests WHERE id = $1 AND company_id = $2 LIMIT 1',
       [reqId, companyId]
     );
@@ -660,7 +684,7 @@ router.patch('/requests/:id/reject', can('assignments.edit'), async (req, res) =
     if (existing.rows[0].status !== 'PENDING')
       return res.status(409).json({ ok: false, error: 'REQUEST_NOT_PENDING' });
 
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       `UPDATE public.assignment_requests
        SET status = 'REJECTED', decision_by_user_id = $1, decision_at = NOW(),
            decision_note = $2, updated_at = NOW()
@@ -683,14 +707,14 @@ router.patch('/requests/:id/reject', can('assignments.edit'), async (req, res) =
   }
 });
 
-// â”€â”€ PATCH /api/assignments/requests/:id/cancel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── PATCH /api/assignments/requests/:id/cancel ───────────────────
 // PM can cancel their own PENDING request
 router.patch('/requests/:id/cancel', can('assignments.edit'), async (req, res) => {
   try {
     const reqId = Number(req.params.id);
     const companyId = req.user.company_id;
 
-    const existing = await pool.query(
+    const existing = await req.db.query(
       'SELECT * FROM public.assignment_requests WHERE id = $1 AND company_id = $2 LIMIT 1',
       [reqId, companyId]
     );
@@ -709,7 +733,7 @@ router.patch('/requests/:id/cancel', can('assignments.edit'), async (req, res) =
     if (!['PENDING', 'APPROVED'].includes(r.status))
       return res.status(409).json({ ok: false, error: 'CANNOT_CANCEL' });
 
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       `UPDATE public.assignment_requests
        SET status = 'CANCELLED', updated_at = NOW()
        WHERE id = $1 AND company_id = $2
@@ -731,8 +755,8 @@ router.patch('/requests/:id/cancel', can('assignments.edit'), async (req, res) =
   }
 });
 
-// â”€â”€ GET /api/assignments â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// Active (APPROVED) assignments â€” what's on site today/upcoming
+// ── GET /api/assignments ──────────────────────────────────────────
+// Active (APPROVED) assignments — what's on site today/upcoming
 router.get('/', can('assignments.view'), async (req, res) => {
   try {
     const { project_id, employee_id, date } = req.query;
@@ -784,7 +808,7 @@ router.get('/', can('assignments.view'), async (req, res) => {
 
     query += ' ORDER BY ar.start_date ASC, ep.full_name ASC';
 
-    const { rows } = await pool.query(query, params);
+    const { rows } = await req.db.query(query, params);
     return res.json({ ok: true, assignments: rows });
   } catch (err) {
     console.error('GET /assignments error:', err);
@@ -792,11 +816,12 @@ router.get('/', can('assignments.view'), async (req, res) => {
   }
 });
 
-// â”€â”€ PATCH /api/assignments/requests/:id/reassign â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// Atomically cancel old assignment + create new one in one transaction
-// Avoids race condition of cancel-then-create with overlap check
+// ── PATCH /api/assignments/requests/:id/reassign ─────────────────
+// Atomically cancel old assignment + create new one. Under tenantDb,
+// the request is already wrapped in one transaction — no manual BEGIN
+// needed. Pre-existing pool.connect()/BEGIN/COMMIT was flattened in
+// 89-C/11.
 router.patch('/requests/:id/reassign', can('assignments.edit'), async (req, res) => {
-  const client = await pool.connect();
   try {
     const reqId = Number(req.params.id);
     const companyId = req.user.company_id;
@@ -805,25 +830,21 @@ router.patch('/requests/:id/reassign', can('assignments.edit'), async (req, res)
     if (!new_employee_id)
       return res.status(400).json({ ok: false, error: 'NEW_EMPLOYEE_REQUIRED' });
 
-    await client.query('BEGIN');
-
     // Get original assignment
-    const orig = await client.query(
+    const orig = await req.db.query(
       `SELECT * FROM public.assignment_requests WHERE id = $1 AND company_id = $2 LIMIT 1`,
       [reqId, companyId]
     );
     if (!orig.rows.length) {
-      await client.query('ROLLBACK');
       return res.status(404).json({ ok: false, error: 'REQUEST_NOT_FOUND' });
     }
     const r = orig.rows[0];
     if (r.status !== 'APPROVED') {
-      await client.query('ROLLBACK');
       return res.status(409).json({ ok: false, error: 'CANNOT_REASSIGN' });
     }
 
     // Verify new employee belongs to company
-    const emp = await client.query(
+    const emp = await req.db.query(
       `SELECT ep.employee_id, ep.full_name
        FROM public.employee_profiles ep
        JOIN public.app_users au ON au.employee_id = ep.employee_id
@@ -831,18 +852,17 @@ router.patch('/requests/:id/reassign', can('assignments.edit'), async (req, res)
       [new_employee_id, companyId]
     );
     if (!emp.rows.length) {
-      await client.query('ROLLBACK');
       return res.status(400).json({ ok: false, error: 'EMPLOYEE_NOT_FOUND' });
     }
 
     // Cancel old assignment
-    await client.query(
+    await req.db.query(
       `UPDATE public.assignment_requests SET status = 'CANCELLED', updated_at = NOW() WHERE id = $1`,
       [reqId]
     );
 
     // Check overlap for new employee (excluding the row we just cancelled)
-    const overlap = await client.query(
+    const overlap = await req.db.query(
       `SELECT id FROM public.assignment_requests
        WHERE requested_for_employee_id = $1
          AND company_id = $2
@@ -852,16 +872,19 @@ router.patch('/requests/:id/reassign', can('assignments.edit'), async (req, res)
       [new_employee_id, companyId, r.end_date, r.start_date]
     );
     if (overlap.rows.length > 0) {
-      await client.query('ROLLBACK');
-      return res.status(409).json({
+      // Throw so tenantDb rolls back the cancellation we just did.
+      const err = new Error('EMPLOYEE_ALREADY_ASSIGNED');
+      err.statusCode = 409;
+      err.body = {
         ok: false,
         error: 'EMPLOYEE_ALREADY_ASSIGNED',
         message: `${emp.rows[0].full_name} is already assigned to another project during this period.`,
-      });
+      };
+      throw err;
     }
 
     // Create new assignment
-    const { rows } = await client.query(
+    const { rows } = await req.db.query(
       `INSERT INTO public.assignment_requests
          (company_id, project_id, requested_for_employee_id, requested_by_user_id,
           start_date, end_date, shift_start, shift_end, decision_note,
@@ -883,25 +906,24 @@ router.patch('/requests/:id/reassign', can('assignments.edit'), async (req, res)
       ]
     );
 
-    await client.query('COMMIT');
-
-    // Send notification to new employee + foreman
+    // Send notification to new employee + foreman (fire-and-forget after
+    // tenantDb commits)
     notifyAssignment(pool, rows[0].id, companyId);
 
     return res.json({ ok: true, request: rows[0] });
   } catch (err) {
-    await client.query('ROLLBACK');
+    if (err.statusCode && err.body) {
+      return res.status(err.statusCode).json(err.body);
+    }
     console.error('PATCH reassign error:', err);
     return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
-  } finally {
-    client.release();
   }
 });
 
-// â”€â”€ PATCH /api/assignments/requests/:id/move â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// Move an employee to a different project (same dates + shift)
+// ── PATCH /api/assignments/requests/:id/move ─────────────────────
+// Move an employee to a different project (same dates + shift).
+// 89-C/11: manual transaction flattened to req.db sequence.
 router.patch('/requests/:id/move', can('assignments.edit'), async (req, res) => {
-  const client = await pool.connect();
   try {
     const reqId = Number(req.params.id);
     const companyId = req.user.company_id;
@@ -909,10 +931,8 @@ router.patch('/requests/:id/move', can('assignments.edit'), async (req, res) => 
 
     if (!new_project_id) return res.status(400).json({ ok: false, error: 'NEW_PROJECT_REQUIRED' });
 
-    await client.query('BEGIN');
-
     // Get original assignment
-    const orig = await client.query(
+    const orig = await req.db.query(
       `SELECT ar.*, ep.full_name AS employee_name
        FROM public.assignment_requests ar
        JOIN public.employee_profiles ep ON ep.employee_id = ar.requested_for_employee_id
@@ -920,12 +940,10 @@ router.patch('/requests/:id/move', can('assignments.edit'), async (req, res) => 
       [reqId, companyId]
     );
     if (!orig.rows.length) {
-      await client.query('ROLLBACK');
       return res.status(404).json({ ok: false, error: 'REQUEST_NOT_FOUND' });
     }
     const r = orig.rows[0];
     if (r.status !== 'APPROVED') {
-      await client.query('ROLLBACK');
       return res.status(409).json({
         ok: false,
         error: 'CANNOT_MOVE',
@@ -938,7 +956,6 @@ router.patch('/requests/:id/move', can('assignments.edit'), async (req, res) => 
     // guard dead code. Coerce both sides to Number for a correct compare.
     // See DECISIONS.md Section 41 for the original Bug 9 pin.
     if (Number(r.project_id) === Number(new_project_id)) {
-      await client.query('ROLLBACK');
       return res.status(400).json({
         ok: false,
         error: 'SAME_PROJECT',
@@ -947,7 +964,7 @@ router.patch('/requests/:id/move', can('assignments.edit'), async (req, res) => 
     }
 
     // Verify new project belongs to company and is ACTIVE
-    const proj = await client.query(
+    const proj = await req.db.query(
       `SELECT p.id, p.project_name, p.project_code, ps.code AS status_code
        FROM public.projects p
        JOIN public.project_statuses ps ON ps.id = p.status_id
@@ -955,16 +972,14 @@ router.patch('/requests/:id/move', can('assignments.edit'), async (req, res) => 
       [new_project_id, companyId]
     );
     if (!proj.rows.length) {
-      await client.query('ROLLBACK');
       return res.status(404).json({ ok: false, error: 'PROJECT_NOT_FOUND' });
     }
     if (proj.rows[0].status_code !== 'ACTIVE') {
-      await client.query('ROLLBACK');
       return res.status(400).json({ ok: false, error: 'PROJECT_NOT_ACTIVE' });
     }
 
     // Check employee not already assigned to new project during same period
-    const overlap = await client.query(
+    const overlap = await req.db.query(
       `SELECT id FROM public.assignment_requests
        WHERE requested_for_employee_id = $1
          AND project_id = $2
@@ -976,7 +991,6 @@ router.patch('/requests/:id/move', can('assignments.edit'), async (req, res) => 
       [r.requested_for_employee_id, new_project_id, companyId, reqId, r.end_date, r.start_date]
     );
     if (overlap.rows.length > 0) {
-      await client.query('ROLLBACK');
       return res.status(409).json({
         ok: false,
         error: 'EMPLOYEE_ALREADY_ON_PROJECT',
@@ -985,15 +999,13 @@ router.patch('/requests/:id/move', can('assignments.edit'), async (req, res) => 
     }
 
     // Update project_id in-place (no need to cancel + recreate)
-    const { rows } = await client.query(
+    const { rows } = await req.db.query(
       `UPDATE public.assignment_requests
        SET project_id = $1, updated_at = NOW()
        WHERE id = $2 AND company_id = $3
        RETURNING *`,
       [new_project_id, reqId, companyId]
     );
-
-    await client.query('COMMIT');
 
     await audit(pool, req, {
       action: ACTIONS.ASSIGNMENT_UPDATED,
@@ -1007,20 +1019,17 @@ router.patch('/requests/:id/move', can('assignments.edit'), async (req, res) => 
       },
     });
 
-    // Notify employee of new project assignment
+    // Notify employee of new project assignment (fire-and-forget)
     notifyAssignment(pool, reqId, companyId);
 
     return res.json({ ok: true, request: rows[0] });
   } catch (err) {
-    await client.query('ROLLBACK');
     console.error('PATCH /move error:', err);
     return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
-  } finally {
-    client.release();
   }
 });
 
-// â”€â”€ POST /api/assignments/repeat-preview â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── POST /api/assignments/repeat-preview ──────────────────────────
 // Shows what would be repeated from today to target_date
 router.post('/repeat-preview', can('assignments.create'), async (req, res) => {
   try {
@@ -1031,7 +1040,7 @@ router.post('/repeat-preview', can('assignments.create'), async (req, res) => {
     const today = new Date().toISOString().split('T')[0];
 
     // Get today's APPROVED assignments
-    const { rows: todayRows } = await pool.query(
+    const { rows: todayRows } = await req.db.query(
       `SELECT
          ar.id, ar.requested_for_employee_id AS employee_id,
          ar.project_id, ar.shift_start, ar.shift_end, ar.decision_note AS notes, ar.assignment_role,
@@ -1057,7 +1066,7 @@ router.post('/repeat-preview', can('assignments.create'), async (req, res) => {
       });
 
     // Check which employees already have an assignment on target_date
-    const { rows: busyRows } = await pool.query(
+    const { rows: busyRows } = await req.db.query(
       `SELECT DISTINCT requested_for_employee_id
        FROM public.assignment_requests
        WHERE company_id = $1
@@ -1078,10 +1087,10 @@ router.post('/repeat-preview', can('assignments.create'), async (req, res) => {
   }
 });
 
-// â”€â”€ POST /api/assignments/repeat-confirm â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// Creates assignments for target_date based on today's assignments (skips already assigned)
+// ── POST /api/assignments/repeat-confirm ──────────────────────────
+// Creates assignments for target_date based on today's assignments (skips already assigned).
+// 89-C/11: manual transaction flattened to req.db sequence.
 router.post('/repeat-confirm', can('assignments.create'), async (req, res) => {
-  const client = await pool.connect();
   try {
     const companyId = req.user.company_id;
     const { target_date } = req.body || {};
@@ -1090,7 +1099,7 @@ router.post('/repeat-confirm', can('assignments.create'), async (req, res) => {
     const today = new Date().toISOString().split('T')[0];
 
     // Get today's assignments
-    const { rows: todayRows } = await pool.query(
+    const { rows: todayRows } = await req.db.query(
       `SELECT
          ar.requested_for_employee_id AS employee_id,
          ar.project_id, ar.shift_start, ar.shift_end, ar.decision_note AS notes, ar.assignment_role
@@ -1104,7 +1113,7 @@ router.post('/repeat-confirm', can('assignments.create'), async (req, res) => {
     if (!todayRows.length) return res.json({ ok: true, created: 0, skipped: 0 });
 
     // Get already assigned on target_date
-    const { rows: busyRows } = await pool.query(
+    const { rows: busyRows } = await req.db.query(
       `SELECT DISTINCT requested_for_employee_id
        FROM public.assignment_requests
        WHERE company_id = $1
@@ -1114,8 +1123,6 @@ router.post('/repeat-confirm', can('assignments.create'), async (req, res) => {
       [companyId, target_date]
     );
     const busyIds = new Set(busyRows.map((r) => r.requested_for_employee_id));
-
-    await client.query('BEGIN');
 
     let created = 0;
     let skipped = 0;
@@ -1127,7 +1134,7 @@ router.post('/repeat-confirm', can('assignments.create'), async (req, res) => {
         continue;
       }
 
-      const { rows } = await client.query(
+      const { rows } = await req.db.query(
         `INSERT INTO public.assignment_requests
            (company_id, project_id, requested_for_employee_id, requested_by_user_id,
             start_date, end_date, shift_start, shift_end, decision_note, assignment_role,
@@ -1152,26 +1159,19 @@ router.post('/repeat-confirm', can('assignments.create'), async (req, res) => {
       created++;
     }
 
-    await client.query('COMMIT');
-
-    // Send notifications (fire and forget)
+    // Send notifications (fire and forget — runs after tenantDb commits)
     for (const id of createdIds) {
       notifyAssignment(pool, id, companyId);
     }
 
     return res.json({ ok: true, created, skipped });
   } catch (err) {
-    await client.query('ROLLBACK');
     console.error('POST /repeat-confirm error:', err);
     return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
-  } finally {
-    client.release();
   }
 });
 
-module.exports = router;
-
-// â”€â”€ GET /api/assignments/suggest/:project_id â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── GET /api/assignments/suggest/:project_id ─────────────────────
 // Smart suggestions: available employees ranked by distance + compatibility
 router.get('/suggest/:project_id', can('assignments.view'), async (req, res) => {
   try {
@@ -1184,7 +1184,7 @@ router.get('/suggest/:project_id', can('assignments.view'), async (req, res) => 
       return res.status(400).json({ ok: false, error: 'DATES_REQUIRED' });
 
     // Get project details + coords
-    const projRes = await pool.query(
+    const projRes = await req.db.query(
       `SELECT p.id, p.project_name, p.project_code, p.trade_type_id,
               p.site_lat, p.site_lng,
               tt.code AS trade_code
@@ -1199,13 +1199,13 @@ router.get('/suggest/:project_id', can('assignments.view'), async (req, res) => 
     const project = projRes.rows[0];
 
     // Get all employees with profiles for this company
-    const empRes = await pool.query(
+    const empRes = await req.db.query(
       `SELECT
          ep.employee_id AS id,
          ep.full_name,
          ep.trade_code,
          ep.role_code,
- 
+
          ep.home_address,
          ST_X(ep.home_location::geometry) AS home_lng,
          ST_Y(ep.home_location::geometry) AS home_lat,
@@ -1233,7 +1233,7 @@ router.get('/suggest/:project_id', can('assignments.view'), async (req, res) => 
     );
 
     // Get employees already assigned during this period
-    const busyRes = await pool.query(
+    const busyRes = await req.db.query(
       `SELECT DISTINCT requested_for_employee_id
        FROM public.assignment_requests
        WHERE company_id = $1
@@ -1244,8 +1244,8 @@ router.get('/suggest/:project_id', can('assignments.view'), async (req, res) => 
     );
     const busyIds = new Set(busyRes.rows.map((r) => r.requested_for_employee_id));
 
-    // Get team frequency â€” who worked together on same projects before
-    const freqRes = await pool.query(
+    // Get team frequency — who worked together on same projects before
+    const freqRes = await req.db.query(
       `SELECT ar.requested_for_employee_id AS employee_id,
               COUNT(*) AS times_together
        FROM public.assignment_requests ar
@@ -1301,3 +1301,5 @@ router.get('/suggest/:project_id', can('assignments.view'), async (req, res) => 
     return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
 });
+
+module.exports = router;

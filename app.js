@@ -278,7 +278,8 @@ app.use('/api/projects', auth, tenantDb, loadRouter('./routes/projects'));
 // Other routes still use pool.query + permissive RLS until they migrate
 // in subsequent 89-C batches.
 app.use('/api/suppliers', auth, tenantDb, require('./routes/suppliers'));
-app.use('/api/assignments', auth, loadRouter('./routes/assignments'));
+// Section 89-C/11: assignments migrated to req.db (RLS-enforced).
+app.use('/api/assignments', auth, tenantDb, loadRouter('./routes/assignments'));
 // Section 89-C/4: auto_assign migrated to req.db (RLS-enforced).
 // NOTE: assignments.js (mounted directly above) still uses pool.query —
 // it'll be migrated in a separate batch since it has 30 queries + complex
@@ -327,7 +328,9 @@ app.use('/api/admin/users', auth, loadRouter('./routes/admin_users'));
 // ── RBAC Permissions ──────────────────────────────────────────
 // Section 89-C/5: user_management migrated to req.db (RLS-enforced).
 app.use('/api/users', auth, tenantDb, require('./routes/user_management'));
-app.use('/api/permissions', auth, require('./routes/permissions'));
+// Section 89-C/11: permissions migrated to req.db (light touch — most tables
+// are global system config; only /audit is tenant-scoped).
+app.use('/api/permissions', auth, tenantDb, require('./routes/permissions'));
 
 // ── Hub (Tasks & Blueprints) ──────────────────────────────────
 // Section 89-C/6: hub migrated to req.db (RLS-enforced).
