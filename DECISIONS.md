@@ -9251,9 +9251,9 @@ After 89-C/5 (`/api/users`) deployed, 89-C/6 migrates **`routes/hub.js`** — ta
 |---|---|
 | Code migrated | ✅ 1 file, 11 handler queries → req.db; manual transaction kept on pool with TODO |
 | Cross-tenant integration test | ✅ 3 new tests in `tenant_db_89c6.test.js` |
-| PR opened + CI green | ⏳ Pending |
-| Merged to main | ⏳ Pending |
-| Deployed to prod | ⏳ Pending |
+| PR opened + CI green | ✅ PR #167 (CI #441, 5m 24s) |
+| Merged to main | ✅ May 8, 2026 (squash `8d434e3`) |
+| Deployed to prod | ✅ May 8, 2026 — `git pull` (already up-to-date via webhook), `pm2 restart`, startup logs clean (↺667 pid 707621) |
 | Next batch (89-C/7) | ⏳ Pending — candidates: profile + push_tokens (paired mount, q() helper refactor), standup.js (15 queries), daily_dispatch.js (19 queries), material_requests.js (26 queries) |
 
 - **Today: 58 sections.** (Section 89 extended again with Piece 89-C/6: hub migration. 9 of ~25 protected routes now consume req.db — Phase 4b is ~36% done.)
