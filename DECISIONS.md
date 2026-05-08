@@ -9228,9 +9228,9 @@ After 89-C/4 (`/api/assignments/auto-*`) deployed, 89-C/5 migrates **`routes/use
 |---|---|
 | Code migrated | ✅ 1 file, 9 handler queries → req.db, pool import dropped |
 | Cross-tenant integration test | ✅ 3 new tests in `tenant_db_89c5.test.js` |
-| PR opened + CI green | ⏳ Pending |
-| Merged to main | ⏳ Pending |
-| Deployed to prod | ⏳ Pending |
+| PR opened + CI green | ✅ PR #165 (CI #436, 5m 35s) |
+| Merged to main | ✅ May 8, 2026 |
+| Deployed to prod | ✅ May 8, 2026 — `git pull` (already up-to-date via webhook), `pm2 restart mep-backend`, startup logs clean (↺660 pid 706821) |
 | Next batch (89-C/6) | ⏳ Pending — candidates: hub.js (11 queries), profile + push_tokens (paired mount, q() helper refactor), daily_dispatch.js (19 queries), standup.js (15 queries) |
 
 - **Today: 58 sections.** (Section 89 extended again with Piece 89-C/5: user_management migration. 8 of ~25 protected routes now consume req.db — Phase 4b is ~32% done.)
