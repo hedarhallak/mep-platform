@@ -9,11 +9,18 @@
  * PATCH  /api/super/ccq-rates/:id      — update rate row
  * DELETE /api/super/ccq-rates/:id      — delete rate row
  * GET    /api/super/ccq-rates/expiring — rates expiring within 60 days
+ *
+ * Section 89-C/15: migrated from `pool.query` to `req.db.query`. The
+ * `tenantDb` middleware routes SUPER_ADMIN through `superPool`
+ * (BYPASSRLS), so cross-tenant reads/writes work naturally without
+ * having to disable RLS per-query. The `ccq_travel_rates` table is
+ * global config (no company_id), so RLS doesn't apply to it under
+ * any role — the migration is purely for consistency with the rest
+ * of 89-C.
  */
 
 const express = require('express');
 const router = express.Router();
-const { pool } = require('../db');
 
 const TRADES = ['GENERAL', 'ELECTRICAL', 'PLUMBING', 'HVAC', 'CARPENTRY', 'ELEVATOR_TECH'];
 const SECTORS = ['IC', 'I', 'RESIDENTIAL'];
@@ -21,7 +28,7 @@ const SECTORS = ['IC', 'I', 'RESIDENTIAL'];
 // ── GET /api/super/ccq-rates ─────────────────────────────────
 router.get('/', async (req, res) => {
   try {
-    const { rows } = await pool.query(`
+    const { rows } = await req.db.query(`
       SELECT * FROM public.ccq_travel_rates
       ORDER BY trade_code, sector, min_km, effective_from
     `);
@@ -35,7 +42,7 @@ router.get('/', async (req, res) => {
 // ── GET /api/super/ccq-rates/expiring ────────────────────────
 router.get('/expiring', async (req, res) => {
   try {
-    const { rows } = await pool.query(`
+    const { rows } = await req.db.query(`
       SELECT * FROM public.ccq_travel_rates
       WHERE effective_to < CURRENT_DATE + INTERVAL '60 days'
         AND effective_to >= CURRENT_DATE
@@ -67,7 +74,7 @@ router.post('/', async (req, res) => {
     if (effective_from > effective_to)
       return res.status(400).json({ ok: false, error: 'INVALID_DATE_RANGE' });
 
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       `
       INSERT INTO public.ccq_travel_rates
         (trade_code, sector, min_km, rate_cad, tax_form, effective_from, effective_to, notes, created_by)
@@ -127,7 +134,7 @@ router.patch('/:id', async (req, res) => {
     if (!fields.length) return res.status(400).json({ ok: false, error: 'NOTHING_TO_UPDATE' });
 
     params.push(id);
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       `
       UPDATE public.ccq_travel_rates
       SET ${fields.join(', ')}, updated_at = NOW()
@@ -149,7 +156,7 @@ router.patch('/:id', async (req, res) => {
 // ── DELETE /api/super/ccq-rates/:id ──────────────────────────
 router.delete('/:id', async (req, res) => {
   try {
-    const { rowCount } = await pool.query(`DELETE FROM public.ccq_travel_rates WHERE id = $1`, [
+    const { rowCount } = await req.db.query(`DELETE FROM public.ccq_travel_rates WHERE id = $1`, [
       Number(req.params.id),
     ]);
     if (!rowCount) return res.status(404).json({ ok: false, error: 'NOT_FOUND' });
