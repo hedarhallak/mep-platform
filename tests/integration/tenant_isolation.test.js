@@ -66,13 +66,20 @@ describeIfDb('Tenant isolation — GET /api/employees', () => {
     expect(returnedIds).not.toContain(empA.id);
   });
 
-  test('user without a company_id (e.g. orphaned account) is rejected with 403', async () => {
+  test('user without a company_id (e.g. orphaned account) is rejected by tenantDb with 401', async () => {
+    // Section 89-C/12: when employees.js was migrated onto tenantDb, the
+    // middleware took over the orphan-account guard. tenantDb returns
+    // 401 NO_TENANT_IN_TOKEN before the route's own 403
+    // COMPANY_CONTEXT_REQUIRED branch can fire — that route-level check
+    // is now defense-in-depth, dead code under the normal middleware
+    // chain. The 401 here is the authoritative cross-route contract for
+    // orphaned tokens.
     const orphan = await seedUser({ company_id: null, role: 'COMPANY_ADMIN' });
     const { token } = await loginUser(orphan);
     const res = await request(app).get('/api/employees').set('Authorization', `Bearer ${token}`);
 
-    expect(res.statusCode).toBe(403);
-    expect(res.body).toMatchObject({ ok: false, error: 'COMPANY_CONTEXT_REQUIRED' });
+    expect(res.statusCode).toBe(401);
+    expect(res.body).toMatchObject({ ok: false, error: 'NO_TENANT_IN_TOKEN' });
   });
 });
 
