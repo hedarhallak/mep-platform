@@ -18,9 +18,17 @@
 
 const express = require('express');
 const router = express.Router();
-const { pool } = require('../db');
 const { audit, ACTIONS } = require('../lib/audit');
 const { can } = require('../middleware/permissions');
+
+// Section 89-C/8 (Phase 4 Stage 2): in-handler queries migrated to req.db
+// (RLS-enforced via middleware/tenant_db). The `pool` import was removed.
+// audit(pool, req, ...) calls switched to audit(req.db, req, ...) so the
+// audit_logs INSERT flows through the same per-request transaction
+// (forward-compatible with Stage 3 strict). No manual transactions, no
+// fire-and-forget helpers — clean migration.
+//
+// WHERE company_id clauses are kept for defense-in-depth.
 
 // ── Helpers ──────────────────────────────────────────────
 
@@ -36,11 +44,11 @@ router.get('/meta', can('projects.view'), async (req, res) => {
     const companyId = req.user.company_id;
 
     const [tradeTypes, statuses, clients] = await Promise.all([
-      pool.query(
+      req.db.query(
         'SELECT id, code, name FROM public.trade_types WHERE is_active = true ORDER BY name'
       ),
-      pool.query('SELECT id, code, name, is_final FROM public.project_statuses ORDER BY id'),
-      pool.query(
+      req.db.query('SELECT id, code, name, is_final FROM public.project_statuses ORDER BY id'),
+      req.db.query(
         'SELECT id, client_code, client_name, phone, email FROM public.clients WHERE company_id = $1 AND is_active = true ORDER BY client_name',
         [companyId]
       ),
@@ -61,7 +69,7 @@ router.get('/meta', can('projects.view'), async (req, res) => {
 // ── GET /api/projects/clients ─────────────────────────────
 router.get('/clients', can('projects.view'), async (req, res) => {
   try {
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       `SELECT id, client_code, client_name, client_type, phone, email, address, is_active, created_at
        FROM public.clients
        WHERE company_id = $1
@@ -85,13 +93,14 @@ router.post('/clients', can('projects.create'), async (req, res) => {
       return res.status(400).json({ ok: false, error: 'CLIENT_NAME_REQUIRED' });
 
     // Generate client_code: CLI-XXXX
-    const countRes = await pool.query('SELECT COUNT(*) FROM public.clients WHERE company_id = $1', [
-      companyId,
-    ]);
+    const countRes = await req.db.query(
+      'SELECT COUNT(*) FROM public.clients WHERE company_id = $1',
+      [companyId]
+    );
     const seq = parseInt(countRes.rows[0].count) + 1;
     const client_code = 'CLI-' + String(seq).padStart(4, '0');
 
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       `INSERT INTO public.clients
          (client_code, client_name, client_type, phone, email, address, company_id, is_active, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, true, NOW())
@@ -161,7 +170,7 @@ router.get('/', can('projects.view'), async (req, res) => {
     query +=
       ' GROUP BY p.id, tt.code, tt.name, ps.code, ps.name, ps.is_final, c.client_name ORDER BY p.created_at DESC';
 
-    const { rows } = await pool.query(query, params);
+    const { rows } = await req.db.query(query, params);
     return res.json({ ok: true, projects: rows });
   } catch (err) {
     console.error('GET /api/projects error:', err);
@@ -172,7 +181,7 @@ router.get('/', can('projects.view'), async (req, res) => {
 // ── GET /api/projects/map ─────────────────────────────────
 router.get('/map', can('projects.view'), async (req, res) => {
   try {
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       `SELECT p.id, p.project_code, p.project_name, p.site_address, p.site_lat, p.site_lng,
               tt.name AS trade_name, ps.name AS status_name
        FROM public.projects p
@@ -198,7 +207,7 @@ router.get('/:id', can('projects.view'), async (req, res) => {
 
     if (!projectId) return res.status(400).json({ ok: false, error: 'INVALID_ID' });
 
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       `SELECT
          p.*,
          tt.code AS trade_code, tt.name AS trade_name,
@@ -241,7 +250,7 @@ router.post('/', can('projects.create'), async (req, res) => {
     if (!trade_type_id) return res.status(400).json({ ok: false, error: 'TRADE_TYPE_REQUIRED' });
 
     // Validate trade_type belongs to platform
-    const trade = await pool.query(
+    const trade = await req.db.query(
       'SELECT id FROM public.trade_types WHERE id = $1 AND is_active = true LIMIT 1',
       [trade_type_id]
     );
@@ -250,7 +259,7 @@ router.post('/', can('projects.create'), async (req, res) => {
     // Default status = PLANNED (id:1) if not provided
     const resolvedStatusId = status_id || 1;
 
-    const status = await pool.query(
+    const status = await req.db.query(
       'SELECT id FROM public.project_statuses WHERE id = $1 LIMIT 1',
       [resolvedStatusId]
     );
@@ -258,7 +267,7 @@ router.post('/', can('projects.create'), async (req, res) => {
 
     // Validate client belongs to this company
     if (client_id) {
-      const client = await pool.query(
+      const client = await req.db.query(
         'SELECT id FROM public.clients WHERE id = $1 AND company_id = $2 LIMIT 1',
         [client_id, companyId]
       );
@@ -267,7 +276,7 @@ router.post('/', can('projects.create'), async (req, res) => {
 
     // Generate project_code: PRJ-XXXX
     // Use MAX to avoid duplicate codes when projects are deleted
-    const seqRes = await pool.query(
+    const seqRes = await req.db.query(
       `SELECT COALESCE(MAX(CAST(SUBSTRING(project_code FROM 5) AS INTEGER)), 0) + 1 AS next_seq
        FROM public.projects
        WHERE company_id = $1 AND project_code ~ '^PRJ-[0-9]+$'`,
@@ -276,7 +285,7 @@ router.post('/', can('projects.create'), async (req, res) => {
     const seq = seqRes.rows[0].next_seq;
     const project_code = 'PRJ-' + String(seq).padStart(4, '0');
 
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       `INSERT INTO public.projects
          (project_code, project_name, trade_type_id, status_id, site_address,
           start_date, end_date, client_id, company_id, ccq_sector, created_at)
@@ -298,7 +307,7 @@ router.post('/', can('projects.create'), async (req, res) => {
       ]
     );
 
-    await audit(pool, req, {
+    await audit(req.db, req, {
       action: ACTIONS.PROJECT_CREATED,
       entity_type: 'project',
       entity_id: rows[0].id,
@@ -322,7 +331,7 @@ router.patch('/:id', can('projects.edit'), async (req, res) => {
     if (!projectId) return res.status(400).json({ ok: false, error: 'INVALID_ID' });
 
     // Verify ownership
-    const exists = await pool.query(
+    const exists = await req.db.query(
       'SELECT id FROM public.projects WHERE id = $1 AND company_id = $2 LIMIT 1',
       [projectId, companyId]
     );
@@ -340,7 +349,7 @@ router.patch('/:id', can('projects.edit'), async (req, res) => {
       client_id,
     } = req.body || {};
 
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       `UPDATE public.projects SET
          project_name  = COALESCE($1, project_name),
          trade_type_id = COALESCE($2, trade_type_id),
@@ -372,7 +381,7 @@ router.patch('/:id', can('projects.edit'), async (req, res) => {
       ]
     );
 
-    await audit(pool, req, {
+    await audit(req.db, req, {
       action: ACTIONS.PROJECT_UPDATED,
       entity_type: 'project',
       entity_id: rows[0].id,
@@ -396,14 +405,14 @@ router.delete('/:id', can('projects.delete'), async (req, res) => {
     if (!projectId) return res.status(400).json({ ok: false, error: 'INVALID_ID' });
 
     // Verify ownership
-    const exists = await pool.query(
+    const exists = await req.db.query(
       'SELECT id FROM public.projects WHERE id = $1 AND company_id = $2 LIMIT 1',
       [projectId, companyId]
     );
     if (!exists.rows.length) return res.status(404).json({ ok: false, error: 'PROJECT_NOT_FOUND' });
 
     // Block delete if project has assignments
-    const assigned = await pool.query(
+    const assigned = await req.db.query(
       'SELECT COUNT(*) FROM public.assignment_requests WHERE project_id = $1',
       [projectId]
     );
@@ -416,16 +425,16 @@ router.delete('/:id', can('projects.delete'), async (req, res) => {
       });
 
     // Fetch name before delete for audit
-    const toDelete = await pool.query('SELECT project_name FROM public.projects WHERE id = $1', [
+    const toDelete = await req.db.query('SELECT project_name FROM public.projects WHERE id = $1', [
       projectId,
     ]);
 
-    await pool.query('DELETE FROM public.projects WHERE id = $1 AND company_id = $2', [
+    await req.db.query('DELETE FROM public.projects WHERE id = $1 AND company_id = $2', [
       projectId,
       companyId,
     ]);
 
-    await audit(pool, req, {
+    await audit(req.db, req, {
       action: ACTIONS.PROJECT_DELETED,
       entity_type: 'project',
       entity_id: projectId,
