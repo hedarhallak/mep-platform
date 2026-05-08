@@ -9373,12 +9373,12 @@ For routes that *legitimately* need to recover from a query error inside a trans
 | Item | Status |
 |---|---|
 | Code migrated | ✅ 1 file, 19 handler queries → req.db, defensive import + assertPool dropped |
-| `/prepare` ON CONFLICT refactor | ✅ ships in same PR as the migration |
+| `/prepare` ON CONFLICT refactor | ✅ shipped in same PR as the migration |
 | Cross-tenant integration test | ✅ 2 new tests in `tenant_db_89c9.test.js` |
-| Pre-existing `daily_dispatch.test.js` "/prepare twice → 409" | ✅ should pass after the ON CONFLICT refactor |
-| PR opened + CI green | ⏳ Pending re-run after force-push |
-| Merged to main | ⏳ Pending |
-| Deployed to prod | ⏳ Pending |
+| Pre-existing `daily_dispatch.test.js` "/prepare twice → 409" | ✅ green after ON CONFLICT refactor |
+| PR opened + CI green | ✅ PR #173, CI #454 (5m 20s) green after force-push |
+| Merged to main | ✅ Squash `4703343` (May 8, 2026) |
+| Deployed to prod | ✅ `pm2 restart mep-backend` — pid 710619 online, Sentry initialized, jobs scheduled (May 8, 2026) |
 | Next batch (89-C/10) | ⏳ Pending — candidates: profile + push_tokens (paired mount, q() helper refactor), material_requests.js (26 queries), assignments.js (30 queries), employees.js (caching tricks), permissions.js (mostly global tables) |
 
 - **Today: 58 sections.** (Section 89 extended again with Piece 89-C/9: daily_dispatch migration + the `try/catch INSERT` lesson. 12 of ~25 protected routes now consume req.db — Phase 4b is ~48% done.)
