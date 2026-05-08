@@ -11,6 +11,18 @@
  * POST   /api/super/companies/:id/suspend  — suspend company
  * POST   /api/super/companies/:id/activate — activate company
  * GET    /api/super/stats                  — platform statistics
+ *
+ * Section 89-C/15: migrated from `pool.query` to `req.db.query`. The
+ * `tenantDb` middleware routes SUPER_ADMIN through `superPool`
+ * (BYPASSRLS), so cross-company reads (the entire purpose of this
+ * route file) work naturally without per-query bypass. The
+ * pre-existing manual `pool.connect()/BEGIN/COMMIT` block in
+ * POST /companies flattened to a `req.db.query` sequence — same
+ * pattern as 89-C/4..14.
+ *
+ * `audit(pool, req, …)` calls remain on `pool` because audit is
+ * fire-and-forget after the response (89-C/11 fire-and-forget rule).
+ * The `pool` import is retained solely for those audit calls.
  */
 
 const express = require('express');
@@ -32,10 +44,10 @@ function generateCompanyCode(name) {
   return `${prefix}${suffix}`;
 }
 
-async function uniqueCompanyCode(pool, name) {
+async function uniqueCompanyCode(req, name) {
   for (let i = 0; i < 10; i++) {
     const code = generateCompanyCode(name);
-    const exists = await pool.query(
+    const exists = await req.db.query(
       'SELECT 1 FROM public.companies WHERE company_code = $1 LIMIT 1',
       [code]
     );
@@ -51,7 +63,7 @@ async function uniqueCompanyCode(pool, name) {
  */
 router.get('/stats', async (req, res) => {
   try {
-    const { rows } = await pool.query(`
+    const { rows } = await req.db.query(`
       SELECT
         (SELECT COUNT(*) FROM public.companies)                                        AS total_companies,
         (SELECT COUNT(*) FROM public.companies WHERE status = 'ACTIVE')               AS active_companies,
@@ -73,7 +85,7 @@ router.get('/stats', async (req, res) => {
  */
 router.get('/companies', async (req, res) => {
   try {
-    const { rows } = await pool.query(`
+    const { rows } = await req.db.query(`
       SELECT
         c.company_id   AS id,
         c.name,
@@ -109,13 +121,13 @@ router.get('/companies/:id', async (req, res) => {
     const companyId = Number(req.params.id);
     if (!companyId) return res.status(400).json({ ok: false, error: 'INVALID_ID' });
 
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       'SELECT * FROM public.companies WHERE company_id = $1 LIMIT 1',
       [companyId]
     );
     if (!rows.length) return res.status(404).json({ ok: false, error: 'COMPANY_NOT_FOUND' });
 
-    const admins = await pool.query(
+    const admins = await req.db.query(
       `SELECT id, username, role, is_active, created_at
        FROM public.app_users
        WHERE company_id = $1 AND role = 'ADMIN'
@@ -133,9 +145,10 @@ router.get('/companies/:id', async (req, res) => {
 /**
  * POST /api/super/companies
  * Body: name, admin_username, admin_pin, plan?, admin_email?, phone?
+ *
+ * 89-C/15: manual transaction flattened — tenantDb wraps the request.
  */
 router.post('/companies', async (req, res) => {
-  const client = await pool.connect();
   try {
     const { name, admin_username, admin_pin, plan, admin_email, phone } = req.body || {};
 
@@ -159,16 +172,14 @@ router.post('/companies', async (req, res) => {
     const companyName = String(name).trim();
     const adminUsername = String(admin_username).trim().toLowerCase();
 
-    const userExists = await pool.query(
+    const userExists = await req.db.query(
       'SELECT 1 FROM public.app_users WHERE username = $1 LIMIT 1',
       [adminUsername]
     );
     if (userExists.rows.length) return res.status(409).json({ ok: false, error: 'USERNAME_TAKEN' });
 
-    await client.query('BEGIN');
-
-    const companyCode = await uniqueCompanyCode(pool, companyName);
-    const companyIns = await client.query(
+    const companyCode = await uniqueCompanyCode(req, companyName);
+    const companyIns = await req.db.query(
       `INSERT INTO public.companies
          (name, company_code, status, plan, admin_email, phone, created_at, updated_at)
        VALUES ($1, $2, 'ACTIVE', $3, $4, $5, NOW(), NOW())
@@ -184,7 +195,7 @@ router.post('/companies', async (req, res) => {
       admin_email && String(admin_email).trim()
         ? String(admin_email).trim().toLowerCase()
         : `${adminUsername}@${companyCode}.constrai.local`;
-    const userIns = await client.query(
+    const userIns = await req.db.query(
       `INSERT INTO public.app_users
          (username, email, pin_hash, company_id, role, is_active, must_change_pin, is_temp_pin)
        VALUES ($1, $2, $3, $4, 'ADMIN', true, true, true)
@@ -193,9 +204,12 @@ router.post('/companies', async (req, res) => {
     );
     const adminUser = userIns.rows[0];
 
-    await client.query('COMMIT');
-
-    // Send welcome email if admin_email provided (non-blocking)
+    // Send welcome email if admin_email provided (non-blocking).
+    // Note: this happens before res.json (and therefore before tenantDb's
+    // COMMIT), but sendAdminWelcome catches its own errors and returns
+    // false rather than throwing, so a SendGrid failure does NOT roll
+    // back the company creation. Same semantic as the pre-migration
+    // "after-COMMIT" placement.
     let emailSent = false;
     if (admin_email) {
       emailSent = await sendAdminWelcome({
@@ -236,11 +250,8 @@ router.post('/companies', async (req, res) => {
       },
     });
   } catch (err) {
-    await client.query('ROLLBACK');
     console.error('POST /super/companies error:', err);
     return res.status(500).json({ ok: false, error: 'SERVER_ERROR', message: err.message });
-  } finally {
-    client.release();
   }
 });
 
@@ -262,7 +273,7 @@ router.patch('/companies/:id', async (req, res) => {
     if (plan && !allowedPlans.includes(String(plan).toUpperCase()))
       return res.status(400).json({ ok: false, error: 'INVALID_PLAN', allowed: allowedPlans });
 
-    const upd = await pool.query(
+    const upd = await req.db.query(
       `UPDATE public.companies SET
          name        = COALESCE($1, name),
          plan        = COALESCE($2, plan),
@@ -299,7 +310,7 @@ router.post('/companies/:id/suspend', async (req, res) => {
     const companyId = Number(req.params.id);
     if (!companyId) return res.status(400).json({ ok: false, error: 'INVALID_ID' });
 
-    const upd = await pool.query(
+    const upd = await req.db.query(
       `UPDATE public.companies SET status = 'SUSPENDED', updated_at = NOW()
        WHERE company_id = $1 RETURNING company_id, name, status`,
       [companyId]
@@ -328,7 +339,7 @@ router.post('/companies/:id/activate', async (req, res) => {
     const companyId = Number(req.params.id);
     if (!companyId) return res.status(400).json({ ok: false, error: 'INVALID_ID' });
 
-    const upd = await pool.query(
+    const upd = await req.db.query(
       `UPDATE public.companies SET status = 'ACTIVE', updated_at = NOW()
        WHERE company_id = $1 RETURNING company_id, name, status`,
       [companyId]
