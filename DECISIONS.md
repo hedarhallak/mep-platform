@@ -9535,3 +9535,58 @@ Each one was discovered the first time a route shape ran into it. Listing them u
 
 - **Today: 58 sections.** (Section 89 extended with Piece 89-C/12: employees migration + Pitfall #24 — orphan-account 401 is the cross-route contract. 16 of ~25 protected routes now consume req.db — Phase 4b is ~64% done.)
 
+### Piece 89-C/13 — profile + push_tokens, paired (May 8, 2026)
+
+After 89-C/12 (`/api/employees`) deployed, 89-C/13 migrates **`routes/profile.js` + `routes/push_tokens_route.js`** as a paired bundle. Both routes share the `/api/profile` mount prefix in app.js — migrating one without the other would mean half the prefix runs through tenantDb and half doesn't, which is needlessly confusing for any future debugger. The bundled-PR rule from 89-C/11 applies again: 1 CI run, 1 deploy, per-route commits preserved (13a + 13b + 13c-test).
+
+#### Why the `q()` helper refactor
+
+`profile.js` was the only migrated route built around a graceful-fallback query helper:
+
+```js
+async function q(text, params) {
+  if (db && typeof db.query === 'function') return db.query(text, params);
+  if (db && db.pool && typeof db.pool.query === 'function') return db.pool.query(text, params);
+  if (db && db.client && typeof db.client.query === 'function') return db.client.query(text, params);
+  throw new Error('DB_QUERY_NOT_FOUND: expected db.query or db.pool.query');
+}
+```
+
+This was a pre-tenantDb pattern designed to "find any DB connection" regardless of how `db.js` was exported. Under tenantDb, every authenticated request has a live `req.db` client with the GUC set, so the fallback chain is no longer useful. The migration refactored the signature from `q(text, params)` to `q(req, text, params)` and made it a thin wrapper over `req.db.query`. All 6 call sites in the file were updated.
+
+The two schema-introspection helpers (`getHomeLocationExpr`, `detectEmployeeProfileColumns`) each cache their result on a module-level variable. Migrated to accept `req` so the lookup runs on `req.db.query`. The cache itself is tenant-agnostic (column metadata doesn't change per tenant), so per-request GUC is irrelevant to the cached value — the first request that triggers the lookup just happens to run it on its own request-scoped client.
+
+#### Per-user, not per-tenant
+
+`/api/profile` and `/api/profile/push-token` are unusual relative to the rest of 89-C: their queries are keyed off `req.user.employee_id` or `req.user.user_id` from the JWT, **with no `WHERE company_id = $1` filter**. Cross-tenant isolation here is enforced by the JWT itself (a different user's token would have a different employee_id/user_id). The migration is therefore mostly about **consistency**: every authenticated route should run through tenantDb so the GUC is always set, even if the specific queries don't depend on it.
+
+The integration tests reflect this — they're smoke tests verifying the migration didn't break basic functionality, not cross-tenant isolation tests like the rest of 89-C.
+
+#### Pitfall #23 audit
+
+`POST /api/profile` has an outer `try/catch` around an `INSERT ... ON CONFLICT (employee_id) DO UPDATE` that catches `code === '23505'` for **non-employee_id** UNIQUE violations (specifically `employee_profiles_phone_digits_uniq`). Under tenantDb, that 23505 will abort the transaction; the catch returns `400 PHONE_ALREADY_IN_USE` correctly, but tenantDb's COMMIT will then fail and log a warning. Functionally correct (the user gets the right response), just noisy. A SAVEPOINT-based fix would clean this up; deferred to Phase 4c when we audit all `try/catch` patterns systematically. Logged here so the next reader of the prod logs doesn't chase a phantom bug.
+
+#### Files touched
+
+| File | Change |
+|---|---|
+| `routes/profile.js` | `q(text, params)` → `q(req, text, params)` using `req.db.query`; 6 call sites updated; `getHomeLocationExpr(req, …)` and `detectEmployeeProfileColumns(req)` accept `req`; `db` import dropped |
+| `routes/push_tokens_route.js` | Single `pool.query` → `req.db.query`; `pool` import dropped |
+| `app.js` | `tenantDb` added to BOTH `/api/profile` mount lines (profile + push_tokens_route) + 89-C/13 comment |
+| `tests/integration/tenant_db_89c13.test.js` (new) | 5 smoke tests: dropdowns, /me admin path, push-token insert + upsert + 400 |
+| `HANDOFF.md` | Latest deployed → 89-C/13; progress 18/~25 (~72%) |
+| `DECISIONS.md` (this Piece) | — |
+
+#### Status — Piece 89-C/13
+
+| Item | Status |
+|---|---|
+| Code migrated | ✅ 2 routes, q() helper refactored, 7 in-handler queries → req.db |
+| Smoke tests | ✅ 5 tests in `tenant_db_89c13.test.js` |
+| PR opened + CI green | ✅ CI #471 (5m 49s) green on first push |
+| Merged to main | ✅ Squash `9979495` (May 8, 2026) |
+| Deployed to prod | ✅ `pm2 restart mep-backend` — pid 715168 online, Sentry initialized, jobs scheduled (May 8, 2026) |
+| Next batch (89-C/14) | ⏳ Pending — remaining ~7 routes; enumerate at start of next session |
+
+- **Today: 58 sections.** (Section 89 extended with Piece 89-C/13: profile + push_tokens paired bundle, q() helper refactor pattern documented. 18 of ~25 protected routes now consume req.db — Phase 4b is ~72% done.)
+
