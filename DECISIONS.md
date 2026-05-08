@@ -9178,5 +9178,37 @@ No new Stage 3 backlog from this batch. The `ccqZoneFromDB` helper is permanent 
 | Deployed to prod | ✅ May 8, 2026 — `git pull` (already up-to-date via webhook), `pm2 restart mep-backend`, startup logs clean (↺646 pid 705171) |
 | Next batch (89-C/4) | ⏳ Pending — candidates: auto_assign.js (6 queries, mounted alongside assignments.js), profile + push_tokens (paired mount, q() helper refactor), or hub.js (11 queries) |
 
-- **Today: 58 sections.** (Section 89 extended again with Piece 89-C/3: reports migration. 6 of ~25 protected routes now consume req.db — Phase 4b is ~24% done.)
+### Piece 89-C/4 — auto_assign route migration (May 8, 2026, morning continued)
+
+After 89-C/3 (`/api/reports`) deployed, we kept the single-route batch cadence and migrated **`routes/auto_assign.js`** — which is mounted alongside `routes/assignments.js` on the same `/api/assignments` prefix.
+
+### What this batch shipped
+
+| File | Change |
+|---|---|
+| `app.js` | `/api/assignments` mount line for `auto_assign` gains `tenantDb` between `auth` and the route module. The sibling mount for `assignments.js` (above it) still uses pool — it'll be migrated in a separate batch since assignments.js has 30 queries + complex transactional logic. Express resolves the two routers in mount order; auto_assign only sees requests for paths assignments.js doesn't define (`/auto-suggest`, `/auto-confirm`). |
+| `routes/auto_assign.js` | (a) 6 in-handler `await pool.query(...)` → `await req.db.query(...)`. (b) The `pool.connect() + client.query('BEGIN/COMMIT/ROLLBACK')` manual-transaction block inside `/auto-confirm` was kept as-is — it needs all-or-nothing atomicity across multiple INSERTs into `assignment_requests`, and migrating it would require either a route-error → middleware-rollback signal or a `SET LOCAL app.company_id` inside the manual transaction (Stage 3 prep TODO). (c) File-header comment block explains the partial migration + Stage 3 TODO with two refactor options. |
+| `tests/integration/tenant_db_89c4.test.js` | NEW — 3 tests: 2 cross-tenant assertions for `/auto-suggest` (companyA vs companyB) + 1 smoke test for the validation path (missing `target_date` returns 400). `/auto-confirm` is NOT exercised here — its INSERTs go through the kept manual transaction; it'll get a dedicated test alongside the Stage 3 refactor. |
+
+### Why this batch was chosen
+
+- 6 queries, smallest remaining single-route batch, similar shape to other routes already migrated.
+- Surfaced the "manual transaction with `pool.connect()` inside a route" pattern, which we've now documented + flagged for Stage 3. Assignments.js (the bigger route mounted alongside) likely has a similar pattern that we'll handle then.
+
+### Stage 3 prep notes added
+
+- `routes/auto_assign.js` `/auto-confirm` manual transaction needs Stage 3 work — either drop it and rely on middleware (requires error → rollback signal) or `SET LOCAL` inside the manual BEGIN. **Plan B is the smaller delta.**
+
+### Status — Piece 89-C/4
+
+| Item | Status |
+|---|---|
+| Code migrated | ✅ 1 file, 6 handler queries → req.db; manual transaction kept on pool with TODO |
+| Cross-tenant integration test | ✅ 3 new tests in `tenant_db_89c4.test.js` |
+| PR opened + CI green | ⏳ Pending |
+| Merged to main | ⏳ Pending |
+| Deployed to prod | ⏳ Pending |
+| Next batch (89-C/5) | ⏳ Pending — candidates: profile + push_tokens (paired mount, q() helper refactor), hub.js (11 queries), user_management.js (9 queries) |
+
+- **Today: 58 sections.** (Section 89 extended again with Piece 89-C/4: auto_assign migration. 7 of ~25 protected routes now consume req.db — Phase 4b is ~28% done.)
 
