@@ -265,8 +265,9 @@ app.use('/api/onboarding', require('./routes/onboarding')); // public — no aut
 app.use('/activate', loadRouter('./routes/activate')); // public — activation link
 
 // ── Super admin ───────────────────────────────────────────────
-app.use('/api/super', auth, superAdmin, loadRouter('./routes/super_admin'));
-app.use('/api/super/ccq-rates', auth, superAdmin, require('./routes/ccq_rates'));
+// Section 89-C/15: SUPER_ADMIN routes migrated to req.db (BYPASSRLS via superPool).
+app.use('/api/super', auth, superAdmin, tenantDb, loadRouter('./routes/super_admin'));
+app.use('/api/super/ccq-rates', auth, superAdmin, tenantDb, require('./routes/ccq_rates'));
 
 // ── Core business routes ──────────────────────────────────────
 // Section 89-C/12: employees migrated to req.db (RLS-enforced).
