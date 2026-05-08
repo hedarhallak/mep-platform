@@ -303,7 +303,8 @@ app.use('/api/project-foremen', auth, tenantDb, require('./routes/project_foreme
 // flow is routes/material_requests.js (the merge-and-send-PO workflow).
 // File kept on disk for one sprint as a safety net; delete after no
 // incidents.
-app.use('/api/materials', auth, require('./routes/material_requests'));
+// Section 89-C/10: material_requests migrated to req.db (RLS-enforced).
+app.use('/api/materials', auth, tenantDb, require('./routes/material_requests'));
 
 // ── Business Intelligence ─────────────────────────────────────
 // Section 89-C/1: bi route migrated to req.db.
