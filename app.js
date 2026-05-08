@@ -291,8 +291,9 @@ app.use('/api/assignments', auth, tenantDb, loadRouter('./routes/assignments'));
 app.use('/api/assignments', auth, tenantDb, require('./routes/auto_assign'));
 // Section 89-C/2: attendance migrated to req.db (RLS-enforced).
 app.use('/api/attendance', auth, tenantDb, loadRouter('./routes/attendance'));
-app.use('/api/profile', auth, loadRouter('./routes/profile'));
-app.use('/api/profile', auth, require('./routes/push_tokens_route'));
+// Section 89-C/13: profile + push_tokens migrated to req.db (RLS-enforced).
+app.use('/api/profile', auth, tenantDb, loadRouter('./routes/profile'));
+app.use('/api/profile', auth, tenantDb, require('./routes/push_tokens_route'));
 
 // ── Project structure ─────────────────────────────────────────
 // Section 89-C/1: project_trades + project_foremen migrated to req.db.
