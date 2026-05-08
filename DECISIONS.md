@@ -9420,3 +9420,58 @@ Material request creation does not use a `try { INSERT } catch { SELECT existing
 
 - **Today: 58 sections.** (Section 89 extended again with Piece 89-C/10: material_requests migration + manual-tx flattening pattern encoded. 13 of ~25 protected routes now consume req.db — Phase 4b is ~52% done.)
 
+### Piece 89-C/11 — assignments + permissions, bundled (May 8, 2026)
+
+After 89-C/10 (`/api/materials`) deployed, 89-C/11 became the **first bundled batch** under the 4.5 batching rule: two routes (`assignments.js` + `permissions.js`) shipped in one PR with per-route commits, one CI run, one prod deploy. The combination was chosen because permissions.js is a near-no-op (mostly global tables, RLS doesn't apply except for `/audit`), so bundling it onto a substantive migration costs ~no extra review surface.
+
+#### Route A — `routes/assignments.js` (~30 queries, 3 manual tx, fire-and-forget helpers)
+
+The largest single-route migration of the batch. Three things made it more involved than recent batches:
+
+1. **Three manual `pool.connect()/BEGIN/COMMIT` blocks** (PATCH `/:id/reassign`, PATCH `/:id/move`, POST `/repeat-confirm`) — flattened to plain `req.db.query` sequences per the standard rule.
+2. **Fire-and-forget helpers stay on `pool`.** `notifyAssignment(pool, id, companyId)`, `calcDistanceKm(...)`, the distance-update `.then()` chain, and `audit(pool, req, …)` are invoked **without await** so they run after `res.end()` has fired. By that point tenantDb has committed and released the request-scoped connection — `req.db` no longer points at a usable client. They each pass `companyId` and filter on `WHERE company_id = $…`, so tenant scoping is preserved without RLS. This is now the documented pattern for any post-response background work.
+3. **`/:id/reassign` rollback semantics.** Under the old manual tx, an overlap detected after the first cancel-update raised a 409 by issuing `ROLLBACK` mid-handler. Under tenantDb the equivalent is to **throw a structured error** (`{ statusCode: 409, body: { … } }`) so middleware rolls back the whole request. Encoded inline; future migrations should follow.
+
+Side fix: `module.exports` was at line 1172 in the legacy file with `/suggest/:project_id` defined after it — same orphan pattern as material_requests.js. Moved to end of file.
+
+#### Route B — `routes/permissions.js` (light touch)
+
+`public.permissions` and `public.role_permissions` are global system config (no `company_id` column), so RLS doesn't enforce anything new on them. Only `GET /audit` is tenant-scoped (it filters on `audit_logs.company_id`). We migrated anyway for consistency — every authenticated route should run through tenantDb so the GUC is always set, even if the specific queries don't depend on it.
+
+Two manual transactions (`PUT /role/:role`, `POST /reset/:role`) flattened to `req.db` sequences.
+
+#### Bundling outcome
+
+| Metric | Single PR per route (old) | Bundle (new) |
+|---|---|---|
+| CI runs | 2 × 5m | 1 × 5m 37s |
+| Deploys to prod | 2 | 1 |
+| Round-trips Hedar↔Claude | ~10 | ~5 |
+| Failure isolation | per PR | per commit (preserved via 11a/11b/11c) |
+
+**Conclusion:** the bundling rule from Section 4.5 finally got applied to this migration program. Future batches with at least one near-no-op route (e.g. global-table routes) should default to bundling.
+
+#### Files touched
+
+| File | Change |
+|---|---|
+| `routes/assignments.js` | ~30 `pool.query` → `req.db.query`; 3 manual tx flattened; `notifyAssignment`/`calcDistanceKm`/audit kept on pool with explanatory comments; `module.exports` moved to end |
+| `routes/permissions.js` | All `pool.query` → `req.db.query`; 2 manual tx flattened; `pool` import dropped |
+| `app.js` | `tenantDb` added to `/api/assignments` + `/api/permissions` mount lines, with 89-C/11 comments |
+| `tests/integration/tenant_db_89c11.test.js` (new) | 5 tests: 4 for assignments (list scoping ×2, `/:id/cancel` cross-tenant 404, active list scoping), 1 for `/permissions/audit` |
+| `HANDOFF.md` | Latest deployed → 89-C/11; progress 15/~25 (~60%) |
+| `DECISIONS.md` (this Piece) | — |
+
+#### Status — Piece 89-C/11
+
+| Item | Status |
+|---|---|
+| Code migrated | ✅ 2 routes, ~40 in-handler queries → req.db, 5 manual tx flattened |
+| Cross-tenant integration test | ✅ 5 tests in `tenant_db_89c11.test.js` |
+| PR opened + CI green | ✅ CI #462 (5m 37s) green on first push |
+| Merged to main | ✅ Squash `418cb75` (May 8, 2026) |
+| Deployed to prod | ✅ `pm2 restart mep-backend` — pid 713390 online, Sentry initialized, jobs scheduled (May 8, 2026) |
+| Next batch (89-C/12) | ⏳ Pending — candidates: employees.js (caching trick + SUPER_ADMIN cross-company logic), profile + push_tokens (paired mount, q() helper refactor) |
+
+- **Today: 58 sections.** (Section 89 extended with Piece 89-C/11: first bundled batch — assignments + permissions in one PR. Fire-and-forget pattern documented. 15 of ~25 protected routes now consume req.db — Phase 4b is ~60% done.)
+
