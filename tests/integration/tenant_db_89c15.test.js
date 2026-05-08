@@ -54,7 +54,17 @@ describeIfDb('tenantDb middleware — Section 89-C/15 batch (SUPER_ADMIN routes)
 
     // SUPER_ADMIN typically has no company_id. seedUser supports
     // company_id: null for this case.
-    superUser = await seedUser({ company_id: null, role: 'SUPER_ADMIN' });
+    //
+    // Pre-existing gotcha (DECISIONS.md, CI #73): routes/auth.js#isValidPin
+    // enforces a stricter format for SUPER_ADMIN — length 8-32 instead of
+    // 4-8. The default seedUser PIN '1234' fails SA login with 400
+    // INVALID_PIN_FORMAT. We seed an 11-char PIN here; loginUser() reads
+    // user.pin if no explicit override is provided.
+    superUser = await seedUser({
+      company_id: null,
+      role: 'SUPER_ADMIN',
+      pin: 'sa-pin-1234',
+    });
     regularAdmin = await seedUser({ company_id: companyA.company_id, role: 'COMPANY_ADMIN' });
   });
 
