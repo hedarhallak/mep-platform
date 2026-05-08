@@ -1,30 +1,47 @@
-﻿'use strict';
+'use strict';
+
+/**
+ * routes/permissions.js — RBAC matrix admin endpoints.
+ *
+ * Section 89-C/11: in-handler queries migrated from `pool.query` to
+ * `req.db.query`. This is a **light-touch migration**: most of the
+ * tables used here (`public.permissions`, `public.role_permissions`)
+ * are GLOBAL system config, not tenant-scoped, so RLS doesn't actually
+ * enforce anything new on them. The only company-scoped query is
+ * `GET /audit`, which already filters on `WHERE al.company_id = $1`.
+ * We migrate anyway for consistency — every authenticated route should
+ * eventually run through tenantDb so the GUC is always set, even if
+ * the specific queries don't depend on it.
+ *
+ * The two pre-existing manual `pool.connect()/BEGIN/COMMIT` blocks
+ * (PUT /role/:role, POST /reset/:role) collapsed to plain sequences of
+ * `req.db.query` calls — same pattern as 89-C/4, /9, /10.
+ */
 
 const express = require('express');
 const router = express.Router();
-const { pool } = require('../db');
 const { can, logAudit } = require('../middleware/permissions');
 
-// Splits 'employees.view' â†’ { module: 'employees', action: 'view' }
+// Splits 'employees.view' → { module: 'employees', action: 'view' }
 function parseCode(code) {
   const dot = code.indexOf('.');
   if (dot === -1) return { module: code, action: 'view' };
   return { module: code.slice(0, dot), action: code.slice(dot + 1) };
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────
 // GET /api/permissions/matrix
 // Returns { roles[], modules[], matrix: { role: { module: { action: bool } } } }
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────
 router.get('/matrix', can('settings.permissions'), async (req, res) => {
   try {
     // All permission codes with their groups
-    const allPerms = await pool.query(`
+    const allPerms = await req.db.query(`
       SELECT code, grp FROM public.permissions ORDER BY grp, code
     `);
 
     // All role_permissions rows
-    const rolePerms = await pool.query(`
+    const rolePerms = await req.db.query(`
       SELECT role, permission_code FROM public.role_permissions ORDER BY role
     `);
 
@@ -54,10 +71,10 @@ router.get('/matrix', can('settings.permissions'), async (req, res) => {
   }
 });
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────
 // GET /api/permissions/my-permissions
 // Returns current user's permissions as { module: { action: true } }
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────
 router.get('/my-permissions', async (req, res) => {
   try {
     if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
@@ -65,7 +82,7 @@ router.get('/my-permissions', async (req, res) => {
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
     res.set('Pragma', 'no-cache');
 
-    const result = await pool.query(
+    const result = await req.db.query(
       `
       SELECT permission_code
       FROM public.role_permissions
@@ -84,7 +101,7 @@ router.get('/my-permissions', async (req, res) => {
 
     // SUPER_ADMIN gets everything
     if (req.user.role === 'SUPER_ADMIN') {
-      const allPerms = await pool.query(`SELECT code FROM public.permissions`);
+      const allPerms = await req.db.query(`SELECT code FROM public.permissions`);
       for (const row of allPerms.rows) {
         const { module, action } = parseCode(row.code);
         if (!permissions[module]) permissions[module] = {};
@@ -99,10 +116,10 @@ router.get('/my-permissions', async (req, res) => {
   }
 });
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────
 // GET /api/permissions/role/:role
 // Returns all permission_codes for a role
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────
 router.get('/role/:role', can('settings.permissions'), async (req, res) => {
   try {
     const { role } = req.params;
@@ -123,7 +140,7 @@ router.get('/role/:role', can('settings.permissions'), async (req, res) => {
     ];
     if (!validRoles.includes(role)) return res.status(400).json({ error: 'Invalid role' });
 
-    const result = await pool.query(
+    const result = await req.db.query(
       `
       SELECT rp.permission_code, p.description, p.grp
       FROM public.role_permissions rp
@@ -141,13 +158,14 @@ router.get('/role/:role', can('settings.permissions'), async (req, res) => {
   }
 });
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────
 // PUT /api/permissions/role/:role
 // Body: { permissions: [{ module, action, allowed }] }
-// Converts module+action back to permission_code for DB ops
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Converts module+action back to permission_code for DB ops.
+// 89-C/11: manual transaction flattened — tenantDb wraps the whole
+// request in one transaction already.
+// ─────────────────────────────────────────────────────────────────
 router.put('/role/:role', can('settings.permissions'), async (req, res) => {
-  const client = await pool.connect();
   try {
     const { role } = req.params;
     const { permissions } = req.body;
@@ -194,10 +212,8 @@ router.put('/role/:role', can('settings.permissions'), async (req, res) => {
         .json({ error: 'Cannot edit permissions for a role equal or higher than yours' });
     }
 
-    await client.query('BEGIN');
-
     // Delete all current permissions for this role
-    await client.query(`DELETE FROM public.role_permissions WHERE role = $1`, [role]);
+    await req.db.query(`DELETE FROM public.role_permissions WHERE role = $1`, [role]);
 
     // Re-insert only the allowed ones
     for (const perm of permissions) {
@@ -206,7 +222,7 @@ router.put('/role/:role', can('settings.permissions'), async (req, res) => {
       const code = `${module}.${action}`;
 
       // Only insert if the code exists in the permissions master table
-      await client.query(
+      await req.db.query(
         `
         INSERT INTO public.role_permissions (role, permission_code)
         SELECT $1, $2 WHERE EXISTS (SELECT 1 FROM public.permissions WHERE code = $2)
@@ -218,25 +234,20 @@ router.put('/role/:role', can('settings.permissions'), async (req, res) => {
 
     logAudit(req, 'UPDATE_PERMISSIONS', 'role_permissions', null, null, { role });
 
-    await client.query('COMMIT');
-
     res.json({ success: true, message: `Permissions updated for role: ${role}` });
   } catch (err) {
-    await client.query('ROLLBACK');
     console.error('PUT /permissions/role/:role error:', err);
     res.status(500).json({ error: 'Failed to update permissions' });
-  } finally {
-    client.release();
   }
 });
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────
 // POST /api/permissions/reset/:role
-// Resets role to seeded defaults by re-running seed logic
-// Only SUPER_ADMIN / IT_ADMIN
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Resets role to seeded defaults by re-running seed logic.
+// Only SUPER_ADMIN / IT_ADMIN.
+// 89-C/11: manual transaction flattened.
+// ─────────────────────────────────────────────────────────────────
 router.post('/reset/:role', can('settings.permissions'), async (req, res) => {
-  const client = await pool.connect();
   try {
     if (!['SUPER_ADMIN', 'IT_ADMIN'].includes(req.user.role)) {
       return res.status(403).json({ error: 'Only SUPER_ADMIN or IT_ADMIN can reset roles' });
@@ -453,16 +464,15 @@ router.post('/reset/:role', can('settings.permissions'), async (req, res) => {
       ],
     };
 
-    await client.query('BEGIN');
-    await client.query(`DELETE FROM public.role_permissions WHERE role = $1`, [role]);
+    await req.db.query(`DELETE FROM public.role_permissions WHERE role = $1`, [role]);
 
     const codes =
       role === 'SUPER_ADMIN'
-        ? (await client.query(`SELECT code FROM public.permissions`)).rows.map((r) => r.code)
+        ? (await req.db.query(`SELECT code FROM public.permissions`)).rows.map((r) => r.code)
         : defaults[role] || [];
 
     for (const code of codes) {
-      await client.query(
+      await req.db.query(
         `
         INSERT INTO public.role_permissions (role, permission_code) VALUES ($1, $2) ON CONFLICT DO NOTHING
       `,
@@ -472,24 +482,20 @@ router.post('/reset/:role', can('settings.permissions'), async (req, res) => {
 
     logAudit(req, 'RESET_PERMISSIONS', 'role_permissions', null, null, { role });
 
-    await client.query('COMMIT');
-
     res.json({ success: true, message: `Role "${role}" reset to defaults` });
   } catch (err) {
-    await client.query('ROLLBACK');
     console.error('POST /permissions/reset/:role error:', err);
     res.status(500).json({ error: 'Failed to reset permissions' });
-  } finally {
-    client.release();
   }
 });
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────
 // GET /api/permissions/audit
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Tenant-scoped — only this endpoint actually benefits from RLS.
+// ─────────────────────────────────────────────────────────────────
 router.get('/audit', can('settings.permissions'), async (req, res) => {
   try {
-    const result = await pool.query(
+    const result = await req.db.query(
       `
       SELECT
         al.id,
