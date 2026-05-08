@@ -9590,3 +9590,54 @@ The integration tests reflect this — they're smoke tests verifying the migrati
 
 - **Today: 58 sections.** (Section 89 extended with Piece 89-C/13: profile + push_tokens paired bundle, q() helper refactor pattern documented. 18 of ~25 protected routes now consume req.db — Phase 4b is ~72% done.)
 
+### Piece 89-C/14 — invite_employee + admin_users, bundled (May 8, 2026)
+
+After 89-C/13 (`/api/profile` + push-token) deployed, an audit of `app.js` enumerated the remaining unmigrated authenticated routes:
+
+| Route | Status entering 89-C/14 |
+|---|---|
+| `/api/super` (super_admin.js) | ⏳ Pending — SUPER_ADMIN-only, special handling |
+| `/api/super/ccq-rates` (ccq_rates.js) | ⏳ Pending — SUPER_ADMIN-only, special handling |
+| `/api/invite-employee` (invite_employee.js) | ⏳ Pending — manual tx |
+| `/api/admin/users` (admin_users.js) | ⏳ Pending — manual tx, email-inside-tx |
+
+89-C/14 picks the two non-SUPER routes (`/api/invite-employee` + `/api/admin/users`) as a bundle — both have manual transactions, both are tenant-scoped via `req.user.company_id`, similar shape. The two SUPER_ADMIN routes are deferred to 89-C/15 because they need different review (the superPool path in tenantDb already handles them, but they may have role-bypass assumptions worth confirming before flipping the mount).
+
+#### Email-inside-tx semantics — preserved differently in each route
+
+The two routes treat email failures differently. The migration preserves both behaviors deliberately:
+
+**`invite_employee.js`** — `sendEmail` is called AFTER the last DB write. `sendEmail` returns `false` on failure but doesn't throw (see `lib/email.js`), so the response is 201 with `email_sent: false` and the row persists. Pre-migration was the same.
+
+**`admin_users.js`** — `sgMail.send` is called INSIDE the transaction, BEFORE the trailing UPDATE-sent-at writes. If SendGrid throws (network error, invalid API key, rate limit), the throw propagates to the route's outer catch, which returns 500. Under the original manual-tx version, the catch ran `client.query('ROLLBACK')` explicitly. Under tenantDb, the throw poisons the transaction; tenantDb's `res.end` override calls COMMIT which fails because the tx is aborted; tenantDb's `'close'` listener then fires ROLLBACK. **Net effect: no user row, no invite row, 500 response.** This is the desired behavior — don't create a user account we couldn't email an activation link to.
+
+This is the first migration where we kept email-inside-tx semantics intentionally rather than punting to a "post-COMMIT side-effect" pattern. Logging here so future readers know it's deliberate.
+
+#### Pitfall #23 audit
+
+No `try { INSERT } catch { handle dup }` patterns in either route. Email-already-registered is checked with a SELECT-first (`emailExists.rows.length` check at line 158 of original `invite_employee.js`; `exists.rows.length` at line 162 of original `admin_users.js`). Both safe under tenantDb.
+
+#### Files touched
+
+| File | Change |
+|---|---|
+| `routes/invite_employee.js` | All `client.query` / `pool.query` → `req.db.query`; manual tx flattened; `pool` import dropped |
+| `routes/admin_users.js` | All `client.query` / `pool.query` → `req.db.query`; `ensureUniqueUsername(req, base)` accepts `req`; manual tx flattened; `pool` import dropped |
+| `app.js` | `tenantDb` added to `/api/invite-employee` + `/api/admin/users` mount lines + 89-C/14 comments |
+| `tests/integration/tenant_db_89c14.test.js` (new) | 4 tests: invite-employee validation, cross-tenant duplicate-email isolation, same-company duplicate → 409, admin/users smoke (env check) |
+| `HANDOFF.md` | Latest deployed → 89-C/14; progress 20/~25 (~80%) |
+| `DECISIONS.md` (this Piece) | — |
+
+#### Status — Piece 89-C/14
+
+| Item | Status |
+|---|---|
+| Code migrated | ✅ 2 routes, manual tx flattened in both, 1 helper signature updated |
+| Cross-tenant + smoke tests | ✅ 4 tests in `tenant_db_89c14.test.js` |
+| PR opened + CI green | ✅ CI #475 (6m 5s) green on first push |
+| Merged to main | ✅ Squash `646c665` (May 8, 2026) |
+| Deployed to prod | ✅ `pm2 restart mep-backend` — pid 716165 online, Sentry initialized, jobs scheduled (May 8, 2026) |
+| Next batch (89-C/15) | ⏳ Pending — `/api/super` + `/api/super/ccq-rates` (SUPER_ADMIN routes, special handling) |
+
+- **Today: 58 sections.** (Section 89 extended with Piece 89-C/14: invite_employee + admin_users bundle. Email-inside-tx semantics documented per-route. 20 of ~25 protected routes now consume req.db — Phase 4b is ~80% done.)
+
