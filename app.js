@@ -320,12 +320,14 @@ app.use('/api/reports', auth, tenantDb, loadRouter('./routes/reports'));
 app.use('/api/daily-dispatch', auth, tenantDb, loadRouter('./routes/daily_dispatch'));
 
 // ── User & invite management ──────────────────────────────────
-app.use('/api/invite-employee', auth, require('./routes/invite_employee'));
+// Section 89-C/14: invite_employee migrated to req.db (RLS-enforced).
+app.use('/api/invite-employee', auth, tenantDb, require('./routes/invite_employee'));
 
 // Phase 63 (May 2026) — /api/user-invites/generate was redundant with
 // /api/invite-employee + /api/users/:id/resend (audit confirmed no
 // frontend usage). Route file deleted. See DECISIONS.md Phase 63.
-app.use('/api/admin/users', auth, loadRouter('./routes/admin_users'));
+// Section 89-C/14: admin_users migrated to req.db (RLS-enforced).
+app.use('/api/admin/users', auth, tenantDb, loadRouter('./routes/admin_users'));
 
 // ── RBAC Permissions ──────────────────────────────────────────
 // Section 89-C/5: user_management migrated to req.db (RLS-enforced).

@@ -15,6 +15,16 @@
 //   }
 //
 // Valid roles: IT_ADMIN, COMPANY_ADMIN, TRADE_PROJECT_MANAGER, TRADE_ADMIN, WORKER
+//
+// Section 89-C/14: migrated from `pool.query` to `req.db.query`. The
+// pre-existing manual `pool.connect()/BEGIN/COMMIT` block flattened to
+// a plain sequence of `req.db.query` calls — tenantDb wraps the whole
+// request in one transaction. The `ensureUniqueUsername(req, base)`
+// helper now takes `req` so its uniqueness check runs on the same
+// request-scoped client. Email send remains inside the transaction
+// (pre-existing behavior) — a SendGrid failure will cause tenantDb to
+// roll back the user + invite rows, which is the desired behavior:
+// don't create a user if we couldn't send their activation email.
 
 const express = require('express');
 const crypto = require('crypto');
@@ -22,7 +32,6 @@ const { hashPin } = require('../lib/auth_utils');
 const { normalizeRole } = require('../middleware/roles');
 const { can } = require('../middleware/permissions');
 const sgMail = require('@sendgrid/mail');
-const { pool } = require('../db');
 const { escapeHtml } = require('../lib/email');
 
 const router = express.Router();
@@ -70,14 +79,14 @@ function sanitizeUsername(s) {
   return cleaned.replace(/_+/g, '_').replace(/^_+|_+$/g, '');
 }
 
-async function ensureUniqueUsername(base) {
+async function ensureUniqueUsername(req, base) {
   let candidate = base;
   if (!candidate || candidate.length < 3) {
     candidate = `user_${crypto.randomBytes(3).toString('hex')}`;
   }
   for (let i = 0; i < 20; i++) {
     const name = i === 0 ? candidate : `${candidate}${i}`;
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       `SELECT 1 FROM public.app_users WHERE username = $1 LIMIT 1`,
       [name]
     );
@@ -145,139 +154,132 @@ router.post('/', can('settings.user_management'), async (req, res) => {
     const companyId = req.user?.company_id ?? null;
     const createdByUserId = req.user?.user_id ?? null;
 
-    // ── Atomic create user + invite ───────────────────────────
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
+    // tenantDb already opened a transaction; run the writes in sequence.
 
-      // Duplicate check
-      const exists = await client.query(
-        `SELECT id, username, role, is_active, activated_at
-         FROM public.app_users
-         WHERE (company_id IS NOT DISTINCT FROM $1)
-           AND lower(email) = lower($2)
-         LIMIT 1`,
-        [companyId, email]
-      );
-      if (exists.rows.length) {
-        await client.query('ROLLBACK');
-        return res.status(409).json({
-          ok: false,
-          error: 'USER_EMAIL_EXISTS',
-          user: exists.rows[0],
-        });
-      }
-
-      // Generate username
-      const base = sanitizeUsername(usernameRaw || email.split('@')[0]);
-      const username = await ensureUniqueUsername(base);
-
-      // Random PIN — user sets real PIN during activation
-      const randomPin = crypto.randomBytes(6).toString('base64url');
-      const pinHash = await hashPin(randomPin);
-
-      const insUser = await client.query(
-        `INSERT INTO public.app_users
-          (username, pin_hash, employee_id, role, is_active, company_id, email,
-           profile_status, activation_sent_at, activated_at, last_invite_id)
-         VALUES ($1, $2, $3, $4, true, $5, $6, 'NEW', NULL, NULL, NULL)
-         RETURNING id, username, email, role, employee_id, company_id, is_active, profile_status`,
-        [username, pinHash, employeeId, role, companyId, email]
-      );
-      const newUser = insUser.rows[0];
-
-      // Revoke existing active invites for this email
-      await client.query(
-        `UPDATE public.user_invites
-         SET status='REVOKED', revoked_at=NOW()
-         WHERE (company_id IS NOT DISTINCT FROM $1)
-           AND lower(email)=lower($2)
-           AND status='ACTIVE'`,
-        [companyId, email]
-      );
-
-      // Generate activation token
-      const rawToken = crypto.randomBytes(32).toString('base64url');
-      const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
-
-      const expiresHours = Number(process.env.USER_INVITE_EXPIRES_HOURS || 48);
-      const expiresAt = new Date(Date.now() + Math.max(1, expiresHours) * 60 * 60 * 1000);
-
-      const noteParts = [];
-      if (note) noteParts.push(String(note));
-      if (fullName) noteParts.push(`full_name=${String(fullName)}`);
-      noteParts.push(`created_user_id=${newUser.id}`);
-
-      const insInvite = await client.query(
-        `INSERT INTO public.user_invites
-          (company_id, employee_id, email, role, token_hash, status, created_by_user_id, note, expires_at)
-         VALUES ($1, $2, $3, $4, $5, 'ACTIVE', $6, $7, $8)
-         RETURNING id`,
-        [
-          companyId,
-          employeeId,
-          email,
-          role,
-          tokenHash,
-          createdByUserId,
-          noteParts.join(' | '),
-          expiresAt,
-        ]
-      );
-      const inviteId = insInvite.rows?.[0]?.id;
-      if (!inviteId) throw new Error('Failed to create invite');
-
-      // Send activation email
-      sgMail.setApiKey(SENDGRID_API_KEY);
-      const activateLink = `${APP_BASE_URL.replace(/\/$/, '')}/activate?token=${rawToken}`;
-
-      const roleLabel =
-        {
-          IT_ADMIN: 'IT Administrator',
-          COMPANY_ADMIN: 'Company Administrator',
-          TRADE_PROJECT_MANAGER: 'Trade Project Manager',
-          TRADE_ADMIN: 'Trade Administrator',
-          WORKER: 'Worker',
-        }[role] || role;
-
-      const html = `
-        <div style="font-family: Arial, sans-serif; line-height:1.6; max-width:500px">
-          <h2 style="color:#0f172a">Activate your MEP Platform account</h2>
-          <p>You've been invited as <strong>${escapeHtml(roleLabel)}</strong>.</p> <!-- nosemgrep: javascript.express.security.injection.raw-html-format.raw-html-format -->
-          <p>Click the link below to set up your account:</p>
-          <p><a href="${escapeHtml(activateLink)}" style="color:#1e3a5f">${escapeHtml(activateLink)}</a></p>
-          <p style="color:#94a3b8;font-size:13px">This link expires in ${expiresHours} hours.</p>
-        </div>
-      `;
-
-      await sgMail.send({
-        to: email,
-        from: SENDGRID_FROM_EMAIL,
-        subject: 'Activate your MEP Platform account',
-        html,
+    // Duplicate check
+    const exists = await req.db.query(
+      `SELECT id, username, role, is_active, activated_at
+       FROM public.app_users
+       WHERE (company_id IS NOT DISTINCT FROM $1)
+         AND lower(email) = lower($2)
+       LIMIT 1`,
+      [companyId, email]
+    );
+    if (exists.rows.length) {
+      return res.status(409).json({
+        ok: false,
+        error: 'USER_EMAIL_EXISTS',
+        user: exists.rows[0],
       });
-
-      await client.query(`UPDATE public.user_invites SET sent_at=NOW() WHERE id=$1`, [inviteId]);
-      await client.query(
-        `UPDATE public.app_users SET activation_sent_at=NOW(), last_invite_id=$2 WHERE id=$1`,
-        [newUser.id, inviteId]
-      );
-
-      await client.query('COMMIT');
-
-      return res.status(201).json({
-        ok: true,
-        user: newUser,
-        invite_id: inviteId,
-        expires_at: expiresAt.toISOString(),
-        activation_link: activateLink,
-      });
-    } catch (e) {
-      await client.query('ROLLBACK');
-      throw e;
-    } finally {
-      client.release();
     }
+
+    // Generate username
+    const base = sanitizeUsername(usernameRaw || email.split('@')[0]);
+    const username = await ensureUniqueUsername(req, base);
+
+    // Random PIN — user sets real PIN during activation
+    const randomPin = crypto.randomBytes(6).toString('base64url');
+    const pinHash = await hashPin(randomPin);
+
+    const insUser = await req.db.query(
+      `INSERT INTO public.app_users
+        (username, pin_hash, employee_id, role, is_active, company_id, email,
+         profile_status, activation_sent_at, activated_at, last_invite_id)
+       VALUES ($1, $2, $3, $4, true, $5, $6, 'NEW', NULL, NULL, NULL)
+       RETURNING id, username, email, role, employee_id, company_id, is_active, profile_status`,
+      [username, pinHash, employeeId, role, companyId, email]
+    );
+    const newUser = insUser.rows[0];
+
+    // Revoke existing active invites for this email
+    await req.db.query(
+      `UPDATE public.user_invites
+       SET status='REVOKED', revoked_at=NOW()
+       WHERE (company_id IS NOT DISTINCT FROM $1)
+         AND lower(email)=lower($2)
+         AND status='ACTIVE'`,
+      [companyId, email]
+    );
+
+    // Generate activation token
+    const rawToken = crypto.randomBytes(32).toString('base64url');
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+
+    const expiresHours = Number(process.env.USER_INVITE_EXPIRES_HOURS || 48);
+    const expiresAt = new Date(Date.now() + Math.max(1, expiresHours) * 60 * 60 * 1000);
+
+    const noteParts = [];
+    if (note) noteParts.push(String(note));
+    if (fullName) noteParts.push(`full_name=${String(fullName)}`);
+    noteParts.push(`created_user_id=${newUser.id}`);
+
+    const insInvite = await req.db.query(
+      `INSERT INTO public.user_invites
+        (company_id, employee_id, email, role, token_hash, status, created_by_user_id, note, expires_at)
+       VALUES ($1, $2, $3, $4, $5, 'ACTIVE', $6, $7, $8)
+       RETURNING id`,
+      [
+        companyId,
+        employeeId,
+        email,
+        role,
+        tokenHash,
+        createdByUserId,
+        noteParts.join(' | '),
+        expiresAt,
+      ]
+    );
+    const inviteId = insInvite.rows?.[0]?.id;
+    if (!inviteId) throw new Error('Failed to create invite');
+
+    // Send activation email — pre-migration behavior was to send INSIDE
+    // the manual transaction so that a SendGrid failure rolled back the
+    // user + invite. Same semantics under tenantDb: if sgMail.send
+    // throws, the catch returns 500 and tenantDb rolls back via the
+    // 'close' event listener (the transaction is poisoned, COMMIT
+    // would fail; close fires a ROLLBACK).
+    sgMail.setApiKey(SENDGRID_API_KEY);
+    const activateLink = `${APP_BASE_URL.replace(/\/$/, '')}/activate?token=${rawToken}`;
+
+    const roleLabel =
+      {
+        IT_ADMIN: 'IT Administrator',
+        COMPANY_ADMIN: 'Company Administrator',
+        TRADE_PROJECT_MANAGER: 'Trade Project Manager',
+        TRADE_ADMIN: 'Trade Administrator',
+        WORKER: 'Worker',
+      }[role] || role;
+
+    const html = `
+      <div style="font-family: Arial, sans-serif; line-height:1.6; max-width:500px">
+        <h2 style="color:#0f172a">Activate your MEP Platform account</h2>
+        <p>You've been invited as <strong>${escapeHtml(roleLabel)}</strong>.</p> <!-- nosemgrep: javascript.express.security.injection.raw-html-format.raw-html-format -->
+        <p>Click the link below to set up your account:</p>
+        <p><a href="${escapeHtml(activateLink)}" style="color:#1e3a5f">${escapeHtml(activateLink)}</a></p>
+        <p style="color:#94a3b8;font-size:13px">This link expires in ${expiresHours} hours.</p>
+      </div>
+    `;
+
+    await sgMail.send({
+      to: email,
+      from: SENDGRID_FROM_EMAIL,
+      subject: 'Activate your MEP Platform account',
+      html,
+    });
+
+    await req.db.query(`UPDATE public.user_invites SET sent_at=NOW() WHERE id=$1`, [inviteId]);
+    await req.db.query(
+      `UPDATE public.app_users SET activation_sent_at=NOW(), last_invite_id=$2 WHERE id=$1`,
+      [newUser.id, inviteId]
+    );
+
+    return res.status(201).json({
+      ok: true,
+      user: newUser,
+      invite_id: inviteId,
+      expires_at: expiresAt.toISOString(),
+      activation_link: activateLink,
+    });
   } catch (err) {
     console.error('POST /api/admin/users error:', err);
     return res.status(500).json({

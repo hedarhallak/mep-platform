@@ -8,11 +8,19 @@
  *
  * Body:
  *   first_name, last_name, email, trade_type_id, level_code, role, emp_code (optional)
+ *
+ * Section 89-C/14: migrated from `pool.query` to `req.db.query`.
+ * The pre-existing manual `pool.connect()/BEGIN/COMMIT` block flattened
+ * to a plain sequence of `req.db.query` calls — tenantDb wraps the
+ * whole request in one transaction. Email send happens after the last
+ * DB write; if it throws, the request response will be 500 but the
+ * transaction has already committed via res.end's COMMIT path. This
+ * matches the pre-migration behavior, where email was sent AFTER the
+ * COMMIT and a send failure didn't roll back the employee row.
  */
 
 const router = require('express').Router();
 const crypto = require('crypto');
-const { pool } = require('../db');
 const auth = require('../middleware/auth');
 const { can } = require('../middleware/permissions');
 const { sendEmail } = require('../lib/email');
@@ -83,7 +91,7 @@ function inviteEmailHtml({
     <div class="body">
       <div class="greeting">Welcome, ${firstName}! 👋</div>
       <p class="text">
-        You've been invited to join <strong>${appName}</strong>. 
+        You've been invited to join <strong>${appName}</strong>.
         Complete your account setup to access your assignments, schedules, and project information.
       </p>
 
@@ -133,10 +141,7 @@ function inviteEmailHtml({
 
 // ── POST /api/invite-employee ─────────────────────────────────
 router.post('/', can('employees.invite'), async (req, res) => {
-  const client = await pool.connect();
   try {
-    await client.query('BEGIN');
-
     const { first_name, last_name, email, trade_type_id, role, emp_code } = req.body;
 
     const companyId = req.user.company_id;
@@ -155,7 +160,7 @@ router.post('/', can('employees.invite'), async (req, res) => {
     if (!role) return res.status(400).json({ ok: false, error: 'ROLE_REQUIRED' });
 
     // ── Check email not already used in this company ──────────
-    const emailExists = await client.query(
+    const emailExists = await req.db.query(
       `SELECT id FROM public.employees
        WHERE (email = $1 OR contact_email = $1)
          AND company_id = $2
@@ -168,7 +173,7 @@ router.post('/', can('employees.invite'), async (req, res) => {
     // ── Get trade name for email ──────────────────────────────
     let tradeName = null;
     if (trade_type_id) {
-      const t = await client.query(`SELECT name FROM public.trade_types WHERE id = $1 LIMIT 1`, [
+      const t = await req.db.query(`SELECT name FROM public.trade_types WHERE id = $1 LIMIT 1`, [
         trade_type_id,
       ]);
       tradeName = t.rows[0]?.name || null;
@@ -178,7 +183,7 @@ router.post('/', can('employees.invite'), async (req, res) => {
     const employeeCode = emp_code?.trim() || generateEmployeeCode(companyId);
 
     // ── INSERT into public.employees ──────────────────────────
-    const empResult = await client.query(
+    const empResult = await req.db.query(
       `INSERT INTO public.employees
          (first_name, last_name, contact_email, employee_code, company_id, is_active, employee_profile_type)
        VALUES ($1, $2, $3, $4, $5, false, $6)
@@ -199,7 +204,7 @@ router.post('/', can('employees.invite'), async (req, res) => {
     const tokenHash = hashToken(rawToken);
     const expiresAt = new Date(Date.now() + expiresHours * 3600 * 1000);
 
-    await client.query(
+    await req.db.query(
       `INSERT INTO public.user_invites
          (token_hash, email, role, employee_id, company_id, created_by_user_id, expires_at, status)
        VALUES ($1, $2, $3, $4, $5, $6, $7, 'ACTIVE')`,
@@ -214,9 +219,15 @@ router.post('/', can('employees.invite'), async (req, res) => {
       ]
     );
 
-    await client.query('COMMIT');
-
-    // ── Send email (outside transaction) ─────────────────────
+    // ── Send email (after last DB write) ─────────────────────
+    // Email send is OUTSIDE the meaningful "DB writes" but INSIDE the
+    // tenantDb transaction. If sendEmail throws, the request will 500
+    // and the transaction will commit anyway because tenantDb's
+    // res.end COMMIT is wired to the response flush, not to whether
+    // the handler resolved successfully — but in practice we await
+    // sendEmail before sending the response, so a throw here jumps to
+    // the outer catch and the response is 500 with the row already
+    // persisted. This matches pre-migration behavior (email-after-COMMIT).
     const inviteUrl = `${appBaseUrl}/onboarding?token=${rawToken}`;
     const emailSent = await sendEmail({
       to: email,
@@ -240,11 +251,8 @@ router.post('/', can('employees.invite'), async (req, res) => {
       invite_url: inviteUrl, // useful for dev/testing
     });
   } catch (err) {
-    await client.query('ROLLBACK').catch(() => {});
     console.error('POST /api/invite-employee error:', err);
     return res.status(500).json({ ok: false, error: 'SERVER_ERROR', message: err.message });
-  } finally {
-    client.release();
   }
 });
 
