@@ -278,7 +278,14 @@ app.use('/api/projects', auth, loadRouter('./routes/projects'));
 // in subsequent 89-C batches.
 app.use('/api/suppliers', auth, tenantDb, require('./routes/suppliers'));
 app.use('/api/assignments', auth, loadRouter('./routes/assignments'));
-app.use('/api/assignments', auth, require('./routes/auto_assign'));
+// Section 89-C/4: auto_assign migrated to req.db (RLS-enforced).
+// NOTE: assignments.js (mounted directly above) still uses pool.query —
+// it'll be migrated in a separate batch since it has 30 queries + complex
+// transactional logic. Express resolves these two routers in mount order:
+// requests matching assignments.js endpoints fire first; auto_assign only
+// sees requests for paths assignments.js doesn't define (/auto-suggest,
+// /auto-confirm). Adding tenantDb here only affects auto_assign's path set.
+app.use('/api/assignments', auth, tenantDb, require('./routes/auto_assign'));
 // Section 89-C/2: attendance migrated to req.db (RLS-enforced).
 app.use('/api/attendance', auth, tenantDb, loadRouter('./routes/attendance'));
 app.use('/api/profile', auth, loadRouter('./routes/profile'));

@@ -13,6 +13,26 @@ const { sendEmail } = require('../lib/email');
 
 const { can } = require('../middleware/permissions');
 
+// Section 89-C/4 (Phase 4 Stage 2): in-handler queries migrated to req.db
+// (RLS-enforced via middleware/tenant_db). The `pool` import is retained
+// ONLY for the explicit `pool.connect()` transaction block inside
+// `/auto-confirm` — that handler needs all-or-nothing atomicity across
+// multiple INSERTs into assignment_requests, and uses BEGIN/COMMIT/ROLLBACK
+// on a manually-acquired client. The middleware's `req.db` already has its
+// own transaction, but nested savepoints + the existing manual-rollback
+// error path made the cleanest migration to keep the manual transaction
+// as-is in this batch.
+//
+// TODO Stage 3 (Section 89-E): the manual transaction client doesn't have
+// `app.company_id` GUC set, so under strict RLS the INSERTs into
+// `assignment_requests` would fail. Refactor pattern: either (a) drop the
+// manual transaction and trust the per-request middleware transaction
+// (requires a route-error → middleware-rollback signal), or (b) call
+// `client.query("SET LOCAL app.company_id = ...")` immediately after BEGIN
+// inside the manual transaction. Plan B is the smaller delta.
+//
+// WHERE company_id clauses are kept for defense-in-depth.
+
 // ─────────────────────────────────────────────────────────────
 // Email Templates
 // ─────────────────────────────────────────────────────────────
@@ -296,7 +316,7 @@ router.post('/auto-suggest', can('assignments.smart_assign'), async (req, res) =
     if (!target_date) return res.status(400).json({ ok: false, error: 'TARGET_DATE_REQUIRED' });
 
     // 1. Get all ACTIVE projects for this company
-    const projRes = await pool.query(
+    const projRes = await req.db.query(
       `SELECT p.id, p.project_code, p.project_name, p.site_address,
               p.site_lat, p.site_lng,
               c.default_shift_start AS shift_start,
@@ -313,7 +333,7 @@ router.post('/auto-suggest', can('assignments.smart_assign'), async (req, res) =
 
     // 2. Get today's assignments (who is working today per project)
     const today = new Date().toISOString().split('T')[0];
-    const todayAssignRes = await pool.query(
+    const todayAssignRes = await req.db.query(
       `SELECT ar.project_id, ar.requested_for_employee_id AS employee_id,
               ep.full_name AS employee_name, ep.trade_code,
               ar.shift_start, ar.shift_end, ar.assignment_role
@@ -334,7 +354,7 @@ router.post('/auto-suggest', can('assignments.smart_assign'), async (req, res) =
     }
 
     // 3. Get who is already assigned on target_date (busy)
-    const busyRes = await pool.query(
+    const busyRes = await req.db.query(
       `SELECT DISTINCT requested_for_employee_id
        FROM public.assignment_requests
        WHERE company_id = $1
@@ -346,7 +366,7 @@ router.post('/auto-suggest', can('assignments.smart_assign'), async (req, res) =
     const busyOnTarget = new Set(busyRes.rows.map((r) => r.requested_for_employee_id));
 
     // 3b. Get foremen from today's assignments (assignment_role = 'FOREMAN')
-    const foremenRes = await pool.query(
+    const foremenRes = await req.db.query(
       `SELECT ar.project_id, ep.trade_code,
               ep.full_name     AS foreman_name,
               ep.contact_email AS foreman_email,
@@ -368,7 +388,7 @@ router.post('/auto-suggest', can('assignments.smart_assign'), async (req, res) =
     }
 
     // 4. Get all available employees with profiles + coords
-    const empRes = await pool.query(
+    const empRes = await req.db.query(
       `SELECT ep.employee_id AS id, ep.full_name, ep.trade_code, ep.rank_code,
               ep.contact_email,
               ST_X(ep.home_location::geometry) AS home_lng,
@@ -522,7 +542,7 @@ router.post('/auto-confirm', can('assignments.smart_assign'), async (req, res) =
     const appName = process.env.APP_NAME || 'MEP Platform';
 
     // Get company name + admin email
-    const companyRes = await pool.query(
+    const companyRes = await req.db.query(
       `SELECT c.name AS company_name, au.email AS admin_email
        FROM public.companies c
        JOIN public.app_users au ON au.company_id = c.company_id
