@@ -269,7 +269,8 @@ app.use('/api/super', auth, superAdmin, loadRouter('./routes/super_admin'));
 app.use('/api/super/ccq-rates', auth, superAdmin, require('./routes/ccq_rates'));
 
 // ── Core business routes ──────────────────────────────────────
-app.use('/api/employees', auth, loadRouter('./routes/employees'));
+// Section 89-C/12: employees migrated to req.db (RLS-enforced).
+app.use('/api/employees', auth, tenantDb, loadRouter('./routes/employees'));
 // Section 89-C/8: projects migrated to req.db (RLS-enforced).
 app.use('/api/projects', auth, tenantDb, loadRouter('./routes/projects'));
 // Section 89-B sample migration: /api/suppliers was the first production

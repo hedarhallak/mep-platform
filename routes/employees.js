@@ -3,13 +3,47 @@
 /**
  * routes/employees.js
  *
- * GET  /api/employees       — list employees for current company
- * GET  /api/employees/:id   — get single employee
+ * GET   /api/employees       — list employees for current company
+ * GET   /api/employees/:id   — get single employee
+ * PATCH /api/employees/:id   — update employee info
+ *
+ * Section 89-C/12: in-handler queries migrated from `pool.query` to
+ * `req.db.query`. The `tenantDb` middleware (mounted in app.js) wraps
+ * every request in a per-request transaction with `app.company_id`
+ * set on the GUC.
+ *
+ * Two notes specific to this route:
+ *
+ * 1. **`module._epCols` schema cache.** The list handler reads
+ *    `information_schema.columns` once per process startup to discover
+ *    which optional columns exist on `employee_profiles` (`role_code`,
+ *    `rank_code`, `phone`, `city`). Cached on the `module` object so
+ *    subsequent requests skip the lookup. The first request now runs
+ *    that lookup on `req.db`; the cache is module-level so per-request
+ *    GUC has no effect on the cached value (it's just column metadata).
+ *
+ * 2. **SUPER_ADMIN cross-company.** SUPER_ADMIN can pass
+ *    `?company_id=X` to scope to a tenant or omit it to see all
+ *    companies. Under Stage 2 permissive RLS (GUC unset OR mismatch →
+ *    allow) this works because either:
+ *      - SUPER_ADMIN's `req.user.company_id` is null/undefined, so
+ *        tenantDb sets the GUC to NULL → permissive policies allow all
+ *        rows (the SQL filter — present or absent — controls
+ *        visibility).
+ *      - Or SUPER_ADMIN has a real company_id, in which case Stage 2
+ *        still allows them through the permissive policy.
+ *    Stage 3 (strict RLS) will require a separate mechanism for
+ *    cross-company SUPER_ADMIN access (e.g. a `mepuser_super` pool
+ *    that bypasses RLS by role). That's a Phase 4c concern, not this
+ *    migration.
+ *
+ * The pre-existing manual `pool.connect()/BEGIN/COMMIT` block in
+ * PATCH /:id collapsed to a plain sequence of `req.db.query` calls —
+ * tenantDb already wraps the request in one transaction.
  */
 
 const express = require('express');
 const router = express.Router();
-const { pool } = require('../db');
 const auth = require('../middleware/auth');
 const { can } = require('../middleware/permissions');
 
@@ -75,9 +109,10 @@ router.get('/', can('employees.view'), async (req, res) => {
 
     const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    // Detect available columns in employee_profiles to avoid missing column errors
+    // Detect available columns in employee_profiles to avoid missing column errors.
+    // The cache is module-level; the lookup is one-time per process.
     if (!module._epCols) {
-      const colRes = await pool.query(
+      const colRes = await req.db.query(
         `SELECT column_name FROM information_schema.columns
          WHERE table_schema='public' AND table_name='employee_profiles'`
       );
@@ -94,7 +129,7 @@ router.get('/', can('employees.view'), async (req, res) => {
       has('city') ? 'ep.city' : 'NULL AS city',
     ].join(',\n         ');
 
-    const result = await pool.query(
+    const result = await req.db.query(
       `SELECT
          e.id,
          e.employee_code,
@@ -142,7 +177,7 @@ router.get('/:id', can('employees.view'), async (req, res) => {
       return res.status(400).json({ ok: false, error: 'INVALID_ID' });
     }
 
-    const result = await pool.query(
+    const result = await req.db.query(
       `SELECT
          e.id,
          e.employee_code,
@@ -193,11 +228,9 @@ router.get('/:id', can('employees.view'), async (req, res) => {
 
 // ── PATCH /api/employees/:id ─────────────────────────────────
 // Update employee info — admin can edit name, email, role, trade, etc.
+// 89-C/12: manual transaction flattened — tenantDb wraps the request.
 router.patch('/:id', can('employees.edit'), async (req, res) => {
-  const client = await pool.connect();
   try {
-    await client.query('BEGIN');
-
     const employeeId = Number(req.params.id);
     const companyId = req.user.company_id ? Number(req.user.company_id) : null;
     const userRole = req.user.role;
@@ -207,7 +240,7 @@ router.patch('/:id', can('employees.edit'), async (req, res) => {
     }
 
     // Verify employee belongs to same company
-    const empCheck = await client.query(
+    const empCheck = await req.db.query(
       `SELECT e.id, e.company_id, e.first_name, e.last_name,
               au.id AS user_id, au.role AS current_app_role
        FROM public.employees e
@@ -276,7 +309,7 @@ router.patch('/:id', can('employees.edit'), async (req, res) => {
 
     if (empUpdates.length) {
       empParams.push(employeeId);
-      await client.query(
+      await req.db.query(
         `UPDATE public.employees SET ${empUpdates.join(', ')} WHERE id = $${empParams.length}`,
         empParams
       );
@@ -332,14 +365,14 @@ router.patch('/:id', can('employees.edit'), async (req, res) => {
 
     if (profUpdates.length) {
       // Check if profile exists
-      const profileExists = await client.query(
+      const profileExists = await req.db.query(
         `SELECT 1 FROM public.employee_profiles WHERE employee_id = $1 LIMIT 1`,
         [employeeId]
       );
 
       if (profileExists.rows.length) {
         profParams.push(employeeId);
-        await client.query(
+        await req.db.query(
           `UPDATE public.employee_profiles SET ${profUpdates.join(', ')} WHERE employee_id = $${profParams.length}`,
           profParams
         );
@@ -347,7 +380,7 @@ router.patch('/:id', can('employees.edit'), async (req, res) => {
         // Create profile if it doesn't exist
         const fn = first_name?.trim() || existing.first_name;
         const ln = last_name?.trim() || existing.last_name;
-        await client.query(
+        await req.db.query(
           `INSERT INTO public.employee_profiles (employee_id, full_name, trade_code, rank_code, phone)
            VALUES ($1, $2, $3, $4, $5)`,
           [
@@ -363,7 +396,7 @@ router.patch('/:id', can('employees.edit'), async (req, res) => {
 
     // ── Sync role to app_users if changed ──
     if (employee_profile_type !== undefined && existing.user_id) {
-      await client.query(`UPDATE public.app_users SET role = $1 WHERE id = $2`, [
+      await req.db.query(`UPDATE public.app_users SET role = $1 WHERE id = $2`, [
         employee_profile_type,
         existing.user_id,
       ]);
@@ -371,21 +404,16 @@ router.patch('/:id', can('employees.edit'), async (req, res) => {
 
     // ── Sync is_active to app_users if changed ──
     if (is_active !== undefined && existing.user_id) {
-      await client.query(`UPDATE public.app_users SET is_active = $1 WHERE id = $2`, [
+      await req.db.query(`UPDATE public.app_users SET is_active = $1 WHERE id = $2`, [
         is_active,
         existing.user_id,
       ]);
     }
 
-    await client.query('COMMIT');
-
     return res.json({ ok: true, message: 'Employee updated successfully' });
   } catch (err) {
-    await client.query('ROLLBACK').catch(() => {});
     console.error('PATCH /api/employees/:id error:', err);
     return res.status(500).json({ ok: false, error: 'SERVER_ERROR', message: err.message });
-  } finally {
-    client.release();
   }
 });
 
