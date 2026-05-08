@@ -312,7 +312,8 @@ app.use('/api/bi', auth, tenantDb, require('./routes/bi'));
 app.use('/api/reports', auth, tenantDb, loadRouter('./routes/reports'));
 
 // ── Daily operations ──────────────────────────────────────────
-app.use('/api/daily-dispatch', auth, loadRouter('./routes/daily_dispatch'));
+// Section 89-C/9: daily_dispatch migrated to req.db (RLS-enforced).
+app.use('/api/daily-dispatch', auth, tenantDb, loadRouter('./routes/daily_dispatch'));
 
 // ── User & invite management ──────────────────────────────────
 app.use('/api/invite-employee', auth, require('./routes/invite_employee'));

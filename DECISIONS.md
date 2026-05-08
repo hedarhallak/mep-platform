@@ -9302,5 +9302,84 @@ After 89-C/7 (`/api/standup`) deployed, 89-C/8 migrates **`routes/projects.js`**
 | Deployed to prod | ✅ May 8, 2026 — `git pull` (already up-to-date), `pm2 restart`, startup logs clean (↺681 pid 709061) |
 | Next batch (89-C/9) | ⏳ Pending — candidates: profile + push_tokens (paired mount, q() helper refactor), daily_dispatch.js (19 queries), material_requests.js (26 queries), assignments.js (30 queries) |
 
-- **Today: 58 sections.** (Section 89 extended again with Piece 89-C/8: projects migration. 11 of ~25 protected routes now consume req.db — Phase 4b is ~44% done.)
+### Piece 89-C/9 — daily_dispatch route migration (May 8, 2026)
+
+After 89-C/8 (`/api/projects`) deployed, 89-C/9 migrates **`routes/daily_dispatch.js`** — daily dispatch snapshot prepare/commit workflow. 19 in-handler `pool.query` calls + 1 helper query (`getEmployeesEmailColumn`) + 3 pre-existing `assertPool` runtime checks (now obsolete under tenantDb).
+
+### What this batch shipped
+
+| File | Change |
+|---|---|
+| `app.js` | `/api/daily-dispatch` mount adds `tenantDb`. |
+| `routes/daily_dispatch.js` | (a) Drop the unusual `const db = require('../db'); const pool = db && db.pool ? db.pool : db;` defensive import + the local `assertPool` helper. The middleware now guarantees `req.db` exists with a `.query` method on every authenticated request. (b) 19 in-handler `pool.query(...)` → `req.db.query(...)`. (c) Helper `getEmployeesEmailColumn(pool)` renamed param `pool` → `db` and updated call sites to pass `req.db` (the helper queries `information_schema.columns`, a global table — works on any pg client). (d) Removed 3 `if (!assertPool(pool))` runtime checks at the top of `/prepare` and `/commit` — middleware-guaranteed contract makes them dead code. |
+| `tests/integration/tenant_db_89c9.test.js` | NEW — 2 tests: each company's admin POSTs `/prepare` and we assert the resulting `daily_dispatch_runs` row's `company_id` matches the caller's tenant (verified via direct DB check). The two tenants' runs coexist — no collision. `/commit` deferred (sends real emails via SendGrid). |
+
+### Status — Piece 89-C/9
+
+| Item | Status |
+|---|---|
+| Code migrated | ✅ 1 file, 19 handler queries → req.db, 1 helper migrated, defensive import + assertPool dead code dropped |
+| Cross-tenant integration test | ✅ 2 new tests in `tenant_db_89c9.test.js` |
+| PR opened + CI green | ⏳ Pending |
+| Merged to main | ⏳ Pending |
+| Deployed to prod | ⏳ Pending |
+| Next batch (89-C/10) | ⏳ Pending — candidates: profile + push_tokens (paired mount, q() helper refactor), material_requests.js (26 queries), assignments.js (30 queries), employees.js (caching tricks), permissions.js (mostly global tables) |
+
+### 89-C/9 lesson — `try/catch INSERT` patterns DO NOT survive tenantDb transactions
+
+CI #452 on the 89-C/9 PR surfaced this (`tests/integration/daily_dispatch.test.js` line 127 — "POST /prepare twice on same date returns 409 already_prepared"). Failure: expected 409, got something else.
+
+**Root cause.** The pre-existing `/prepare` route detected duplicates by:
+```js
+try {
+  await pool.query(`INSERT INTO daily_dispatch_runs ... RETURNING *`);
+} catch (e) {
+  // UNIQUE violation → SELECT the existing row, return 409
+  const { rows } = await pool.query(`SELECT ... WHERE company_id = $1 ...`);
+  return res.status(409).json({ ... });
+}
+```
+
+Under `pool.query` this works — each query is auto-committed. The INSERT fails, the catch block runs a fresh SELECT.
+
+Under `req.db.query` (per-request transaction wrapping the whole handler), the INSERT failure on UNIQUE violation **aborts the transaction**. Postgres requires either ROLLBACK or ROLLBACK TO SAVEPOINT before subsequent commands can run. The catch-block SELECT fails with `current transaction is aborted, commands ignored until end of transaction block`. Whatever happens next — sometimes a 500, sometimes a coercion to 200 — does NOT match the 409 the test expects.
+
+**The fix.** Use Postgres's native `INSERT ... ON CONFLICT DO NOTHING RETURNING *` pattern. No exception is raised on conflict, the transaction stays alive, and we cleanly check `if (!ins.rows.length)` to detect the duplicate path:
+
+```js
+const ins = await req.db.query(`
+  INSERT INTO daily_dispatch_runs (company_id, dispatch_date, ...)
+  VALUES ($1, $2::date, ...)
+  ON CONFLICT (company_id, dispatch_date) DO NOTHING
+  RETURNING *
+`, [companyId, date, ...]);
+let runRow = ins.rows[0] || null;
+if (!runRow) {
+  const { rows } = await req.db.query(`SELECT ... WHERE company_id = $1 ...`, [...]);
+  return res.status(409).json({ ok: false, error: 'already_prepared', run: rows[0] });
+}
+```
+
+**Convention added to HANDOFF (Pitfall #23).** When migrating any route that uses `try { INSERT } catch { handle dup }` — refactor to `ON CONFLICT DO NOTHING` BEFORE merging. Other patterns to watch for during future batches:
+
+- `try { INSERT } catch { SELECT existing }` — replace with ON CONFLICT
+- `try { UPDATE } catch { /* assume not found */ }` — replace with `RETURNING * + check rows.length`
+- Any other place where catching a Postgres exception is used to drive control flow — needs SAVEPOINT or constraint-aware refactor
+
+For routes that *legitimately* need to recover from a query error inside a transaction (rare), use `await req.db.query('SAVEPOINT s'); ... ROLLBACK TO SAVEPOINT s` to wall off the failing query.
+
+### Status — Piece 89-C/9 (post-fix)
+
+| Item | Status |
+|---|---|
+| Code migrated | ✅ 1 file, 19 handler queries → req.db, defensive import + assertPool dropped |
+| `/prepare` ON CONFLICT refactor | ✅ ships in same PR as the migration |
+| Cross-tenant integration test | ✅ 2 new tests in `tenant_db_89c9.test.js` |
+| Pre-existing `daily_dispatch.test.js` "/prepare twice → 409" | ✅ should pass after the ON CONFLICT refactor |
+| PR opened + CI green | ⏳ Pending re-run after force-push |
+| Merged to main | ⏳ Pending |
+| Deployed to prod | ⏳ Pending |
+| Next batch (89-C/10) | ⏳ Pending — candidates: profile + push_tokens (paired mount, q() helper refactor), material_requests.js (26 queries), assignments.js (30 queries), employees.js (caching tricks), permissions.js (mostly global tables) |
+
+- **Today: 58 sections.** (Section 89 extended again with Piece 89-C/9: daily_dispatch migration + the `try/catch INSERT` lesson. 12 of ~25 protected routes now consume req.db — Phase 4b is ~48% done.)
 
