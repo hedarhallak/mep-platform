@@ -9297,9 +9297,9 @@ After 89-C/7 (`/api/standup`) deployed, 89-C/8 migrates **`routes/projects.js`**
 |---|---|
 | Code migrated | ✅ 1 file, 20 handler queries → req.db, 3 audit calls migrated, pool import dropped |
 | Cross-tenant integration test | ✅ 4 new tests in `tenant_db_89c8.test.js` |
-| PR opened + CI green | ⏳ Pending |
-| Merged to main | ⏳ Pending |
-| Deployed to prod | ⏳ Pending |
+| PR opened + CI green | ✅ PR #171 (CI #449, 5m 24s) |
+| Merged to main | ✅ May 8, 2026 (squash `479a22b`) |
+| Deployed to prod | ✅ May 8, 2026 — `git pull` (already up-to-date), `pm2 restart`, startup logs clean (↺681 pid 709061) |
 | Next batch (89-C/9) | ⏳ Pending — candidates: profile + push_tokens (paired mount, q() helper refactor), daily_dispatch.js (19 queries), material_requests.js (26 queries), assignments.js (30 queries) |
 
 - **Today: 58 sections.** (Section 89 extended again with Piece 89-C/8: projects migration. 11 of ~25 protected routes now consume req.db — Phase 4b is ~44% done.)
