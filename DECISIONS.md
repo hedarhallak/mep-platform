@@ -9770,3 +9770,66 @@ No route changes needed. No test changes needed.
 
 - **Today: 58 sections.** (Section 89 extended with Piece 89-D: permissions middleware refactor closing Pitfall #21. **Phase 4b complete: 22/22 routes on req.db. Phase 4c started: 89-D ✅, 89-E pending.**)
 
+### Piece 89-E/1 — notifyAssignment helper → req.db (May 8, 2026)
+
+First sub-piece of 89-E (Stage 3 strict RLS prep). 89-E was originally scoped as one PR but split into 3 sub-pieces after a closer audit revealed the helpers have different shape:
+
+| Sub-piece | Helper | Why this shape |
+|---|---|---|
+| **89-E/1 ✅ this Piece** | `notifyAssignment` (routes/assignments.js) | DB reads then SendGrid emails — clean split between "needs req.db" and "no DB" |
+| **89-E/2** | `calcDistanceKm` (routes/assignments.js) + `logAudit` (middleware/permissions.js) + `audit()` (lib/audit.js) | Each has its own pattern — Mapbox API call mid-helper, fire-and-forget audit semantics, etc. |
+| **89-E/3** | `migrations/013_rls_strict.sql` | DDL flip; depends on 89-E/2 completing the pool→req.db migration of all helpers |
+
+#### Why notifyAssignment was the easy one
+
+The original helper did three things in sequence:
+
+1. Two DB SELECTs (assignment + team)
+2. SendGrid email sends
+3. (No further DB writes)
+
+Steps 2-3 don't touch the DB, so they can stay detached. Only step 1 needs req.db. This made the split clean:
+
+```js
+async function prepareNotifyData(db, id, companyId) { /* DB reads */ }
+async function fireNotifyEmails({ a, team }) { /* SendGrid */ }
+async function notifyAssignment(db, id, companyId) {
+  const data = await prepareNotifyData(db, id, companyId);
+  if (!data) return;
+  fireNotifyEmails(data).catch(err => console.error(err));
+}
+```
+
+Caller pattern changes from fire-and-forget on pool to await + req.db:
+
+```diff
+- notifyAssignment(pool, rows[0].id, companyId);
++ await notifyAssignment(req.db, rows[0].id, companyId);
+```
+
+The `await` blocks only on the DB-read phase (~5-20ms typical). Emails fire as a detached promise and survive past `res.end()` since they don't touch the DB.
+
+#### What this unblocks for Stage 3
+
+Under Stage 3 strict RLS, `pool.query` calls with no GUC return zero rows. The pre-89-E/1 fire-and-forget-on-pool pattern would have silently skipped all assignment notifications. With 89-E/1 shipped, notifyAssignment survives strict mode unchanged.
+
+#### Files touched
+
+| File | Change |
+|---|---|
+| `routes/assignments.js` | `notifyAssignment` split into `prepareNotifyData(db, …) + fireNotifyEmails(data)`. 5 callers updated to `await notifyAssignment(req.db, …)`: POST /requests, PATCH /:id/approve, PATCH /:id/reassign, PATCH /:id/move, POST /repeat-confirm (in loop) |
+| `HANDOFF.md` | Latest deployed → 89-E/1; 89-E/2 + /3 added to roadmap as pending |
+| `DECISIONS.md` (this Piece) | — |
+
+#### Status — Piece 89-E/1
+
+| Item | Status |
+|---|---|
+| Refactor | ✅ Helper split + 5 callers updated |
+| Existing tests | ✅ CI #490 green on first push (no test changes needed; routes still 200) |
+| Merged to main | ✅ Squash `cb6f341` (May 8, 2026) |
+| Deployed to prod | ✅ `pm2 restart mep-backend` — pid 724975 online (May 8, 2026) |
+| Next (89-E/2) | ⏳ Pending — calcDistanceKm + logAudit + audit() helpers |
+
+- **Today: 58 sections.** (Section 89 extended with Piece 89-E/1: notifyAssignment refactor — first sub-piece of Stage 3 strict RLS prep. Pattern documented: split DB-reads from non-DB-side-effects so DB work goes through req.db while side-effects stay detached.)
+
