@@ -1,7 +1,7 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 8, 2026 — after Phase 4c Piece 89-E/2 (audit + logAudit + calcDistanceKm helpers refactored to req.db) deployed to prod. **Phase 4b: 22/22 authenticated routes on req.db (100% ✅)**. Phase 4c: 89-D ✅, 89-E/1 ✅, 89-E/2 ✅. Remaining: **89-E/3 (migration 013 strict RLS flip)** — last piece before Stage 3 ships.
+> Last updated: May 9, 2026 — **Phase 4 (PostgreSQL Row-Level Security) is COMPLETE on prod.** Migration 013 strict flip applied May 9, 2026 ~14:45 UTC; verified 21 policies (19 strict + audit_logs read/write). All 20 tenant tables under strict policies; all 22 authenticated routes on req.db; auth.js audit writes still work via the `audit_logs` permissive INSERT split. **Next session starts Phase 5 (SUPER_ADMIN portal split)** per Section 85 plan.
 
 ---
 
@@ -27,7 +27,7 @@ When you receive the one-line command above:
    - `RECOVERY.md` Section 2.4 only (cost inventory) if relevant to today's task
 3. **Echo this exact line** as the first line of your reply so Hedar knows bootstrap completed:
    ```
-   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 89)
+   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 89/E/3, Phase 4 done)
    ```
 4. **Confirm the next task** in 1-2 lines (from "Next task" below).
 5. **Ask if Hedar is ready to start**, then wait.
@@ -45,9 +45,9 @@ When you receive the one-line command above:
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04) |
 | Backend | Node.js + Express + Postgres 16, pm2-managed at `/var/www/mep` |
 | Frontend | React + Vite + Tailwind, deployed to `/var/www/mep/mep-frontend/dist` |
-| Latest deployed to prod | **Phase 4c Piece 89-E/2 (audit + logAudit + calcDistanceKm → req.db)** — May 8, 2026 |
-| Last merged to main | Piece 89-E/2 (squash `b9b5c28`) — May 8, 2026 |
-| Active program | **Multi-Tenant Migration** (Section 85, Phases 1-8) — Phase 4 in progress |
+| Latest deployed to prod | **Migration 013 strict RLS flip (89-E/3)** — May 9, 2026 ~14:45 UTC. **Phase 4 complete.** |
+| Last merged to main | Piece 89-E/3 (squash `ad1db73`) — May 9, 2026 |
+| Active program | **Multi-Tenant Migration** (Section 85, Phases 1-8) — **Phase 4 done; Phase 5 (SUPER_ADMIN portal split) next** |
 | Mobile app | Still on legacy username login — backend keeps backward-compat |
 
 ### Multi-tenant migration progress
@@ -59,9 +59,9 @@ When you receive the one-line command above:
 | Phase 2 — Tenant Resolver | ✅ No-op (Model C) | 87 |
 | Phase 3 — DB schema 011 + email login | ✅ Deployed | 87 |
 | **Phase 4a — RLS Stage 1 (permissive policies)** | ✅ **Deployed to prod** | 88 |
-| **Phase 4b — RLS Stage 2 (req.db middleware)** | ⏳ **In progress** (89-A + 89-B + 89-C/1 deployed; 89-C/2..N next) | 89 |
-| Phase 4c — RLS Stage 3 (strict policies) | ⏳ Pending | TBD |
-| Phase 5 — SUPER_ADMIN portal split | ⏳ Pending | TBD |
+| **Phase 4b — RLS Stage 2 (req.db middleware)** | ✅ **Deployed to prod** (22/22 routes on req.db) | 89-A through 89-D |
+| **Phase 4c — RLS Stage 3 (strict policies)** | ✅ **Deployed to prod** (May 9, 2026, migration 013) | 89-E/1, 89-E/2, 89-E/3 |
+| **Phase 5 — SUPER_ADMIN portal split** | ⏳ **Next** | TBD |
 | Phase 6 — Frontend tenant context + branding | ⏳ Pending | TBD |
 | Phase 7 — 2FA + biometric + account security | ⏳ Pending | TBD |
 | Phase 8 — Audit + compliance | ⏳ Pending | TBD |
@@ -91,34 +91,35 @@ When you receive the one-line command above:
 | 89-D | middleware/permissions.js → req.db (Pitfall #21 closed) | ✅ **Deployed to prod** (May 8, 2026) |
 | 89-E/1 | notifyAssignment helper → req.db (split DB-reads from email-sends) | ✅ **Deployed to prod** (May 8, 2026) |
 | 89-E/2 | audit + logAudit + calcDistanceKm helpers → req.db | ✅ **Deployed to prod** (May 8, 2026) |
-| 89-E/3 | migration 013 strict RLS flip + audit_logs INSERT permissive policy | ⏳ Pending |
+| 89-E/3 | migration 013 strict RLS flip + audit_logs INSERT permissive policy | ✅ **Deployed to prod** (May 9, 2026) |
 
 ---
 
-## Next task: Phase 4c Piece 89-E/3 — migration 013 strict RLS flip + audit_logs handling
+## Next task: Phase 5 — SUPER_ADMIN portal split
 
-**Goal:** continue migrating remaining ~21 protected routes off `pool.query` onto `req.db.query`, batch by batch. Target batch size: 1-3 routes per PR (smaller is easier — see lessons captured in DECISIONS Section 89-C/1-fix). Once 100% of routes are on `req.db`, Stage 3 (89-E) can drop the "GUC unset = bypass" clause and RLS goes strict.
+**Goal:** stand up a separate SUPER_ADMIN portal so cross-tenant administration (creating new companies, viewing usage, billing, support tooling) lives outside the customer-facing app shell. Today SUPER_ADMIN logs into the same `app.constrai.ca` and sees both tenant-scoped pages and admin-only pages mixed together. After Phase 5 they'll be served from a separate path/subdomain (TBD — `admin.constrai.ca` is the working assumption) with its own React entry, its own route guards, and its own backend mount prefix.
 
-**Status entering this task** (per Section 89 in DECISIONS.md, sub-sections 89-C/1, 89-C/1-fix, 89-C/2):
+**Why now:** Phase 4 made the DB layer fail-closed against tenant leaks. Phase 5 makes the application layer cleanly separate which UI surfaces are tenant-scoped vs cross-tenant. This is a prerequisite for Phase 6 (frontend tenant context + branding per company) and Phase 7 (2FA + biometric) — both of those need the tenant boundary to be visible at the top of the React tree, not hidden behind role-conditional renders.
 
-- 89-C/1 migrated `/api/bi`, `/api/project-foremen`, `/api/project-trades`. Deployed to prod May 7, 2026.
-- 89-C/1-fix corrected the tenantDb COMMIT race (override `res.end` instead of `res.on('finish')`). Deployed to prod same day.
-- 89-C/2 migrated `/api/attendance`. Merged to main, awaiting prod deploy.
-- The migration pattern is now fully proven across both small (1-handler) and medium (5-handler) routes, including helpers that need to retain pool access for fire-and-forget paths (notifyForeman pattern).
+**Status entering this task** (per Section 89 in DECISIONS.md):
 
-**Suggested 89-C/3 candidates (low-risk):**
+- All 20 tenant tables under strict RLS policies on prod (migration 013 applied May 9, 2026).
+- All 22 authenticated routes mount tenantDb middleware.
+- `audit_logs` has a split policy: strict SELECT (tenant-scoped reads) + permissive INSERT (auth.js login/logout/PIN-change writes from the global pool).
+- `routes/super_admin.js` and `routes/ccq_rates.js` already exist as the SA-only mount points (89-C/15 batch), but they're served from the same domain + the same React build as everything else.
 
-1. **`auto_assign.js`** (6 queries) — small, mounted under `/api/assignments` alongside `assignments.js`. Both share the prefix; if migrating either, both mount lines need `tenantDb`. auto_assign alone is the smallest practical batch.
-2. **`reports.js`** (11 queries) — read-heavy, similar shape to bi.js. Single-route batch.
-3. **`profile.js` + `push_tokens_route.js`** — both mounted on `/api/profile`. profile.js uses a custom `q()` helper + module-level caches that need refactoring. Mid-complexity batch, do alone.
+**Open design questions for Phase 5 kickoff (do not resolve in this HANDOFF — surface to Hedar at session start):**
 
-**89-D (SUPER pool wiring) and 89-E (Stage 3 graduation) come AFTER 89-C is 100% done.**
+1. **Subdomain vs path.** `admin.constrai.ca` (separate certificate, cleaner CSP) vs `app.constrai.ca/super` (one domain, cookies share). Section 85 lists this as TBD.
+2. **Separate React build vs single build with code-split entry.** Two builds simplify the security boundary at the cost of duplicated dependencies. One build with a guarded `/super/*` route tree keeps the existing deploy pipeline.
+3. **Backend mount.** Today `routes/super_admin.js` lives on the same Express app. Should it be a sub-app behind a separate auth middleware, or stay co-mounted?
 
-### Backlog items surfaced during 89-C/1 + 89-C/2
+**Backlog items still open after Phase 4** (carried forward — not blockers for Phase 5 but should be tracked):
 
-- **`middleware/permissions.js` `can()` uses `pool.query` directly.** Under Stage 1 permissive RLS this works (queries against `user_permissions` return rows when GUC is unset on the pool client). **Under Stage 3 strict RLS, every authenticated request will fail** because `can()` will see 0 user_permissions rows and reject. Fix planned for 89-D or 89-E: refactor `can()` to either consume `req.db` or use a SUPER-pool fallback.
-- **`routes/attendance.js` `notifyForeman` helper** still uses pool.query (fire-and-forget after `res.json`). Stage 3 strict would block its SELECT (no GUC on the shared pool connection). Refactor pattern: prefetch the email-data fields via `req.db` BEFORE `res.json`, then fire-and-forget the SendGrid send (no DB) afterwards. Same pattern will apply to any future fire-and-forget DB-backed helper.
-- **`routes/project_trades.js`** has a redundant top-level `router.use(auth)` (auth runs twice on every request — once from `app.js` mount, once internally). Pre-existing, harmless, but should be removed in a future cleanup PR. Out of scope for 89-C batches.
+- **`routes/attendance.js` `notifyForeman` helper** still uses pool.query for the fire-and-forget DB read inside the SendGrid send. Under Stage 3 strict that read returns 0 rows; the email body would silently come out empty. Apply the 89-E/1 prepareNotifyData / fireNotifyEmails split pattern. **Action:** open a small PR before any feature work that exercises foreman notifications.
+- **`routes/project_trades.js`** has a redundant top-level `router.use(auth)` (auth runs twice). Pre-existing, harmless, low-priority cleanup.
+- **pg DeprecationWarning: "Calling client.query() when the client is already executing a query"** — visible in pm2 logs after every prod restart. Pre-existing pattern issue (not from 013); a separate hygiene PR should track it down. Likely candidate: a route still doing parallel `Promise.all([client.query(...), client.query(...)])` on a single client.
+- **Coverage threshold ratchet** — Phase 4 added 2 new test files (rls.test.js + rls_stage1.test.js), both Stage-3-aware. Total integration suite is 41+. After a few quiet days, run `TEST_DATABASE_URL=… npx jest --coverage` and consider ratcheting if the measured value has crept ≥3 pp above the current threshold (per CLAUDE.md Section 4.6 convention).
 
 ---
 
@@ -167,6 +168,7 @@ Cost inventory (services + monthly bill ~$37 USD): see `RECOVERY.md` Section 2.4
 23. **`try { INSERT } catch { handle dup }` patterns DO NOT survive inside a tenantDb transaction** (Section 89, 89-C/9, May 8, 2026) — under `pool.query` each query auto-commits, so an INSERT that fails on UNIQUE violation can be caught and the catch block can run a fresh SELECT. Under `req.db.query` (per-request transaction wrapping the whole handler), the INSERT failure aborts the transaction; subsequent queries fail with `current transaction is aborted, commands ignored until end of transaction block`. Refactor to `INSERT ... ON CONFLICT DO NOTHING RETURNING *` and check `rows.length` instead of catching. CI #452 on the 89-C/9 PR caught this — `daily_dispatch.test.js` "POST /prepare twice on same date returns 409 already_prepared" failed because the catch-block SELECT couldn't run after the dup INSERT poisoned the transaction. **Convention:** when migrating any route, grep for `try ... catch.*query|UNIQUE|ON CONFLICT` patterns BEFORE pushing the migration PR. Other patterns to watch: `try { UPDATE } catch { /* assume not found */ }` → use `RETURNING * + check rows.length`. For rare cases where catching a query error is unavoidable, use `SAVEPOINT` to wall off the failing query.
 24. **Orphan-account 401 from tenantDb is the cross-route contract — route-level 403 for missing company_id becomes dead code** (Section 89, 89-C/12, May 8, 2026) — when a route had its own `if (!companyId) return res.status(403).json({ error: 'COMPANY_CONTEXT_REQUIRED' })` defensive branch (e.g. `routes/employees.js` line 35), migrating onto tenantDb makes that branch unreachable: tenantDb's own missing-company guard returns **401 NO_TENANT_IN_TOKEN** before the route handler ever runs. Existing tests in `tenant_isolation.test.js` written around the 403 contract will fail with `Expected: 403, Received: 401`. **Convention:** before pushing a migration PR for a route that has its own 403 for missing company_id, grep `tests/integration/tenant_isolation.test.js` for the route's path + 403 expectation, and update the test to expect 401 NO_TENANT_IN_TOKEN. Keep the route-level 403 in code as defense-in-depth (in case anything ever bypasses tenantDb), but document it as dead code under the normal middleware chain. CI #465 on the 89-C/12 PR caught this; fixed in commit `c0c2c8f`.
 25. **SUPER_ADMIN seedUser needs an explicit 8+ char PIN** (Section 89, 89-C/15, May 8, 2026) — `routes/auth.js#isValidPin` enforces stricter format for SUPER_ADMIN: length 8-32 vs 4-8 for other roles. The default `seedUser` PIN `'1234'` (4 chars) is rejected by the auth/login endpoint with **400 INVALID_PIN_FORMAT** for SA, before any test logic runs. Surfaced when CI #480 on the 89-C/15 PR failed at test setup. Already documented in DECISIONS.md from CI #73 era but not previously encoded in HANDOFF's pitfalls list — re-encoding here. **Convention:** any test that logs in as SUPER_ADMIN must seed with an explicit `pin` override of length 8-32 chars: ``await seedUser({ role: 'SUPER_ADMIN', pin: 'sa-pin-1234' })``. Default `'1234'` works for every other role but not SA. Same gotcha applies if production ever ships a UI flow that creates SA accounts — the create endpoint must enforce ≥8 chars or the login will silently break.
+26. **Test files that pin a transitional stage's contract become blockers at the next stage's cutover** (Section 89, 89-E/3, May 9, 2026) — when a multi-stage migration ratchets behavior over time (Stage 1 permissive → Stage 3 strict), tests that assert the **current** stage's exact contract (`expect(rows).toHaveLength(2)` for the GUC-unset case under Stage 1) will fail mechanically when Stage 3 lands. Discovery is delayed: CI #497 for migration 013 went red on `tests/integration/rls.test.js` + `tests/integration/rls_stage1.test.js` even though the migration logic was correct. Fix is mechanical (flip the assertions), but cost is one extra CI cycle per affected test file. **Convention:** when writing tests for a known-transitional stage, label the test name with the stage + future migration (e.g., "Stage 1 permissive baseline (will flip in migration 013, Stage 3)") and add a comment near the assertion referencing the future change. The next session reading the test then knows it's expected to change without re-deriving the dependency chain. Note: `employee_profiles` was deliberately kept at 2 rows in the Stage-3 update because that table isn't in 013's strict_tables list (no `company_id` column; it's joined through `employees` for tenant scope). When Stage 3 affects only some tables, document which tables aren't affected at the assertion site.
 
 ---
 
