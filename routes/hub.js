@@ -406,7 +406,7 @@ router.post('/messages', can('hub.send_tasks'), upload.single('file'), async (re
       );
     }
 
-    logAudit(req, 'SEND_TASK', 'task_messages', messageId, null, {
+    await logAudit(req, 'SEND_TASK', 'task_messages', messageId, null, {
       type,
       title,
       sent: sentCount,

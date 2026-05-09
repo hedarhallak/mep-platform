@@ -20,14 +20,14 @@
  * POST /companies flattened to a `req.db.query` sequence — same
  * pattern as 89-C/4..14.
  *
- * `audit(pool, req, …)` calls remain on `pool` because audit is
- * fire-and-forget after the response (89-C/11 fire-and-forget rule).
- * The `pool` import is retained solely for those audit calls.
+ * `audit(…, req, …)` calls were updated in 89-E/2 from
+ * `audit(pool, req, …)` to `audit(req.db, req, …)`, so this file no
+ * longer imports `pool` directly. All DB I/O (handler queries +
+ * audit writes) flows through the request-scoped client.
  */
 
 const express = require('express');
 const router = express.Router();
-const { pool } = require('../db');
 const { hashPin } = require('../lib/auth_utils');
 const { sendAdminWelcome } = require('../lib/email');
 const { audit, ACTIONS } = require('../lib/audit');
@@ -221,7 +221,7 @@ router.post('/companies', async (req, res) => {
       });
     }
 
-    await audit(pool, req, {
+    await audit(req.db, req, {
       action: ACTIONS.COMPANY_CREATED,
       entity_type: 'company',
       entity_id: company.company_id,
@@ -317,7 +317,7 @@ router.post('/companies/:id/suspend', async (req, res) => {
     );
     if (!upd.rows.length) return res.status(404).json({ ok: false, error: 'COMPANY_NOT_FOUND' });
 
-    await audit(pool, req, {
+    await audit(req.db, req, {
       action: ACTIONS.COMPANY_SUSPENDED,
       entity_type: 'company',
       entity_id: companyId,
@@ -346,7 +346,7 @@ router.post('/companies/:id/activate', async (req, res) => {
     );
     if (!upd.rows.length) return res.status(404).json({ ok: false, error: 'COMPANY_NOT_FOUND' });
 
-    await audit(pool, req, {
+    await audit(req.db, req, {
       action: ACTIONS.COMPANY_ACTIVATED,
       entity_type: 'company',
       entity_id: companyId,
