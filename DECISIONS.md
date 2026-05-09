@@ -9881,3 +9881,77 @@ All callsites of these helpers (except auth.js's 3 audit calls) are in routes th
 
 - **Today: 58 sections.** (Section 89 extended with Piece 89-E/2: audit + logAudit + calcDistanceKm helpers refactored. Stage 3 prep ~67% done — only the migration itself remains.)
 
+### Piece 89-E/3 — migration 013 strict RLS flip (May 8–9, 2026)
+
+Final sub-piece of Stage 3. Drops the "GUC unset = bypass" clause from 19 of the 20 tenant policies installed by migration 012, and splits `audit_logs` into a strict `tenant_isolation_read` (FOR SELECT) + permissive `tenant_isolation_write` (FOR INSERT WITH CHECK true) so the auth.js pool path keeps working through login/logout/PIN-change.
+
+**Phase 4 is now complete.** All authenticated read paths fail closed if a route ever forgets to mount tenantDb — the pool client with no GUC returns zero rows instead of leaking another tenant's data.
+
+#### What changed
+
+**`migrations/013_rls_strict.sql` (new, ~230 lines):**
+
+- Section 1: `DO $$ … $$` block iterates over the 19 strict_tables array (everything from 012 except `audit_logs`). For each: `DROP POLICY IF EXISTS tenant_isolation` + `CREATE POLICY tenant_isolation … USING (company_id = NULLIF(current_setting('app.company_id', true), '')::bigint) WITH CHECK (same)`. The cast `NULL::bigint = company_id` evaluates to NULL → row excluded → fail-closed.
+- Section 2: `audit_logs` gets split. Old `tenant_isolation` dropped, replaced by `tenant_isolation_read FOR SELECT USING (strict)` + `tenant_isolation_write FOR INSERT WITH CHECK (true)`. `audit_logs` is append-only by trigger so no policies are needed for UPDATE/DELETE.
+- Section 3: in-transaction sanity check — counts the 19 strict policies and the 2 audit_logs policies, raises EXCEPTION (rolling back the whole migration) if either count is wrong, plus a belt-and-suspenders check that the old single `tenant_isolation` no longer exists on `audit_logs`.
+
+**`migrations/013_rls_strict.rollback.sql` (new):**
+
+Restores Stage 1 permissive on all 20 tables (including collapsing the audit_logs split back into a single permissive policy). Wrapped in one transaction. Sanity check expects exactly 20 `tenant_isolation` policies post-rollback.
+
+#### CI failure recovery — `rls.test.js` + `rls_stage1.test.js` (Pitfall #26)
+
+CI #497 went red on the first push. Both `tests/integration/rls.test.js` and `tests/integration/rls_stage1.test.js` had test cases that explicitly asserted the **Stage 1 permissive contract** (GUC unset → all rows returned). Under strict mode those tests must invert: GUC unset → 0 rows.
+
+Fix:
+
+- `rls_stage1.test.js`: 2 assertions flipped. "GUC unset: permissive bypass returns rows from all companies" → "GUC unset: strict policy returns 0 rows (Stage 3 contract)". "GUC empty string: behaves like unset (permissive bypass)" → "GUC empty string: behaves like unset under Stage 3 strict (returns 0 rows)". Both now `expect(rows).toHaveLength(0)`.
+- `rls.test.js`: the `employees` baseline test flipped from 2 rows to 0 rows. The `employee_profiles` test was **kept at 2 rows** — that table is intentionally NOT in 013's strict_tables list (it doesn't have a `company_id` column; it's joined to `employees` for the tenant scope), so RLS is not active on it.
+
+CI #499 went green after the test fix push (commit `ad1db73`). Auto-merge fired and the PR #194 squash landed on main.
+
+#### Branch-hygiene recovery (Section 88 lesson reinforced)
+
+The first attempt to commit migration 013 + tests landed accidentally on `main` because `git checkout -b feat/s89e3-rls-strict-migration` was skipped before `git commit`. Recovery: created the feat branch from HEAD (carrying the commit forward), then `git checkout main && git reset --hard origin/main` to unwind the accidental main commit, then push the feat branch and open the PR. No data loss; cost: ~3 commands extra. Section 88 already encoded "ALWAYS delete the local branch after a PR merges" — this incident motivates an additional checklist item: **ALWAYS verify `git branch --show-current` before `git commit`**, especially after closing a previous PR (which leaves you back on main and feels like you're already on a branch).
+
+#### Prod deploy
+
+`sudo -u postgres psql -d mepdb -f migrations/013_rls_strict.sql` ran clean on prod (May 9, 2026, ~14:45 UTC):
+
+- BEGIN → DO block (19 DROP + 19 CREATE on the strict tables) → 1 DROP + 2 NOTICE skips + 2 CREATE on `audit_logs` → DO sanity check pass → COMMIT.
+- Post-deploy verification: `SELECT c.relname, p.polname FROM pg_policy …` returned 21 rows (19 strict tables × `tenant_isolation` + audit_logs × `tenant_isolation_read` + audit_logs × `tenant_isolation_write`). Matches expected.
+- `pm2 logs mep-backend --lines 20 --nostream` showed only pre-existing pg DeprecationWarnings; no fresh errors.
+- **No `pm2 restart` needed** — the migration only changes policy expressions on the DB; existing pool connections see the new policies on the next query.
+
+#### Pitfall #26 — Test files that pin Stage 1 contract become Stage 3 blockers
+
+When a multi-stage migration ratchets behavior over time (Stage 1 permissive → Stage 3 strict), test files that pin the **current** stage's contract by exact assertion (`expect(rows).toHaveLength(2)` for the GUC-unset case) will fail at the cutover. The fix is mechanical (flip the assertion to the new contract) but the **discovery is annoying** — it surfaces only after the migration commit lands in CI, not at design time.
+
+**Convention going forward:** when writing tests for a stage that's known to be transitional, label the test name with the stage + contract (e.g., "Stage 1 permissive baseline (will flip in Stage 3)") and reference the future migration number in a comment. That way the next session reading the test knows it's expected to change without having to re-derive the dependency chain. `rls_stage1.test.js` was named correctly but the assertions weren't tagged; the fix added explicit "Stage 3 contract — migration 013" comments to the flipped assertions.
+
+#### Files touched
+
+| File | Change |
+|---|---|
+| `migrations/013_rls_strict.sql` | NEW. Strict policy on 19 tables; split `tenant_isolation_read` (strict) + `tenant_isolation_write` (permissive) on `audit_logs`; in-tx sanity check |
+| `migrations/013_rls_strict.rollback.sql` | NEW. Restores Stage 1 permissive on all 20 tables (collapses audit_logs split) |
+| `tests/integration/rls.test.js` | Flipped employees baseline from 2 → 0 rows; kept employee_profiles at 2 (no RLS on that table) |
+| `tests/integration/rls_stage1.test.js` | Flipped 2 assertions: GUC unset and GUC '' both now expect 0 rows |
+| `HANDOFF.md` | Latest deployed → 89-E/3 / Phase 4 complete |
+| `MASTER_README.md` | Phase 4 status flipped to ✅ done |
+| `DECISIONS.md` (this Piece) | — |
+
+#### Status — Piece 89-E/3
+
+| Item | Status |
+|---|---|
+| Migration written | ✅ `013_rls_strict.sql` + `013_rls_strict.rollback.sql` |
+| Tests | ✅ CI #499 green after fixing 4 assertions across 2 files |
+| Merged to main | ✅ Squash `ad1db73` (May 9, 2026) |
+| Deployed to prod | ✅ `sudo -u postgres psql -f migrations/013_rls_strict.sql` (May 9, 2026, ~14:45 UTC) |
+| Verified on prod | ✅ 21 policies present (19 strict + audit_logs read/write); pm2 logs clean |
+| **Phase 4 status** | ✅ **COMPLETE** — Stage 1 (012) ✅, Stage 2 (89-A through 89-D) ✅, Stage 3 (89-E/1, /2, /3) ✅ |
+| Next | Phase 5 — SUPER_ADMIN portal split (per Section 85 plan) |
+
+- **Today: 58 sections.** (Section 89 extended with Piece 89-E/3: migration 013 strict RLS flip. **Phase 4 (PostgreSQL Row-Level Security) is now fully shipped — all 20 tenant tables under strict policies, all authenticated routes on req.db.** Pitfall #26 encoded for future stage-cutover migrations.)
+
