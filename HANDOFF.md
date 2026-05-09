@@ -1,7 +1,7 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 8, 2026 — after Phase 4c Piece 89-E/1 (notifyAssignment refactored to req.db) deployed to prod. **Phase 4b: 22/22 authenticated routes on req.db (100% ✅)**. Phase 4c: 89-D ✅, 89-E/1 ✅. Remaining: 89-E/2 (calcDistanceKm + logAudit + audit() helpers) + 89-E/3 (migration 013 strict RLS flip).
+> Last updated: May 8, 2026 — after Phase 4c Piece 89-E/2 (audit + logAudit + calcDistanceKm helpers refactored to req.db) deployed to prod. **Phase 4b: 22/22 authenticated routes on req.db (100% ✅)**. Phase 4c: 89-D ✅, 89-E/1 ✅, 89-E/2 ✅. Remaining: **89-E/3 (migration 013 strict RLS flip)** — last piece before Stage 3 ships.
 
 ---
 
@@ -45,8 +45,8 @@ When you receive the one-line command above:
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04) |
 | Backend | Node.js + Express + Postgres 16, pm2-managed at `/var/www/mep` |
 | Frontend | React + Vite + Tailwind, deployed to `/var/www/mep/mep-frontend/dist` |
-| Latest deployed to prod | **Phase 4c Piece 89-E/1 (notifyAssignment → req.db)** — May 8, 2026 |
-| Last merged to main | Piece 89-E/1 (squash `cb6f341`) — May 8, 2026 |
+| Latest deployed to prod | **Phase 4c Piece 89-E/2 (audit + logAudit + calcDistanceKm → req.db)** — May 8, 2026 |
+| Last merged to main | Piece 89-E/2 (squash `b9b5c28`) — May 8, 2026 |
 | Active program | **Multi-Tenant Migration** (Section 85, Phases 1-8) — Phase 4 in progress |
 | Mobile app | Still on legacy username login — backend keeps backward-compat |
 
@@ -90,12 +90,12 @@ When you receive the one-line command above:
 | Phase 4b status | ✅ **22 of 22 authenticated routes on req.db (100%)** — confirmed by audit at end of 89-C/15 (the "~25" estimate was high; actual is 22) |
 | 89-D | middleware/permissions.js → req.db (Pitfall #21 closed) | ✅ **Deployed to prod** (May 8, 2026) |
 | 89-E/1 | notifyAssignment helper → req.db (split DB-reads from email-sends) | ✅ **Deployed to prod** (May 8, 2026) |
-| 89-E/2 | calcDistanceKm + logAudit + audit() helpers → req.db | ⏳ Pending |
-| 89-E/3 | migration 013 strict RLS flip | ⏳ Pending |
+| 89-E/2 | audit + logAudit + calcDistanceKm helpers → req.db | ✅ **Deployed to prod** (May 8, 2026) |
+| 89-E/3 | migration 013 strict RLS flip + audit_logs INSERT permissive policy | ⏳ Pending |
 
 ---
 
-## Next task: Phase 4c Piece 89-E/2 — calcDistanceKm + logAudit + audit() helpers → req.db
+## Next task: Phase 4c Piece 89-E/3 — migration 013 strict RLS flip + audit_logs handling
 
 **Goal:** continue migrating remaining ~21 protected routes off `pool.query` onto `req.db.query`, batch by batch. Target batch size: 1-3 routes per PR (smaller is easier — see lessons captured in DECISIONS Section 89-C/1-fix). Once 100% of routes are on `req.db`, Stage 3 (89-E) can drop the "GUC unset = bypass" clause and RLS goes strict.
 
