@@ -9955,3 +9955,150 @@ When a multi-stage migration ratchets behavior over time (Stage 1 permissive →
 
 - **Today: 58 sections.** (Section 89 extended with Piece 89-E/3: migration 013 strict RLS flip. **Phase 4 (PostgreSQL Row-Level Security) is now fully shipped — all 20 tenant tables under strict policies, all authenticated routes on req.db.** Pitfall #26 encoded for future stage-cutover migrations.)
 
+## Section 90 — Phase 5 Architecture: SUPER_ADMIN Portal Split (May 9, 2026)
+
+> **Status:** Architecture decided. No code yet. Execution begins after this section is merged.
+>
+> **Scope:** Split Hedar's cross-tenant admin tooling out of the customer-facing Constrai app into a dedicated portal. Today SUPER_ADMIN logs into `app.constrai.ca` and sees both tenant-scoped pages and admin-only pages mixed together. After Phase 5 they'll be served from a separate subdomain with its own React entry, its own backend mount, and its own auth guard.
+
+### Why now
+
+Phase 4 made the **DB layer** fail-closed against tenant data leaks. Phase 5 makes the **application layer** cleanly separate which UI surfaces are tenant-scoped vs cross-tenant. This is a prerequisite for:
+
+- **Phase 6** (per-tenant branding — each company gets its own logo + accent colors). Per-tenant branding inside the same React tree as cross-tenant admin tools means complex conditional rendering everywhere. Splitting the admin portal out of the tenant tree removes the conditional.
+- **Phase 7** (2FA + biometric). The admin portal should enforce stricter auth (e.g., mandatory 2FA for SA, optional for tenants).
+- **A future SUPPORT_AGENT role** when Constrai grows past Hedar-as-sole-operator. The role doesn't exist today and isn't built in Phase 5; the architecture just keeps the door open for it.
+
+### What's NOT decided in Phase 5 (explicit non-goals)
+
+To keep Phase 5 small and shippable, the following are deferred:
+
+- **SUPPORT_AGENT role.** Phase 5 ships with SUPER_ADMIN as the only role that can reach the admin portal. SUPPORT_AGENT (read-only across tenants + impersonation with audit trail) is added when there's a real support team to put in it. The portal architecture is designed so that adding a second role is a localized change (one new role row + a few permission gates) — not a re-architecture.
+- **Impersonation.** Mentioned in the discussion but not built in Phase 5. When SUPPORT_AGENT lands, impersonation comes with it. Standard pattern: SA temporarily assumes a tenant user identity, every request gets `impersonated_by` audit row, session timeout shorter than normal.
+- **Billing UI.** Tenant billing belongs in the admin portal eventually. Phase 5 ships read-only "list all companies + basic metadata" only. Billing comes in a later phase (probably Phase 7 or 8).
+- **Tenant onboarding flow.** Today new companies are created by Hedar manually via psql. Phase 5 ships the **read** side of company management; the **create company** flow is deferred to a small follow-up after Phase 5 lands.
+
+### Decision A — Portal location: `admin.constrai.ca` (subdomain)
+
+**Chosen.** Alternative considered: `app.constrai.ca/super/*` (path-based on same domain).
+
+**Why subdomain wins:**
+
+1. **Security boundary is architectural, not linguistic.** Path-based separation depends on route guards being correct everywhere; one missed guard = leak. Subdomain separation puts the admin tree behind a different Host header, a different cookie scope, and a different Express sub-app — multiple physical boundaries.
+2. **Cookie scope.** SA can be logged into both `admin.constrai.ca` (admin work) and `app.constrai.ca` (testing as a tenant) at the same time, in different tabs, without either session interfering with the other. With path-based, there's one session and one role at a time — every "switch context" requires logout/login.
+3. **Phase 6 branding becomes trivial.** Per-tenant branding (logo, colors) is loaded from `/api/companies/:id/branding` for the active tenant on `app.constrai.ca`. The admin portal on `admin.constrai.ca` never participates in that flow. Path-based would force "if path starts with `/super` skip branding" logic that has to be threaded through the entire React tree.
+4. **Mental clarity for Hedar (the operator).** Opening `admin.constrai.ca` makes "I'm doing cross-tenant work" obvious from the URL bar. Opening `app.constrai.ca/super/companies` looks identical to a normal tenant page until you read the path.
+5. **Big-SaaS precedent is unanimous.** Shopify (`partners.shopify.com` separate from `*.myshopify.com`), Stripe (dashboard vs hidden internal admin), GitHub (Stafftools on a separate URL), Auth0, Atlassian — all separate the staff/admin portal by URL. Constrai aspires to that posture.
+
+**Trade-offs accepted:**
+
+- **One-time ops cost:** new DNS record (free), Cloudflare zone update (free, already managed), potentially new Origin Cert (free if existing wildcard covers `*.constrai.ca`; otherwise ~10 min to regenerate via Cloudflare dashboard), new Nginx server block (~30 min).
+- **Frontend complexity:** two entry points instead of one. Mitigated by Decision B2 (Vite multi-entry sharing one project).
+- **Backend complexity:** vhost dispatching. Mitigated by Decision C2 (sub-apps in same process).
+- **No new monthly cost.** Same Droplet, same Postgres, same pm2 process, same Cloudflare plan. Total recurring: $0/month.
+
+### Decision B2 — Frontend: single Vite project, two entry points
+
+**Chosen.** Alternatives considered: B1 (two separate React projects in separate folders) and B3 (single SPA with runtime hostname detection).
+
+**The shape of B2:**
+
+- `mep-frontend/src/main.tsx` — tenant entry (current).
+- `mep-frontend/src/admin-main.tsx` — new admin entry.
+- `vite.config.ts` `rollupOptions.input` builds both → two `index.html` files.
+- Nginx server blocks: `app.constrai.ca` serves the tenant build's `index.html`; `admin.constrai.ca` serves the admin build's `index.html`.
+- Shared code stays in `mep-frontend/src/{theme,auth,i18n,lib,hooks,components}` — both entries import from the same place.
+
+**Why B2 over B1 (separate projects):**
+
+- B1 forces duplication of theme tokens, auth flow, i18n setup, http client, design components. With Hedar as sole frontend dev, that's pure overhead.
+- Big-company precedent **does** end up at B1 — but only after the team grows. Shopify Partners and Stripe internal admin both started as part of the main app and split out when separate teams owned them. The migration B2 → B1 is well-known (lift shared code into `packages/shared/`, convert root to npm workspaces) and takes 1–2 days when the time comes. The reverse (B1 → B2) is much harder once the two codebases accumulate divergent dependencies.
+- **Conclusion:** B2 first. The door to B1 stays open.
+
+**Why B2 over B3 (single SPA, runtime hostname switch):**
+
+- B3 ships every byte of admin code to every tenant browser, even though tenants can't use it. Defeats the security argument and bloats the bundle. Rejected.
+
+### Decision C2 — Backend: vhost split, same process, two sub-apps
+
+**Chosen.** Alternatives considered: C1 (single app + role guard on path prefix) and C3 (two completely separate Node.js processes on different ports).
+
+**The shape of C2:**
+
+```js
+// index.js (sketch)
+const adminApp = express();
+adminApp.use(express.json());
+adminApp.use(adminCorsMiddleware);    // stricter CORS — only admin.constrai.ca
+adminApp.use(adminRateLimiter);       // stricter rate limit
+adminApp.use(authForSuperAdmin);      // role must be SUPER_ADMIN
+adminApp.use('/api/super', superRouter);
+adminApp.use('/api/super/ccq-rates', ccqRatesRouter);
+adminApp.use(hostHeaderGuard('admin.constrai.ca'));   // refuse other Host
+
+const tenantApp = express();
+tenantApp.use(express.json());
+tenantApp.use(tenantCors);
+tenantApp.use(authForTenant);          // any authenticated role
+tenantApp.use('/api', tenantRouter);
+tenantApp.use(hostHeaderGuard('app.constrai.ca'));    // refuse other Host
+
+const root = express();
+root.use(vhost('admin.constrai.ca', adminApp));
+root.use(vhost('app.constrai.ca', tenantApp));
+root.listen(3000);
+```
+
+**Why C2 over C1 (single app + role guard):**
+
+- C1's security depends on getting middleware ordering right on every route. One refactor that moves a `requireSuperAdmin` middleware below a route definition, or one new route added to the wrong router, leaks admin endpoints onto the tenant domain. The bug is silent until exploited.
+- C2 makes the leak architecturally impossible: admin routes are physically registered on `adminApp` only. Tenant traffic hits `tenantApp` and never sees admin routes exist.
+- The cost (boilerplate) is one-time. The benefit is permanent.
+
+**Why C2 over C3 (separate processes):**
+
+- C3 doubles operational surface: two pm2 processes, two `npm install` runs per deploy, two Sentry projects (or one with disambiguating tags), two `.env` files, twice the deploy script. Justified at scale (admin can hot-restart without touching tenant traffic) but premature for Constrai.
+- Same migration argument as B2: C1 → C2 → C3 is a well-known progression. We're picking the middle slot now and leaving the door open for C3 later.
+
+**Big-company precedents:**
+
+- **Stripe / Shopify (current):** C3-equivalent — completely separate services. They got there by passing through C2 first.
+- **Mid-stage B2B SaaS (Linear, Render, Resend at their scale):** typically C2.
+- **Early-stage SaaS:** typically C1.
+- Constrai's posture is "early stage but engineered for the long run" — C2 fits.
+
+### Phase 5 execution roadmap
+
+Pieces are sequential where the dependency is real, parallel where it isn't. Each piece = one PR, same pattern as Phase 4.
+
+| Piece | Scope | Dep | Est |
+|---|---|---|---|
+| **90-A** | DNS + Cloudflare zone entry for `admin.constrai.ca`; verify Origin Cert covers `*.constrai.ca` (regen if not); add Nginx server block returning a placeholder 200. No app code yet. | none | ½ day |
+| **90-B** | Backend vhost split (C2). Refactor `index.js` into root + `adminApp` + `tenantApp`. Move `routes/super_admin.js` + `routes/ccq_rates.js` mounts onto `adminApp`. Add Host-header anti-leak guards both directions. New integration test: tenant Host with `/api/super/*` path → 404 (or 403). | 90-A | 1 day |
+| **90-C** | Frontend Vite multi-entry (B2). Add `src/admin-main.tsx` and matching `admin.html`. Configure `rollupOptions.input`. Nginx serves tenant `index.html` from `app.constrai.ca` and admin `index.html` from `admin.constrai.ca`. Admin entry is a stub for now ("Constrai Admin — coming soon"). | 90-A | 1 day |
+| **90-D** | First real admin screen: read-only "All Companies" list. Backend: `GET /api/super/companies/overview` returns `[{ company_id, name, employee_count, project_count, created_at, last_activity_at }]`. Frontend: sortable + searchable table. No edit actions. | 90-B + 90-C | 1 day |
+| **90-E** | Auth flow validation. SUPER_ADMIN login on `admin.constrai.ca` works; same SA on `app.constrai.ca` works for tenant view (current behavior preserved); COMPANY_ADMIN attempting to login on `admin.constrai.ca` rejected with explicit error. Cookie scope: `admin.constrai.ca` cookies do NOT bleed to `app.constrai.ca`. | 90-D | ½ day |
+| **90-F** | Prod deploy + UAT. Anti-leak scenarios: (a) COMPANY_ADMIN curls `admin.constrai.ca/api/super/companies` → 403/401, (b) SA's tenant-scoped queries on `app.constrai.ca` still RLS-scoped, (c) Sentry firing for both portals separately. Phase 5 closeout PR. | 90-E | ½ day |
+
+**Estimated total:** 4 days of focused work, spread across multiple sessions.
+
+### Open architectural questions (for follow-up phases, not Phase 5)
+
+1. **Where does SA's password live?** Today `auth.js` stores PINs (8–32 chars for SA). When Phase 7 adds 2FA, SA enrollment may differ from tenant enrollment (mandatory vs optional). Decision deferred.
+2. **Per-tenant Origin Cert subjects?** If Phase 6's branding extends to per-tenant subdomains (`acme.constrai.ca` for ACME Corp), the cert story changes. For Phase 5, only `admin.constrai.ca` is added — tenants stay on `app.constrai.ca` shared.
+3. **Admin shell design system.** Does the admin portal use the same Tailwind config + design tokens as tenant, or its own (e.g., dense data-grid styling typical of admin tools)? Decision: shares the same tokens for now (B2 makes this trivial); divergence allowed later.
+
+### Pitfalls expected for Phase 5
+
+Encoded in advance based on the architecture review. To be confirmed/refined as pieces ship.
+
+- **Cookie scoping mistake.** If `Set-Cookie` is set with `Domain=.constrai.ca` (leading dot), the cookie is shared across `admin.` and `app.` — defeating decision A's session isolation. Convention: `Set-Cookie` MUST omit `Domain` attribute (or use exact host) so each subdomain gets its own cookie jar. Add a regression test: log into one portal, check `document.cookie` is empty on the other.
+- **CORS preflight catch-22.** If `admin.constrai.ca` ever calls `app.constrai.ca/api/...` (or vice versa), the cross-origin preflight needs explicit CORS allow rules. Convention: each portal calls only its own backend Host. If a cross-portal call ever becomes necessary, document the CORS allowlist explicitly.
+- **Vhost ordering bug.** Express's `vhost()` matches the first one whose hostname matches. If two vhosts could match (e.g., a wildcard `*.constrai.ca` plus a specific `admin.constrai.ca`), the more specific one MUST be registered first. Convention: list specific vhosts before wildcards.
+- **Nginx server_name precedence.** Same kind of issue at the Nginx layer. Convention: each `server_name` is exact (no wildcard server blocks for now).
+- **Frontend bundle leak.** Even with Vite multi-entry, a careless `import` from `admin-main.tsx` into a tenant component will pull admin code into the tenant bundle. Convention: ESLint rule that disallows `import` from `src/admin/**` outside `src/admin-main.tsx` and its descendants.
+
+---
+
+- **Today: 59 sections.** (Section 90 NEW — Phase 5 architecture decisions: subdomain (A), Vite multi-entry (B2), backend vhost split (C2). Roadmap 90-A → 90-F = ~4 days of work. No code shipped yet — execution begins next.)
+
