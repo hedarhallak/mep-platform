@@ -28,7 +28,6 @@
 
 const express = require('express');
 const router = express.Router();
-const { pool } = require('../db');
 const { audit, ACTIONS } = require('../lib/audit');
 const { can } = require('../middleware/permissions');
 const { sendAssignmentEmployee, sendAssignmentForeman } = require('../lib/email');
@@ -526,7 +525,7 @@ router.post('/requests', can('assignments.create'), async (req, res) => {
       ]
     );
 
-    await audit(pool, req, {
+    await audit(req.db, req, {
       action: ACTIONS.ASSIGNMENT_CREATED,
       entity_type: 'assignment_request',
       entity_id: rows[0].id,
@@ -537,17 +536,21 @@ router.post('/requests', can('assignments.create'), async (req, res) => {
     // Calculate and store distance for auto-approved assignments
     if (isAdmin) {
       await notifyAssignment(req.db, rows[0].id, companyId);
-      // Fire and forget distance calculation
-      calcDistanceKm(employee_id, project_id, companyId).then((km) => {
+      // 89-E/2: synchronous Mapbox distance calculation. Adds ~200-500ms
+      // to response time but works under Stage 3 strict RLS (pool path
+      // would return 0 rows). The UPDATE writes through req.db so it's
+      // covered by the request transaction.
+      try {
+        const km = await calcDistanceKm(req.db, employee_id, project_id, companyId);
         if (km !== null) {
-          pool
-            .query('UPDATE public.assignment_requests SET distance_km = $1 WHERE id = $2', [
-              km,
-              rows[0].id,
-            ])
-            .catch((e) => console.error('distance update error:', e.message));
+          await req.db.query(
+            'UPDATE public.assignment_requests SET distance_km = $1 WHERE id = $2',
+            [km, rows[0].id]
+          );
         }
-      });
+      } catch (e) {
+        console.error('distance update error:', e.message);
+      }
     }
 
     return res.status(201).json({ ok: true, request: rows[0], auto_approved: isAdmin });
@@ -559,13 +562,26 @@ router.post('/requests', can('assignments.create'), async (req, res) => {
 
 // ── Mapbox Distance Helper ────────────────────────────────────────
 //
-// Fire-and-forget — invoked without await after res.end() has fired.
-// Stays on global `pool` for the same reason as notifyAssignment.
+// Section 89-E/2 (May 8, 2026): refactored from fire-and-forget on
+// `pool` to await + `req.db`. The Mapbox API call between the DB
+// reads and the post-call UPDATE adds ~200-500ms to caller response
+// time, but this is the cost of correctness under Stage 3 strict RLS:
+// pool reads with no GUC return zero rows.
+//
+// Caller pattern changes from
+//   calcDistanceKm(empId, projId, companyId).then(km => pool.query(UPDATE…));
+// to
+//   const km = await calcDistanceKm(req.db, empId, projId, companyId);
+//   if (km !== null) await req.db.query('UPDATE…');
+//
+// (The post-Mapbox UPDATE is the caller's responsibility now — the
+// helper just returns the km. Keeps the helper simple and lets the
+// caller pick the right tx for the UPDATE.)
 const MAPBOX_TOKEN = process.env.MAPBOX_ACCESS_TOKEN || '';
 
-async function calcDistanceKm(employeeId, projectId, companyId) {
+async function calcDistanceKm(db, employeeId, projectId, companyId) {
   try {
-    const empRes = await pool.query(
+    const empRes = await db.query(
       `SELECT ST_Y(home_location::geometry) AS home_lat,
               ST_X(home_location::geometry) AS home_lng
        FROM public.employee_profiles
@@ -578,7 +594,7 @@ async function calcDistanceKm(employeeId, projectId, companyId) {
     if (!emp || !emp.home_lat || !emp.home_lng) return null;
 
     // Get project site coords
-    const projRes = await pool.query(
+    const projRes = await db.query(
       `SELECT site_lat, site_lng FROM public.projects
        WHERE id = $1 AND company_id = $2 LIMIT 1`,
       [projectId, companyId]
@@ -660,7 +676,7 @@ router.patch('/requests/:id/approve', can('assignments.edit'), async (req, res) 
       [req.user.user_id, reqId, companyId]
     );
 
-    await audit(pool, req, {
+    await audit(req.db, req, {
       action: ACTIONS.ASSIGNMENT_UPDATED,
       entity_type: 'assignment_request',
       entity_id: reqId,
@@ -670,17 +686,18 @@ router.patch('/requests/:id/approve', can('assignments.edit'), async (req, res) 
     // Send notification emails
     await notifyAssignment(req.db, reqId, companyId);
 
-    // Calculate and store distance
-    calcDistanceKm(r.requested_for_employee_id, r.project_id, companyId).then((km) => {
+    // 89-E/2: synchronous Mapbox distance calculation. Adds ~200-500ms.
+    try {
+      const km = await calcDistanceKm(req.db, r.requested_for_employee_id, r.project_id, companyId);
       if (km !== null) {
-        pool
-          .query('UPDATE public.assignment_requests SET distance_km = $1 WHERE id = $2', [
-            km,
-            reqId,
-          ])
-          .catch((e) => console.error('distance update error:', e.message));
+        await req.db.query('UPDATE public.assignment_requests SET distance_km = $1 WHERE id = $2', [
+          km,
+          reqId,
+        ]);
       }
-    });
+    } catch (e) {
+      console.error('distance update error:', e.message);
+    }
 
     return res.json({ ok: true, request: rows[0] });
   } catch (err) {
@@ -714,7 +731,7 @@ router.patch('/requests/:id/reject', can('assignments.edit'), async (req, res) =
       [req.user.user_id, reason || null, reqId, companyId]
     );
 
-    await audit(pool, req, {
+    await audit(req.db, req, {
       action: ACTIONS.ASSIGNMENT_UPDATED,
       entity_type: 'assignment_request',
       entity_id: reqId,
@@ -762,7 +779,7 @@ router.patch('/requests/:id/cancel', can('assignments.edit'), async (req, res) =
       [reqId, companyId]
     );
 
-    await audit(pool, req, {
+    await audit(req.db, req, {
       action: ACTIONS.ASSIGNMENT_DELETED,
       entity_type: 'assignment_request',
       entity_id: reqId,
@@ -1028,7 +1045,7 @@ router.patch('/requests/:id/move', can('assignments.edit'), async (req, res) => 
       [new_project_id, reqId, companyId]
     );
 
-    await audit(pool, req, {
+    await audit(req.db, req, {
       action: ACTIONS.ASSIGNMENT_UPDATED,
       entity_type: 'assignment_request',
       entity_id: reqId,

@@ -189,27 +189,39 @@ function invalidateCache() {
 // ── Audit log helper ─────────────────────────────────────────
 /**
  * logAudit(req, action, entity, entityId, oldValue, newValue)
- * Non-blocking — fires and forgets, never throws.
+ * Awaitable — caller should `await` to ensure the audit row lands
+ * before the request response flushes.
  *
- * Stays on `pool` (not `req.db`) because it runs without await from
- * route handlers and is meant to outlive the request transaction.
- * Under Stage 2 permissive RLS this works; under Stage 3 strict, the
- * audit_logs INSERT will need either: (a) a permissive policy on
- * audit_logs that allows pool writes regardless of GUC, or
- * (b) refactor logAudit to await + use req.db. Decision deferred
- * to Stage 3 audit pass (89-E).
+ * Section 89-E/2 (May 8, 2026): refactored from a fire-and-forget
+ * `pool.query(...).catch(...)` synchronous-return helper to an async
+ * helper that uses `req.db` (request-scoped, with `app.company_id`
+ * GUC set by tenantDb). Falls back to the global `pool` only if
+ * `req.db` is missing (defense-in-depth — every caller of logAudit
+ * is in a route mounted with tenantDb, so req.db is always set in
+ * practice). Errors are caught and logged so audit failure never
+ * crashes the request.
+ *
+ * Caller pattern changes from
+ *   logAudit(req, 'ACTION', 'entity', id, old, new);
+ * to
+ *   await logAudit(req, 'ACTION', 'entity', id, old, new);
+ *
+ * Latency impact: small audit_logs INSERT (~5ms) added to response
+ * time. Acceptable for write operations that already do meaningful
+ * work and want a guaranteed audit trail.
  */
-function logAudit(req, action, entity, entityId = null, oldValue = null, newValue = null) {
-  const userId = req.user?.user_id ? Number(req.user.user_id) : null;
-  const companyId = req.user?.company_id ? Number(req.user.company_id) : null;
-  const username = req.user?.username || null;
-  const role = req.user?.role || null;
-  const ip =
-    req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || null;
-  const ua = req.headers['user-agent'] || null;
+async function logAudit(req, action, entity, entityId = null, oldValue = null, newValue = null) {
+  try {
+    const userId = req.user?.user_id ? Number(req.user.user_id) : null;
+    const companyId = req.user?.company_id ? Number(req.user.company_id) : null;
+    const username = req.user?.username || null;
+    const role = req.user?.role || null;
+    const ip =
+      req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || null;
+    const ua = req.headers['user-agent'] || null;
+    const db = req.db || pool;
 
-  pool
-    .query(
+    await db.query(
       `INSERT INTO public.audit_logs
        (company_id, user_id, username, role, action, entity_type, entity_id,
         old_values, new_values, ip_address, user_agent)
@@ -227,8 +239,10 @@ function logAudit(req, action, entity, entityId = null, oldValue = null, newValu
         ip,
         ua,
       ]
-    )
-    .catch((err) => console.error('[audit] Failed to write log:', err.message));
+    );
+  } catch (err) {
+    console.error('[audit] Failed to write log:', err.message);
+  }
 }
 
 module.exports = { can, canAny, userHasPermission, invalidateCache, logAudit };

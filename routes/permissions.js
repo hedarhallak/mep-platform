@@ -232,7 +232,7 @@ router.put('/role/:role', can('settings.permissions'), async (req, res) => {
       );
     }
 
-    logAudit(req, 'UPDATE_PERMISSIONS', 'role_permissions', null, null, { role });
+    await logAudit(req, 'UPDATE_PERMISSIONS', 'role_permissions', null, null, { role });
 
     res.json({ success: true, message: `Permissions updated for role: ${role}` });
   } catch (err) {
@@ -480,7 +480,7 @@ router.post('/reset/:role', can('settings.permissions'), async (req, res) => {
       );
     }
 
-    logAudit(req, 'RESET_PERMISSIONS', 'role_permissions', null, null, { role });
+    await logAudit(req, 'RESET_PERMISSIONS', 'role_permissions', null, null, { role });
 
     res.json({ success: true, message: `Role "${role}" reset to defaults` });
   } catch (err) {

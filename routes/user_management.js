@@ -134,7 +134,14 @@ router.patch('/:id/role', can('settings.user_management'), async (req, res) => {
 
     await req.db.query(`UPDATE public.app_users SET role = $1 WHERE id = $2`, [newRole, targetId]);
 
-    logAudit(req, 'CHANGE_ROLE', 'app_users', targetId, { role: target.role }, { role: newRole });
+    await logAudit(
+      req,
+      'CHANGE_ROLE',
+      'app_users',
+      targetId,
+      { role: target.role },
+      { role: newRole }
+    );
 
     res.json({ ok: true, message: `Role updated to ${newRole}` });
   } catch (err) {
@@ -268,7 +275,7 @@ router.post('/:id/resend', can('settings.user_management'), async (req, res) => 
       targetId,
     ]);
 
-    logAudit(req, 'RESEND_INVITE', 'app_users', targetId, null, { email: target.email });
+    await logAudit(req, 'RESEND_INVITE', 'app_users', targetId, null, { email: target.email });
 
     res.json({ ok: true, message: 'Activation email resent' });
   } catch (err) {
