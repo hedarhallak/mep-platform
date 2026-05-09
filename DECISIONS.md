@@ -9709,3 +9709,64 @@ No `try { INSERT } catch { handle dup }` patterns. Username uniqueness in POST /
 
 - **Today: 58 sections.** (Section 89 extended with Piece 89-C/15: SUPER_ADMIN routes bundle + Pitfall #25 — SUPER_ADMIN PIN format trap. 22 of ~25 protected routes now consume req.db — Phase 4b is ~88% done.)
 
+### Piece 89-D — middleware/permissions.js → req.db (Stage 3 prep, May 8, 2026)
+
+After 89-C/15 deployed, an audit of `app.js` confirmed Phase 4b is **actually 100% complete**: 22 of 22 authenticated route mounts are now wrapped in `tenantDb`. The "~25" estimate from earlier sub-sections was a high-side guess; the real count is 22 distinct route files. The "3 routes remaining" line at the end of 89-C/15 was the audit error. Mentioning here so the next reader doesn't go looking for them.
+
+89-D is the first Stage 3 prep piece — closing **Pitfall #21** ("`middleware/permissions.js` `can()` calls `pool.query` directly"). Under Stage 3 strict RLS, every authenticated request would 403 because `user_permissions` lookups via the global pool (no GUC) would return zero rows.
+
+#### Approach
+
+Backward-compatible refactor:
+
+```js
+// Before (89-C/1 era):
+async function userHasPermission(userId, role, permissionCode) {
+  // ... uses global `pool`
+}
+
+// After (89-D):
+async function userHasPermission(userId, role, permissionCode, db = pool) {
+  // ... uses `db` (defaults to pool)
+}
+```
+
+`can()` and `canAny()` pass `req.db || pool` to `userHasPermission`. Under Stage 2 either path works; under Stage 3 the pool fallback fails-closed (zero rows for user_permissions overrides). Existing tests (`tests/smoke/middleware_permissions.test.js`, `tests/auth/rbac_matrix.test.js`) call the 3-arg form unchanged — they keep working via the default `db = pool` parameter.
+
+#### What stayed on `pool`
+
+Two helpers intentionally stay on `pool`:
+
+1. **`loadRolePermissions`** — reads from `role_permissions`, a global table with no `company_id` column. RLS doesn't apply. The cache is module-level, populated once per ~5 minutes regardless of which request triggers the load — using a request-scoped client there would be wrong (the client is released at end of that request).
+2. **`logAudit`** — fire-and-forget INSERT into `audit_logs`, runs without await from route handlers. Stage 3 may need a follow-up: either keep a permissive policy on `audit_logs` for system-level inserts, or refactor `logAudit` to await + use req.db. Decision deferred to **89-E audit pass**.
+
+#### Why this was safe to ship now
+
+Every `can()`-protected route already mounts `tenantDb` before the route handler fires. Verified at end of 89-C/15: 22/22 authenticated routes through tenantDb. So `req.db` is always available when `can()` runs. The pool fallback is purely defense-in-depth.
+
+CI #486 went green on first push — no regressions.
+
+#### Files touched
+
+| File | Change |
+|---|---|
+| `middleware/permissions.js` | `userHasPermission` accepts optional `db` (defaults pool); `can()`/`canAny()` pass `req.db || pool`; comments explaining what stayed on pool and why |
+| `HANDOFF.md` | Latest deployed → 89-D; Phase 4b status → 100%; Pitfall #21 marked CLOSED with resolution note |
+| `DECISIONS.md` (this Piece) | — |
+
+No route changes needed. No test changes needed.
+
+#### Status — Piece 89-D
+
+| Item | Status |
+|---|---|
+| Refactor | ✅ `userHasPermission` 4th param; `can()`/`canAny()` use `req.db || pool` |
+| Backward compat | ✅ Existing tests still pass via `db = pool` default |
+| PR opened + CI green | ✅ CI #486 green on first push |
+| Merged to main | ✅ Squash `1c8bd8f` (May 8, 2026) |
+| Deployed to prod | ✅ `pm2 restart mep-backend` — pid 723774 online (May 8, 2026) |
+| Pitfall #21 | ✅ Closed |
+| Next (89-E) | ⏳ Pending — Stage 3 strict RLS flip + `audit_logs` write path under strict mode |
+
+- **Today: 58 sections.** (Section 89 extended with Piece 89-D: permissions middleware refactor closing Pitfall #21. **Phase 4b complete: 22/22 routes on req.db. Phase 4c started: 89-D ✅, 89-E pending.**)
+
