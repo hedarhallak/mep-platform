@@ -82,9 +82,12 @@ describeIfDb('Phase 4 Stage 1 — Permissive RLS at the DB layer', () => {
     await closePool();
   });
 
-  test('GUC unset: permissive bypass returns rows from all companies (Stage 1 contract)', async () => {
+  test('GUC unset: strict policy returns 0 rows (Stage 3 contract — migration 013)', async () => {
+    // Section 89-E/3 (May 9, 2026): migration 013 dropped the
+    // "GUC unset = bypass" clause. With no GUC set, the policy
+    // expression `company_id = NULL::bigint` evaluates to NULL on
+    // every row → all rows excluded. Fail-closed by design.
     await withMepuserRls(async (client) => {
-      // GUC is not set in this transaction.
       const { rows } = await client.query(
         `SELECT id, first_name, company_id
            FROM public.employees
@@ -93,9 +96,7 @@ describeIfDb('Phase 4 Stage 1 — Permissive RLS at the DB layer', () => {
         [empA1.id, empA2.id, empB1.id]
       );
 
-      const ids = rows.map((r) => Number(r.id));
-      expect(ids).toEqual(expect.arrayContaining([empA1.id, empA2.id, empB1.id]));
-      expect(ids).toHaveLength(3);
+      expect(rows).toHaveLength(0);
     });
   });
 
@@ -132,10 +133,13 @@ describeIfDb('Phase 4 Stage 1 — Permissive RLS at the DB layer', () => {
     });
   });
 
-  test('GUC empty string: behaves like unset (permissive bypass)', async () => {
-    // Edge case worth pinning: the policy treats empty string the same as
-    // NULL. A future bug that sets the GUC to '' instead of unsetting it
-    // must NOT accidentally cast empty string to bigint.
+  test('GUC empty string: behaves like unset under Stage 3 strict (returns 0 rows)', async () => {
+    // Edge case worth pinning: the policy uses NULLIF(…, '') so empty
+    // string is treated the same as NULL. Under Stage 3 strict that
+    // means 0 rows (instead of the Stage 1 "permissive bypass returns
+    // everything"). A future bug that sets the GUC to '' instead of
+    // setting a real bigint will fail-closed at the read, which is the
+    // desired behavior — the route handler should never see stale rows.
     await withMepuserRls(async (client) => {
       await client.query(`SELECT set_config('app.company_id', '', true)`);
 
@@ -143,9 +147,7 @@ describeIfDb('Phase 4 Stage 1 — Permissive RLS at the DB layer', () => {
         `SELECT id FROM public.employees WHERE id IN ($1, $2, $3) ORDER BY id`,
         [empA1.id, empA2.id, empB1.id]
       );
-      const ids = rows.map((r) => Number(r.id));
-      expect(ids).toEqual(expect.arrayContaining([empA1.id, empA2.id, empB1.id]));
-      expect(ids).toHaveLength(3);
+      expect(rows).toHaveLength(0);
     });
   });
 });

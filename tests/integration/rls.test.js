@@ -108,30 +108,37 @@ describeIfDb('RLS — Phase 4 Stage 1 (permissive policies)', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // 1. Permissive baseline — unset app.company_id allows reading both tenants.
+  // 1. Strict baseline — unset app.company_id returns 0 rows (Stage 3, migration 013).
+  //
+  // Section 89-E/3 (May 9, 2026): migration 013 dropped the
+  // "GUC unset = bypass" clause from the 19 strict-tenant policies. The
+  // policy is now `company_id = NULLIF(current_setting(...), '')::bigint`
+  // which evaluates to NULL when GUC is unset, filtering all rows out.
   // ---------------------------------------------------------------------------
-  describe('with app.company_id unset (permissive baseline)', () => {
-    it('reads both tenants from a direct-company_id table (employees)', async () => {
+  describe('with app.company_id unset (strict baseline — Stage 3)', () => {
+    it('returns 0 rows from a direct-company_id table (employees)', async () => {
       const client = await pool.connect();
       try {
         await asMepuser(client, async () => {
-          // No SET LOCAL app.company_id — GUC is unset, policies are permissive.
           const { rows } = await client.query(
             `SELECT id, company_id FROM public.employees
               WHERE id IN ($1, $2)
               ORDER BY id`,
             [employeeA.id, employeeB.id]
           );
-          expect(rows).toHaveLength(2);
-          const ids = rows.map((r) => Number(r.id)).sort();
-          expect(ids).toEqual([employeeA.id, employeeB.id].sort());
+          expect(rows).toHaveLength(0);
         });
       } finally {
         client.release();
       }
     });
 
-    it('reads both tenants from a child table (employee_profiles)', async () => {
+    it('reads both tenants from employee_profiles (RLS not applied to this table)', async () => {
+      // employee_profiles is NOT in migration 012's tenant_tables list
+      // (or migration 013's strict_tables list). It has no RLS policy
+      // attached, so queries return all rows regardless of GUC. This
+      // test pins that current state — if employee_profiles ever gets
+      // RLS, this assertion will need to change to 0 rows under strict.
       const client = await pool.connect();
       try {
         await asMepuser(client, async () => {
