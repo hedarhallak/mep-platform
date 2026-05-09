@@ -1,7 +1,7 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 9, 2026 — **Phase 4 (PostgreSQL Row-Level Security) is COMPLETE on prod.** Migration 013 strict flip applied May 9, 2026 ~14:45 UTC; verified 21 policies (19 strict + audit_logs read/write). All 20 tenant tables under strict policies; all 22 authenticated routes on req.db; auth.js audit writes still work via the `audit_logs` permissive INSERT split. **Next session starts Phase 5 (SUPER_ADMIN portal split)** per Section 85 plan.
+> Last updated: May 9, 2026 — **Phase 4 (PostgreSQL Row-Level Security) is COMPLETE on prod** (migration 013 applied ~14:45 UTC). **Phase 5 architecture decided in Section 90 of DECISIONS.md** (no code yet): subdomain `admin.constrai.ca` (A) + Vite multi-entry frontend (B2) + Express vhost backend split (C2). Execution roadmap = 6 pieces (90-A through 90-F), ~4 days total. **Next task: Piece 90-A — DNS + Cloudflare + cert + Nginx for `admin.constrai.ca`.**
 
 ---
 
@@ -27,7 +27,7 @@ When you receive the one-line command above:
    - `RECOVERY.md` Section 2.4 only (cost inventory) if relevant to today's task
 3. **Echo this exact line** as the first line of your reply so Hedar knows bootstrap completed:
    ```
-   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 89/E/3, Phase 4 done)
+   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 90, Phase 5 architecture)
    ```
 4. **Confirm the next task** in 1-2 lines (from "Next task" below).
 5. **Ask if Hedar is ready to start**, then wait.
@@ -95,24 +95,39 @@ When you receive the one-line command above:
 
 ---
 
-## Next task: Phase 5 — SUPER_ADMIN portal split
+## Next task: Piece 90-A — DNS + Cloudflare + cert + Nginx for `admin.constrai.ca`
 
-**Goal:** stand up a separate SUPER_ADMIN portal so cross-tenant administration (creating new companies, viewing usage, billing, support tooling) lives outside the customer-facing app shell. Today SUPER_ADMIN logs into the same `app.constrai.ca` and sees both tenant-scoped pages and admin-only pages mixed together. After Phase 5 they'll be served from a separate path/subdomain (TBD — `admin.constrai.ca` is the working assumption) with its own React entry, its own route guards, and its own backend mount prefix.
+**Phase 5 architecture is fully decided** — see DECISIONS.md Section 90 for the full rationale. Quick recap of the 3 choices, so the next session doesn't have to re-derive them:
 
-**Why now:** Phase 4 made the DB layer fail-closed against tenant leaks. Phase 5 makes the application layer cleanly separate which UI surfaces are tenant-scoped vs cross-tenant. This is a prerequisite for Phase 6 (frontend tenant context + branding per company) and Phase 7 (2FA + biometric) — both of those need the tenant boundary to be visible at the top of the React tree, not hidden behind role-conditional renders.
+- **Decision A**: subdomain `admin.constrai.ca` (NOT path-based on `app.constrai.ca/super`). Reason: physical security boundary, separate cookie scope, makes Phase 6 per-tenant branding trivial.
+- **Decision B2**: single Vite project with two entry points (`src/main.tsx` for tenant + `src/admin-main.tsx` for admin). NOT B1 (separate projects) yet — that's the standard "early SaaS" choice; B2 → B1 migration is well-trodden when the team grows.
+- **Decision C2**: Express vhost split — same pm2 process, two sub-apps physically separated by Host header. NOT C1 (single app + role guard, security too linguistic) and NOT C3 (separate processes, premature operational overhead).
 
-**Status entering this task** (per Section 89 in DECISIONS.md):
+**Piece 90-A scope (this PR):** infrastructure only — no app code touched.
 
-- All 20 tenant tables under strict RLS policies on prod (migration 013 applied May 9, 2026).
-- All 22 authenticated routes mount tenantDb middleware.
-- `audit_logs` has a split policy: strict SELECT (tenant-scoped reads) + permissive INSERT (auth.js login/logout/PIN-change writes from the global pool).
-- `routes/super_admin.js` and `routes/ccq_rates.js` already exist as the SA-only mount points (89-C/15 batch), but they're served from the same domain + the same React build as everything else.
+1. Verify whether the Cloudflare Origin Cert installed in Phase 1 covers `*.constrai.ca` (wildcard) or specific hostnames only. SSH to prod and run:
+   ```bash
+   openssl x509 -in /etc/ssl/cloudflare/origin.pem -noout -text | grep -A2 "Subject Alternative Name"
+   ```
+   If the SAN list contains `*.constrai.ca` → wildcard, no cert work needed.
+   If only specific names → regenerate via Cloudflare dashboard (free, ~10 min) covering `*.constrai.ca` + `constrai.ca`.
+2. Add `admin.constrai.ca` as a Cloudflare DNS record (proxied A record pointing at the same Droplet IP `143.110.218.84`).
+3. Add an Nginx server block for `admin.constrai.ca` that returns a placeholder 200 + "Constrai Admin — coming soon" plain text. This proves the SSL chain end-to-end before any app code is written.
+4. Test from Hedar's browser: `https://admin.constrai.ca` should show the placeholder over a valid cert.
 
-**Open design questions for Phase 5 kickoff (do not resolve in this HANDOFF — surface to Hedar at session start):**
+**Out of scope for 90-A:** any backend or frontend code. Those land in 90-B and 90-C respectively.
 
-1. **Subdomain vs path.** `admin.constrai.ca` (separate certificate, cleaner CSP) vs `app.constrai.ca/super` (one domain, cookies share). Section 85 lists this as TBD.
-2. **Separate React build vs single build with code-split entry.** Two builds simplify the security boundary at the cost of duplicated dependencies. One build with a guarded `/super/*` route tree keeps the existing deploy pipeline.
-3. **Backend mount.** Today `routes/super_admin.js` lives on the same Express app. Should it be a sub-app behind a separate auth middleware, or stay co-mounted?
+**Suggested PR title:** `infra(s90-a): add admin.constrai.ca DNS + Nginx server block (placeholder)`.
+
+**Checklist before opening 90-A PR:**
+
+- [ ] `openssl x509` confirmation that the cert covers `admin.constrai.ca` (wildcard or explicit SAN entry).
+- [ ] `dig admin.constrai.ca` returns Cloudflare proxy IPs.
+- [ ] `curl -I https://admin.constrai.ca` returns `200 OK` with a valid TLS handshake.
+- [ ] `curl -I https://app.constrai.ca` still returns the existing tenant app (no regression).
+- [ ] Nginx `nginx -t` clean, `systemctl reload nginx` executed.
+
+**After 90-A merges:** start 90-B (backend vhost split). 90-C (frontend multi-entry) can run in parallel with 90-B since they touch different files.
 
 **Backlog items still open after Phase 4** (carried forward — not blockers for Phase 5 but should be tracked):
 
