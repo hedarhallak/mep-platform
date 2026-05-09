@@ -1,7 +1,7 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 9, 2026 — **Phase 4 done (May 9 ~14:45 UTC).** **Phase 5 in progress: 90-A ✅ DONE** (admin.constrai.ca subdomain live with placeholder, May 9 ~21:55 UTC) — DNS + Cloudflare + Nginx server block + static placeholder all verified end-to-end. Phase 1's wildcard Origin Cert covered the new subdomain natively (no cert work needed). New `infra/` folder convention introduced for server-side configs tracked in git. **Next task: Piece 90-B — Backend vhost split (C2)**: refactor `index.js` into root + adminApp + tenantApp, move `routes/super_admin.js` + `routes/ccq_rates.js` mounts onto adminApp, add Host-header anti-leak guards both directions, integration tests for cross-Host rejection.
+> Last updated: May 9, 2026 — **Phase 4 done (May 9 ~14:45 UTC).** **Phase 5 in progress: 90-A + 90-B ✅ DONE.** 90-A stood up admin.constrai.ca subdomain (May 9 ~21:55 UTC). 90-B refactored Express into vhost root + adminApp + tenantApp, with anti-leak 404 guards both directions and a 12-assertion vhost_isolation test (deployed May 9 ~22:50 UTC). All 4 SA test files updated to use the new `tests/helpers/admin_request.js` helper. **Next task: Piece 90-C — Frontend Vite multi-entry (B2)**: add `src/admin-main.tsx`, configure `rollupOptions.input` for two `index.html` outputs, Nginx serves the right one per Host. Admin shell is just a stub for now; first real screen lands in 90-D.
 
 ---
 
@@ -27,7 +27,7 @@ When you receive the one-line command above:
    - `RECOVERY.md` Section 2.4 only (cost inventory) if relevant to today's task
 3. **Echo this exact line** as the first line of your reply so Hedar knows bootstrap completed:
    ```
-   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 90 / 90-A, next is 90-B)
+   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 90 / 90-B, next is 90-C)
    ```
 4. **Confirm the next task** in 1-2 lines (from "Next task" below).
 5. **Ask if Hedar is ready to start**, then wait.
@@ -45,9 +45,9 @@ When you receive the one-line command above:
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04) |
 | Backend | Node.js + Express + Postgres 16, pm2-managed at `/var/www/mep` |
 | Frontend | React + Vite + Tailwind, deployed to `/var/www/mep/mep-frontend/dist` |
-| Latest deployed to prod | **`admin.constrai.ca` subdomain + placeholder (90-A)** — May 9, 2026 ~21:55 UTC. (Migration 013 strict RLS flip / 89-E/3 also today ~14:45 UTC.) |
-| Last merged to main | Section 90 docs (squash `d7ead26`) — May 9, 2026. 90-A docs PR pending. |
-| Active program | **Multi-Tenant Migration** (Section 85, Phases 1-8) — **Phase 5 in progress** (90-A done, 90-B next) |
+| Latest deployed to prod | **Backend vhost split (90-B)** — May 9, 2026 ~22:50 UTC. (Earlier today: 90-A subdomain ~21:55 UTC, migration 013 strict RLS flip / 89-E/3 ~14:45 UTC.) |
+| Last merged to main | 90-A infra (squash from PR #197) — May 9, 2026. 90-B PR pending. |
+| Active program | **Multi-Tenant Migration** (Section 85, Phases 1-8) — **Phase 5 in progress** (90-A + 90-B done, 90-C next) |
 | Mobile app | Still on legacy username login — backend keeps backward-compat |
 
 ### Multi-tenant migration progress
@@ -95,41 +95,39 @@ When you receive the one-line command above:
 
 ---
 
-## Next task: Piece 90-B — Backend vhost split (C2)
+## Next task: Piece 90-C — Frontend Vite multi-entry (B2)
 
-**Phase 5 architecture (Section 90) recap** — all 3 decisions stand:
+**Phase 5 architecture (Section 90) recap** — all 3 decisions are in place:
 
-- **A**: subdomain `admin.constrai.ca` ✅ live as of 90-A (May 9, 2026)
-- **B2**: single Vite project with two entry points — pending in 90-C
-- **C2**: Express vhost split — **THIS PIECE**
+- **A**: subdomain `admin.constrai.ca` ✅ live as of 90-A
+- **B2**: single Vite project with two entry points — **THIS PIECE**
+- **C2**: Express vhost split ✅ live as of 90-B (adminApp + tenantApp physically separated, anti-leak 404 guards both directions, 12 vhost_isolation assertions in CI)
 
-**90-B scope:** refactor `index.js` (the Express bootstrap) into:
+**90-C scope:** refactor `mep-frontend/` (the Vite + React tenant app) to also build an admin entry:
 
-1. A `root` Express app that uses `vhost('admin.constrai.ca', adminApp)` + `vhost('app.constrai.ca', tenantApp)` to dispatch by Host header.
-2. `adminApp`: minimal Express sub-app mounting only `/api/super` + `/api/super/ccq-rates` (currently in `routes/super_admin.js` + `routes/ccq_rates.js`). Stricter middleware stack — admin-only auth gate, separate rate limiter, separate CORS allowlist.
-3. `tenantApp`: everything else (the current `/api/*` mounts minus the two SUPER_ADMIN ones). Existing `tenantDb` middleware stays exactly where it is.
-4. **Anti-leak guards**: `tenantApp` MUST refuse any request whose path starts with `/api/super` (return 404 — admin path on tenant Host). `adminApp` MUST refuse any request whose path is NOT `/api/super*` (also 404). These guards are belt-and-suspenders on top of the vhost dispatch — if Express's vhost ever has a bug or someone mounts a route on the wrong app, the guard catches it.
-5. **Update Nginx**: `admin.constrai.ca`'s server block needs an `/api/` location block proxying to `localhost:3000` (same backend port — vhost dispatches by Host header inside the Node process). Update `infra/nginx/admin-constrai.conf` mirror in repo.
+1. Add `mep-frontend/admin.html` — Vite entry HTML for the admin portal. Mirrors the existing `index.html` shape, but loads `/src/admin-main.tsx` instead of `/src/main.tsx`.
+2. Add `mep-frontend/src/admin-main.tsx` + `mep-frontend/src/AdminApp.tsx` — minimal admin shell. For 90-C, just a placeholder layout with the Constrai logo + a "Welcome, SA" heading. Real screens land in 90-D.
+3. Update `mep-frontend/vite.config.ts`'s `build.rollupOptions.input` to:
+   ```ts
+   input: {
+     main: resolve(__dirname, 'index.html'),
+     admin: resolve(__dirname, 'admin.html'),
+   }
+   ```
+   This produces `dist/index.html` (tenant) AND `dist/admin.html` (admin) plus per-entry chunks.
+4. Update Nginx server blocks:
+   - `app.constrai.ca`: stays the same (`root /var/www/mep/mep-frontend/dist`, `try_files $uri $uri/ /index.html`).
+   - `admin.constrai.ca`: change `root` from `/var/www/admin-placeholder` to `/var/www/mep/mep-frontend/dist`, change `try_files` fallback from `/index.html` to `/admin.html`. Update both `infra/nginx/admin-constrai.conf` mirror and the prod server file.
+5. Wire shared infra: theme tokens, i18n setup, http client, design components — all stay in `mep-frontend/src/{theme,i18n,api,components}`. Both entries import from the same source. Keep an ESLint rule comment in place noting that admin-only modules should live under `src/admin/**` and tenant-only under `src/tenant/**` (deferred — 90-D will introduce these folders when real screens land).
 
-**Integration tests for 90-B (new):**
+**Out of scope for 90-C:**
+- No real admin screens — just the shell. First real page (companies list) lands in 90-D.
+- No SA-vs-tenant role guards in the React tree. That's 90-E.
+- No per-tenant branding work. That's Phase 6.
 
-- `tests/integration/vhost_isolation.test.js`:
-  1. Request to `admin.constrai.ca/api/super/companies` with valid SA token → 200 + JSON body.
-  2. Request to `admin.constrai.ca/api/employees` with valid SA token → 404 (admin app doesn't mount tenant routes).
-  3. Request to `app.constrai.ca/api/super/companies` with valid SA token → 404 (tenant app doesn't mount admin routes).
-  4. Request to `app.constrai.ca/api/employees` with valid COMPANY_ADMIN token → 200 + JSON (existing behavior preserved).
+**Suggested PR title:** `feat(s90-c): Vite multi-entry frontend (B2) — admin shell stub`.
 
-The Host header in tests is set explicitly via supertest's `.set('Host', 'admin.constrai.ca')`. CI runs against localhost so vhost dispatching works on the request Host header alone.
-
-**Pitfall to watch (encoded in Section 90 in advance):** Express's `vhost()` matches the FIRST vhost whose hostname matches. If a wildcard `*.constrai.ca` is ever added later, the more specific `admin.constrai.ca` MUST be registered first. Convention enforced by code comment at the vhost registration point.
-
-**Out of scope for 90-B:**
-
-- No frontend changes. The admin portal still serves the static placeholder from 90-A.
-- No new admin endpoints. Only the existing `super_admin.js` + `ccq_rates.js` routes get re-mounted.
-- No cookie scoping / cross-domain auth work. That's 90-E.
-
-**Suggested PR title:** `feat(s90-b): split Express into admin/tenant vhosts (C2)`.
+**Backlog items still open after Phase 4** (carried forward — not blockers for Phase 5 but should be tracked):
 
 **Backlog items still open after Phase 4** (carried forward — not blockers for Phase 5 but should be tracked):
 

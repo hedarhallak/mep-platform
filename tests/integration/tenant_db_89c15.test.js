@@ -23,6 +23,7 @@
 
 const request = require('supertest');
 const app = require('../../app');
+const { adminRequest } = require('../helpers/admin_request');
 const {
   describeIfDb,
   closePool,
@@ -77,7 +78,9 @@ describeIfDb('tenantDb middleware — Section 89-C/15 batch (SUPER_ADMIN routes)
 
   test('super/stats: SUPER_ADMIN sees cross-company aggregates', async () => {
     const { token } = await loginUser(superUser);
-    const res = await request(app).get('/api/super/stats').set('Authorization', `Bearer ${token}`);
+    const res = await adminRequest(app)
+      .get('/api/super/stats')
+      .set('Authorization', `Bearer ${token}`);
 
     expect(res.statusCode).toBe(200);
     expect(res.body.ok).toBe(true);
@@ -88,7 +91,7 @@ describeIfDb('tenantDb middleware — Section 89-C/15 batch (SUPER_ADMIN routes)
 
   test('super/companies: SUPER_ADMIN sees ALL companies (no per-tenant filter)', async () => {
     const { token } = await loginUser(superUser);
-    const res = await request(app)
+    const res = await adminRequest(app)
       .get('/api/super/companies')
       .set('Authorization', `Bearer ${token}`);
 
@@ -103,7 +106,7 @@ describeIfDb('tenantDb middleware — Section 89-C/15 batch (SUPER_ADMIN routes)
 
   test('super/companies: regular admin gets 403 from superAdmin middleware (before tenantDb)', async () => {
     const { token } = await loginUser(regularAdmin);
-    const res = await request(app)
+    const res = await adminRequest(app)
       .get('/api/super/companies')
       .set('Authorization', `Bearer ${token}`);
 
@@ -117,7 +120,7 @@ describeIfDb('tenantDb middleware — Section 89-C/15 batch (SUPER_ADMIN routes)
 
   test('ccq-rates: SUPER_ADMIN can list rates (global table)', async () => {
     const { token } = await loginUser(superUser);
-    const res = await request(app)
+    const res = await adminRequest(app)
       .get('/api/super/ccq-rates')
       .set('Authorization', `Bearer ${token}`);
 
@@ -128,7 +131,7 @@ describeIfDb('tenantDb middleware — Section 89-C/15 batch (SUPER_ADMIN routes)
 
   test('ccq-rates: regular admin gets 403 from superAdmin middleware', async () => {
     const { token } = await loginUser(regularAdmin);
-    const res = await request(app)
+    const res = await adminRequest(app)
       .get('/api/super/ccq-rates')
       .set('Authorization', `Bearer ${token}`);
 

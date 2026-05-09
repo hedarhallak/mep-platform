@@ -7,6 +7,7 @@
 
 const request = require('supertest');
 const app = require('../../app');
+const { adminRequest } = require('../helpers/admin_request');
 const {
   describeIfDb,
   closePool,
@@ -36,7 +37,7 @@ describeIfDb('CCQ rates — /api/super/ccq-rates', () => {
     const sa = await seedUser({ role: 'SUPER_ADMIN', pin: 'sa-pin-1234' });
     const { token } = await loginUser(sa);
 
-    const res = await request(app)
+    const res = await adminRequest(app)
       .get('/api/super/ccq-rates')
       .set('Authorization', `Bearer ${token}`);
 
@@ -50,7 +51,7 @@ describeIfDb('CCQ rates — /api/super/ccq-rates', () => {
     const admin = await seedUser({ company_id: company.company_id, role: 'COMPANY_ADMIN' });
     const { token } = await loginUser(admin);
 
-    const res = await request(app)
+    const res = await adminRequest(app)
       .get('/api/super/ccq-rates')
       .set('Authorization', `Bearer ${token}`);
 
@@ -62,7 +63,7 @@ describeIfDb('CCQ rates — /api/super/ccq-rates', () => {
     const sa = await seedUser({ role: 'SUPER_ADMIN', pin: 'sa-pin-1234' });
     const { token } = await loginUser(sa);
 
-    const res = await request(app)
+    const res = await adminRequest(app)
       .get('/api/super/ccq-rates/expiring')
       .set('Authorization', `Bearer ${token}`);
 

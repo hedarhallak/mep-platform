@@ -8,6 +8,7 @@
 
 const request = require('supertest');
 const app = require('../../app');
+const { adminRequest } = require('../helpers/admin_request');
 const { describeIfDb, closePool, seedUser, cleanupTestRows } = require('../helpers/db');
 
 async function loginUser(user, pin) {
@@ -31,7 +32,7 @@ describeIfDb('Super admin — POST /api/super/companies validation', () => {
     const sa = await seedUser({ role: 'SUPER_ADMIN', pin: 'sa-pin-1234' });
     const { token } = await loginUser(sa);
 
-    const res = await request(app)
+    const res = await adminRequest(app)
       .post('/api/super/companies')
       .set('Authorization', `Bearer ${token}`)
       .send({ admin_username: 'foo', admin_pin: '1234' });
@@ -44,7 +45,7 @@ describeIfDb('Super admin — POST /api/super/companies validation', () => {
     const sa = await seedUser({ role: 'SUPER_ADMIN', pin: 'sa-pin-1234' });
     const { token } = await loginUser(sa);
 
-    const res = await request(app)
+    const res = await adminRequest(app)
       .post('/api/super/companies')
       .set('Authorization', `Bearer ${token}`)
       .send({ name: 'NewCo', admin_pin: '1234' });
@@ -57,7 +58,7 @@ describeIfDb('Super admin — POST /api/super/companies validation', () => {
     const sa = await seedUser({ role: 'SUPER_ADMIN', pin: 'sa-pin-1234' });
     const { token } = await loginUser(sa);
 
-    const res = await request(app)
+    const res = await adminRequest(app)
       .post('/api/super/companies')
       .set('Authorization', `Bearer ${token}`)
       .send({ name: 'NewCo', admin_username: 'foo' });
@@ -70,7 +71,7 @@ describeIfDb('Super admin — POST /api/super/companies validation', () => {
     const sa = await seedUser({ role: 'SUPER_ADMIN', pin: 'sa-pin-1234' });
     const { token } = await loginUser(sa);
 
-    const res = await request(app)
+    const res = await adminRequest(app)
       .post('/api/super/companies')
       .set('Authorization', `Bearer ${token}`)
       .send({
@@ -91,7 +92,7 @@ describeIfDb('Super admin — POST /api/super/companies validation', () => {
     const sa = await seedUser({ role: 'SUPER_ADMIN', pin: 'sa-pin-1234' });
     const { token } = await loginUser(sa);
 
-    const res = await request(app)
+    const res = await adminRequest(app)
       .post('/api/super/companies')
       .set('Authorization', `Bearer ${token}`)
       .send({
