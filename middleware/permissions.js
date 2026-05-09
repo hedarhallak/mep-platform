@@ -9,6 +9,26 @@
  * Usage:
  *   const { can } = require('./permissions');
  *   router.get('/employees', can('employees.view'), handler);
+ *
+ * Section 89-D (May 8, 2026): refactored to use the request-scoped
+ * `req.db` client for `user_permissions` lookups when available, with
+ * `pool` as a backward-compat fallback. Under Stage 2 permissive RLS
+ * either path works; under Stage 3 strict RLS, the pool fallback will
+ * fail because `user_permissions` lookups need the GUC set, which only
+ * `tenantDb` does. Every authenticated route already mounts tenantDb
+ * before this middleware fires (verified at end of 89-C/15), so the
+ * fallback is purely a defense-in-depth path that should never trigger
+ * in production after Stage 3 ships.
+ *
+ * The `loadRolePermissions` global cache and the `logAudit` write-side
+ * stay on `pool` — both touch global tables (`role_permissions`,
+ * `audit_logs` is tenant-scoped but is fire-and-forget per the 89-C/11
+ * pattern). The cache is module-level, populated once per ~5 minutes
+ * regardless of which request triggers the load; using a request-scoped
+ * client there would be wrong (the client is released at end of that
+ * request, so subsequent reads of the cached Map are fine but a fresh
+ * load on a stale-cache hit would crash mid-request handler if we
+ * forced req.db).
  */
 
 const { pool } = require('../db');
@@ -21,6 +41,10 @@ let _cacheLoadedAt = 0;
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 async function loadRolePermissions() {
+  // role_permissions is a global table (no company_id), so RLS doesn't
+  // apply. Always read via pool — the cache is module-level and shared
+  // across requests, so binding it to a request-scoped client would be
+  // semantically wrong.
   const { rows } = await pool.query(`SELECT role, permission_code FROM public.role_permissions`);
   const map = {};
   for (const row of rows) {
@@ -45,8 +69,18 @@ async function getRolePermissions(role) {
  *   2. user_permissions.granted = false → explicitly denied
  *   3. user_permissions.granted = true  → explicitly granted
  *   4. role_permissions                 → default
+ *
+ * @param {number|null} userId
+ * @param {string} role
+ * @param {string} permissionCode
+ * @param {{query: function}} [db] - request-scoped client (req.db) when
+ *   called from middleware. Defaults to the global pool for backward
+ *   compatibility (tests, scripts). Under Stage 3 strict RLS the
+ *   default-pool path will return zero rows for user_permissions
+ *   lookups — callers must pass req.db (or any client with
+ *   `app.company_id` GUC set).
  */
-async function userHasPermission(userId, role, permissionCode) {
+async function userHasPermission(userId, role, permissionCode, db = pool) {
   const normalizedRole = normalizeRole(role);
 
   // SUPER_ADMIN always passes
@@ -54,7 +88,7 @@ async function userHasPermission(userId, role, permissionCode) {
 
   // Check user-level override first
   if (userId) {
-    const { rows } = await pool.query(
+    const { rows } = await db.query(
       `SELECT granted FROM public.user_permissions
        WHERE user_id = $1 AND permission_code = $2
        LIMIT 1`,
@@ -76,6 +110,12 @@ async function userHasPermission(userId, role, permissionCode) {
  *
  * Example:
  *   router.get('/employees', can('employees.view'), handler)
+ *
+ * Mount AFTER `auth` and `tenantDb` so `req.db` is available for the
+ * user_permissions lookup. If `req.db` is missing (route hasn't mounted
+ * tenantDb), falls back to `pool` — works under Stage 2 permissive RLS
+ * but will return zero rows under Stage 3 strict RLS, effectively
+ * denying all user-permission overrides.
  */
 function can(permissionCode) {
   return async (req, res, next) => {
@@ -86,8 +126,9 @@ function can(permissionCode) {
     try {
       const userId = req.user.user_id ? Number(req.user.user_id) : null;
       const role = req.user.role;
+      const db = req.db || pool;
 
-      const allowed = await userHasPermission(userId, role, permissionCode);
+      const allowed = await userHasPermission(userId, role, permissionCode, db);
 
       if (!allowed) {
         return res.status(403).json({
@@ -118,9 +159,10 @@ function canAny(permissionCodes) {
     try {
       const userId = req.user.user_id ? Number(req.user.user_id) : null;
       const role = req.user.role;
+      const db = req.db || pool;
 
       for (const code of permissionCodes) {
-        const allowed = await userHasPermission(userId, role, code);
+        const allowed = await userHasPermission(userId, role, code, db);
         if (allowed) return next();
       }
 
@@ -148,6 +190,14 @@ function invalidateCache() {
 /**
  * logAudit(req, action, entity, entityId, oldValue, newValue)
  * Non-blocking — fires and forgets, never throws.
+ *
+ * Stays on `pool` (not `req.db`) because it runs without await from
+ * route handlers and is meant to outlive the request transaction.
+ * Under Stage 2 permissive RLS this works; under Stage 3 strict, the
+ * audit_logs INSERT will need either: (a) a permissive policy on
+ * audit_logs that allows pool writes regardless of GUC, or
+ * (b) refactor logAudit to await + use req.db. Decision deferred
+ * to Stage 3 audit pass (89-E).
  */
 function logAudit(req, action, entity, entityId = null, oldValue = null, newValue = null) {
   const userId = req.user?.user_id ? Number(req.user.user_id) : null;
