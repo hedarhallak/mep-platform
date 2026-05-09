@@ -34,108 +34,112 @@ const { can } = require('../middleware/permissions');
 const { sendAssignmentEmployee, sendAssignmentForeman } = require('../lib/email');
 
 // ── notifyAssignment ──────────────────────────────────────────────
-// Sends email to the assigned employee + foreman (same project, same trade)
+// Sends email to the assigned employee + foreman (same project, same trade).
 // Never throws — errors are logged only.
 //
-// Fire-and-forget: callers invoke `notifyAssignment(pool, id, companyId)`
-// **without await**, so this runs after res.end() — i.e. after tenantDb
-// has committed and released the request-scoped connection. We must use
-// the global `pool` here, not req.db. The WHERE company_id filter
-// preserves tenant scoping.
-async function notifyAssignment(pool, assignmentRequestId, companyId) {
+// Section 89-E/1 (May 8, 2026): split into DB-read phase and
+// email-send phase. Callers now invoke
+// `await notifyAssignment(req.db, id, companyId)` — the await blocks
+// only on the DB reads (fast). Email sends are launched as a detached
+// promise inside this function and fire after the function returns,
+// so the route handler's response time only includes the DB-read
+// portion. This unblocks Stage 3 strict RLS: under strict mode,
+// queries on the global pool with no GUC return zero rows, so the
+// pre-89-E/1 fire-and-forget-on-pool pattern would have silently
+// skipped notifications. By doing the reads on the request-scoped
+// `req.db` (with the GUC set by tenantDb), they survive strict mode.
+async function notifyAssignment(db, assignmentRequestId, companyId) {
+  let data;
   try {
-    // Load this assignment's details
-    const { rows } = await pool.query(
-      `SELECT
-         ar.start_date, ar.end_date, ar.shift_start, ar.shift_end, ar.decision_note AS notes,
-         ar.assignment_role,
-         ar.requested_for_employee_id AS employee_id,
-         ar.project_id,
-         ep.full_name    AS employee_name,
-         ep.trade_code,
-         ep.phone        AS employee_phone,
-         ep.contact_email AS employee_email,
-         p.project_code, p.project_name, p.site_address
-       FROM public.assignment_requests ar
-       JOIN public.employee_profiles ep ON ep.employee_id = ar.requested_for_employee_id
-       JOIN public.projects           p  ON p.id          = ar.project_id
-       WHERE ar.id = $1 AND ar.company_id = $2
-       LIMIT 1`,
-      [assignmentRequestId, companyId]
-    );
-    if (!rows.length) return;
-    const a = rows[0];
+    data = await prepareNotifyData(db, assignmentRequestId, companyId);
+  } catch (err) {
+    console.error('[notifyAssignment] DB-read error:', err.message);
+    return;
+  }
+  if (!data) return;
 
-    // Load all APPROVED assignments on the same project overlapping this period
-    const teamRes = await pool.query(
-      `SELECT
-         ep.full_name    AS name,
+  // Detached: emails fly off independently of the request lifecycle.
+  // No DB calls inside fireNotifyEmails — only sendgrid network I/O —
+  // so survival past `res.end()` is fine.
+  fireNotifyEmails(data).catch((err) =>
+    console.error('[notifyAssignment] email error:', err.message)
+  );
+}
 
-         ep.contact_email,
-         ar.assignment_role,
-         ar.id
-       FROM public.assignment_requests ar
-       JOIN public.employee_profiles ep ON ep.employee_id = ar.requested_for_employee_id
-       WHERE ar.project_id  = $1
-         AND ar.company_id  = $2
-         AND ar.status      = 'APPROVED'
-         AND ar.id         != $3
-         AND ar.start_date <= $4
-         AND ar.end_date   >= $5`,
-      [a.project_id, companyId, assignmentRequestId, a.end_date, a.start_date]
-    );
-    const team = teamRes.rows;
+async function prepareNotifyData(db, assignmentRequestId, companyId) {
+  // Load this assignment's details
+  const { rows } = await db.query(
+    `SELECT
+       ar.start_date, ar.end_date, ar.shift_start, ar.shift_end, ar.decision_note AS notes,
+       ar.assignment_role,
+       ar.requested_for_employee_id AS employee_id,
+       ar.project_id,
+       ep.full_name    AS employee_name,
+       ep.trade_code,
+       ep.phone        AS employee_phone,
+       ep.contact_email AS employee_email,
+       p.project_code, p.project_name, p.site_address
+     FROM public.assignment_requests ar
+     JOIN public.employee_profiles ep ON ep.employee_id = ar.requested_for_employee_id
+     JOIN public.projects           p  ON p.id          = ar.project_id
+     WHERE ar.id = $1 AND ar.company_id = $2
+     LIMIT 1`,
+    [assignmentRequestId, companyId]
+  );
+  if (!rows.length) return null;
+  const a = rows[0];
 
-    // Find foreman on this project (same period)
-    const foreman = team.find((t) => t.assignment_role === 'FOREMAN');
+  // Load all APPROVED assignments on the same project overlapping this period
+  const teamRes = await db.query(
+    `SELECT
+       ep.full_name    AS name,
 
-    if (a.assignment_role === 'FOREMAN') {
-      // ── Foreman assigned ──
-      // 1) Send foreman their own assignment details + list of workers
-      const workers = team.filter((t) => t.assignment_role !== 'FOREMAN');
-      if (a.employee_email) {
-        await sendAssignmentForeman({
-          to: a.employee_email,
-          foremanName: a.employee_name,
-          employeeName: null, // foreman is the one being assigned
-          projectCode: a.project_code,
-          projectName: a.project_name,
-          siteAddress: a.site_address,
-          startDate: a.start_date,
-          endDate: a.end_date,
-          shiftStart: a.shift_start,
-          shiftEnd: a.shift_end,
-          tradeCode: a.trade_code,
-          teamList: workers,
-          isSelfNotice: true,
-        });
-      }
-      // 2) Notify existing workers — update them with foreman contact
-      for (const worker of workers) {
-        if (worker.contact_email) {
-          await sendAssignmentEmployee({
-            to: worker.contact_email,
-            employeeName: worker.name,
-            projectCode: a.project_code,
-            projectName: a.project_name,
-            siteAddress: a.site_address,
-            startDate: a.start_date,
-            endDate: a.end_date,
-            shiftStart: a.shift_start,
-            shiftEnd: a.shift_end,
-            foremanName: a.employee_name,
-            foremanPhone: a.employee_phone,
-            updateType: 'foreman_assigned',
-          });
-        }
-      }
-    } else {
-      // ── Worker / Journeyman assigned ──
-      // 1) Send worker their assignment + foreman info if available
-      if (a.employee_email) {
+       ep.contact_email,
+       ar.assignment_role,
+       ar.id
+     FROM public.assignment_requests ar
+     JOIN public.employee_profiles ep ON ep.employee_id = ar.requested_for_employee_id
+     WHERE ar.project_id  = $1
+       AND ar.company_id  = $2
+       AND ar.status      = 'APPROVED'
+       AND ar.id         != $3
+       AND ar.start_date <= $4
+       AND ar.end_date   >= $5`,
+    [a.project_id, companyId, assignmentRequestId, a.end_date, a.start_date]
+  );
+  return { a, team: teamRes.rows };
+}
+
+async function fireNotifyEmails({ a, team }) {
+  const foreman = team.find((t) => t.assignment_role === 'FOREMAN');
+
+  if (a.assignment_role === 'FOREMAN') {
+    // ── Foreman assigned ──
+    // 1) Send foreman their own assignment details + list of workers
+    const workers = team.filter((t) => t.assignment_role !== 'FOREMAN');
+    if (a.employee_email) {
+      await sendAssignmentForeman({
+        to: a.employee_email,
+        foremanName: a.employee_name,
+        employeeName: null, // foreman is the one being assigned
+        projectCode: a.project_code,
+        projectName: a.project_name,
+        siteAddress: a.site_address,
+        startDate: a.start_date,
+        endDate: a.end_date,
+        shiftStart: a.shift_start,
+        shiftEnd: a.shift_end,
+        tradeCode: a.trade_code,
+        teamList: workers,
+        isSelfNotice: true,
+      });
+    }
+    // 2) Notify existing workers — update them with foreman contact
+    for (const worker of workers) {
+      if (worker.contact_email) {
         await sendAssignmentEmployee({
-          to: a.employee_email,
-          employeeName: a.employee_name,
+          to: worker.contact_email,
+          employeeName: worker.name,
           projectCode: a.project_code,
           projectName: a.project_name,
           siteAddress: a.site_address,
@@ -143,32 +147,49 @@ async function notifyAssignment(pool, assignmentRequestId, companyId) {
           endDate: a.end_date,
           shiftStart: a.shift_start,
           shiftEnd: a.shift_end,
-          notes: a.notes,
-          foremanName: foreman?.name || null,
-          foremanPhone: foreman?.phone || null,
-        });
-      }
-      // 2) Notify foreman — new team member added
-      if (foreman?.contact_email) {
-        await sendAssignmentForeman({
-          to: foreman.contact_email,
-          foremanName: foreman.name,
-          employeeName: a.employee_name,
-          projectCode: a.project_code,
-          projectName: a.project_name,
-          siteAddress: a.site_address,
-          startDate: a.start_date,
-          endDate: a.end_date,
-          shiftStart: a.shift_start,
-          shiftEnd: a.shift_end,
-          tradeCode: a.trade_code,
-          teamList: null,
-          isSelfNotice: false,
+          foremanName: a.employee_name,
+          foremanPhone: a.employee_phone,
+          updateType: 'foreman_assigned',
         });
       }
     }
-  } catch (err) {
-    console.error('[notifyAssignment] error:', err.message);
+  } else {
+    // ── Worker / Journeyman assigned ──
+    // 1) Send worker their assignment + foreman info if available
+    if (a.employee_email) {
+      await sendAssignmentEmployee({
+        to: a.employee_email,
+        employeeName: a.employee_name,
+        projectCode: a.project_code,
+        projectName: a.project_name,
+        siteAddress: a.site_address,
+        startDate: a.start_date,
+        endDate: a.end_date,
+        shiftStart: a.shift_start,
+        shiftEnd: a.shift_end,
+        notes: a.notes,
+        foremanName: foreman?.name || null,
+        foremanPhone: foreman?.phone || null,
+      });
+    }
+    // 2) Notify foreman — new team member added
+    if (foreman?.contact_email) {
+      await sendAssignmentForeman({
+        to: foreman.contact_email,
+        foremanName: foreman.name,
+        employeeName: a.employee_name,
+        projectCode: a.project_code,
+        projectName: a.project_name,
+        siteAddress: a.site_address,
+        startDate: a.start_date,
+        endDate: a.end_date,
+        shiftStart: a.shift_start,
+        shiftEnd: a.shift_end,
+        tradeCode: a.trade_code,
+        teamList: null,
+        isSelfNotice: false,
+      });
+    }
   }
 }
 
@@ -515,7 +536,7 @@ router.post('/requests', can('assignments.create'), async (req, res) => {
 
     // Calculate and store distance for auto-approved assignments
     if (isAdmin) {
-      notifyAssignment(pool, rows[0].id, companyId);
+      await notifyAssignment(req.db, rows[0].id, companyId);
       // Fire and forget distance calculation
       calcDistanceKm(employee_id, project_id, companyId).then((km) => {
         if (km !== null) {
@@ -647,7 +668,7 @@ router.patch('/requests/:id/approve', can('assignments.edit'), async (req, res) 
     });
 
     // Send notification emails
-    notifyAssignment(pool, reqId, companyId);
+    await notifyAssignment(req.db, reqId, companyId);
 
     // Calculate and store distance
     calcDistanceKm(r.requested_for_employee_id, r.project_id, companyId).then((km) => {
@@ -908,7 +929,7 @@ router.patch('/requests/:id/reassign', can('assignments.edit'), async (req, res)
 
     // Send notification to new employee + foreman (fire-and-forget after
     // tenantDb commits)
-    notifyAssignment(pool, rows[0].id, companyId);
+    await notifyAssignment(req.db, rows[0].id, companyId);
 
     return res.json({ ok: true, request: rows[0] });
   } catch (err) {
@@ -1019,8 +1040,8 @@ router.patch('/requests/:id/move', can('assignments.edit'), async (req, res) => 
       },
     });
 
-    // Notify employee of new project assignment (fire-and-forget)
-    notifyAssignment(pool, reqId, companyId);
+    // Notify employee of new project assignment (DB reads await'd; emails detached)
+    await notifyAssignment(req.db, reqId, companyId);
 
     return res.json({ ok: true, request: rows[0] });
   } catch (err) {
@@ -1159,9 +1180,10 @@ router.post('/repeat-confirm', can('assignments.create'), async (req, res) => {
       created++;
     }
 
-    // Send notifications (fire and forget — runs after tenantDb commits)
+    // Send notifications (DB reads await'd inside the loop; emails fire detached
+    // per-assignment after each notifyAssignment returns)
     for (const id of createdIds) {
-      notifyAssignment(pool, id, companyId);
+      await notifyAssignment(req.db, id, companyId);
     }
 
     return res.json({ ok: true, created, skipped });
