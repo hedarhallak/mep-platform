@@ -9833,3 +9833,51 @@ Under Stage 3 strict RLS, `pool.query` calls with no GUC return zero rows. The p
 
 - **Today: 58 sections.** (Section 89 extended with Piece 89-E/1: notifyAssignment refactor — first sub-piece of Stage 3 strict RLS prep. Pattern documented: split DB-reads from non-DB-side-effects so DB work goes through req.db while side-effects stay detached.)
 
+### Piece 89-E/2 — audit + logAudit + calcDistanceKm helpers → req.db (May 8, 2026)
+
+Second sub-piece of Stage 3 strict RLS prep. Three pool-based helpers refactored in one PR (per the 4.5 batching rule — same shape, related changes).
+
+#### What changed
+
+**`lib/audit.js#audit`**: first param renamed `pool` → `db` semantically (still accepts any pg client/pool with `.query()`). 8 callsites in routes updated from `audit(pool, req, …)` to `audit(req.db, req, …)`. The auth.js callsites stay on `pool` — those run in pre-tenant flows (login/logout/PIN-change) that can't mount tenantDb. The `pool` import was dropped from `assignments.js` and `super_admin.js` (no remaining direct refs in either).
+
+**`middleware/permissions.js#logAudit`**: refactored from sync fire-and-forget `pool.query(...).catch(...)` to async + `req.db` (with pool fallback for defense-in-depth — never triggers in practice since every caller is in a tenantDb-mounted route). Callers add `await`; the audit row now lands in the same transaction as the rest of the request work, which is a strict improvement on consistency. 5 callers updated across `permissions.js`, `hub.js`, `user_management.js`. Latency impact: ~5ms per write, acceptable.
+
+**`routes/assignments.js#calcDistanceKm`**: refactored from `calcDistanceKm(empId, projId, companyId)` (pool internally) + caller-side `.then(km => pool.query('UPDATE…'))` fire-and-forget to `calcDistanceKm(db, empId, projId, companyId)` returning just the km, with the caller doing `await` + `req.db.query('UPDATE…')` synchronously. 2 callers (POST /requests auto-approve, PATCH /:id/approve).
+
+**Latency note**: the calcDistanceKm change adds ~200-500ms to auto-approve response time because the Mapbox API call is now in the request response path. This is the cost of correctness under Stage 3 strict RLS — pool reads with no GUC return zero rows, so distance_km would silently never be filled in. Future optimization: move distance calc to a background job if 500ms becomes a UX problem.
+
+#### auth.js — intentional non-change
+
+`auth.js` calls `audit(pool, req, …)` from login/logout/PIN-change handlers (3 callsites). These routes can't mount tenantDb (they run pre-tenant — login is the moment a tenant context is established). Under Stage 3 strict RLS the audit_logs INSERT from pool would fail unless `audit_logs` has a permissive INSERT policy that allows pool clients with no GUC.
+
+**This is the explicit dependency on 89-E/3**: migration 013 needs to keep `audit_logs` permissive for INSERTs (or add a separate INSERT policy that's permissive while SELECT/UPDATE/DELETE go strict). Documented in `lib/audit.js` header so the next reader knows.
+
+#### Why this was safe to ship now
+
+All callsites of these helpers (except auth.js's 3 audit calls) are in routes that mount tenantDb, so `req.db` is always available when they run. The pool fallback in logAudit is defense-in-depth that should never trigger in practice. CI #494 went green on first push — no regressions.
+
+#### Files touched
+
+| File | Change |
+|---|---|
+| `lib/audit.js` | First param renamed `pool` → `db` semantically; doc updated to call out auth.js's pool path and 89-E/3 dependency |
+| `middleware/permissions.js` | `logAudit` refactored to async + `req.db` (pool fallback for safety); callers add `await` |
+| `routes/assignments.js` | `audit(pool, …)` → `audit(req.db, …)` ×5; `calcDistanceKm` takes `db` param; `pool` import dropped; callers updated to synchronous await pattern |
+| `routes/super_admin.js` | `audit(pool, …)` → `audit(req.db, …)` ×3; `pool` import dropped; header comment updated |
+| `routes/permissions.js`, `routes/hub.js`, `routes/user_management.js` | `logAudit(req, …)` → `await logAudit(req, …)` (5 callsites total) |
+| `HANDOFF.md` | Latest deployed → 89-E/2; 89-E/3 status added |
+| `DECISIONS.md` (this Piece) | — |
+
+#### Status — Piece 89-E/2
+
+| Item | Status |
+|---|---|
+| Refactor | ✅ 3 helpers, 13 callsites updated, 2 pool imports dropped |
+| Tests | ✅ CI #494 green on first push (existing test suite covers the routes) |
+| Merged to main | ✅ Squash `b9b5c28` (May 8, 2026) |
+| Deployed to prod | ✅ `pm2 restart mep-backend` — pid 726104 online (May 8, 2026) |
+| Next (89-E/3) | ⏳ Pending — `migrations/013_rls_strict.sql`. Drop "GUC unset = allow" clause from 19 of the 20 tenant policies; keep `audit_logs` with permissive INSERT for auth.js's pool path; integration test under strict mode; deploy |
+
+- **Today: 58 sections.** (Section 89 extended with Piece 89-E/2: audit + logAudit + calcDistanceKm helpers refactored. Stage 3 prep ~67% done — only the migration itself remains.)
+
