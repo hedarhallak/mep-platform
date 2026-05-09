@@ -10102,3 +10102,86 @@ Encoded in advance based on the architecture review. To be confirmed/refined as 
 
 - **Today: 59 sections.** (Section 90 NEW — Phase 5 architecture decisions: subdomain (A), Vite multi-entry (B2), backend vhost split (C2). Roadmap 90-A → 90-F = ~4 days of work. No code shipped yet — execution begins next.)
 
+### Piece 90-A — DNS + Cloudflare + Nginx for `admin.constrai.ca` (May 9, 2026)
+
+First execution piece of Phase 5. Pure infrastructure: zero application code touched. Stands up the `admin.constrai.ca` subdomain end-to-end (DNS → Cloudflare proxy → Origin cert → Nginx → static placeholder) so the rest of Phase 5 has a real target to deploy into.
+
+#### Cloudflare Origin Cert — wildcard already covers us
+
+The Origin Cert installed in Phase 1 (Section 86, May 6, 2026) was generated as a **wildcard** for `*.constrai.ca` + `constrai.ca`. SAN list verified on prod:
+
+```
+$ openssl x509 -in /etc/nginx/ssl/cloudflare/cloudflare-origin.pem -noout -text | grep -A2 "Subject Alternative Name"
+            X509v3 Subject Alternative Name:
+                DNS:*.constrai.ca, DNS:constrai.ca
+```
+
+This covers `admin.constrai.ca` automatically — **no cert regeneration needed, no Cloudflare dashboard cert work**, the existing `cloudflare-origin.pem` + `cloudflare-origin.key` files serve the new subdomain unchanged. Saved ~15-30 minutes of cert ops + a Nginx reload that would otherwise have been needed.
+
+This is a meaningful piece of luck inherited from Phase 1's design: had the Origin Cert been generated for specific hostnames (`app.constrai.ca` + `www.constrai.ca` only), every new subdomain in Phases 5/6/7 would require a regeneration step. Worth noting as a Phase 1 retroactive win.
+
+#### What changed on prod
+
+1. **Cloudflare DNS** — added an A record: `admin` → `143.110.218.84`, **Proxied** (orange cloud), TTL Auto. Comment field set to `Added 2026-05-09 — Phase 5 (90-A) admin portal subdomain` for traceability if the record is ever questioned.
+2. **`/var/www/admin-placeholder/index.html`** — created (was missing) with a dark-themed "Constrai Admin — Internal portal — under construction" page + a small badge reading `Phase 5 / 90-A • Infrastructure ready`. Standalone HTML + inline CSS, no JS, no external assets. Canonical copy committed at `infra/admin-placeholder/index.html` in the repo.
+3. **`/etc/nginx/sites-available/admin-constrai`** — new file: a single server block on port 443 with `server_name admin.constrai.ca`, `root /var/www/admin-placeholder`, `try_files $uri $uri/ /index.html`, including the existing `cloudflare-ssl.conf` snippet. Plus a small port-80 block redirecting HTTP → HTTPS. Symlinked into `/etc/nginx/sites-enabled/`. Canonical copy committed at `infra/nginx/admin-constrai.conf`.
+4. **Nginx pre-edit backup** — `sudo cp -r /etc/nginx /root/nginx-backup-<timestamp>` taken before any change. Habit worth encoding: every Phase 5/6/7 Nginx-touching piece starts with this backup so a quick `cp -r /root/nginx-backup-<ts>/* /etc/nginx/ && nginx -t && systemctl reload nginx` rolls back in <30s.
+
+`nginx -t` returned clean — `syntax is ok`, `test is successful`. The 4 pre-existing "conflicting server name" warnings (about `constrai.ca` and `www.constrai.ca` being defined in both `default` and `www-constrai`) showed up but are unrelated to today's change. Logged as a follow-up cleanup item but not a 90-A blocker.
+
+`systemctl reload nginx` completed without dropping connections (graceful reload, existing requests finish on the old config).
+
+#### Verification (4 checks, all green)
+
+1. `curl -sI https://admin.constrai.ca` → `HTTP/2 200`, `content-type: text/html`, `server: cloudflare`. ✅
+2. `curl -sI https://app.constrai.ca` → `HTTP/2 200` unchanged (no regression on the tenant app). ✅
+3. `curl -s https://admin.constrai.ca | head -20` → returns the placeholder HTML byte-for-byte. ✅
+4. `openssl s_client -servername admin.constrai.ca -connect admin.constrai.ca:443 | openssl x509 | grep "Subject Alternative"` → `DNS:*.constrai.ca, DNS:constrai.ca`. The wildcard cert is what's actually being served. ✅
+5. **Browser visual confirmation** — `https://admin.constrai.ca` in Chrome rendered the placeholder card, valid lock icon, no mixed-content / cert warnings.
+
+#### What 90-A explicitly does NOT do
+
+- No `/api/*` proxy on the admin block. A request to `https://admin.constrai.ca/api/super/companies` today returns the placeholder's `/index.html` (because of `try_files`). The proxy + the admin-only Express sub-app come in 90-B.
+- No Vite build for the admin frontend. `/var/www/admin-placeholder/index.html` is a hand-written static file. The real React shell with auth + i18n + theme arrives in 90-C and replaces the placeholder.
+- No cookie scoping work. Cross-portal cookie isolation gets validated in 90-E once both portals serve real React apps.
+
+This piece deliberately stays small so 90-B can land independently — if the backend split has issues, the admin portal still serves the placeholder and tenant traffic is unaffected.
+
+#### Files touched
+
+| File | Change |
+|---|---|
+| `infra/README.md` | NEW. Explains the new `infra/` folder convention (server-side configs tracked in git, not auto-deployed). |
+| `infra/nginx/admin-constrai.conf` | NEW. Canonical copy of the Nginx server block on prod. |
+| `infra/admin-placeholder/index.html` | NEW. Canonical copy of the placeholder HTML on prod. |
+| Cloudflare DNS (out-of-repo) | NEW A record `admin` → 143.110.218.84, proxied. |
+| `/etc/nginx/sites-available/admin-constrai` (server) | NEW, symlinked into `sites-enabled/`. |
+| `/var/www/admin-placeholder/index.html` (server) | NEW. |
+| `HANDOFF.md` | "Last updated", "Latest deployed to prod", "Next task" advance to 90-B. |
+| `MASTER_README.md` | Latest DECISIONS pointer bumped to "Section 90 / Piece 90-A". |
+| `DECISIONS.md` (this Piece) | — |
+
+#### Status — Piece 90-A
+
+| Item | Status |
+|---|---|
+| Origin Cert wildcard verified | ✅ Covers `admin.constrai.ca` natively |
+| DNS record (Cloudflare) | ✅ A record proxied, comment annotated |
+| Placeholder HTML | ✅ Deployed at `/var/www/admin-placeholder/`, mirror in `infra/` |
+| Nginx server block | ✅ `nginx -t` clean, reload graceful, repo mirror in `infra/nginx/` |
+| End-to-end verification | ✅ 4 curl checks + browser visual |
+| Tenant app regression check | ✅ `app.constrai.ca` unchanged |
+| `infra/` folder + README | ✅ NEW convention introduced |
+| Next (90-B) | ⏳ Pending — backend vhost split: refactor `index.js` into root + `adminApp` + `tenantApp`, move `routes/super_admin.js` + `routes/ccq_rates.js` mounts onto `adminApp`, add Host-header anti-leak guards both directions, integration tests for cross-Host rejection |
+
+#### Convention encoded — `infra/` folder for server-tracked configs
+
+Phase 4 ended with several deploy steps that touched server-only configs (Nginx server blocks, /var/www static dirs) where the only record was prose in DECISIONS.md. Phase 5 adds at least 2 new Nginx server blocks (admin.constrai.ca in 90-A, possibly tightened cookie/CSP rules in 90-E) and updates the existing `app.constrai.ca` block (for the vhost split in 90-B), pushing the value of git-tracked source-of-truth past the threshold of justifying a folder. Convention going forward:
+
+- Server configs that need version control go under `infra/`.
+- Each file has a header comment with the canonical Droplet path + the introducing DECISIONS section.
+- Editing a file in `infra/` does NOT auto-deploy — manual SCP/cat + nginx -t + systemctl reload is still required, but the diff is now in git.
+- Pre-existing configs (`default`, `www-constrai`, the original `constrai` for `app.constrai.ca`) get migrated into `infra/` opportunistically; for now they stay only on the Droplet.
+
+- **Today: 59 sections.** (Section 90 extended with Piece 90-A: DNS + Cloudflare + Nginx for `admin.constrai.ca` deployed and verified. Phase 1's wildcard Origin Cert covered the new subdomain natively — saved ~30 min of cert ops. New `infra/` folder convention introduced for server-side config tracking. Next: 90-B backend vhost split.)
+

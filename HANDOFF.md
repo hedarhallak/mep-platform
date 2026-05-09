@@ -1,7 +1,7 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 9, 2026 — **Phase 4 (PostgreSQL Row-Level Security) is COMPLETE on prod** (migration 013 applied ~14:45 UTC). **Phase 5 architecture decided in Section 90 of DECISIONS.md** (no code yet): subdomain `admin.constrai.ca` (A) + Vite multi-entry frontend (B2) + Express vhost backend split (C2). Execution roadmap = 6 pieces (90-A through 90-F), ~4 days total. **Next task: Piece 90-A — DNS + Cloudflare + cert + Nginx for `admin.constrai.ca`.**
+> Last updated: May 9, 2026 — **Phase 4 done (May 9 ~14:45 UTC).** **Phase 5 in progress: 90-A ✅ DONE** (admin.constrai.ca subdomain live with placeholder, May 9 ~21:55 UTC) — DNS + Cloudflare + Nginx server block + static placeholder all verified end-to-end. Phase 1's wildcard Origin Cert covered the new subdomain natively (no cert work needed). New `infra/` folder convention introduced for server-side configs tracked in git. **Next task: Piece 90-B — Backend vhost split (C2)**: refactor `index.js` into root + adminApp + tenantApp, move `routes/super_admin.js` + `routes/ccq_rates.js` mounts onto adminApp, add Host-header anti-leak guards both directions, integration tests for cross-Host rejection.
 
 ---
 
@@ -27,7 +27,7 @@ When you receive the one-line command above:
    - `RECOVERY.md` Section 2.4 only (cost inventory) if relevant to today's task
 3. **Echo this exact line** as the first line of your reply so Hedar knows bootstrap completed:
    ```
-   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 90, Phase 5 architecture)
+   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 90 / 90-A, next is 90-B)
    ```
 4. **Confirm the next task** in 1-2 lines (from "Next task" below).
 5. **Ask if Hedar is ready to start**, then wait.
@@ -45,9 +45,9 @@ When you receive the one-line command above:
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04) |
 | Backend | Node.js + Express + Postgres 16, pm2-managed at `/var/www/mep` |
 | Frontend | React + Vite + Tailwind, deployed to `/var/www/mep/mep-frontend/dist` |
-| Latest deployed to prod | **Migration 013 strict RLS flip (89-E/3)** — May 9, 2026 ~14:45 UTC. **Phase 4 complete.** |
-| Last merged to main | Piece 89-E/3 (squash `ad1db73`) — May 9, 2026 |
-| Active program | **Multi-Tenant Migration** (Section 85, Phases 1-8) — **Phase 4 done; Phase 5 (SUPER_ADMIN portal split) next** |
+| Latest deployed to prod | **`admin.constrai.ca` subdomain + placeholder (90-A)** — May 9, 2026 ~21:55 UTC. (Migration 013 strict RLS flip / 89-E/3 also today ~14:45 UTC.) |
+| Last merged to main | Section 90 docs (squash `d7ead26`) — May 9, 2026. 90-A docs PR pending. |
+| Active program | **Multi-Tenant Migration** (Section 85, Phases 1-8) — **Phase 5 in progress** (90-A done, 90-B next) |
 | Mobile app | Still on legacy username login — backend keeps backward-compat |
 
 ### Multi-tenant migration progress
@@ -95,39 +95,41 @@ When you receive the one-line command above:
 
 ---
 
-## Next task: Piece 90-A — DNS + Cloudflare + cert + Nginx for `admin.constrai.ca`
+## Next task: Piece 90-B — Backend vhost split (C2)
 
-**Phase 5 architecture is fully decided** — see DECISIONS.md Section 90 for the full rationale. Quick recap of the 3 choices, so the next session doesn't have to re-derive them:
+**Phase 5 architecture (Section 90) recap** — all 3 decisions stand:
 
-- **Decision A**: subdomain `admin.constrai.ca` (NOT path-based on `app.constrai.ca/super`). Reason: physical security boundary, separate cookie scope, makes Phase 6 per-tenant branding trivial.
-- **Decision B2**: single Vite project with two entry points (`src/main.tsx` for tenant + `src/admin-main.tsx` for admin). NOT B1 (separate projects) yet — that's the standard "early SaaS" choice; B2 → B1 migration is well-trodden when the team grows.
-- **Decision C2**: Express vhost split — same pm2 process, two sub-apps physically separated by Host header. NOT C1 (single app + role guard, security too linguistic) and NOT C3 (separate processes, premature operational overhead).
+- **A**: subdomain `admin.constrai.ca` ✅ live as of 90-A (May 9, 2026)
+- **B2**: single Vite project with two entry points — pending in 90-C
+- **C2**: Express vhost split — **THIS PIECE**
 
-**Piece 90-A scope (this PR):** infrastructure only — no app code touched.
+**90-B scope:** refactor `index.js` (the Express bootstrap) into:
 
-1. Verify whether the Cloudflare Origin Cert installed in Phase 1 covers `*.constrai.ca` (wildcard) or specific hostnames only. SSH to prod and run:
-   ```bash
-   openssl x509 -in /etc/ssl/cloudflare/origin.pem -noout -text | grep -A2 "Subject Alternative Name"
-   ```
-   If the SAN list contains `*.constrai.ca` → wildcard, no cert work needed.
-   If only specific names → regenerate via Cloudflare dashboard (free, ~10 min) covering `*.constrai.ca` + `constrai.ca`.
-2. Add `admin.constrai.ca` as a Cloudflare DNS record (proxied A record pointing at the same Droplet IP `143.110.218.84`).
-3. Add an Nginx server block for `admin.constrai.ca` that returns a placeholder 200 + "Constrai Admin — coming soon" plain text. This proves the SSL chain end-to-end before any app code is written.
-4. Test from Hedar's browser: `https://admin.constrai.ca` should show the placeholder over a valid cert.
+1. A `root` Express app that uses `vhost('admin.constrai.ca', adminApp)` + `vhost('app.constrai.ca', tenantApp)` to dispatch by Host header.
+2. `adminApp`: minimal Express sub-app mounting only `/api/super` + `/api/super/ccq-rates` (currently in `routes/super_admin.js` + `routes/ccq_rates.js`). Stricter middleware stack — admin-only auth gate, separate rate limiter, separate CORS allowlist.
+3. `tenantApp`: everything else (the current `/api/*` mounts minus the two SUPER_ADMIN ones). Existing `tenantDb` middleware stays exactly where it is.
+4. **Anti-leak guards**: `tenantApp` MUST refuse any request whose path starts with `/api/super` (return 404 — admin path on tenant Host). `adminApp` MUST refuse any request whose path is NOT `/api/super*` (also 404). These guards are belt-and-suspenders on top of the vhost dispatch — if Express's vhost ever has a bug or someone mounts a route on the wrong app, the guard catches it.
+5. **Update Nginx**: `admin.constrai.ca`'s server block needs an `/api/` location block proxying to `localhost:3000` (same backend port — vhost dispatches by Host header inside the Node process). Update `infra/nginx/admin-constrai.conf` mirror in repo.
 
-**Out of scope for 90-A:** any backend or frontend code. Those land in 90-B and 90-C respectively.
+**Integration tests for 90-B (new):**
 
-**Suggested PR title:** `infra(s90-a): add admin.constrai.ca DNS + Nginx server block (placeholder)`.
+- `tests/integration/vhost_isolation.test.js`:
+  1. Request to `admin.constrai.ca/api/super/companies` with valid SA token → 200 + JSON body.
+  2. Request to `admin.constrai.ca/api/employees` with valid SA token → 404 (admin app doesn't mount tenant routes).
+  3. Request to `app.constrai.ca/api/super/companies` with valid SA token → 404 (tenant app doesn't mount admin routes).
+  4. Request to `app.constrai.ca/api/employees` with valid COMPANY_ADMIN token → 200 + JSON (existing behavior preserved).
 
-**Checklist before opening 90-A PR:**
+The Host header in tests is set explicitly via supertest's `.set('Host', 'admin.constrai.ca')`. CI runs against localhost so vhost dispatching works on the request Host header alone.
 
-- [ ] `openssl x509` confirmation that the cert covers `admin.constrai.ca` (wildcard or explicit SAN entry).
-- [ ] `dig admin.constrai.ca` returns Cloudflare proxy IPs.
-- [ ] `curl -I https://admin.constrai.ca` returns `200 OK` with a valid TLS handshake.
-- [ ] `curl -I https://app.constrai.ca` still returns the existing tenant app (no regression).
-- [ ] Nginx `nginx -t` clean, `systemctl reload nginx` executed.
+**Pitfall to watch (encoded in Section 90 in advance):** Express's `vhost()` matches the FIRST vhost whose hostname matches. If a wildcard `*.constrai.ca` is ever added later, the more specific `admin.constrai.ca` MUST be registered first. Convention enforced by code comment at the vhost registration point.
 
-**After 90-A merges:** start 90-B (backend vhost split). 90-C (frontend multi-entry) can run in parallel with 90-B since they touch different files.
+**Out of scope for 90-B:**
+
+- No frontend changes. The admin portal still serves the static placeholder from 90-A.
+- No new admin endpoints. Only the existing `super_admin.js` + `ccq_rates.js` routes get re-mounted.
+- No cookie scoping / cross-domain auth work. That's 90-E.
+
+**Suggested PR title:** `feat(s90-b): split Express into admin/tenant vhosts (C2)`.
 
 **Backlog items still open after Phase 4** (carried forward — not blockers for Phase 5 but should be tracked):
 
