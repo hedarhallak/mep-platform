@@ -114,6 +114,47 @@ router.get('/companies', async (req, res) => {
 });
 
 /**
+ * GET /api/super/companies/overview
+ *
+ * Phase 5 / 90-D — read-only dashboard list for the admin portal.
+ * Distinct from `GET /companies` above (which is the management endpoint
+ * that also drives suspend/activate/PATCH); this shape is display-only
+ * and adds `last_activity_at` (latest audit_logs row per tenant) which
+ * the dashboard renders as "last seen".
+ *
+ * MUST be registered BEFORE `GET /companies/:id` — otherwise Express
+ * would route `/companies/overview` to the :id handler which Number()s
+ * "overview" to NaN and 400s. (Pitfall recorded — easy to miss when
+ * adding routes; convention: more specific named routes first, then
+ * parameterized routes.)
+ */
+router.get('/companies/overview', async (req, res) => {
+  try {
+    const { rows } = await req.db.query(`
+      SELECT
+        c.company_id,
+        c.name,
+        c.plan,
+        c.status,
+        c.created_at,
+        COUNT(DISTINCT e.id) AS employee_count,
+        COUNT(DISTINCT p.id) AS project_count,
+        MAX(a.created_at)    AS last_activity_at
+      FROM public.companies c
+      LEFT JOIN public.employees   e ON e.company_id = c.company_id
+      LEFT JOIN public.projects    p ON p.company_id = c.company_id
+      LEFT JOIN public.audit_logs  a ON a.company_id = c.company_id
+      GROUP BY c.company_id
+      ORDER BY c.name ASC
+    `);
+    return res.json({ ok: true, companies: rows });
+  } catch (err) {
+    console.error('GET /super/companies/overview error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
+  }
+});
+
+/**
  * GET /api/super/companies/:id
  */
 router.get('/companies/:id', async (req, res) => {
