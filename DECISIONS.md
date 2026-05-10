@@ -10185,3 +10185,131 @@ Phase 4 ended with several deploy steps that touched server-only configs (Nginx 
 
 - **Today: 59 sections.** (Section 90 extended with Piece 90-A: DNS + Cloudflare + Nginx for `admin.constrai.ca` deployed and verified. Phase 1's wildcard Origin Cert covered the new subdomain natively — saved ~30 min of cert ops. New `infra/` folder convention introduced for server-side config tracking. Next: 90-B backend vhost split.)
 
+### Piece 90-B — Backend vhost split (C2) (May 9, 2026)
+
+Second execution piece of Phase 5. Refactors `app.js` from a single monolithic Express app into a vhost root + two physically separate sub-apps: `adminApp` (admin.constrai.ca) and `tenantApp` (app.constrai.ca). The route trees are no longer reachable across portals — admin endpoints don't exist on the tenant Host, and tenant endpoints don't exist on the admin Host.
+
+#### What changed
+
+**`app.js` — full refactor.** The structural change:
+
+```
+                 ┌──────────────── root (Express) ────────────────┐
+                 │   trust proxy=1, helmet (CSP), express.json    │
+                 │   rate limiters at root paths                  │
+                 │                                                │
+   admin.constrai.ca  ─── vhost dispatch ──→  adminApp (Express)  │
+                 │                            • public routes     │
+                 │                            • /api/super        │
+                 │                            • /api/super/ccq-…  │
+                 │                            • catch-all 404     │
+                 │                                                │
+   app.constrai.ca    ─── vhost dispatch ──→  tenantApp (Express) │
+                 │                            • public routes     │
+                 │                            • /api/super → 404  │
+                 │                            • all tenant routes │
+                 │                                                │
+   any other host     ─── default fallback ─→  tenantApp          │
+                 │                                                │
+                 │   Sentry error handler at root                 │
+                 └────────────────────────────────────────────────┘
+```
+
+**vhost middleware**: inline (no npm dependency). 5-line implementation that matches Host header case-insensitively and dispatches to the matching sub-app, falling through to `next()` otherwise.
+
+**Mounting helpers**: route registration is split into 3 functions (`mountPublicRoutes`, `mountAdminRoutes`, `mountTenantRoutes`) so each sub-app gets exactly the route trees it should have. Public routes (auth, health, geocode, config, api-docs, onboarding, activate) are mounted on BOTH sub-apps so the SA can log in on either portal.
+
+**Anti-leak guards**: catch-all 404 handlers registered AFTER all routes on each sub-app:
+- `adminApp.use('/api', notFoundOnPath(...))` — any /api/* path that isn't a defined admin route returns explicit JSON 404. 
+- `tenantApp.use('/api/super', notFoundOnPath(...))` — registered BEFORE tenant routes so it matches first; any /api/super/* on the tenant Host is 404.
+
+Both 404 responses include a clear `message` (e.g., "Endpoint not available on the tenant portal") so a misrouted client/test sees the failure instead of a generic Express 404.
+
+**Default fallback**: `root.use(tenantApp)` after vhost registrations. Two purposes:
+1. **Test backward compat.** ~41 existing test files use `request(app)` without setting Host. They flow through tenantApp and continue to work for tenant routes.
+2. **Direct-IP safety.** A request that bypasses Cloudflare and hits the Droplet IP directly lands on tenantApp (anti-leak guard 404s any /api/super/* attempt). Admin routes are unreachable via direct IP.
+
+**Sentry error handler** stays at root (was on monolithic app before). Sub-apps don't define their own error handlers; errors bubble via `next(err)` to root where Sentry catches them.
+
+#### Test surface changes
+
+**4 SA test files updated** to set `Host: admin.constrai.ca` on /api/super calls (otherwise they'd hit tenantApp's anti-leak 404):
+- `tests/integration/super_admin.test.js` (11 calls)
+- `tests/integration/super_admin_create.test.js` (5 calls)
+- `tests/integration/ccq_rates.test.js` (3 calls)
+- `tests/integration/tenant_db_89c15.test.js` (5 calls)
+
+To keep the calls clean, a tiny helper at `tests/helpers/admin_request.js` exports `adminRequest(app)` that wraps supertest and auto-sets `Host: admin.constrai.ca`. Same surface as `request(app)`. Public-route calls (e.g., `/api/auth/login` in `loginUser` setup helpers) continue to use plain `request(app)` since those work on either Host.
+
+**New test file** `tests/integration/vhost_isolation.test.js` — 12 assertions, no DB required, runs in every CI:
+- `/api/health` works on both Hosts and on default fallback (sanity)
+- `/api/super/*` returns 404 NOT_FOUND on tenant Host + on default fallback (anti-leak guard)
+- `/api/employees`, `/api/projects`, `/api/hub` return 404 NOT_FOUND on admin Host (admin sub-app doesn't mount tenant routes)
+- `/api/super/stats` without token on admin Host returns 401/403 (route IS mounted, auth fires)
+- Host header matching is case-insensitive
+- Unknown Host falls through to tenantApp's anti-leak 404 for /api/super
+
+#### Nginx + prod deploy
+
+**`infra/nginx/admin-constrai.conf`** updated with a `location /api/` block proxying to `localhost:3000`. Critically, the `proxy_set_header Host` directive is set to the **literal string** `admin.constrai.ca` (not `$host`) for two reasons:
+1. **Lint-friendly.** Avoids the Semgrep `request-host-used` rule that fires on `$host` references — the same rule that needed a workaround in 90-A's redirect block.
+2. **Defense-in-depth.** Forces every request reaching Node from this server block to arrive with `Host: admin.constrai.ca` regardless of what the upstream client sent. The vhost dispatcher then routes to adminApp deterministically.
+
+**Prod deploy steps** (record from May 9, 2026, ~22:50 UTC):
+1. `git pull origin main` on prod.
+2. `sudo cp infra/nginx/admin-constrai.conf /etc/nginx/sites-available/admin-constrai`.
+3. `sudo nginx -t` (clean) → `sudo systemctl reload nginx` (graceful).
+4. `pm2 restart mep-backend` (Node picks up the new app.js with vhost split).
+5. `pm2 logs mep-backend --lines 20 --nostream` (verify no startup errors).
+6. End-to-end probes:
+   - `curl https://admin.constrai.ca/api/health` → 200
+   - `curl https://admin.constrai.ca/api/super/stats` → 401 (route exists, auth required)
+   - `curl https://app.constrai.ca/api/super/stats` → 404 (anti-leak)
+   - `curl https://app.constrai.ca/api/employees` (with valid tenant token) → 200 (no regression)
+
+#### What 90-B explicitly does NOT do
+
+- No frontend changes. The admin portal's `/` still serves the static placeholder from 90-A. The Vite multi-entry build (90-C) replaces it.
+- No new admin endpoints. Only the existing `super_admin.js` + `ccq_rates.js` routes are exposed on adminApp.
+- No cookie scoping work. The auth flow still issues bearer tokens, not cookies. Cookie isolation across portals lands when frontend (90-C) plus the auth flow validation (90-E) come together.
+- No SUPPORT_AGENT role. Documented as a non-goal in Section 90.
+- No removal of the old monolithic /api/super mount from the request entry. The new code is the entry. There is no "old code path still around" to clean up.
+
+#### Pitfall encoded — Semgrep reads comments too
+
+When the 90-A docs PR shipped an Nginx config with `$host` in a comment ("Literal redirect target — avoids $host …"), Semgrep flagged the comment as a finding because the rule's pattern is purely textual. Lesson encoded for future Nginx work: when writing comments that explain a security tradeoff, **don't quote the literal sensitive token** ('$host', '$http_host', etc.). Use a paraphrase ("Host header variable", "attacker-controlled host value") instead. The same applies to any linter that scans comments for token patterns (CodeQL, custom regex linters, etc.).
+
+#### Files touched
+
+| File | Change |
+|---|---|
+| `app.js` | FULL REFACTOR. Built as vhost root + 2 sub-apps. Route mounting split into helper functions. Anti-leak 404 handlers added. Default fallback to tenantApp for backward compat. |
+| `tests/helpers/admin_request.js` | NEW. Tiny wrapper exporting `adminRequest(app)` and `tenantRequest(app)` that auto-set Host headers. Same surface as `request(app)`. |
+| `tests/integration/super_admin.test.js` | 11 `request(app)` calls on /api/super → `adminRequest(app)`. Login helper still uses plain `request(app)` (public route). |
+| `tests/integration/super_admin_create.test.js` | 5 calls updated. |
+| `tests/integration/ccq_rates.test.js` | 3 calls updated. |
+| `tests/integration/tenant_db_89c15.test.js` | 5 calls updated. |
+| `tests/integration/vhost_isolation.test.js` | NEW. 12 assertions covering cross-Host isolation. No DB required. |
+| `infra/nginx/admin-constrai.conf` | Added `location /api/` proxy to `localhost:3000` with literal `Host: admin.constrai.ca`. |
+| `/etc/nginx/sites-available/admin-constrai` (server) | Updated to match repo mirror. |
+| `HANDOFF.md` | "Latest deployed", "Last merged", "Next task" advance to 90-C. |
+| `MASTER_README.md` | Latest DECISIONS pointer bumped to "Section 90 / Piece 90-B". |
+| `DECISIONS.md` (this Piece) | — |
+
+#### Status — Piece 90-B
+
+| Item | Status |
+|---|---|
+| Refactor | ✅ app.js → vhost root + adminApp + tenantApp |
+| Helper for SA tests | ✅ `tests/helpers/admin_request.js` |
+| Existing SA tests updated | ✅ 4 files, 24 calls |
+| New vhost isolation tests | ✅ 12 assertions, no DB required |
+| Nginx /api/ proxy on admin Host | ✅ Mirror in `infra/`, deployed on prod |
+| Anti-leak guards | ✅ 404 NOT_FOUND on cross-Host paths |
+| Default fallback tenantApp | ✅ Direct-IP requests cannot reach admin routes |
+| pm2 restart on prod | ✅ Backend running new app.js |
+| End-to-end probes on prod | ✅ All 4 expected codes correct |
+| Next (90-C) | ⏳ Pending — Frontend Vite multi-entry: add `src/admin-main.tsx`, configure `rollupOptions.input`, two index.html outputs, Nginx serves the right one per Host |
+
+- **Today: 59 sections.** (Section 90 extended with Piece 90-B: backend vhost split. app.js refactored into vhost root + adminApp + tenantApp. 4 SA test files updated to use new admin_request helper. 12-assertion vhost_isolation test added. Nginx /api/ proxy on admin Host with literal Host header for lint-friendliness. Pitfall encoded: Semgrep reads comments — don't quote sensitive tokens.)
+

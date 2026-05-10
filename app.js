@@ -1,16 +1,33 @@
-// app.js — Section 19 Phase 11b extraction.
+// app.js — Express app setup with vhost split (Section 90 / Piece 90-B).
 //
-// Express app setup, factored out of index.js so Supertest can drive the
-// app in tests without binding to a port and without scheduling the
-// production cron jobs (weeklyReportJob, ccqRatesReminderJob).
+// Phase 11b refactor (2026-04-28): the Express app setup moved here from
+// index.js so tests can drive the app via Supertest without binding to a
+// port and without scheduling production cron jobs.
+//
+// Phase 90-B refactor (2026-05-09): the app is now a vhost root that
+// dispatches by Host header into two physically separate sub-apps:
+//
+//   - adminApp  → admin.constrai.ca → mounts /api/super + /api/super/ccq-rates
+//                 + the shared public routes (health, auth, etc.)
+//   - tenantApp → app.constrai.ca   → mounts every other /api/* route
+//                 + the same shared public routes
+//
+// A request that comes in on the wrong Host hits the sub-app's anti-leak
+// 404 (admin Host with /api/employees → 404; tenant Host with /api/super
+// → 404). This is "C2" from Section 90 — physical separation rather than
+// linguistic role guards.
+//
+// Default fallback: tenantApp. Existing tests (~41 files) use
+// `request(app)` without setting a Host header; those flow through the
+// fallback and continue to work for tenant routes. The 4 test files that
+// hit /api/super now use the helper `tests/helpers/admin_request.js`,
+// which sets Host: admin.constrai.ca explicitly so they reach adminApp.
+// This matches production behavior end-to-end.
 //
 // Production entry remains `index.js`, which:
 //   1. require('./app')
 //   2. app.listen(...)
 //   3. schedules jobs
-//
-// Tests do `const app = require('../../app')` and pipe Supertest
-// requests directly into it. No listen, no jobs.
 
 'use strict';
 
@@ -19,15 +36,295 @@ const express = require('express');
 const path = require('path');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const app = express();
 
-// --- Trust the first reverse proxy (Nginx) ---
+// =============================================================================
+// vhost middleware — inline (no npm dep). Dispatches by Host header.
+// =============================================================================
+//
+// Section 90 / Decision C2: physical separation of admin vs tenant route
+// trees by Host header. We don't use the `vhost` npm package because (a)
+// we need only exact-match dispatch (no regex/wildcards), (b) inlining
+// keeps the dependency graph flat, (c) the implementation is 5 lines.
+//
+// Pitfall to remember: if a wildcard host (e.g., '*.constrai.ca') is ever
+// added later, register the more specific exact-match vhost FIRST.
+// First-match-wins.
+function vhost(targetHost, app) {
+  const want = targetHost.toLowerCase();
+  return (req, res, next) => {
+    const host = (req.hostname || (req.headers.host || '').split(':')[0] || '').toLowerCase();
+    if (host === want) return app(req, res, next);
+    return next();
+  };
+}
+
+// =============================================================================
+// Shared loader for routers that may be exported as fn / { router } / default
+// =============================================================================
+function loadRouter(modPath) {
+  const mod = require(modPath);
+  if (typeof mod === 'function') return mod;
+  if (mod && typeof mod.router === 'function') return mod.router;
+  if (mod && typeof mod.default === 'function') return mod.default;
+  throw new Error(`Route module "${modPath}" did not export an Express router function.`);
+}
+
+// =============================================================================
+// Rate limiters — defined once, mounted at root (apply across both sub-apps).
+// Skip under Jest so dense test loops don't trip 429s.
+// =============================================================================
+const skipInTests = () => process.env.NODE_ENV === 'test';
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: skipInTests,
+  message: {
+    ok: false,
+    error: 'TOO_MANY_REQUESTS',
+    message: 'Too many attempts, please try again later.',
+  },
+});
+
+const refreshLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: skipInTests,
+  message: { ok: false, error: 'TOO_MANY_REQUESTS' },
+});
+
+const changePinLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: skipInTests,
+  message: { ok: false, error: 'TOO_MANY_REQUESTS' },
+});
+
+const onboardingLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: skipInTests,
+  message: { ok: false, error: 'TOO_MANY_REQUESTS' },
+});
+
+const superAdminLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: skipInTests,
+  message: { ok: false, error: 'TOO_MANY_REQUESTS' },
+});
+
+// =============================================================================
+// Middleware imports for the route mounts
+// =============================================================================
+const auth = require('./middleware/auth');
+const superAdmin = require('./middleware/super_admin');
+const tenantDb = require('./middleware/tenant_db');
+if (typeof auth !== 'function') {
+  throw new Error(`"./middleware/auth" must export a middleware function, got ${typeof auth}`);
+}
+
+// =============================================================================
+// Public routes — mounted on BOTH adminApp and tenantApp.
+//
+// Why both: SUPER_ADMIN logs in on admin.constrai.ca, but might also want
+// to test as a tenant in another tab on app.constrai.ca. Both portals
+// expose /api/auth/login + the public health / config / docs endpoints.
+// =============================================================================
+function mountPublicRoutes(app) {
+  app.get('/api/geocode/suggest', async (req, res) => {
+    try {
+      const q = String(req.query.q || '').trim();
+      const token = process.env.MAPBOX_ACCESS_TOKEN;
+      if (!q || q.length < 3) return res.json({ ok: true, features: [] });
+      if (!token) return res.json({ ok: false, error: 'MAPBOX_NOT_CONFIGURED' });
+
+      const url =
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json` +
+        `?access_token=${encodeURIComponent(token)}&country=ca&language=en&types=address&limit=5`;
+
+      const r = await fetch(url);
+      const data = await r.json();
+      return res.json({ ok: true, features: data.features || [] });
+    } catch (err) {
+      console.error('geocode/suggest error:', err.message);
+      return res.status(500).json({ ok: false, error: 'GEOCODE_ERROR' });
+    }
+  });
+
+  app.get('/api/config', (req, res) => {
+    return res.json({
+      ok: true,
+      mapbox_token: process.env.MAPBOX_ACCESS_TOKEN || null,
+    });
+  });
+
+  /**
+   * @openapi
+   * /api/health:
+   *   get:
+   *     tags: [Health]
+   *     summary: Liveness probe
+   *     description: |
+   *       Cheap liveness probe — no I/O, no DB. Polled by UptimeRobot every
+   *       5 minutes. Always returns 200 if the Node process is responsive.
+   *     security: []
+   *     responses:
+   *       200:
+   *         description: Process is responsive.
+   */
+  app.get('/api/health', (req, res) => {
+    res.json({ ok: true, service: 'mep-site-workforce', time: new Date().toISOString() });
+  });
+
+  /**
+   * @openapi
+   * /api/health/deep:
+   *   get:
+   *     tags: [Health]
+   *     summary: Readiness probe with structured checks
+   *     description: |
+   *       Phase 66 readiness probe. Returns DB connectivity, disk space, and
+   *       last-backup-age status. Returns 503 if any hard-fail check trips
+   *       (DB or disk); 200 otherwise. Soft warnings (stale backup) surface
+   *       in the response body via a `warnings` array but do NOT trip 503.
+   *     security: []
+   */
+  app.get('/api/health/deep', async (req, res) => {
+    try {
+      const { pool } = require('./db');
+      const { runChecks } = require('./lib/health');
+      const { statusCode, body } = await runChecks(pool);
+      res.status(statusCode).json(body);
+    } catch (e) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  // /api-docs — Swagger UI. Public so frontend devs / partners can self-serve.
+  // Phase 71 (May 2026, Section 22 hardening). See lib/openapi.js for the base
+  // definition; per-route schemas are added incrementally in Phase 71b.
+  {
+    const swaggerUi = require('swagger-ui-express');
+    const { spec } = require('./lib/openapi');
+    app.get('/api-docs.json', (req, res) => res.json(spec));
+    app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(spec, { explorer: true }));
+  }
+
+  // Auth + onboarding + activation links — public on both portals.
+  app.use('/api/auth', loadRouter('./routes/auth'));
+  app.use('/api/onboarding', require('./routes/onboarding'));
+  app.use('/activate', loadRouter('./routes/activate'));
+}
+
+// =============================================================================
+// Admin routes — mounted ONLY on adminApp (admin.constrai.ca).
+// Section 89-C/15: SUPER_ADMIN routes consume req.db (BYPASSRLS via superPool).
+// =============================================================================
+function mountAdminRoutes(app) {
+  app.use('/api/super', auth, superAdmin, tenantDb, loadRouter('./routes/super_admin'));
+  app.use('/api/super/ccq-rates', auth, superAdmin, tenantDb, require('./routes/ccq_rates'));
+}
+
+// =============================================================================
+// Tenant routes — mounted ONLY on tenantApp (app.constrai.ca).
+// =============================================================================
+function mountTenantRoutes(app) {
+  // ── Core business routes ────────────────────────────────────
+  // Section 89-C/12: employees migrated to req.db (RLS-enforced).
+  app.use('/api/employees', auth, tenantDb, loadRouter('./routes/employees'));
+  // Section 89-C/8: projects migrated to req.db (RLS-enforced).
+  app.use('/api/projects', auth, tenantDb, loadRouter('./routes/projects'));
+  // Section 89-B sample migration: /api/suppliers was the first production
+  // route to consume req.db (RLS-enforced).
+  app.use('/api/suppliers', auth, tenantDb, require('./routes/suppliers'));
+  // Section 89-C/11: assignments migrated to req.db (RLS-enforced).
+  app.use('/api/assignments', auth, tenantDb, loadRouter('./routes/assignments'));
+  // Section 89-C/4: auto_assign migrated to req.db (RLS-enforced).
+  // NOTE: assignments.js (mounted directly above) and auto_assign coexist
+  // on /api/assignments. Express resolves these in mount order: requests
+  // matching assignments.js endpoints fire first; auto_assign sees only
+  // /auto-suggest, /auto-confirm, etc.
+  app.use('/api/assignments', auth, tenantDb, require('./routes/auto_assign'));
+  // Section 89-C/2: attendance migrated to req.db (RLS-enforced).
+  app.use('/api/attendance', auth, tenantDb, loadRouter('./routes/attendance'));
+  // Section 89-C/13: profile + push_tokens migrated to req.db (RLS-enforced).
+  app.use('/api/profile', auth, tenantDb, loadRouter('./routes/profile'));
+  app.use('/api/profile', auth, tenantDb, require('./routes/push_tokens_route'));
+
+  // ── Project structure ───────────────────────────────────────
+  // Section 89-C/1: project_trades + project_foremen migrated to req.db.
+  app.use('/api/project-trades', auth, tenantDb, require('./routes/project_trades'));
+  app.use('/api/project-foremen', auth, tenantDb, require('./routes/project_foremen'));
+
+  // ── Materials & Purchase Orders ─────────────────────────────
+  // Section 89-C/10: material_requests migrated to req.db (RLS-enforced).
+  app.use('/api/materials', auth, tenantDb, require('./routes/material_requests'));
+
+  // ── Business Intelligence ───────────────────────────────────
+  // Section 89-C/1: bi route migrated to req.db.
+  app.use('/api/bi', auth, tenantDb, require('./routes/bi'));
+  // Section 89-C/3: reports migrated to req.db (RLS-enforced).
+  app.use('/api/reports', auth, tenantDb, loadRouter('./routes/reports'));
+
+  // ── Daily operations ────────────────────────────────────────
+  // Section 89-C/9: daily_dispatch migrated to req.db (RLS-enforced).
+  app.use('/api/daily-dispatch', auth, tenantDb, loadRouter('./routes/daily_dispatch'));
+
+  // ── User & invite management ────────────────────────────────
+  // Section 89-C/14: invite_employee migrated to req.db (RLS-enforced).
+  app.use('/api/invite-employee', auth, tenantDb, require('./routes/invite_employee'));
+  // Section 89-C/14: admin_users migrated to req.db (RLS-enforced).
+  app.use('/api/admin/users', auth, tenantDb, loadRouter('./routes/admin_users'));
+
+  // ── RBAC Permissions ────────────────────────────────────────
+  // Section 89-C/5: user_management migrated to req.db (RLS-enforced).
+  app.use('/api/users', auth, tenantDb, require('./routes/user_management'));
+  // Section 89-C/11: permissions migrated to req.db.
+  app.use('/api/permissions', auth, tenantDb, require('./routes/permissions'));
+
+  // ── Hub (Tasks & Blueprints) ────────────────────────────────
+  // Section 89-C/6: hub migrated to req.db (RLS-enforced).
+  app.use('/api/hub', auth, tenantDb, require('./routes/hub'));
+
+  // ── Daily Standup ───────────────────────────────────────────
+  // Section 89-C/7: standup migrated to req.db (RLS-enforced).
+  app.use('/api/standup', auth, tenantDb, require('./routes/standup'));
+  app.use('/uploads/hub', express.static(path.join(__dirname, 'uploads/hub')));
+}
+
+// =============================================================================
+// Anti-leak 404 — used as a tail catch-all on each sub-app to prevent any
+// route-tree leak across portals.
+// =============================================================================
+function notFoundOnPath(message) {
+  return (req, res) => {
+    res.status(404).json({ ok: false, error: 'NOT_FOUND', message });
+  };
+}
+
+// =============================================================================
+// Build the vhost root + the two sub-apps.
+// =============================================================================
+const root = express();
+
+// Trust the first reverse proxy (Nginx).
 // Required so req.ip and rate-limit key generation use the real client IP
 // from X-Forwarded-For instead of Nginx's loopback address.
-app.set('trust proxy', 1);
+root.set('trust proxy', 1);
 
-// --- Security headers ---
-app.use(
+// Security headers (CSP) — applied at root before vhost dispatch.
+root.use(
   helmet({
     contentSecurityPolicy: {
       directives: {
@@ -50,309 +347,58 @@ app.use(
   })
 );
 
-// --- Body parsing ---
-app.use(express.json());
+root.use(express.json());
 
-// --- Rate limiting ---
-// Skip rate limiting under Jest (NODE_ENV=test). Tests issue many auth
-// requests in a tight loop from the same supertest IP; the production
-// auth limit of 20/15min would cause 429s and false-positive failures.
-// All other environments (dev, staging, prod) keep the limits intact.
-const skipInTests = () => process.env.NODE_ENV === 'test';
+// Rate limiters at root level — they fire BEFORE vhost dispatch so the
+// IP-based limit applies regardless of which Host the request targeted.
+root.use('/api/auth/login', authLimiter);
+root.use('/api/auth/signup', authLimiter);
+root.use('/api/auth/refresh', refreshLimiter);
+root.use('/api/auth/change-pin', changePinLimiter);
+root.use('/api/onboarding', onboardingLimiter);
+root.use('/activate', onboardingLimiter);
+root.use('/api/super', superAdminLimiter);
 
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
-  skip: skipInTests,
-  message: {
-    ok: false,
-    error: 'TOO_MANY_REQUESTS',
-    message: 'Too many attempts, please try again later.',
-  },
-});
+// ── Admin sub-app (admin.constrai.ca) ───────────────────────────
+const adminApp = express();
+mountPublicRoutes(adminApp);
+mountAdminRoutes(adminApp);
+// Anti-leak: any /api/* path NOT defined above (i.e., a tenant route accidentally
+// requested via the admin Host) falls through to a 404 instead of 404'ing via
+// Express's default handler — explicit JSON so callers see the failure clearly.
+adminApp.use('/api', notFoundOnPath('Endpoint not available on the admin portal'));
 
-// Refresh endpoint — moderate limit to prevent token brute-force
-const refreshLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 60,
-  standardHeaders: true,
-  legacyHeaders: false,
-  skip: skipInTests,
-  message: { ok: false, error: 'TOO_MANY_REQUESTS' },
-});
+// ── Tenant sub-app (app.constrai.ca) ────────────────────────────
+const tenantApp = express();
+mountPublicRoutes(tenantApp);
+// Anti-leak: /api/super/* on the tenant Host returns 404. Registered BEFORE
+// the tenant routes so it matches first for /api/super/*.
+tenantApp.use('/api/super', notFoundOnPath('Endpoint not available on the tenant portal'));
+mountTenantRoutes(tenantApp);
 
-// PIN change — strict (prevents stolen-token PIN reset abuse)
-const changePinLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
-  skip: skipInTests,
-  message: { ok: false, error: 'TOO_MANY_REQUESTS' },
-});
+// ── Wire vhost dispatch ─────────────────────────────────────────
+root.use(vhost('admin.constrai.ca', adminApp));
+root.use(vhost('app.constrai.ca', tenantApp));
 
-// Public onboarding / activation — strict (prevents invite-token brute-force)
-const onboardingLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 30,
-  standardHeaders: true,
-  legacyHeaders: false,
-  skip: skipInTests,
-  message: { ok: false, error: 'TOO_MANY_REQUESTS' },
-});
+// ── Default fallback ────────────────────────────────────────────
+// Tests using `request(app)` without setting Host, plus direct-IP requests
+// (UptimeRobot polls /api/health/deep on the Droplet IP), fall through to
+// tenantApp. /api/super on default Host hits tenantApp's anti-leak guard
+// → 404. This means an attacker bypassing Cloudflare and hitting the IP
+// directly cannot reach admin routes.
+//
+// All ~41 existing test files using `request(app)` continue to work
+// unchanged for tenant routes. The 4 SA test files use the helper at
+// `tests/helpers/admin_request.js` to set Host: admin.constrai.ca
+// explicitly so they reach adminApp.
+root.use(tenantApp);
 
-// SUPER_ADMIN endpoints — moderate (defense in depth even though SA is auth-gated)
-const superAdminLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  max: 200,
-  standardHeaders: true,
-  legacyHeaders: false,
-  skip: skipInTests,
-  message: { ok: false, error: 'TOO_MANY_REQUESTS' },
-});
-
-app.use('/api/auth/login', authLimiter);
-app.use('/api/auth/signup', authLimiter);
-app.use('/api/auth/refresh', refreshLimiter);
-app.use('/api/auth/change-pin', changePinLimiter);
-app.use('/api/onboarding', onboardingLimiter);
-app.use('/activate', onboardingLimiter);
-app.use('/api/super', superAdminLimiter);
-
-function loadRouter(modPath) {
-  const mod = require(modPath);
-  if (typeof mod === 'function') return mod;
-  if (mod && typeof mod.router === 'function') return mod.router;
-  if (mod && typeof mod.default === 'function') return mod.default;
-  throw new Error(`Route module "${modPath}" did not export an Express router function.`);
-}
-
-const auth = require('./middleware/auth');
-const superAdmin = require('./middleware/super_admin');
-// Section 89-B (Phase 4 Stage 2): per-request tenant DB context. Mount AFTER
-// auth so req.user.company_id is populated. Routes that opt in by querying
-// req.db (instead of pool) get RLS-enforced reads/writes for free. Routes
-// that still use pool.query() rely on the permissive policies from Stage 1
-// (migration 012) until they're migrated. See DECISIONS.md Section 89.
-const tenantDb = require('./middleware/tenant_db');
-if (typeof auth !== 'function') {
-  throw new Error(`"./middleware/auth" must export a middleware function, got ${typeof auth}`);
-}
-
-// ── Public endpoints ──────────────────────────────────────────
-
-app.get('/api/geocode/suggest', async (req, res) => {
-  try {
-    const q = String(req.query.q || '').trim();
-    const token = process.env.MAPBOX_ACCESS_TOKEN;
-    if (!q || q.length < 3) return res.json({ ok: true, features: [] });
-    if (!token) return res.json({ ok: false, error: 'MAPBOX_NOT_CONFIGURED' });
-
-    const url =
-      `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json` +
-      `?access_token=${encodeURIComponent(token)}&country=ca&language=en&types=address&limit=5`;
-
-    const r = await fetch(url);
-    const data = await r.json();
-    return res.json({ ok: true, features: data.features || [] });
-  } catch (err) {
-    console.error('geocode/suggest error:', err.message);
-    return res.status(500).json({ ok: false, error: 'GEOCODE_ERROR' });
-  }
-});
-
-app.get('/api/config', (req, res) => {
-  return res.json({
-    ok: true,
-    mapbox_token: process.env.MAPBOX_ACCESS_TOKEN || null,
-  });
-});
-
-// /api-docs — interactive Swagger UI for the OpenAPI spec, generated
-// from the @openapi JSDoc blocks scattered across this file + routes/.
-// Public (no auth) so frontend devs / partners can self-serve. Phase 71
-// (May 2026, Section 22 hardening). See lib/openapi.js for the base
-// definition; per-route schemas are added incrementally in Phase 71b.
-{
-  const swaggerUi = require('swagger-ui-express');
-  const { spec } = require('./lib/openapi');
-  app.get('/api-docs.json', (req, res) => res.json(spec));
-  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(spec, { explorer: true }));
-}
-
-/**
- * @openapi
- * /api/health:
- *   get:
- *     tags: [Health]
- *     summary: Liveness probe
- *     description: |
- *       Cheap liveness probe — no I/O, no DB. Polled by UptimeRobot every
- *       5 minutes. Always returns 200 if the Node process is responsive.
- *     security: []
- *     responses:
- *       200:
- *         description: Process is responsive.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 ok:      { type: boolean, example: true }
- *                 service: { type: string, example: mep-site-workforce }
- *                 time:    { type: string, format: date-time }
- */
-app.get('/api/health', (req, res) => {
-  res.json({ ok: true, service: 'mep-site-workforce', time: new Date().toISOString() });
-});
-
-/**
- * @openapi
- * /api/health/deep:
- *   get:
- *     tags: [Health]
- *     summary: Readiness probe with structured checks
- *     description: |
- *       Phase 66 readiness probe. Returns DB connectivity, disk space, and
- *       last-backup-age status. Returns 503 if any hard-fail check trips
- *       (DB or disk); 200 otherwise. Soft warnings (stale backup) surface
- *       in the response body via a `warnings` array but do NOT trip 503.
- *     security: []
- *     responses:
- *       200:
- *         description: All hard-fail checks passed; soft warnings may be present.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 ok:       { type: boolean, example: true }
- *                 service:  { type: string }
- *                 time:     { type: string, format: date-time }
- *                 checks:
- *                   type: object
- *                   properties:
- *                     db:     { type: object }
- *                     disk:   { type: object }
- *                     backup: { type: object }
- *                 warnings:
- *                   type: array
- *                   items: { type: string }
- *       503:
- *         description: One or more hard-fail checks tripped (DB or disk).
- */
-// /api/health/deep — Phase 66 readiness probe. Runs structured checks
-// (DB connectivity, disk space, last backup age) and returns 503 when a
-// hard-fail check trips. UptimeRobot continues polling the cheap
-// /api/health endpoint above; this deeper variant is intended for ops
-// dashboards and ad-hoc inspection. See lib/health.js for check details.
-app.get('/api/health/deep', async (req, res) => {
-  try {
-    const { pool } = require('./db');
-    const { runChecks } = require('./lib/health');
-    const { statusCode, body } = await runChecks(pool);
-    res.status(statusCode).json(body);
-  } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
-  }
-});
-
-// ── Auth (public) ─────────────────────────────────────────────
-app.use('/api/auth', loadRouter('./routes/auth'));
-app.use('/api/onboarding', require('./routes/onboarding')); // public — no auth
-app.use('/activate', loadRouter('./routes/activate')); // public — activation link
-
-// ── Super admin ───────────────────────────────────────────────
-// Section 89-C/15: SUPER_ADMIN routes migrated to req.db (BYPASSRLS via superPool).
-app.use('/api/super', auth, superAdmin, tenantDb, loadRouter('./routes/super_admin'));
-app.use('/api/super/ccq-rates', auth, superAdmin, tenantDb, require('./routes/ccq_rates'));
-
-// ── Core business routes ──────────────────────────────────────
-// Section 89-C/12: employees migrated to req.db (RLS-enforced).
-app.use('/api/employees', auth, tenantDb, loadRouter('./routes/employees'));
-// Section 89-C/8: projects migrated to req.db (RLS-enforced).
-app.use('/api/projects', auth, tenantDb, loadRouter('./routes/projects'));
-// Section 89-B sample migration: /api/suppliers was the first production
-// route to consume req.db (RLS-enforced). Section 89-C/1 (May 7, 2026)
-// extends this to /api/bi, /api/project-trades, /api/project-foremen.
-// Other routes still use pool.query + permissive RLS until they migrate
-// in subsequent 89-C batches.
-app.use('/api/suppliers', auth, tenantDb, require('./routes/suppliers'));
-// Section 89-C/11: assignments migrated to req.db (RLS-enforced).
-app.use('/api/assignments', auth, tenantDb, loadRouter('./routes/assignments'));
-// Section 89-C/4: auto_assign migrated to req.db (RLS-enforced).
-// NOTE: assignments.js (mounted directly above) still uses pool.query —
-// it'll be migrated in a separate batch since it has 30 queries + complex
-// transactional logic. Express resolves these two routers in mount order:
-// requests matching assignments.js endpoints fire first; auto_assign only
-// sees requests for paths assignments.js doesn't define (/auto-suggest,
-// /auto-confirm). Adding tenantDb here only affects auto_assign's path set.
-app.use('/api/assignments', auth, tenantDb, require('./routes/auto_assign'));
-// Section 89-C/2: attendance migrated to req.db (RLS-enforced).
-app.use('/api/attendance', auth, tenantDb, loadRouter('./routes/attendance'));
-// Section 89-C/13: profile + push_tokens migrated to req.db (RLS-enforced).
-app.use('/api/profile', auth, tenantDb, loadRouter('./routes/profile'));
-app.use('/api/profile', auth, tenantDb, require('./routes/push_tokens_route'));
-
-// ── Project structure ─────────────────────────────────────────
-// Section 89-C/1: project_trades + project_foremen migrated to req.db.
-app.use('/api/project-trades', auth, tenantDb, require('./routes/project_trades'));
-app.use('/api/project-foremen', auth, tenantDb, require('./routes/project_foremen'));
-
-// ── Materials & Purchase Orders ───────────────────────────────
-// NOTE (2026-04-26): routes/materials.js (the "v1" daily-ticket workflow)
-// is no longer mounted — verified zero frontend/mobile usage. The active
-// flow is routes/material_requests.js (the merge-and-send-PO workflow).
-// File kept on disk for one sprint as a safety net; delete after no
-// incidents.
-// Section 89-C/10: material_requests migrated to req.db (RLS-enforced).
-app.use('/api/materials', auth, tenantDb, require('./routes/material_requests'));
-
-// ── Business Intelligence ─────────────────────────────────────
-// Section 89-C/1: bi route migrated to req.db.
-app.use('/api/bi', auth, tenantDb, require('./routes/bi'));
-// Section 89-C/3: reports migrated to req.db (RLS-enforced).
-app.use('/api/reports', auth, tenantDb, loadRouter('./routes/reports'));
-
-// ── Daily operations ──────────────────────────────────────────
-// Section 89-C/9: daily_dispatch migrated to req.db (RLS-enforced).
-app.use('/api/daily-dispatch', auth, tenantDb, loadRouter('./routes/daily_dispatch'));
-
-// ── User & invite management ──────────────────────────────────
-// Section 89-C/14: invite_employee migrated to req.db (RLS-enforced).
-app.use('/api/invite-employee', auth, tenantDb, require('./routes/invite_employee'));
-
-// Phase 63 (May 2026) — /api/user-invites/generate was redundant with
-// /api/invite-employee + /api/users/:id/resend (audit confirmed no
-// frontend usage). Route file deleted. See DECISIONS.md Phase 63.
-// Section 89-C/14: admin_users migrated to req.db (RLS-enforced).
-app.use('/api/admin/users', auth, tenantDb, loadRouter('./routes/admin_users'));
-
-// ── RBAC Permissions ──────────────────────────────────────────
-// Section 89-C/5: user_management migrated to req.db (RLS-enforced).
-app.use('/api/users', auth, tenantDb, require('./routes/user_management'));
-// Section 89-C/11: permissions migrated to req.db (light touch — most tables
-// are global system config; only /audit is tenant-scoped).
-app.use('/api/permissions', auth, tenantDb, require('./routes/permissions'));
-
-// ── Hub (Tasks & Blueprints) ──────────────────────────────────
-// Section 89-C/6: hub migrated to req.db (RLS-enforced).
-app.use('/api/hub', auth, tenantDb, require('./routes/hub'));
-
-// ── Daily Standup ─────────────────────────────────────────────
-// Section 89-C/7: standup migrated to req.db (RLS-enforced).
-app.use('/api/standup', auth, tenantDb, require('./routes/standup'));
-app.use('/uploads/hub', require('express').static(path.join(__dirname, 'uploads/hub')));
-
-// ── Sentry error handler ──────────────────────────────────────
-// Phase 64 (May 2026). Must be registered AFTER all routes so it sees
-// every uncaught exception bubbling up. Inside Jest (NODE_ENV=test),
-// instrument.js skips Sentry.init(), making this a no-op — but we
-// still register the handler unconditionally so prod and dev have
-// matching middleware stacks.
+// =============================================================================
+// Sentry error handler — registered on root LAST so it sees uncaught errors
+// bubbling up from either sub-app. Inside Jest (NODE_ENV=test),
+// instrument.js skips Sentry.init(), making this a no-op.
+// =============================================================================
 const Sentry = require('@sentry/node');
-Sentry.setupExpressErrorHandler(app);
+Sentry.setupExpressErrorHandler(root);
 
-module.exports = app;
+module.exports = root;

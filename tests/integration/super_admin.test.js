@@ -6,6 +6,7 @@
 
 const request = require('supertest');
 const app = require('../../app');
+const { adminRequest } = require('../helpers/admin_request');
 const {
   describeIfDb,
   closePool,
@@ -35,7 +36,9 @@ describeIfDb('Super admin — /api/super', () => {
     const sa = await seedUser({ role: 'SUPER_ADMIN', pin: 'sa-pin-1234' });
     const { token } = await loginUser(sa);
 
-    const res = await request(app).get('/api/super/stats').set('Authorization', `Bearer ${token}`);
+    const res = await adminRequest(app)
+      .get('/api/super/stats')
+      .set('Authorization', `Bearer ${token}`);
 
     expect(res.statusCode).toBe(200);
     expect(res.body.ok).toBe(true);
@@ -57,7 +60,9 @@ describeIfDb('Super admin — /api/super', () => {
     const admin = await seedUser({ company_id: company.company_id, role: 'COMPANY_ADMIN' });
     const { token } = await loginUser(admin);
 
-    const res = await request(app).get('/api/super/stats').set('Authorization', `Bearer ${token}`);
+    const res = await adminRequest(app)
+      .get('/api/super/stats')
+      .set('Authorization', `Bearer ${token}`);
 
     expect(res.statusCode).toBe(403);
     expect(res.body).toMatchObject({ ok: false, error: 'SUPER_ADMIN_REQUIRED' });
@@ -68,7 +73,7 @@ describeIfDb('Super admin — /api/super', () => {
     const sa = await seedUser({ role: 'SUPER_ADMIN', pin: 'sa-pin-1234' });
     const { token } = await loginUser(sa);
 
-    const res = await request(app)
+    const res = await adminRequest(app)
       .get('/api/super/companies')
       .set('Authorization', `Bearer ${token}`);
 
@@ -84,7 +89,7 @@ describeIfDb('Super admin — /api/super', () => {
     const sa = await seedUser({ role: 'SUPER_ADMIN', pin: 'sa-pin-1234' });
     const { token } = await loginUser(sa);
 
-    const res = await request(app)
+    const res = await adminRequest(app)
       .get(`/api/super/companies/${company.company_id}`)
       .set('Authorization', `Bearer ${token}`);
 
@@ -108,7 +113,7 @@ describeIfDb('Super admin — company suspend / activate', () => {
     const sa = await seedUser({ role: 'SUPER_ADMIN', pin: 'sa-pin-1234' });
     const { token } = await loginUser(sa);
 
-    const res = await request(app)
+    const res = await adminRequest(app)
       .post(`/api/super/companies/${company.company_id}/suspend`)
       .set('Authorization', `Bearer ${token}`);
 
@@ -122,7 +127,7 @@ describeIfDb('Super admin — company suspend / activate', () => {
     const sa = await seedUser({ role: 'SUPER_ADMIN', pin: 'sa-pin-1234' });
     const { token } = await loginUser(sa);
 
-    const res = await request(app)
+    const res = await adminRequest(app)
       .post(`/api/super/companies/${company.company_id}/activate`)
       .set('Authorization', `Bearer ${token}`);
 
@@ -134,7 +139,7 @@ describeIfDb('Super admin — company suspend / activate', () => {
     const sa = await seedUser({ role: 'SUPER_ADMIN', pin: 'sa-pin-1234' });
     const { token } = await loginUser(sa);
 
-    const res = await request(app)
+    const res = await adminRequest(app)
       .post('/api/super/companies/99999999/suspend')
       .set('Authorization', `Bearer ${token}`);
 
@@ -154,7 +159,7 @@ describeIfDb('Super admin — PATCH /api/super/companies/:id', () => {
     const sa = await seedUser({ role: 'SUPER_ADMIN', pin: 'sa-pin-1234' });
     const { token } = await loginUser(sa);
 
-    const res = await request(app)
+    const res = await adminRequest(app)
       .patch(`/api/super/companies/${company.company_id}`)
       .set('Authorization', `Bearer ${token}`)
       .send({ name: 'Renamed Co', plan: 'PRO' });
@@ -170,7 +175,7 @@ describeIfDb('Super admin — PATCH /api/super/companies/:id', () => {
     const sa = await seedUser({ role: 'SUPER_ADMIN', pin: 'sa-pin-1234' });
     const { token } = await loginUser(sa);
 
-    const res = await request(app)
+    const res = await adminRequest(app)
       .patch(`/api/super/companies/${company.company_id}`)
       .set('Authorization', `Bearer ${token}`)
       .send({ plan: 'NOT_A_REAL_PLAN' });
@@ -184,7 +189,7 @@ describeIfDb('Super admin — PATCH /api/super/companies/:id', () => {
     const sa = await seedUser({ role: 'SUPER_ADMIN', pin: 'sa-pin-1234' });
     const { token } = await loginUser(sa);
 
-    const res = await request(app)
+    const res = await adminRequest(app)
       .patch(`/api/super/companies/${company.company_id}`)
       .set('Authorization', `Bearer ${token}`)
       .send({ status: 'NOT_A_STATUS' });
