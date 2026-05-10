@@ -10313,3 +10313,90 @@ When the 90-A docs PR shipped an Nginx config with `$host` in a comment ("Litera
 
 - **Today: 59 sections.** (Section 90 extended with Piece 90-B: backend vhost split. app.js refactored into vhost root + adminApp + tenantApp. 4 SA test files updated to use new admin_request helper. 12-assertion vhost_isolation test added. Nginx /api/ proxy on admin Host with literal Host header for lint-friendliness. Pitfall encoded: Semgrep reads comments — don't quote sensitive tokens.)
 
+### Piece 90-C — Frontend Vite multi-entry (B2) (May 10, 2026)
+
+Third execution piece of Phase 5. Wires the React frontend to build TWO entry points from one Vite project — `dist/index.html` (tenant) and `dist/admin.html` (admin) — with all shared infrastructure (Tailwind theme tokens, i18next setup, http client, design components) staying in one tree under `mep-frontend/src/`. Decision B2 from Section 90 ships in this piece.
+
+#### What changed
+
+**`mep-frontend/admin.html`** — new Vite entry HTML for the admin portal. Deliberately stripped down compared to `index.html`:
+
+- No PWA manifest link, no apple-touch-icon, no shortcuts. The admin portal is an internal desktop tool — installing it as a home-screen app would be wrong-shape.
+- `<meta name="robots" content="noindex,nofollow" />` so the page isn't crawled if the URL leaks into search engines (defense-in-depth — Cloudflare's WAF is the primary control).
+- Loads `/src/admin-main.jsx` instead of `/src/main.jsx`.
+
+**`mep-frontend/src/admin-main.jsx`** — new entry script. Imports `./index.css` (shared Tailwind tokens), `./i18n` (shared i18next setup), then renders `<AdminApp />` via React 18's `createRoot`. Doc header notes the known PWA SW auto-injection on both entries; under the vhost split (90-B) the SW can't poison cross-domain anyway, so it's a deferred cleanup.
+
+**`mep-frontend/src/AdminApp.jsx`** — new admin shell. Intentionally minimal stub for 90-C scope. Renders a centered card with "Constrai Admin" + "Internal portal — under construction." + a badge reading `Phase 5 / 90-C • React shell live` (visual diff target — the 90-A static placeholder showed `90-A • Infrastructure ready`, so a glance at the badge confirms which version is deployed). 90-D will replace the body with the All-Companies list page.
+
+**`mep-frontend/vite.config.js`** — added `build.rollupOptions.input` block:
+
+```js
+build: {
+  rollupOptions: {
+    input: {
+      main:  path.resolve(__dirname, 'index.html'),
+      admin: path.resolve(__dirname, 'admin.html'),
+    },
+  },
+},
+```
+
+Vite emits `dist/index.html`, `dist/admin.html`, plus shared chunks under `dist/assets/...`. Per-entry chunks are named via the standard rollup pattern. No other Vite config knobs touched — Tailwind, PWA plugin, dev-server proxy, vitest config all inherited unchanged.
+
+**`infra/nginx/admin-constrai.conf`** — `root` switched from `/var/www/admin-placeholder` → `/var/www/mep/mep-frontend/dist`, and `try_files` fallback switched from `/index.html` → `/admin.html`. Critical: serving `/index.html` from the admin server block would render the tenant React app on the admin domain, which is the exact failure we're trying to prevent. Comment in the file calls this out so a future editor doesn't "fix" it back to `/index.html`.
+
+#### Why no test file in this piece
+
+90-C is a pure scaffolding piece — the admin shell has no behavior to test yet. Adding component tests for an empty placeholder would be theatre. The existing CI `frontend` job already runs `npm run build` (line 188 of `.github/workflows/ci.yml`) which exercises the new entry; if `admin.html` references a missing module or the rollup config has a typo, the build fails and CI catches it.
+
+90-D introduces real behavior (companies list with sort/search), and that piece will land with React Testing Library coverage of the new screen + Playwright e2e for the navigate-to-admin flow.
+
+#### Prod deploy
+
+Same shape as 90-B's deploy:
+
+1. `cd /var/www/mep && git pull origin main`
+2. `cd mep-frontend && npm ci --omit=dev --ignore-scripts && npm run build` — Vite produces `dist/index.html`, `dist/admin.html`, `dist/assets/...`. Verify both `index.html` and `admin.html` are present in `dist/` after the build.
+3. `sudo cp infra/nginx/admin-constrai.conf /etc/nginx/sites-available/admin-constrai`
+4. `sudo nginx -t` (clean) → `sudo systemctl reload nginx`.
+5. End-to-end probes:
+   - `curl https://admin.constrai.ca/` → 200, body contains `<title>Constrai Admin</title>` (from admin.html, not index.html).
+   - `curl https://app.constrai.ca/` → 200, body contains `<title>Constrai</title>` (tenant title unchanged).
+   - Open `https://admin.constrai.ca` in a browser — should render the React shell with the badge `90-C • React shell live` (replacing the 90-A static badge `90-A • Infrastructure ready`).
+
+#### Known limitations carried forward
+
+- **PWA service worker auto-injects on both entries.** The vite-plugin-pwa setting `injectRegister: 'auto'` (default) inserts a `registerSW()` call into both `index.html` and `admin.html`. The admin SW caches `/api/*` paths under NetworkFirst (5-minute TTL). On `admin.constrai.ca` this means /api/super calls get cached briefly — practically fine since the SW is per-origin and the tenant SW can't see admin paths, but it's slightly over-eager. Tightening (set `injectRegister: null` and call `registerSW()` only from `main.jsx`) is queued for 90-E or a 90-D follow-up.
+- **`dist/admin.html` is reachable as a static file via the tenant Nginx server block** because both server blocks serve from the same `dist/` directory under different `index` directives. A curious user hitting `app.constrai.ca/admin.html` would render the admin shell on the tenant domain. The shell is empty (no SA token, no API calls succeed via the anti-leak guards from 90-B), so this is a cosmetic leak only. Will be tightened in 90-D when the admin shell starts containing real content — a `location = /admin.html { return 404; }` on the tenant server block is the obvious fix.
+
+#### Files touched
+
+| File | Change |
+|---|---|
+| `mep-frontend/admin.html` | NEW. Minimal Vite entry HTML for admin portal. No PWA. |
+| `mep-frontend/src/admin-main.jsx` | NEW. Entry script — renders `<AdminApp />`. |
+| `mep-frontend/src/AdminApp.jsx` | NEW. Admin shell stub (placeholder card, badge updated to 90-C). |
+| `mep-frontend/vite.config.js` | Added `build.rollupOptions.input` for multi-entry build. |
+| `infra/nginx/admin-constrai.conf` | `root` → `mep-frontend/dist`; `try_files` fallback → `/admin.html`. |
+| `/etc/nginx/sites-available/admin-constrai` (server) | Updated to match repo mirror. |
+| `HANDOFF.md` | "Latest deployed", "Last merged", "Next task" advance to 90-D. |
+| `MASTER_README.md` | Latest DECISIONS pointer bumped to "Section 90 / Piece 90-C". |
+| `DECISIONS.md` (this Piece) | — |
+
+#### Status — Piece 90-C
+
+| Item | Status |
+|---|---|
+| `admin.html` entry | ✅ Stripped-down (no PWA, noindex, loads admin-main.jsx) |
+| `admin-main.jsx` entry script | ✅ Mirrors main.jsx but renders AdminApp |
+| `AdminApp.jsx` shell | ✅ Placeholder card with 90-C badge |
+| `vite.config.js` multi-entry | ✅ rollupOptions.input wires both index + admin |
+| Nginx admin block | ✅ Mirror in `infra/`, deployed on prod, root + try_files updated |
+| Local CI build verification | ✅ Frontend job `npm run build` exercises new entry (see ci.yml line 188) |
+| Visual confirmation | ✅ Browser shows `90-C • React shell live` (was `90-A • Infrastructure ready`) |
+| Tenant app regression check | ✅ `app.constrai.ca` still serves tenant index.html unchanged |
+| Next (90-D) | ⏳ Pending — Admin shell + first real screen (All Companies list, read-only). Backend `GET /api/super/companies/overview`, frontend table with sort + search. RTL component test + Playwright e2e for the navigate flow. |
+
+- **Today: 59 sections.** (Section 90 extended with Piece 90-C: Vite multi-entry frontend (B2). admin.html + admin-main.jsx + AdminApp.jsx all new. vite.config.js gains rollupOptions.input. Nginx admin block now serves the React shell instead of the 90-A static placeholder. Two known limitations carried forward: PWA SW auto-inject on both entries; admin.html reachable via tenant Nginx as static file. Both fix in 90-D/E.)
+

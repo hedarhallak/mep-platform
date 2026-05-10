@@ -128,6 +128,29 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  // Phase 5 / 90-C — multi-entry build (Decision B2 from DECISIONS.md
+  // Section 90). Both entries share the same Tailwind theme, i18n setup,
+  // and shared component library; only the root <App> differs. Vite
+  // outputs:
+  //   dist/index.html   → tenant entry (loaded by app.constrai.ca)
+  //   dist/admin.html   → admin entry  (loaded by admin.constrai.ca)
+  //   dist/assets/...   → shared chunks + per-entry chunks
+  //
+  // Nginx server blocks pick the right index per Host:
+  //   - /etc/nginx/sites-available/constrai           → try_files … /index.html
+  //   - /etc/nginx/sites-available/admin-constrai     → try_files … /admin.html
+  //
+  // First-match-wins matters here: do NOT add a wildcard input that could
+  // shadow either explicit name. Future entries (e.g., a separate '/preview'
+  // build) should be added by name, not pattern.
+  build: {
+    rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, 'index.html'),
+        admin: path.resolve(__dirname, 'admin.html'),
+      },
+    },
+  },
   // Vitest config (Phase 68, May 2026, Section 22 hardening week).
   // Co-located with the Vite config so the test runner picks up the same
   // alias + plugin pipeline as the dev server. Overrides only what tests
