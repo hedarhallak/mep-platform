@@ -9,19 +9,34 @@
 //     can be changed via the same `mep_language` localStorage key)
 // then renders <AdminApp /> instead of the tenant <App />.
 //
-// NOTE: PWA service-worker registration is auto-injected by vite-plugin-pwa
-// into both index.html and admin.html. For the admin entry that's slightly
-// over-eager — admin is an internal-only tool that doesn't need offline
-// caching. The SW caches /api/* paths under NetworkFirst (5min TTL). Under
-// the vhost split (90-B), /api/super calls on tenant domain are 404'd
-// before they can be cached, so there's no cross-domain SW poisoning.
-// Tightening this is on the 90-E / Phase 6 follow-up list.
+// 90-D follow-up: PWA registration is disabled for the admin entry. The
+// vite-plugin-pwa setting `injectRegister: false` (see vite.config.js)
+// stops auto-injection on admin.html; the tenant entry (main.jsx) opts
+// back in explicitly. We also UNREGISTER any pre-existing service worker
+// on this origin on every page load — that takes care of the SW that was
+// auto-installed by 90-C before this fix shipped. Without that cleanup,
+// a stale 90-C-era SW would keep serving cached tenant index.html as the
+// navigation fallback for admin routes, causing the visible bug we hit:
+// /login on admin.constrai.ca rendered the tenant login UI instead of
+// the admin React Router NotFound page.
 
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import './i18n'
 import AdminApp from './AdminApp.jsx'
+
+// One-shot cleanup of any SW left behind by the 90-C build. Idempotent:
+// once the SW is gone (typically after one reload), getRegistrations()
+// returns an empty list and this is a no-op. Safe to keep indefinitely.
+if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+  navigator.serviceWorker
+    .getRegistrations()
+    .then((regs) => regs.forEach((r) => r.unregister()))
+    .catch(() => {
+      // ignore — best-effort cleanup
+    })
+}
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

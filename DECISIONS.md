@@ -10490,3 +10490,38 @@ This is logged as the "PWA SW scope tightening" item in HANDOFF's backlog.
 
 - **Today: 59 sections.** (Section 90 extended with Piece 90-D: first real admin screen — All Companies list with search + sort + 7 RTL tests. New `/api/super/companies/overview` endpoint. Tenant Nginx mirrored to `infra/nginx/constrai.conf` with h2c protection + admin.html anti-leak. Pitfall encoded: Express route ordering — name before parameterized.)
 
+### Piece 90-D-fix — PWA service-worker scope (May 10, 2026, post-deploy)
+
+**Trigger**: minutes after 90-D deployed, opening `https://admin.constrai.ca/login` in a browser rendered the **tenant login UI** (green Constrai sign-in card) instead of the admin React Router NotFound page. URL bar showed `admin.constrai.ca/login` correctly; the served HTML was the tenant `index.html`.
+
+**Root cause**: vite-plugin-pwa with `registerType: 'autoUpdate'` and the default `injectRegister: 'auto'` setting injects the SW registration script into BOTH built entry HTMLs (`dist/index.html` AND `dist/admin.html`). When 90-C deployed, an SW was therefore registered on `admin.constrai.ca`. Workbox's default precache manifest includes every HTML emitted by the build (controlled by `globPatterns`), so the admin SW pre-cached `/index.html` (the tenant entry) along with `/admin.html`. Workbox's default NavigationRoute serves the precached `/index.html` as a fallback for any unknown navigation request — which is exactly why `/login` on the admin domain rendered the tenant login.
+
+The 90-D HANDOFF flagged this as a known limitation deferred to 90-E ("PWA SW auto-inject on both entries — practically fine"). It was NOT practically fine: it actively served the wrong entry. The deferred cleanup gets done now as a small follow-up.
+
+**Fix shipped:**
+
+1. **`vite.config.js`** — added `injectRegister: false` to the VitePWA plugin config. Vite no longer auto-injects the SW registration into entry HTMLs.
+2. **`mep-frontend/src/main.jsx`** — explicit `import { registerSW } from 'virtual:pwa-register'` + `registerSW({ immediate: true })`. The tenant entry continues to register the SW exactly as before; only the auto-injection mechanism changed.
+3. **`mep-frontend/src/admin-main.jsx`** — does NOT import `virtual:pwa-register`. So the admin entry never registers an SW. PLUS, on every page load, the admin entry unregisters any pre-existing SW on the origin via `navigator.serviceWorker.getRegistrations().then((regs) => regs.forEach((r) => r.unregister()))`. This idempotent cleanup takes care of the SW that 90-C's build had already installed in users' browsers — once they reload after this fix lands, their stale SW is gone for good.
+
+**Why the unregister-on-load is needed**: shipping a new build that "doesn't register a SW" doesn't remove the SW that was already registered by the 90-C build. Browsers persist SW registrations until they're explicitly unregistered or the SW updates to a new version that calls `self.clients.unregister()`. Adding the unregister call to admin-main.jsx is the pragmatic solution — first reload picks up the new admin-main.jsx (because the OLD SW was caching admin-main.jsx with NetworkFirst, so the new version wins on reload-with-network), which immediately unregisters the SW. Subsequent reloads serve fresh content from the network.
+
+**Pitfall #27 encoded** — "Vite PWA + multi-entry: setting `injectRegister: 'auto'` (the default) silently registers the SW on every entry HTML, regardless of intent. For multi-entry projects where some entries are deliberately non-PWA (admin tools, marketing pages, embeds), explicitly set `injectRegister: false` and call `registerSW()` only from entries that should opt in. The cost of forgetting is invisible until users notice the wrong entry being served as a navigation fallback."
+
+**Files touched**
+
+| File | Change |
+|---|---|
+| `mep-frontend/vite.config.js` | Added `injectRegister: false`. |
+| `mep-frontend/src/main.jsx` | Explicit `registerSW()` import + call. |
+| `mep-frontend/src/admin-main.jsx` | One-shot unregister of any pre-existing SW on the origin. |
+| `DECISIONS.md` (this Piece) | — |
+
+**Status — Piece 90-D-fix**
+
+| Item | Status |
+|---|---|
+| Diagnosis | ✅ Vite PWA auto-injection + Workbox NavigationRoute fallback to `/index.html` |
+| Fix | ✅ Disable auto-injection, register SW only from tenant entry, unregister on admin entry load |
+| Pitfall encoded | ✅ #27 |
+
