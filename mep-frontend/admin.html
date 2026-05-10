@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+
+    <!--
+      Phase 5 / 90-C — admin portal entry. Mounted on admin.constrai.ca via
+      the Nginx server block at infra/nginx/admin-constrai.conf. Loads
+      /src/admin-main.jsx which renders <AdminApp /> instead of the tenant
+      <App />.
+
+      Deliberately minimal: NO PWA manifest links, NO mobile-app meta tags,
+      NO icon shortcuts. The admin portal is an internal desktop tool, not
+      something we want users installing as a home-screen app. The
+      vite-plugin-pwa service worker registration is still auto-injected
+      by the Vite plugin (a side-effect of multi-entry); the SW's path
+      patterns won't trigger on /api/super calls in any harmful way (the
+      tenant SW config doesn't match admin paths). Will be tightened in
+      a follow-up if needed.
+    -->
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0f172a" />
+    <meta name="description" content="Constrai Admin — Internal portal for cross-tenant administration" />
+    <meta name="robots" content="noindex,nofollow" />
+    <title>Constrai Admin</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/admin-main.jsx"></script>
+  </body>
+</html>

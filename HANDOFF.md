@@ -1,7 +1,7 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 9, 2026 — **Phase 4 done (May 9 ~14:45 UTC).** **Phase 5 in progress: 90-A + 90-B ✅ DONE.** 90-A stood up admin.constrai.ca subdomain (May 9 ~21:55 UTC). 90-B refactored Express into vhost root + adminApp + tenantApp, with anti-leak 404 guards both directions and a 12-assertion vhost_isolation test (deployed May 9 ~22:50 UTC). All 4 SA test files updated to use the new `tests/helpers/admin_request.js` helper. **Next task: Piece 90-C — Frontend Vite multi-entry (B2)**: add `src/admin-main.tsx`, configure `rollupOptions.input` for two `index.html` outputs, Nginx serves the right one per Host. Admin shell is just a stub for now; first real screen lands in 90-D.
+> Last updated: May 10, 2026 — **Phase 4 done (May 9).** **Phase 5 in progress: 90-A + 90-B + 90-C ✅ DONE.** 90-A subdomain live (May 9). 90-B Express vhost split (May 10 ~16:17 UTC). 90-C Vite multi-entry frontend (May 10): `admin.html` + `admin-main.jsx` + `AdminApp.jsx` all new, `vite.config.js` gains `rollupOptions.input` for the two-entry build. The admin portal now serves a real React shell (badge: `90-C • React shell live`) instead of the 90-A static placeholder. **Next task: Piece 90-D — Admin shell + All Companies list page**: backend `GET /api/super/companies/overview` returning per-company aggregates, frontend table with sort + search, RTL component test + Playwright e2e for the navigate flow.
 
 ---
 
@@ -27,7 +27,7 @@ When you receive the one-line command above:
    - `RECOVERY.md` Section 2.4 only (cost inventory) if relevant to today's task
 3. **Echo this exact line** as the first line of your reply so Hedar knows bootstrap completed:
    ```
-   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 90 / 90-B, next is 90-C)
+   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 90 / 90-C, next is 90-D)
    ```
 4. **Confirm the next task** in 1-2 lines (from "Next task" below).
 5. **Ask if Hedar is ready to start**, then wait.
@@ -45,9 +45,9 @@ When you receive the one-line command above:
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04) |
 | Backend | Node.js + Express + Postgres 16, pm2-managed at `/var/www/mep` |
 | Frontend | React + Vite + Tailwind, deployed to `/var/www/mep/mep-frontend/dist` |
-| Latest deployed to prod | **Backend vhost split (90-B)** — May 9, 2026 ~22:50 UTC. (Earlier today: 90-A subdomain ~21:55 UTC, migration 013 strict RLS flip / 89-E/3 ~14:45 UTC.) |
-| Last merged to main | 90-A infra (squash from PR #197) — May 9, 2026. 90-B PR pending. |
-| Active program | **Multi-Tenant Migration** (Section 85, Phases 1-8) — **Phase 5 in progress** (90-A + 90-B done, 90-C next) |
+| Latest deployed to prod | **Vite multi-entry frontend (90-C)** — May 10, 2026. (90-B vhost split deployed earlier today ~16:17 UTC; 90-A subdomain May 9 ~21:55 UTC; 89-E/3 RLS strict May 9 ~14:45 UTC.) |
+| Last merged to main | 90-B vhost split (squash `0ee4eff`) — May 10, 2026. 90-C PR pending. |
+| Active program | **Multi-Tenant Migration** (Section 85, Phases 1-8) — **Phase 5 in progress** (90-A + 90-B + 90-C done, 90-D next) |
 | Mobile app | Still on legacy username login — backend keeps backward-compat |
 
 ### Multi-tenant migration progress
@@ -95,37 +95,34 @@ When you receive the one-line command above:
 
 ---
 
-## Next task: Piece 90-C — Frontend Vite multi-entry (B2)
+## Next task: Piece 90-D — Admin shell + All Companies list page
 
-**Phase 5 architecture (Section 90) recap** — all 3 decisions are in place:
+**Phase 5 architecture (Section 90) and infra are fully in place:**
 
 - **A**: subdomain `admin.constrai.ca` ✅ live as of 90-A
-- **B2**: single Vite project with two entry points — **THIS PIECE**
+- **B2**: Vite multi-entry frontend ✅ live as of 90-C (admin.html + admin-main.jsx + AdminApp.jsx, served from `/var/www/mep/mep-frontend/dist`)
 - **C2**: Express vhost split ✅ live as of 90-B (adminApp + tenantApp physically separated, anti-leak 404 guards both directions, 12 vhost_isolation assertions in CI)
 
-**90-C scope:** refactor `mep-frontend/` (the Vite + React tenant app) to also build an admin entry:
+**90-D scope:** first real admin screen — read-only "All Companies" list with sort + search.
 
-1. Add `mep-frontend/admin.html` — Vite entry HTML for the admin portal. Mirrors the existing `index.html` shape, but loads `/src/admin-main.tsx` instead of `/src/main.tsx`.
-2. Add `mep-frontend/src/admin-main.tsx` + `mep-frontend/src/AdminApp.tsx` — minimal admin shell. For 90-C, just a placeholder layout with the Constrai logo + a "Welcome, SA" heading. Real screens land in 90-D.
-3. Update `mep-frontend/vite.config.ts`'s `build.rollupOptions.input` to:
-   ```ts
-   input: {
-     main: resolve(__dirname, 'index.html'),
-     admin: resolve(__dirname, 'admin.html'),
-   }
-   ```
-   This produces `dist/index.html` (tenant) AND `dist/admin.html` (admin) plus per-entry chunks.
-4. Update Nginx server blocks:
-   - `app.constrai.ca`: stays the same (`root /var/www/mep/mep-frontend/dist`, `try_files $uri $uri/ /index.html`).
-   - `admin.constrai.ca`: change `root` from `/var/www/admin-placeholder` to `/var/www/mep/mep-frontend/dist`, change `try_files` fallback from `/index.html` to `/admin.html`. Update both `infra/nginx/admin-constrai.conf` mirror and the prod server file.
-5. Wire shared infra: theme tokens, i18n setup, http client, design components — all stay in `mep-frontend/src/{theme,i18n,api,components}`. Both entries import from the same source. Keep an ESLint rule comment in place noting that admin-only modules should live under `src/admin/**` and tenant-only under `src/tenant/**` (deferred — 90-D will introduce these folders when real screens land).
+1. **Backend**: add `GET /api/super/companies/overview` to `routes/super_admin.js`. Returns an array of `{ company_id, name, plan, status, employee_count, project_count, created_at, last_activity_at }`. Computed via aggregate joins on `companies × employees × projects × audit_logs` (latest audit row's `created_at` is a reasonable proxy for last activity). All counts/joins use `req.db.query` since SUPER_ADMIN routes are RLS-bypass via superPool (already wired).
+2. **Frontend (admin)**: introduce a basic React Router setup in `AdminApp.jsx` — at least one route at `/` that renders the new `<CompaniesList />` component. Route registry kept tiny for now (1 route); 90-E adds login/logout routes.
+3. **Frontend component**: `mep-frontend/src/admin/CompaniesList.jsx` — table with columns from the API response, client-side text search on company name, click-to-sort on each column. Keep the design simple (the existing tenant Tailwind tokens are good enough; no new design system needed).
+4. **Tests**:
+   - Backend: extend `tests/integration/super_admin.test.js` (or add a new `super_admin_overview.test.js`) with assertions for the new endpoint shape + 403 path.
+   - Frontend: RTL component test for `<CompaniesList />` with a mocked fetch — verifies sort + search behavior. New file `mep-frontend/src/admin/CompaniesList.test.jsx`.
+   - E2E: extend the Playwright config to also boot for the admin entry, or add a new `e2e/admin-companies.spec.js` that loads `admin.html` and asserts the table renders. Optional — can defer to 90-E if it complicates the e2e config.
+5. **Tighten the two known-limitation leaks from 90-C** (small follow-ups inside this PR):
+   - Set `vite-plugin-pwa`'s `injectRegister: null` and call `registerSW()` only from `main.jsx` so admin entry doesn't pick up PWA.
+   - Add `location = /admin.html { return 404; }` to the tenant Nginx server block (`/etc/nginx/sites-available/constrai`) to stop static admin.html from being reachable on `app.constrai.ca`. (When this gets done, mirror the constrai server block to `infra/nginx/constrai.conf` for traceability.)
 
-**Out of scope for 90-C:**
-- No real admin screens — just the shell. First real page (companies list) lands in 90-D.
-- No SA-vs-tenant role guards in the React tree. That's 90-E.
-- No per-tenant branding work. That's Phase 6.
+**Out of scope for 90-D:**
+- No write actions on companies (suspend / activate / patch). Read-only list only.
+- No impersonation. That's a separate piece, deferred to a SUPPORT_AGENT phase.
+- No billing UI.
+- No auth flow validation across portals — that's 90-E.
 
-**Suggested PR title:** `feat(s90-c): Vite multi-entry frontend (B2) — admin shell stub`.
+**Suggested PR title:** `feat(s90-d): admin shell + All Companies list (read-only)`.
 
 **Backlog items still open after Phase 4** (carried forward — not blockers for Phase 5 but should be tracked):
 
