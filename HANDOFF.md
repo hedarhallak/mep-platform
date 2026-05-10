@@ -1,7 +1,7 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 10, 2026 — **Phase 4 done (May 9).** **Phase 5 in progress: 90-A + 90-B + 90-C + 90-D ✅ DONE.** 90-D shipped the first real admin screen (All Companies list with search + sort), the `GET /api/super/companies/overview` backend endpoint, 7 RTL tests, and tenant Nginx admin.html anti-leak + h2c smuggling cleanup (mirrored existing constrai.conf to `infra/nginx/constrai.conf`). **Next task: Piece 90-E — Auth flow validation across portals**: SA login on admin works, COMPANY_ADMIN can't reach admin login UI, cookie scope enforced separately per portal, audit log for cross-portal attempts. Plus a small follow-up cleanup deferred from 90-D: tighten `vite-plugin-pwa` so admin entry doesn't auto-register the SW.
+> Last updated: May 10, 2026 — **Phase 4 done (May 9).** **Phase 5 in progress: 90-A + 90-B + 90-C + 90-D + 90-E ✅ DONE** (~83% of Phase 5 roadmap). 90-E added the cross-portal auth gate in `routes/auth.js#login` (admin Host + non-SA → 403 BLOCKED_PORTAL_LOGIN + audit row), the `<AdminLogin />` component, the `/login` route in `AdminApp.jsx`, plus 12 new test assertions (6 backend integration + 6 RTL). Cookie scope is N/A — token stays in localStorage (per-origin, no cross-domain leak). PWA SW scoping fix shipped in 90-D-fix earlier. **Next task: Piece 90-F — Prod deploy + anti-leak UAT (Phase 5 closeout)**.
 
 ---
 
@@ -27,7 +27,7 @@ When you receive the one-line command above:
    - `RECOVERY.md` Section 2.4 only (cost inventory) if relevant to today's task
 3. **Echo this exact line** as the first line of your reply so Hedar knows bootstrap completed:
    ```
-   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 90 / 90-D, next is 90-E)
+   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 90 / 90-E, next is 90-F)
    ```
 4. **Confirm the next task** in 1-2 lines (from "Next task" below).
 5. **Ask if Hedar is ready to start**, then wait.
@@ -45,9 +45,9 @@ When you receive the one-line command above:
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04) |
 | Backend | Node.js + Express + Postgres 16, pm2-managed at `/var/www/mep` |
 | Frontend | React + Vite + Tailwind, deployed to `/var/www/mep/mep-frontend/dist` |
-| Latest deployed to prod | **All Companies list (90-D)** — May 10, 2026. (90-C Vite multi-entry deployed earlier today; 90-B vhost split ~16:17 UTC; 90-A subdomain May 9.) |
-| Last merged to main | 90-C Vite multi-entry (squash `d6fdb7e`) — May 10, 2026. 90-D PR pending. |
-| Active program | **Multi-Tenant Migration** (Section 85, Phases 1-8) — **Phase 5 in progress** (90-A + 90-B + 90-C + 90-D done, 90-E next) |
+| Latest deployed to prod | **PWA SW scope fix (90-D-fix)** — May 10, 2026. 90-E auth gate is merged to main but **NOT yet deployed** to prod (the deploy step is the 90-F piece). |
+| Last merged to main | 90-D-fix PWA scope (squash `c42ec3e`) — May 10, 2026. 90-E PR pending merge → deploy in 90-F. |
+| Active program | **Multi-Tenant Migration** (Section 85, Phases 1-8) — **Phase 5 in progress** (90-A + 90-B + 90-C + 90-D + 90-E done, 90-F final) |
 | Mobile app | Still on legacy username login — backend keeps backward-compat |
 
 ### Multi-tenant migration progress
@@ -95,29 +95,40 @@ When you receive the one-line command above:
 
 ---
 
-## Next task: Piece 90-E — Auth flow validation across portals
+## Next task: Piece 90-F — Prod deploy + anti-leak UAT (Phase 5 closeout)
 
-**Phase 5 architecture is fully wired and the first real screen ships:**
+**Phase 5 is code-complete:**
 
-- **A**: subdomain `admin.constrai.ca` ✅ live (90-A)
-- **B2**: Vite multi-entry frontend ✅ live (90-C). Tenant Nginx now blocks `/admin.html` static access (90-D).
-- **C2**: Express vhost split ✅ live (90-B). 12 vhost_isolation assertions in CI.
-- **First real admin screen**: All Companies list with search + sort + 7 RTL tests ✅ live (90-D).
+- **A**: subdomain `admin.constrai.ca` ✅ deployed (90-A)
+- **B2**: Vite multi-entry frontend ✅ deployed (90-C + 90-D-fix for PWA scope)
+- **C2**: Express vhost split ✅ deployed (90-B)
+- **First real admin screen**: All Companies list ✅ deployed (90-D)
+- **Cross-portal auth gate**: ✅ **merged to main, NOT yet deployed** (90-E)
 
-**90-E scope:** make the auth flow work end-to-end on the admin portal, with proper isolation from the tenant flow.
+**90-F scope:** deploy 90-E to prod and run a full UAT pass on Phase 5.
 
-1. **Admin login UI**: add `/login` route to `AdminApp.jsx` rendering a `<AdminLogin />` component. Posts to `/api/auth/login` (existing public endpoint). On success, stashes the token in a **separate** localStorage key — e.g. `mep_admin_token` — so admin and tenant tokens don't share a slot. The shared `lib/api.js` reads `mep_token` by default; either fork it (admin uses `lib/api-admin.js` reading the admin key) OR make `api.js` aware of the current portal and pick the right key based on hostname.
-2. **Role gate at login**: server-side, when authenticating on Host=admin.constrai.ca, only accept `SUPER_ADMIN` role. Reject COMPANY_ADMIN with a clear "Use the tenant portal at app.constrai.ca" error. Conversely, when authenticating on Host=app.constrai.ca, allow any non-SA role; SA logging in here gets either a friendly "Use admin.constrai.ca" message OR a successful tenant-context login (decision to be made — Section 90's intent suggests SA can log into tenant view for testing).
-3. **Cookie scope assertion**: integration test that proves `Set-Cookie` from the admin Host doesn't leak to the tenant Host (separate localStorage keys + no Domain attribute on cookies if we ever switch to cookie auth).
-4. **Audit log entries** for cross-portal login attempts: every COMPANY_ADMIN trying to log into admin.constrai.ca gets an `AUDIT_BLOCKED_PORTAL_LOGIN` row so the next session reading `audit_logs` sees the attempt history.
-5. **PWA scope tightening (cleanup deferred from 90-D)**: set `vite-plugin-pwa`'s `injectRegister: null` and call `registerSW()` explicitly only in `main.jsx`. Verify in dev that admin SW does NOT register.
+1. **Deploy 90-E to prod**:
+   - `cd /var/www/mep && git pull origin main`
+   - `cd mep-frontend && npm ci --ignore-scripts && npm run build` (rebuilds with the new AdminLogin chunk)
+   - `pm2 restart mep-backend` (picks up the new auth.js portal gate + new BLOCKED_PORTAL_LOGIN audit action)
+   - No Nginx changes — 90-E is pure JS.
 
-**Out of scope for 90-E:**
-- No 2FA or biometric. That's Phase 7.
-- No SUPPORT_AGENT role (read-only cross-tenant access). Architecture stays open for it but no implementation in 90-E.
-- No password reset / forgot-PIN UI for admin. Hedar is the only SA today; he doesn't need self-service.
+2. **Anti-leak UAT scenarios** (run on prod against real test accounts):
+   - SUPER_ADMIN logs into `admin.constrai.ca/login` → reaches CompaniesList → table renders.
+   - SUPER_ADMIN logs into `app.constrai.ca/login` → reaches tenant home (existing behavior preserved per Section 90).
+   - COMPANY_ADMIN logs into `admin.constrai.ca/login` → 403 inline message, NO token stashed, audit row written. Verify the audit row via `psql` (or the `/api/super/audit` endpoint once it exists — for now psql).
+   - COMPANY_ADMIN logs into `app.constrai.ca/login` → tenant home (existing behavior).
+   - Direct curl: `curl -X POST https://admin.constrai.ca/api/super/companies/overview` (no token) → 401. With a tenant token → 401 (or 403, depending on auth.js shape — anti-leak should fire).
+   - Direct curl: `curl https://app.constrai.ca/admin.html` → 404 NOT_FOUND (anti-leak from 90-D).
+   - Open `admin.constrai.ca/login` in a browser → renders the dark-slate AdminLogin form, NOT the tenant green sign-in card (90-D-fix verified earlier).
 
-**Suggested PR title:** `feat(s90-e): admin login flow + cross-portal auth validation`.
+3. **Phase 5 closeout PR** (docs-only): record the prod deploy timestamp, the UAT outcomes, and flip Phase 5 status from "in progress" to ✅ DONE in MASTER_README.md + HANDOFF.md.
+
+**Out of scope for 90-F:**
+- No new code. 90-F is purely deploy + verify + close out the docs.
+- No SUPPORT_AGENT role (a future phase, not Phase 5).
+
+**Suggested PR title for the docs closeout:** `docs(s90-f): Phase 5 closeout — UAT pass, prod deploy log, status flip`.
 
 **Backlog items still open after Phase 4** (carried forward — not blockers for Phase 5 but should be tracked):
 

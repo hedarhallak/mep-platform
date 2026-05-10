@@ -1,22 +1,24 @@
 // src/AdminApp.jsx
 //
-// Phase 5 / 90-D — admin portal root with React Router.
+// Phase 5 / 90-D + 90-E — admin portal root with React Router.
 //
-// 90-C shipped a single-component placeholder. 90-D adds the routing
-// shell + the first real screen (CompaniesList). Future screens land
-// here as new <Route> entries:
+// 90-C shipped a single-component placeholder. 90-D added routing +
+// the first real screen (CompaniesList). 90-E adds the /login route
+// + AdminLogin component so SUPER_ADMIN can authenticate without
+// borrowing a token from the tenant portal.
 //
-//   /                        → CompaniesList (read-only dashboard, 90-D)
-//   /companies/:id           → CompanyDetail   (deferred to a later piece)
-//   /audit                   → AuditLog        (deferred — Phase 8 territory)
-//   /login, /logout          → auth UI         (deferred to 90-E)
+//   /         → CompaniesList (read-only dashboard, 90-D)
+//   /login    → AdminLogin    (sign-in form, 90-E)
+//   *         → NotFound      (stub linking back to /)
 //
-// Anything that doesn't match a registered route falls through to the
-// "Not found" stub. We don't redirect to a default route to avoid hiding
-// link rot — visible 404s are louder than silent redirects.
+// Future screens (CompanyDetail, AuditLog) land here as new <Route>
+// entries. Anything that doesn't match a registered route falls
+// through to NotFound — we don't redirect to a default route to avoid
+// hiding link rot.
 
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom'
 import CompaniesList from './admin/CompaniesList.jsx'
+import AdminLogin from './admin/AdminLogin.jsx'
 
 function NotFound() {
   const { pathname } = useLocation()
@@ -40,6 +42,7 @@ export default function AdminApp() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<CompaniesList />} />
+        <Route path="/login" element={<AdminLogin />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>

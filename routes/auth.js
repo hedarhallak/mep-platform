@@ -150,6 +150,40 @@ router.post('/login', async (req, res) => {
     }
 
     const userRole = user.role ? String(user.role).toUpperCase() : null;
+
+    // Phase 5 / 90-E — cross-portal login gate.
+    //
+    // The login endpoint is mounted on BOTH adminApp and tenantApp via
+    // mountPublicRoutes (90-B), so a request can land here from either
+    // host. Reject COMPANY_ADMIN / FOREMAN / etc. attempting to log in
+    // on admin.constrai.ca; the admin portal is SUPER_ADMIN only.
+    //
+    // The reverse direction (SA logging in on app.constrai.ca) is
+    // intentionally allowed — Section 90 calls out that SA needs to
+    // be able to test as a tenant in another tab.
+    //
+    // `req.hostname` follows X-Forwarded-Host when trust-proxy is set
+    // (see app.js); Nginx forces Host to the literal portal name (90-B
+    // / 90-D), so production traffic always lands here with hostname
+    // either 'admin.constrai.ca' or 'app.constrai.ca'. Tests using
+    // request(app) without setting Host get '127.0.0.1' here and skip
+    // the gate (current default-fallback behavior preserved).
+    const reqHost = (req.hostname || '').toLowerCase();
+    if (reqHost === 'admin.constrai.ca' && userRole !== 'SUPER_ADMIN') {
+      await audit(pool, req, {
+        action: ACTIONS.BLOCKED_PORTAL_LOGIN,
+        entity_type: 'user',
+        entity_id: user.id,
+        entity_name: user.username,
+        details: { role: userRole, attempted_portal: 'admin' },
+      });
+      return res.status(403).json({
+        ok: false,
+        error: 'BLOCKED_PORTAL_LOGIN',
+        message: 'This account does not have access to the admin portal.',
+      });
+    }
+
     if (userRole !== 'SUPER_ADMIN' && user.company_id) {
       const company = await pool.query(
         'SELECT status FROM public.companies WHERE company_id = $1 LIMIT 1',

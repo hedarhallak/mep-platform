@@ -10525,3 +10525,111 @@ The 90-D HANDOFF flagged this as a known limitation deferred to 90-E ("PWA SW au
 | Fix | ✅ Disable auto-injection, register SW only from tenant entry, unregister on admin entry load |
 | Pitfall encoded | ✅ #27 |
 
+### Piece 90-E — Auth flow validation across portals (May 10, 2026)
+
+Fifth execution piece of Phase 5. Closes the cross-portal auth boundary: COMPANY_ADMIN credentials no longer authenticate against the admin portal, the admin shell gets its own sign-in UI, and every blocked attempt lands an audit row. The reverse direction (SUPER_ADMIN logging into the tenant portal) stays open per Section 90's design intent — Hedar needs to be able to test as a tenant in another tab.
+
+#### Backend — portal gate in `routes/auth.js#login`
+
+A new check sits between the `is_active` validation and the `COMPANY_SUSPENDED` check. The handler reads `req.hostname` (which Express derives from `X-Forwarded-Host` when `trust proxy` is set, falling back to the Host header — Nginx on prod forces both to the literal portal name via `proxy_set_header Host` since 90-B/D). When `req.hostname === 'admin.constrai.ca'` and the authenticated user's role is anything other than `SUPER_ADMIN`, the request gets 403 BLOCKED_PORTAL_LOGIN and an audit row.
+
+```js
+const reqHost = (req.hostname || '').toLowerCase();
+if (reqHost === 'admin.constrai.ca' && userRole !== 'SUPER_ADMIN') {
+  await audit(pool, req, {
+    action: ACTIONS.BLOCKED_PORTAL_LOGIN,
+    entity_type: 'user',
+    entity_id: user.id,
+    entity_name: user.username,
+    details: { role: userRole, attempted_portal: 'admin' },
+  });
+  return res.status(403).json({
+    ok: false,
+    error: 'BLOCKED_PORTAL_LOGIN',
+    message: 'This account does not have access to the admin portal.',
+  });
+}
+```
+
+The audit write uses `audit(pool, req, …)` (NOT `req.db`) — auth.js runs pre-tenant, before the tenantDb middleware mounts. This works because of the audit_logs split policy from 89-E/3: `tenant_isolation_write` is `WITH CHECK (true)`, allowing pool inserts when no GUC is set.
+
+`lib/audit.js` gets a new `BLOCKED_PORTAL_LOGIN` action constant alongside the existing auth actions (LOGIN_SUCCESS, LOGIN_FAILED, LOGOUT, PIN_CHANGED).
+
+**Tests added** (`tests/integration/portal_login_gate.test.js`, 6 assertions):
+
+| Scenario | Expected |
+|---|---|
+| admin Host + COMPANY_ADMIN credentials | 403 BLOCKED_PORTAL_LOGIN |
+| admin Host + COMPANY_ADMIN writes audit row | `action='BLOCKED_PORTAL_LOGIN'`, `entity_id=user.id`, `details.role='COMPANY_ADMIN'`, `details.attempted_portal='admin'` |
+| admin Host + SUPER_ADMIN credentials | 200, valid token, role=SUPER_ADMIN |
+| tenant Host + SUPER_ADMIN credentials | 200 (allowed per Section 90) |
+| tenant Host + COMPANY_ADMIN credentials | 200 (existing flow unchanged) |
+| default Host (127.0.0.1) + COMPANY_ADMIN | 200 (gate not active off-portal — preserves backward compat with the ~41 test files using `request(app)` without Host headers) |
+
+#### Frontend — `AdminLogin` + `/login` route
+
+`mep-frontend/src/admin/AdminLogin.jsx` (new): self-contained sign-in form. Visual style matches the admin shell (dark slate background, indigo primary button). Posts to `/api/auth/login` via plain `fetch` — deliberately NOT through the shared `lib/api.js` because the api wrapper auto-attaches the existing token from localStorage and redirects on 401, both of which are wrong for the login flow itself.
+
+On 200 success: stashes `mep_token` + `mep_refresh_token` in `localStorage` (same key names as the tenant flow — localStorage is per-origin so admin.constrai.ca's storage area never collides with app.constrai.ca's, and using the same key name lets the shared `lib/api.js` keep working unchanged for both portals). Then `useNavigate()` to `/`, which renders the CompaniesList component (which immediately fetches `/super/companies/overview` with the new token).
+
+On 403 `BLOCKED_PORTAL_LOGIN`: renders the friendly inline message. The token is NOT stashed.
+
+On 401 INVALID_CREDENTIALS / network error / other failures: renders the inline error banner with the server-provided message.
+
+`AdminApp.jsx` adds the `/login` route between `/` and `*`. Future auth routes (`/logout`, `/forgot-pin` if Phase 7 adds one) plug in alongside.
+
+**Tests added** (`mep-frontend/src/admin/AdminLogin.test.jsx`, 6 RTL assertions): render lifecycle (inputs + disabled-button states), happy-path token stash, 403 BLOCKED_PORTAL_LOGIN inline message, 401 INVALID_CREDENTIALS message, network-error fallback. Stubs `global.fetch` and asserts on the request URL + body.
+
+#### Auth flow end-to-end (after 90-E lands on prod)
+
+Flow when a SUPER_ADMIN visits `https://admin.constrai.ca/` for the first time:
+
+1. Browser loads `/admin.html` → `admin-main.jsx` → `<AdminApp />` renders `<CompaniesList />` at `/`.
+2. CompaniesList's `useEffect` calls `api.get('/super/companies/overview')`.
+3. No token in admin origin's localStorage → server returns 401 INVALID_TOKEN.
+4. `lib/api.js` tries refresh → no refresh token → calls `clearAuthAndRedirect()` → `window.location.href = '/login'`.
+5. URL becomes `admin.constrai.ca/login` → Nginx serves `/admin.html` → `<AdminApp />` renders `<AdminLogin />` at `/login`.
+6. SUPER_ADMIN enters email + PIN → form posts to `/api/auth/login` → portal gate passes (role is SUPER_ADMIN on admin Host) → 200 with token.
+7. `localStorage.setItem('mep_token', token)` → `useNavigate('/', { replace: true })` → CompaniesList re-renders.
+8. Second `api.get('/super/companies/overview')` succeeds with the freshly-stashed token → table renders.
+
+Flow for a COMPANY_ADMIN trying to log in on admin.constrai.ca:
+
+1. Browser loads `/admin.html` → AdminApp → AdminLogin at `/login` (same path as above).
+2. COMPANY_ADMIN enters tenant credentials → posts to `/api/auth/login`.
+3. Server validates credentials successfully → portal gate fires → 403 BLOCKED_PORTAL_LOGIN + audit row.
+4. AdminLogin renders the inline message: "This account does not have access to the admin portal."
+
+#### Cookie/session scope
+
+Section 90's expected pitfalls list called out cookie scope. We don't actually use cookies for auth (the token flow is bearer-token-in-localStorage, not Set-Cookie), so there's nothing to leak across origins. localStorage is per-origin natively. Future-proofing: if a Phase 7 cookie-based session ever lands, the `Set-Cookie` header MUST omit the `Domain` attribute (or use the exact host) so cookies on admin.constrai.ca don't bleed to app.constrai.ca.
+
+#### Files touched
+
+| File | Change |
+|---|---|
+| `lib/audit.js` | New `BLOCKED_PORTAL_LOGIN` action constant. |
+| `routes/auth.js` | New portal gate inside `/login` handler — admin Host + non-SA → 403 + audit. |
+| `tests/integration/portal_login_gate.test.js` | NEW. 6 assertions covering all 4 portal × role combinations + the default-Host backward-compat case + audit row write. |
+| `mep-frontend/src/admin/AdminLogin.jsx` | NEW. Sign-in form for the admin portal. |
+| `mep-frontend/src/AdminApp.jsx` | Adds `/login` route. |
+| `mep-frontend/src/admin/AdminLogin.test.jsx` | NEW. 6 RTL assertions. |
+| `HANDOFF.md` | "Latest deployed", "Last merged", "Next task" advance to 90-F. |
+| `MASTER_README.md` | Latest DECISIONS pointer bumped to "Section 90 / Piece 90-E". |
+| `DECISIONS.md` (this Piece) | — |
+
+#### Status — Piece 90-E
+
+| Item | Status |
+|---|---|
+| Backend portal gate | ✅ admin Host + non-SA → 403 BLOCKED_PORTAL_LOGIN + audit |
+| Backend tests | ✅ 6 assertions (4 portal × role + default-Host + audit row write) |
+| Frontend AdminLogin | ✅ Form posts to `/api/auth/login`, stashes token, navigates to `/` |
+| Frontend `/login` route | ✅ Registered in AdminApp |
+| Frontend tests | ✅ 6 RTL assertions |
+| Auth flow end-to-end documented | ✅ See "Auth flow end-to-end" above |
+| Cookie scope | ✅ N/A (token-in-localStorage, no cookies); future-proof note added |
+| Next (90-F) | ⏳ Pending — Prod deploy + anti-leak UAT (final closeout for Phase 5) |
+
+- **Today: 59 sections.** (Section 90 extended with Piece 90-E: cross-portal auth gate. New BLOCKED_PORTAL_LOGIN audit action + 403 response on admin Host + non-SA login attempt. Frontend AdminLogin component + /login route. 12 new test assertions across backend and frontend. localStorage token storage explicitly noted as per-origin so no cookie scoping work needed.)
+
