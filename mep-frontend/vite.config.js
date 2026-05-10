@@ -11,6 +11,16 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
+      // Phase 5 / 90-D follow-up: disable auto-injection of the SW
+      // registration so the admin entry (admin.html → admin-main.jsx) does
+      // NOT register a service worker. The tenant entry (main.jsx) opts
+      // back in by importing 'virtual:pwa-register' explicitly. Without
+      // this, the auto-injected SW on admin.constrai.ca pre-caches the
+      // tenant entry index.html and serves it as the navigation fallback
+      // for unknown admin routes — visible bug: visiting /login on
+      // admin.constrai.ca rendered the tenant login UI instead of the
+      // admin React Router NotFound page.
+      injectRegister: false,
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'icons/*.png'],
       manifest: {
         name: 'MEP Platform',
