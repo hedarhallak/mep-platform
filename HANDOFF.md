@@ -1,7 +1,7 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 10, 2026 — **Phase 4 done (May 9).** **Phase 5 in progress: 90-A + 90-B + 90-C ✅ DONE.** 90-A subdomain live (May 9). 90-B Express vhost split (May 10 ~16:17 UTC). 90-C Vite multi-entry frontend (May 10): `admin.html` + `admin-main.jsx` + `AdminApp.jsx` all new, `vite.config.js` gains `rollupOptions.input` for the two-entry build. The admin portal now serves a real React shell (badge: `90-C • React shell live`) instead of the 90-A static placeholder. **Next task: Piece 90-D — Admin shell + All Companies list page**: backend `GET /api/super/companies/overview` returning per-company aggregates, frontend table with sort + search, RTL component test + Playwright e2e for the navigate flow.
+> Last updated: May 10, 2026 — **Phase 4 done (May 9).** **Phase 5 in progress: 90-A + 90-B + 90-C + 90-D ✅ DONE.** 90-D shipped the first real admin screen (All Companies list with search + sort), the `GET /api/super/companies/overview` backend endpoint, 7 RTL tests, and tenant Nginx admin.html anti-leak + h2c smuggling cleanup (mirrored existing constrai.conf to `infra/nginx/constrai.conf`). **Next task: Piece 90-E — Auth flow validation across portals**: SA login on admin works, COMPANY_ADMIN can't reach admin login UI, cookie scope enforced separately per portal, audit log for cross-portal attempts. Plus a small follow-up cleanup deferred from 90-D: tighten `vite-plugin-pwa` so admin entry doesn't auto-register the SW.
 
 ---
 
@@ -27,7 +27,7 @@ When you receive the one-line command above:
    - `RECOVERY.md` Section 2.4 only (cost inventory) if relevant to today's task
 3. **Echo this exact line** as the first line of your reply so Hedar knows bootstrap completed:
    ```
-   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 90 / 90-C, next is 90-D)
+   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 90 / 90-D, next is 90-E)
    ```
 4. **Confirm the next task** in 1-2 lines (from "Next task" below).
 5. **Ask if Hedar is ready to start**, then wait.
@@ -45,9 +45,9 @@ When you receive the one-line command above:
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04) |
 | Backend | Node.js + Express + Postgres 16, pm2-managed at `/var/www/mep` |
 | Frontend | React + Vite + Tailwind, deployed to `/var/www/mep/mep-frontend/dist` |
-| Latest deployed to prod | **Vite multi-entry frontend (90-C)** — May 10, 2026. (90-B vhost split deployed earlier today ~16:17 UTC; 90-A subdomain May 9 ~21:55 UTC; 89-E/3 RLS strict May 9 ~14:45 UTC.) |
-| Last merged to main | 90-B vhost split (squash `0ee4eff`) — May 10, 2026. 90-C PR pending. |
-| Active program | **Multi-Tenant Migration** (Section 85, Phases 1-8) — **Phase 5 in progress** (90-A + 90-B + 90-C done, 90-D next) |
+| Latest deployed to prod | **All Companies list (90-D)** — May 10, 2026. (90-C Vite multi-entry deployed earlier today; 90-B vhost split ~16:17 UTC; 90-A subdomain May 9.) |
+| Last merged to main | 90-C Vite multi-entry (squash `d6fdb7e`) — May 10, 2026. 90-D PR pending. |
+| Active program | **Multi-Tenant Migration** (Section 85, Phases 1-8) — **Phase 5 in progress** (90-A + 90-B + 90-C + 90-D done, 90-E next) |
 | Mobile app | Still on legacy username login — backend keeps backward-compat |
 
 ### Multi-tenant migration progress
@@ -95,34 +95,29 @@ When you receive the one-line command above:
 
 ---
 
-## Next task: Piece 90-D — Admin shell + All Companies list page
+## Next task: Piece 90-E — Auth flow validation across portals
 
-**Phase 5 architecture (Section 90) and infra are fully in place:**
+**Phase 5 architecture is fully wired and the first real screen ships:**
 
-- **A**: subdomain `admin.constrai.ca` ✅ live as of 90-A
-- **B2**: Vite multi-entry frontend ✅ live as of 90-C (admin.html + admin-main.jsx + AdminApp.jsx, served from `/var/www/mep/mep-frontend/dist`)
-- **C2**: Express vhost split ✅ live as of 90-B (adminApp + tenantApp physically separated, anti-leak 404 guards both directions, 12 vhost_isolation assertions in CI)
+- **A**: subdomain `admin.constrai.ca` ✅ live (90-A)
+- **B2**: Vite multi-entry frontend ✅ live (90-C). Tenant Nginx now blocks `/admin.html` static access (90-D).
+- **C2**: Express vhost split ✅ live (90-B). 12 vhost_isolation assertions in CI.
+- **First real admin screen**: All Companies list with search + sort + 7 RTL tests ✅ live (90-D).
 
-**90-D scope:** first real admin screen — read-only "All Companies" list with sort + search.
+**90-E scope:** make the auth flow work end-to-end on the admin portal, with proper isolation from the tenant flow.
 
-1. **Backend**: add `GET /api/super/companies/overview` to `routes/super_admin.js`. Returns an array of `{ company_id, name, plan, status, employee_count, project_count, created_at, last_activity_at }`. Computed via aggregate joins on `companies × employees × projects × audit_logs` (latest audit row's `created_at` is a reasonable proxy for last activity). All counts/joins use `req.db.query` since SUPER_ADMIN routes are RLS-bypass via superPool (already wired).
-2. **Frontend (admin)**: introduce a basic React Router setup in `AdminApp.jsx` — at least one route at `/` that renders the new `<CompaniesList />` component. Route registry kept tiny for now (1 route); 90-E adds login/logout routes.
-3. **Frontend component**: `mep-frontend/src/admin/CompaniesList.jsx` — table with columns from the API response, client-side text search on company name, click-to-sort on each column. Keep the design simple (the existing tenant Tailwind tokens are good enough; no new design system needed).
-4. **Tests**:
-   - Backend: extend `tests/integration/super_admin.test.js` (or add a new `super_admin_overview.test.js`) with assertions for the new endpoint shape + 403 path.
-   - Frontend: RTL component test for `<CompaniesList />` with a mocked fetch — verifies sort + search behavior. New file `mep-frontend/src/admin/CompaniesList.test.jsx`.
-   - E2E: extend the Playwright config to also boot for the admin entry, or add a new `e2e/admin-companies.spec.js` that loads `admin.html` and asserts the table renders. Optional — can defer to 90-E if it complicates the e2e config.
-5. **Tighten the two known-limitation leaks from 90-C** (small follow-ups inside this PR):
-   - Set `vite-plugin-pwa`'s `injectRegister: null` and call `registerSW()` only from `main.jsx` so admin entry doesn't pick up PWA.
-   - Add `location = /admin.html { return 404; }` to the tenant Nginx server block (`/etc/nginx/sites-available/constrai`) to stop static admin.html from being reachable on `app.constrai.ca`. (When this gets done, mirror the constrai server block to `infra/nginx/constrai.conf` for traceability.)
+1. **Admin login UI**: add `/login` route to `AdminApp.jsx` rendering a `<AdminLogin />` component. Posts to `/api/auth/login` (existing public endpoint). On success, stashes the token in a **separate** localStorage key — e.g. `mep_admin_token` — so admin and tenant tokens don't share a slot. The shared `lib/api.js` reads `mep_token` by default; either fork it (admin uses `lib/api-admin.js` reading the admin key) OR make `api.js` aware of the current portal and pick the right key based on hostname.
+2. **Role gate at login**: server-side, when authenticating on Host=admin.constrai.ca, only accept `SUPER_ADMIN` role. Reject COMPANY_ADMIN with a clear "Use the tenant portal at app.constrai.ca" error. Conversely, when authenticating on Host=app.constrai.ca, allow any non-SA role; SA logging in here gets either a friendly "Use admin.constrai.ca" message OR a successful tenant-context login (decision to be made — Section 90's intent suggests SA can log into tenant view for testing).
+3. **Cookie scope assertion**: integration test that proves `Set-Cookie` from the admin Host doesn't leak to the tenant Host (separate localStorage keys + no Domain attribute on cookies if we ever switch to cookie auth).
+4. **Audit log entries** for cross-portal login attempts: every COMPANY_ADMIN trying to log into admin.constrai.ca gets an `AUDIT_BLOCKED_PORTAL_LOGIN` row so the next session reading `audit_logs` sees the attempt history.
+5. **PWA scope tightening (cleanup deferred from 90-D)**: set `vite-plugin-pwa`'s `injectRegister: null` and call `registerSW()` explicitly only in `main.jsx`. Verify in dev that admin SW does NOT register.
 
-**Out of scope for 90-D:**
-- No write actions on companies (suspend / activate / patch). Read-only list only.
-- No impersonation. That's a separate piece, deferred to a SUPPORT_AGENT phase.
-- No billing UI.
-- No auth flow validation across portals — that's 90-E.
+**Out of scope for 90-E:**
+- No 2FA or biometric. That's Phase 7.
+- No SUPPORT_AGENT role (read-only cross-tenant access). Architecture stays open for it but no implementation in 90-E.
+- No password reset / forgot-PIN UI for admin. Hedar is the only SA today; he doesn't need self-service.
 
-**Suggested PR title:** `feat(s90-d): admin shell + All Companies list (read-only)`.
+**Suggested PR title:** `feat(s90-e): admin login flow + cross-portal auth validation`.
 
 **Backlog items still open after Phase 4** (carried forward — not blockers for Phase 5 but should be tracked):
 

@@ -198,3 +198,73 @@ describeIfDb('Super admin — PATCH /api/super/companies/:id', () => {
     expect(res.body).toMatchObject({ ok: false, error: 'INVALID_STATUS' });
   });
 });
+
+describeIfDb('Super admin — GET /api/super/companies/overview (90-D)', () => {
+  afterAll(async () => {
+    await cleanupTestRows();
+    await closePool();
+  });
+
+  test('GET /companies/overview as SUPER_ADMIN returns the dashboard shape', async () => {
+    const company = await seedCompany();
+    const sa = await seedUser({ role: 'SUPER_ADMIN', pin: 'sa-pin-1234' });
+    const { token } = await loginUser(sa);
+
+    const res = await adminRequest(app)
+      .get('/api/super/companies/overview')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(Array.isArray(res.body.companies)).toBe(true);
+
+    // Each row must include the dashboard fields. We don't assert specific
+    // values (counts depend on whatever else is in the DB) — just shape.
+    const found = res.body.companies.find((c) => Number(c.company_id) === company.company_id);
+    expect(found).toBeDefined();
+    expect(found).toEqual(
+      expect.objectContaining({
+        company_id: expect.anything(),
+        name: company.name,
+        plan: expect.any(String),
+        status: expect.any(String),
+        created_at: expect.anything(),
+        // Aggregate fields can be string ('0') or number depending on pg config
+        // — assert defined rather than specific type.
+        employee_count: expect.anything(),
+        project_count: expect.anything(),
+      })
+    );
+    // last_activity_at is null for a fresh company with no audit rows yet —
+    // assert the key exists, but allow null.
+    expect(Object.prototype.hasOwnProperty.call(found, 'last_activity_at')).toBe(true);
+  });
+
+  test('GET /companies/overview is NOT shadowed by /companies/:id', async () => {
+    // Regression test for the "overview must come before :id" pitfall — if
+    // route ordering ever regresses, /overview would route to the :id handler
+    // and 400 with INVALID_ID (Number('overview') → NaN → falsy guard).
+    const sa = await seedUser({ role: 'SUPER_ADMIN', pin: 'sa-pin-1234' });
+    const { token } = await loginUser(sa);
+
+    const res = await adminRequest(app)
+      .get('/api/super/companies/overview')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).not.toBe(400);
+    expect(res.body.error).not.toBe('INVALID_ID');
+  });
+
+  test('GET /companies/overview as COMPANY_ADMIN returns 403 SUPER_ADMIN_REQUIRED', async () => {
+    const company = await seedCompany();
+    const admin = await seedUser({ company_id: company.company_id, role: 'COMPANY_ADMIN' });
+    const { token } = await loginUser(admin);
+
+    const res = await adminRequest(app)
+      .get('/api/super/companies/overview')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body).toMatchObject({ ok: false, error: 'SUPER_ADMIN_REQUIRED' });
+  });
+});

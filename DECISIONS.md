@@ -10400,3 +10400,93 @@ Same shape as 90-B's deploy:
 
 - **Today: 59 sections.** (Section 90 extended with Piece 90-C: Vite multi-entry frontend (B2). admin.html + admin-main.jsx + AdminApp.jsx all new. vite.config.js gains rollupOptions.input. Nginx admin block now serves the React shell instead of the 90-A static placeholder. Two known limitations carried forward: PWA SW auto-inject on both entries; admin.html reachable via tenant Nginx as static file. Both fix in 90-D/E.)
 
+### Piece 90-D — Admin shell + All Companies list page (May 10, 2026)
+
+Fourth execution piece of Phase 5. First piece with **real product behavior**: the admin portal now renders an actual screen instead of a placeholder. Read-only list of all tenant companies with client-side text search + click-to-sort columns. Plus two security cleanups left over from 90-C.
+
+#### Backend — `GET /api/super/companies/overview`
+
+New endpoint in `routes/super_admin.js`. Returns `{ ok: true, companies: [{ company_id, name, plan, status, created_at, employee_count, project_count, last_activity_at }] }`. Aggregates computed via LEFT JOINs on `companies × employees × projects × audit_logs` with `MAX(audit_logs.created_at)` as the proxy for "last seen". All queries use `req.db.query` — under tenantDb the SUPER_ADMIN client is `superPool` (BYPASSRLS) so cross-company aggregates work naturally without per-row RLS bypass.
+
+**Route ordering pitfall (encoded)**: the new endpoint MUST be registered BEFORE `GET /companies/:id`. Express matches routes in registration order, so without explicit ordering the path `/companies/overview` would route to the `:id` handler with `id="overview"`, fail the `Number(...)` guard, and return 400 INVALID_ID. The fix is registration order, not regex tightening — Express doesn't have built-in "more specific wins". A regression test in `tests/integration/super_admin.test.js` asserts the path doesn't 400 with INVALID_ID, so a future re-ordering catches itself in CI.
+
+**Backend tests added** (`tests/integration/super_admin.test.js`): three new assertions in a new `describeIfDb` block — happy-path shape verification, the route-ordering regression check above, and the COMPANY_ADMIN → 403 SUPER_ADMIN_REQUIRED gate.
+
+#### Frontend — admin shell with React Router + companies table
+
+`mep-frontend/src/AdminApp.jsx` (rewritten): wrapped in `<BrowserRouter>` with two routes:
+- `/` → `<CompaniesList />` (the new screen)
+- `*` → `<NotFound />` (small stub linking back to `/`)
+
+Future screens (CompanyDetail, AuditLog, login UI for 90-E) plug in as additional `<Route>` entries.
+
+`mep-frontend/src/admin/CompaniesList.jsx` (new): self-contained component, ~200 lines. Shape:
+- Fetches `/super/companies/overview` once on mount via the shared `lib/api.js` (auto-attaches `Bearer <mep_token>` from localStorage, refreshes on 401).
+- Loading state shows `Loading…` placeholder; error state renders a `role="alert"` banner with the API error code; empty state shows a friendly "No companies yet" / "No companies match your search" row.
+- Search input: case-insensitive substring match on company name, applied client-side (no API round-trip per keystroke).
+- Click-to-sort: every column header is sortable. First click on a column sets ascending; second click flips to descending; clicking a different column resets to ascending. Numeric columns (employee_count, project_count) compare by `Number()`; date columns (created_at, last_activity_at) compare by `Date.parse`. Nulls sort to the bottom regardless of direction (so "no last activity yet" companies don't muddy the lists).
+- Status badge uses Tailwind color tokens scoped per status: ACTIVE → emerald, SUSPENDED → rose, TRIAL → amber, anything else → slate.
+
+`mep-frontend/src/admin/CompaniesList.test.jsx` (new): 7 RTL tests covering loading / error / empty / populated states, search filtering, search counter ("1 of 3"), click-to-sort with directional toggle, and the null-sorts-to-bottom behavior. Uses `vi.mock('@/lib/api', …)` matching the pattern from `usePermissions.test.jsx`.
+
+#### Cleanup — tenant Nginx admin.html anti-leak
+
+`infra/nginx/constrai.conf` (new): mirrors the existing `/etc/nginx/sites-available/constrai` server block into the repo for traceability per the `infra/` convention introduced in 90-A. Three security improvements applied vs. the certbot-emitted prod state:
+
+1. **No Upgrade/Connection forwarding** — same h2c smuggling protection that 90-B applied to admin-constrai.conf. The backend doesn't speak WebSocket so there's no reason to forward upgrade requests.
+2. **Literal `proxy_set_header Host app.constrai.ca`** — defense-in-depth so the vhost dispatcher always sees the canonical hostname, even if a malicious client tampered with the upstream Host header.
+3. **Literal HTTP→HTTPS redirect target** — replaces the certbot-default `if ($host = ...) { return 301 https://$host$request_uri; }` pattern with a plain `return 301 https://app.constrai.ca$request_uri;`. Lint-friendly + simpler.
+
+Plus the new 90-D-specific block:
+
+```nginx
+location = /admin.html {
+    return 404;
+}
+```
+
+Closes the cosmetic leak from 90-C: `dist/admin.html` is the admin Vite entry HTML, but both server blocks read from the same `dist/` folder. Without this block, `app.constrai.ca/admin.html` would render the admin React shell on the tenant domain. The shell can't actually fetch /api/super data via the wrong Host (vhost anti-leak from 90-B 404s those requests), but it's still the wrong shape; visible 404 is preferable.
+
+Prod deploy applies the new file via `sudo cp infra/nginx/constrai.conf /etc/nginx/sites-available/constrai && sudo nginx -t && sudo systemctl reload nginx`. Pre-existing `nginx -t` warnings about conflicting server names (from the unrelated `default` and `www-constrai` configs) continue to surface; both are harmless and predate Phase 5.
+
+#### Cleanup deferred — PWA service-worker scoping
+
+The HANDOFF spec listed a second cleanup for 90-D: change `vite-plugin-pwa`'s `injectRegister` from `'auto'` to `null` and call `registerSW()` only from `main.jsx` so the admin entry doesn't pick up PWA. Decided to defer this to a small follow-up PR (or 90-E) for risk-management reasons:
+
+- The PWA setup on the tenant entry is currently working in prod. Touching `main.jsx` (the tenant entry) to add an explicit `registerSW()` call introduces a regression risk that's hard to detect in CI — the SW behavior shows up only on real-browser-with-network test, not in jsdom unit tests.
+- The current "PWA auto-injects on both entries" behavior is not actively harmful: SWs are scoped per-origin so the admin SW cannot poison the tenant SW or vice versa, and the admin SW caching `/api/super` calls under NetworkFirst with a 5-minute TTL is at most a minor freshness concern (and a real concern only post-90-E once auth flow validation is in place).
+- Treating it as a separate small PR keeps 90-D's diff focused on real behavior (companies list) and makes a future PWA tightening easier to review in isolation.
+
+This is logged as the "PWA SW scope tightening" item in HANDOFF's backlog.
+
+#### Files touched
+
+| File | Change |
+|---|---|
+| `routes/super_admin.js` | NEW endpoint `GET /companies/overview` (registered before `/companies/:id`). |
+| `tests/integration/super_admin.test.js` | NEW describeIfDb block with 3 assertions for the new endpoint. |
+| `mep-frontend/src/admin/CompaniesList.jsx` | NEW. Read-only table component with search + sort. |
+| `mep-frontend/src/admin/CompaniesList.test.jsx` | NEW. 7 RTL tests. |
+| `mep-frontend/src/AdminApp.jsx` | Rewritten to use `<BrowserRouter>` with `/` → CompaniesList + `*` → NotFound. |
+| `infra/nginx/constrai.conf` | NEW. Tenant block mirror with h2c protection + literal Host + admin.html anti-leak. |
+| `/etc/nginx/sites-available/constrai` (server) | Updated to match repo mirror. |
+| `HANDOFF.md` | "Latest deployed", "Last merged", "Next task" advance to 90-E. |
+| `MASTER_README.md` | Latest DECISIONS pointer bumped to "Section 90 / Piece 90-D". |
+| `DECISIONS.md` (this Piece) | — |
+
+#### Status — Piece 90-D
+
+| Item | Status |
+|---|---|
+| Backend endpoint | ✅ `GET /api/super/companies/overview` returns dashboard shape |
+| Backend tests | ✅ 3 assertions including route-ordering regression check |
+| Frontend component | ✅ `<CompaniesList />` with search + sort + 4 lifecycle states |
+| Frontend router setup | ✅ `<BrowserRouter>` with `/` and `*` routes |
+| Frontend tests | ✅ 7 RTL tests covering all interactive paths |
+| Tenant Nginx admin.html block | ✅ `location = /admin.html { return 404; }` |
+| Tenant Nginx security cleanups | ✅ no Upgrade forwarding, literal Host, literal redirect target |
+| PWA scope tightening | ⏳ Deferred to a follow-up (low-risk-mgmt) |
+| Next (90-E) | ⏳ Pending — Auth flow validation across portals: SA login on admin works, SA + tenant token isolation, COMPANY_ADMIN can't reach admin login UI, cookie scope enforced, audit log for cross-portal attempts |
+
+- **Today: 59 sections.** (Section 90 extended with Piece 90-D: first real admin screen — All Companies list with search + sort + 7 RTL tests. New `/api/super/companies/overview` endpoint. Tenant Nginx mirrored to `infra/nginx/constrai.conf` with h2c protection + admin.html anti-leak. Pitfall encoded: Express route ordering — name before parameterized.)
+
