@@ -4,9 +4,38 @@ const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const { pool } = require('../db');
+const { pool, superPool } = require('../db');
 const { JWT_SECRET, hashPin, verifyPin } = require('../lib/auth_utils');
 const { audit, ACTIONS } = require('../lib/audit');
+
+// =============================================================================
+// authPool — pool used for PRE-TENANT lookups against RLS-strict tables.
+//
+// auth.js runs before any tenant context exists (login / refresh / whoami /
+// change-pin all execute BEFORE middleware/tenant_db.js can resolve a
+// tenant). Under migration 013's strict RLS, queries against `app_users`
+// and `companies` from a connection with no `app.company_id` GUC set
+// return zero rows — login fails with INVALID_PIN_FORMAT /
+// INVALID_CREDENTIALS even for valid credentials. See DECISIONS.md
+// Section 90 / Piece 90-F and Pitfall #28 for the full incident report.
+//
+// `superPool` connects as `mepuser_super` (BYPASSRLS) so its queries see
+// every row regardless of the GUC. When `DATABASE_URL_SUPER` is unset
+// (dev / legacy CI), `superPool == null` and we fall back to the regular
+// pool — that works under Stage 1 permissive RLS but will 0-row under
+// Stage 3 strict, so production MUST set DATABASE_URL_SUPER.
+//
+// Tables this affects in auth.js:
+//   - app_users          (strict — used by login, refresh, whoami, change-pin)
+//   - companies          (strict — used by SUSPENDED check in login)
+//
+// Tables NOT affected (left on the regular pool):
+//   - refresh_tokens     (no RLS — not in migration 012/013's table list)
+//   - employee_profiles  (no RLS — joined via app_users / employees only)
+//   - audit_logs         (RLS on, but a permissive INSERT policy lets the
+//                         pre-tenant pool write — see migration 013)
+// =============================================================================
+const authPool = superPool || pool;
 
 // ===== Token Config =====
 const ACCESS_TOKEN_EXPIRES = '1h'; // Short-lived access token
@@ -119,7 +148,8 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'MISSING_FIELDS' });
     }
 
-    const { rows } = await pool.query(
+    // Pre-tenant lookup against app_users (strict RLS table — needs authPool).
+    const { rows } = await authPool.query(
       `SELECT au.id, au.username, au.email, au.employee_id, au.company_id, au.role, au.is_active, au.pin_hash, au.must_change_pin, ep.full_name
        FROM public.app_users au
        LEFT JOIN public.employee_profiles ep ON ep.employee_id = au.employee_id
@@ -185,7 +215,8 @@ router.post('/login', async (req, res) => {
     }
 
     if (userRole !== 'SUPER_ADMIN' && user.company_id) {
-      const company = await pool.query(
+      // Pre-tenant lookup against companies (strict RLS table — needs authPool).
+      const company = await authPool.query(
         'SELECT status FROM public.companies WHERE company_id = $1 LIMIT 1',
         [user.company_id]
       );
@@ -250,7 +281,11 @@ router.post('/refresh', async (req, res) => {
 
     const tokenHash = hashRefreshToken(refresh_token);
 
-    const { rows } = await pool.query(
+    // Pre-tenant lookup that JOINs app_users (strict RLS table — needs
+    // authPool). Without superPool, the JOIN to app_users would filter
+    // every row out and refresh would always return INVALID_REFRESH_TOKEN
+    // even for valid tokens.
+    const { rows } = await authPool.query(
       `SELECT rt.id, rt.user_id, rt.expires_at, rt.revoked,
               au.username, au.employee_id, au.company_id, au.role, au.is_active, au.must_change_pin,
               ep.full_name
@@ -404,7 +439,9 @@ router.get('/whoami', async (req, res) => {
 
     if (userId) {
       try {
-        const q = await pool.query(
+        // Pre-tenant SELECT that touches app_users + companies (both strict
+        // RLS — needs authPool).
+        const q = await authPool.query(
           'SELECT profile_status, role, company_id FROM public.app_users au LEFT JOIN public.companies c ON c.company_id = au.company_id WHERE au.id = $1',
           [String(userId)]
         );
@@ -461,7 +498,12 @@ router.post('/change-pin', async (req, res) => {
         message: 'New PIN must be different from current PIN',
       });
 
-    const { rows } = await pool.query(
+    // Pre-tenant SELECT/UPDATE on app_users (strict RLS — needs authPool).
+    // /api/auth/change-pin runs after JWT verify but BEFORE any tenantDb
+    // middleware (auth.js is mounted via mountPublicRoutes in 90-B), so
+    // there's no GUC set on the regular pool. Under Stage 3 strict RLS the
+    // SELECT would 0-row → USER_NOT_FOUND for legitimate users.
+    const { rows } = await authPool.query(
       'SELECT id, pin_hash, must_change_pin FROM public.app_users WHERE id = $1 LIMIT 1',
       [String(payload.user_id)]
     );
@@ -472,7 +514,7 @@ router.post('/change-pin', async (req, res) => {
     if (!pinOk) return res.status(401).json({ ok: false, error: 'WRONG_CURRENT_PIN' });
 
     const newHash = await hashPin(newPinStr);
-    await pool.query(
+    await authPool.query(
       `UPDATE public.app_users SET pin_hash = $1, must_change_pin = false, is_temp_pin = false WHERE id = $2`,
       [newHash, String(payload.user_id)]
     );
