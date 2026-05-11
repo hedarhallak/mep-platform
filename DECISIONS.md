@@ -10633,3 +10633,63 @@ Section 90's expected pitfalls list called out cookie scope. We don't actually u
 
 - **Today: 59 sections.** (Section 90 extended with Piece 90-E: cross-portal auth gate. New BLOCKED_PORTAL_LOGIN audit action + 403 response on admin Host + non-SA login attempt. Frontend AdminLogin component + /login route. 12 new test assertions across backend and frontend. localStorage token storage explicitly noted as per-origin so no cookie scoping work needed.)
 
+### Piece 90-F — Phase 5 UAT + critical 013 rollback (May 10–11, 2026)
+
+Phase 5's "deploy + UAT" closeout piece. The plan was a clean victory lap. Reality: we hit a **production-critical login-broken bug** during UAT that had been live for ~12 hours since 89-E/3's strict RLS deploy, missed it in CI because no test exercises the end-to-end login flow against strict RLS, and had to roll the 013 migration back on prod to restore service.
+
+**The bug. `routes/auth.js#login` uses `pool.query` to look the user up by email/username.** That query runs BEFORE the tenantDb middleware (login is pre-tenant — there's no tenant context until we know who's logging in). Under Stage 1 permissive RLS (012's "GUC unset → allow" clause) the query returned rows normally. Under Stage 3 strict RLS (013 dropped the bypass clause) every row in `app_users` is filtered out for pool queries with no GUC set. Login lookup returns zero rows → `user = undefined` → `fetchedRole = null` → `isValidPin('hedar2026', null)` falls into the non-SA 4–8-char rule (NOT the SA 8–32-char rule) → returns false → response is 400 INVALID_PIN_FORMAT. For other roles whose PIN happens to be 4–8 chars, the path gets one step further and returns 401 INVALID_CREDENTIALS (because `pinOk = user ? … : false` evaluates to false when user is undefined). Either way, **nobody could log in**.
+
+**Why CI didn't catch it.** The integration test files for SA flows (`super_admin.test.js`, `super_admin_create.test.js`, `ccq_rates.test.js`, `tenant_db_89c15.test.js`, the new `portal_login_gate.test.js`) all set up by calling `seedUser({ role: 'SUPER_ADMIN', pin: 'sa-pin-1234' })`. That uses the test pool which is the `postgres` superuser — postgres has **BYPASSRLS** by default. So in CI, the user lookup sees the row even under strict RLS. The CI workflow's `.github/workflows/ci.yml` line 55 sets `TEST_DATABASE_URL: postgres://postgres:testpass@…` — confirmed by inspection. Prod uses `mepuser` which does NOT have BYPASSRLS, so prod sees the bug while CI does not.
+
+**Discovery.** During 90-F UAT, Hedar attempted to log into `admin.constrai.ca/login` as the SUPER_ADMIN account (`hedar.hallak@gmail.com` / `hedar2026`, a 9-char PIN well within the SA's 8–32-char rule). Result: inline 400 INVALID_PIN_FORMAT message. Direct `curl` to `/api/auth/login` returned the same error. Tenant login (`username: 'admin', pin: '1234'`) returned 401 INVALID_CREDENTIALS — same lookup failure manifesting as different errors. `psql` as the postgres superuser confirmed the user does exist (`id=259, role=SUPER_ADMIN, email_len=22`). The DB row was fine; it was unreachable via the production app pool.
+
+**Stop-the-bleeding rollback.** Applied `migrations/013_rls_strict.rollback.sql` on prod at ~05:08 UTC May 11. Migration ran clean (`BEGIN → DO → DROP/CREATE policies → COMMIT`). All 20 tenant-scoped tables (including `app_users`) are now back to the Stage 1 permissive policy where unset GUC means "allow all rows". Login flow restored — SA's curl returned 200 with token immediately after the rollback. UAT then progressed cleanly: the AdminLogin form rendered correctly, SA logged in, `<CompaniesList />` rendered with MEP Construction (the seeded test company) showing the right aggregates.
+
+**Tenant isolation is still enforced.** The permissive 012 policy is `GUC unset OR company_id = GUC value`. tenantDb middleware sets the GUC on every authenticated request, so authenticated routes still see only their own tenant's rows. The thing we lost is the **fail-closed guarantee**: if a future route forgets to mount tenantDb, pool queries against tenant tables will return rows from all tenants (Stage 1 behavior) instead of zero rows (Stage 3 behavior). Stage 1 was the production baseline for several days post-012 with no incidents, so the temporary downgrade is acceptable.
+
+#### Pitfall #28 — strict RLS breaks pre-tenant queries (login, signup, anything-running-before-tenant)
+
+Encoded for future Phase-N RLS work and any system that adds strict RLS to a table that pre-tenant code paths read from:
+
+> Strict RLS on a table that a pre-tenant route (login, signup, password reset, invite-acceptance, magic-link callback, etc.) needs to SELECT from will silently break those routes in production. The pre-tenant route uses a tenant-unaware connection (no GUC set), strict policies filter every row, and the route returns "user not found" — but for callers it looks like wrong credentials, bad PIN format, expired invite, etc. depending on what the lookup feeds.
+>
+> **Three ways to avoid it, in order of preference:**
+> 1. Route the pre-tenant lookup through a **BYPASSRLS connection** (a separate pool, e.g., `superPool`, connected as a role that owns the table or has BYPASSRLS). This is the cleanest and most explicit — pre-tenant routes never touch the tenant pool.
+> 2. Split the policy on the affected table: keep a strict `tenant_isolation` for tenant-scoped routes, and add a permissive `pre_tenant_read` policy that allows the specific SELECT shape the pre-tenant route needs (e.g., `USING (lower(email) = …)` — narrowly scoped). Reserved for cases where #1 isn't feasible.
+> 3. Set a "system" GUC on the pre-tenant pool (e.g., `app.system_mode = 'true'`) and have the strict policy honor it (`company_id = … OR current_setting('app.system_mode', true) = 'true'`). Trades simplicity for a backdoor that's hard to audit. Last resort.
+>
+> **CI must exercise both pool types.** A test suite using a `postgres` superuser connection will NEVER see this bug because BYPASSRLS hides it. Convention: every CI workflow that exercises auth/signup/onboarding flows MUST also run a subset of those tests connected as a non-super role with strict RLS active. The minimum viable check is one e2e login test that asserts a 200 response under a strict RLS run.
+
+#### State on prod after rollback (Stage 1 permissive, Phase 5 90-E shipped)
+
+- Migration 013 ROLLED BACK. All 20 tenant tables run with the Stage 1 permissive `tenant_isolation` policy (`GUC unset OR company_id = GUC`).
+- Migration 012 (Stage 1 permissive) and the 89-A through 89-D / 89-E/1 / 89-E/2 / 89-C/1..15 / 90-A / 90-B / 90-C / 90-D / 90-D-fix / 90-E work is all preserved on prod and functional.
+- 90-E's auth gate (admin Host + non-SA → 403) still fires correctly — it's a role check in `routes/auth.js`, independent of RLS.
+- The audit_logs `tenant_isolation_read` and `tenant_isolation_write` split (also introduced by 013) is rolled back too — audit_logs is back to a single permissive policy. Pool inserts from auth.js continue to work because they pass the permissive check trivially. Tenant scoping on audit_logs reads goes back to the GUC-unset bypass behavior.
+
+#### Proper fix — Section 90 / Piece 90-G plan (deferred to next session)
+
+The right fix preserves Stage 3 strict RLS by routing the auth.js user lookup through a BYPASSRLS connection. Concretely:
+
+1. **`db.js` actually exports `superPool`.** Today it doesn't (line 28: `module.exports = { pool };`). The `tenant_db.js` middleware destructures `{ pool, superPool }` from `'../db'` (line 66) and has a documented graceful-degradation path when `superPool == null`. That degradation only worked under Stage 1 permissive (which is where we currently are). For Stage 3 we MUST implement `superPool` properly. The pool connects as `mepuser_super` (already provisioned per Section 89-A — credentials in password manager). Add `DATABASE_URL_SUPER` to `.env` on prod; the build of superPool mirrors the regular pool but with the BYPASSRLS-attributed role.
+2. **`routes/auth.js` uses `superPool` for the user lookup.** A 2-line change: `const { pool, superPool } = require('../db');` then `superPool.query(...)` for the SELECT inside the login handler. Audit writes (`audit(pool, req, …)` calls in auth.js) stay on the regular pool — they're INSERTs and audit_logs has the permissive INSERT policy (or will, after we re-apply 013).
+3. **Re-apply migration 013** after the auth.js fix is deployed. The DDL is unchanged. After re-apply, strict RLS is back AND login still works because auth.js uses superPool.
+4. **CI test** added: integration test that hits `/api/auth/login` against a `mepuser` (non-super) connection under strict RLS active and asserts 200. This is the regression check that should have prevented this incident.
+
+That's Piece 90-G. Estimated half-day. Next session.
+
+#### Phase 5 status after 90-F
+
+| Piece | Status |
+|---|---|
+| 90-A subdomain | ✅ Deployed |
+| 90-B vhost split | ✅ Deployed |
+| 90-C Vite multi-entry | ✅ Deployed |
+| 90-D companies list | ✅ Deployed |
+| 90-D-fix PWA scoping | ✅ Deployed |
+| 90-E auth gate + AdminLogin | ✅ Deployed |
+| 90-F UAT | ⚠️ **PARTIAL** — Test A (SA login + CompaniesList view) PASSED; Test B (COMPANY_ADMIN block on admin Host) NOT yet verified end-to-end; 013 strict RLS ROLLED BACK pending Piece 90-G |
+| 90-G auth.js superPool fix + re-apply 013 | ⏳ Next session |
+
+- **Today: 59 sections.** (Section 90 extended with Piece 90-F: Phase 5 UAT discovered a 12-hour production login outage caused by 89-E/3 strict RLS on `app_users`. Auth.js login uses pre-tenant pool query that strict policies blocked. Rolled migration 013 back on prod at ~05:08 UTC May 11; SA login restored; UAT Test A verified the full happy path. Pitfall #28 encoded. Piece 90-G plan documented — auth.js to use a properly-implemented superPool, then re-apply 013.)
+
