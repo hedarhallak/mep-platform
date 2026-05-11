@@ -5,6 +5,20 @@
 .env.*.local
 .env.bak.*
 
+# Secrets — defense in depth. The .secrets/ directory is the canonical
+# location for credentials kept on the workstation (Cloudflare origin
+# cert/key, Resend API key, password-manager exports, etc.). Plus a
+# global *.key / *.pem catch in case someone drops a cert outside the
+# folder. Added 2026-05-11 after a `git add -A` accidentally swept
+# .secrets/ contents into a PR (PR #206, force-deleted). Always use
+# explicit paths with `git add <file>` for credential-adjacent work,
+# but these rules are the safety net.
+.secrets/
+*.key
+*.pem
+*.p12
+*.pfx
+
 # Deploy state — written by scripts/deploy.sh on prod (Section 54)
 .last-deployed-sha
 

@@ -8,7 +8,9 @@
 
 const cron = require('node-cron');
 const { pool } = require('../db');
-const sgMail = require('@sendgrid/mail');
+// Provider-agnostic mail client (SendGrid by default, Resend via
+// EMAIL_PROVIDER=resend). See lib/email.js#getMailClient.
+const sgMail = require('../lib/email').getMailClient();
 
 if (process.env.SENDGRID_API_KEY) {
   sgMail.setApiKey(process.env.SENDGRID_API_KEY);
