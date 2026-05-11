@@ -1,7 +1,7 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 10, 2026 — **Phase 4 done (May 9).** **Phase 5 in progress: 90-A + 90-B + 90-C + 90-D + 90-E ✅ DONE** (~83% of Phase 5 roadmap). 90-E added the cross-portal auth gate in `routes/auth.js#login` (admin Host + non-SA → 403 BLOCKED_PORTAL_LOGIN + audit row), the `<AdminLogin />` component, the `/login` route in `AdminApp.jsx`, plus 12 new test assertions (6 backend integration + 6 RTL). Cookie scope is N/A — token stays in localStorage (per-origin, no cross-domain leak). PWA SW scoping fix shipped in 90-D-fix earlier. **Next task: Piece 90-F — Prod deploy + anti-leak UAT (Phase 5 closeout)**.
+> Last updated: May 11, 2026 ~05:30 UTC — **Phase 4 done (May 9).** **Phase 5: 90-A through 90-E ✅ DEPLOYED.** 90-F UAT (May 10–11) discovered a production-critical login bug: **89-E/3 strict RLS on `app_users` broke the auth.js login lookup** (uses pre-tenant pool with no GUC → strict policy filters every row → all logins return 400 INVALID_PIN_FORMAT or 401 INVALID_CREDENTIALS depending on role). **Migration 013 rolled back on prod** at ~05:08 UTC May 11 to restore service. Prod is now on Stage 1 permissive RLS (tenant isolation still enforced by tenantDb GUC; fail-closed guarantee temporarily lost). Section 90 / Piece 90-F documents the bug + rollback + planned fix. Pitfall #28 encoded. **Next task: Piece 90-G — auth.js uses superPool for the login lookup, then re-apply 013** (~½ day).
 
 ---
 
@@ -27,7 +27,7 @@ When you receive the one-line command above:
    - `RECOVERY.md` Section 2.4 only (cost inventory) if relevant to today's task
 3. **Echo this exact line** as the first line of your reply so Hedar knows bootstrap completed:
    ```
-   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 90 / 90-E, next is 90-F)
+   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 90 / 90-F, prod on Stage 1 permissive, next is 90-G superPool fix)
    ```
 4. **Confirm the next task** in 1-2 lines (from "Next task" below).
 5. **Ask if Hedar is ready to start**, then wait.
@@ -45,9 +45,9 @@ When you receive the one-line command above:
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04) |
 | Backend | Node.js + Express + Postgres 16, pm2-managed at `/var/www/mep` |
 | Frontend | React + Vite + Tailwind, deployed to `/var/www/mep/mep-frontend/dist` |
-| Latest deployed to prod | **PWA SW scope fix (90-D-fix)** — May 10, 2026. 90-E auth gate is merged to main but **NOT yet deployed** to prod (the deploy step is the 90-F piece). |
-| Last merged to main | 90-D-fix PWA scope (squash `c42ec3e`) — May 10, 2026. 90-E PR pending merge → deploy in 90-F. |
-| Active program | **Multi-Tenant Migration** (Section 85, Phases 1-8) — **Phase 5 in progress** (90-A + 90-B + 90-C + 90-D + 90-E done, 90-F final) |
+| Latest deployed to prod | **90-E auth gate + AdminLogin** — May 10–11, 2026. Plus an emergency **rollback of migration 013** (Stage 3 strict RLS) at ~05:08 UTC May 11 to restore login flow. Prod is on Stage 1 permissive RLS until Piece 90-G ships. |
+| Last merged to main | 90-E auth gate (squash `d8d74d0`) — May 10, 2026. No code PR pending; 90-F was UAT only. Docs PR for 90-F + 90-G plan pending. |
+| Active program | **Multi-Tenant Migration** (Section 85, Phases 1-8) — **Phase 5 ~90% done** (90-A through 90-E shipped + UAT in 90-F revealed login bug → rolled 013 back → fix planned in 90-G) |
 | Mobile app | Still on legacy username login — backend keeps backward-compat |
 
 ### Multi-tenant migration progress
@@ -95,40 +95,29 @@ When you receive the one-line command above:
 
 ---
 
-## Next task: Piece 90-F — Prod deploy + anti-leak UAT (Phase 5 closeout)
+## Next task: Piece 90-G — auth.js superPool + re-apply 013 strict RLS
 
-**Phase 5 is code-complete:**
+**Production-critical bug uncovered in 90-F UAT** (see DECISIONS.md Section 90 / Piece 90-F for the full incident report). 89-E/3's migration 013 added strict RLS to 19 tenant tables including `app_users`. `routes/auth.js#login` does a pre-tenant SELECT against `app_users` via the regular pool with no GUC set — strict policies filter every row, login lookup returns empty, every user got 400 INVALID_PIN_FORMAT or 401 INVALID_CREDENTIALS. Migration 013 was rolled back on prod at ~05:08 UTC May 11 to restore login. Prod is currently on **Stage 1 permissive RLS** until this piece ships. CI didn't catch it because the test DB connects as `postgres` (BYPASSRLS) — see Pitfall #28 in DECISIONS.md for the full lessons.
 
-- **A**: subdomain `admin.constrai.ca` ✅ deployed (90-A)
-- **B2**: Vite multi-entry frontend ✅ deployed (90-C + 90-D-fix for PWA scope)
-- **C2**: Express vhost split ✅ deployed (90-B)
-- **First real admin screen**: All Companies list ✅ deployed (90-D)
-- **Cross-portal auth gate**: ✅ **merged to main, NOT yet deployed** (90-E)
+**90-G scope:** restore Stage 3 strict RLS by routing the auth.js user lookup through a BYPASSRLS connection.
 
-**90-F scope:** deploy 90-E to prod and run a full UAT pass on Phase 5.
+1. **Implement `superPool` in `db.js`.** Today the file exports `{ pool }` only. Add a `superPool` that connects as `mepuser_super` using `DATABASE_URL_SUPER` from env. The role is already provisioned on prod (Section 89-A) — credentials in password manager. Pool config mirrors the regular pool, just a different connection string. `tenant_db.js` already destructures `{ pool, superPool }` and has a graceful-degradation path for when superPool is null, so adding it is a strict improvement.
+2. **Refactor `routes/auth.js`.** Change the `const { pool } = require('../db')` line to `const { pool, superPool } = require('../db')`. Use `superPool.query(...)` for the login user-lookup SELECT. Leave the audit writes on `pool` (they're INSERTs and audit_logs has the permissive INSERT policy when 013 is re-applied). Also check whether the refresh-token lookup and any other pre-tenant SELECTs need the same treatment — sweep the file.
+3. **Add the missing CI regression test.** A new integration test that exercises `/api/auth/login` against a `mepuser` (non-super) connection under strict RLS. The minimum viable shape is a CI matrix or a second test workflow that creates a temporary mepuser role + runs migration 013 + runs an end-to-end login test. Or simpler — a unit test that monkey-patches the pool to use a non-super connection. Whatever the shape, it MUST be the kind of test that would have failed before this fix and pass after.
+4. **Re-apply migration 013** on prod after the auth.js fix is deployed. DDL unchanged — same migration file (`migrations/013_rls_strict.sql`). The sequence:
+   - Code PR merges to main, deploys (frontend rebuild + pm2 restart).
+   - Verify SA login still works on prod (under Stage 1 permissive — should be unchanged from today).
+   - Apply `sudo -u postgres psql -d mepdb -f migrations/013_rls_strict.sql`.
+   - Verify SA login STILL works on prod (now under Stage 3 strict, going through superPool).
+   - Verify a tenant login also works.
+   - Verify the cross-portal gate (90-E) still 403s COMPANY_ADMIN on admin Host.
 
-1. **Deploy 90-E to prod**:
-   - `cd /var/www/mep && git pull origin main`
-   - `cd mep-frontend && npm ci --ignore-scripts && npm run build` (rebuilds with the new AdminLogin chunk)
-   - `pm2 restart mep-backend` (picks up the new auth.js portal gate + new BLOCKED_PORTAL_LOGIN audit action)
-   - No Nginx changes — 90-E is pure JS.
+**Out of scope for 90-G:**
+- No new product features. Pure plumbing fix.
+- No SUPPORT_AGENT role (future phase, not Phase 5).
+- No reverting the `infra/nginx/admin-constrai.conf` or any frontend changes — all those work fine under either RLS stage.
 
-2. **Anti-leak UAT scenarios** (run on prod against real test accounts):
-   - SUPER_ADMIN logs into `admin.constrai.ca/login` → reaches CompaniesList → table renders.
-   - SUPER_ADMIN logs into `app.constrai.ca/login` → reaches tenant home (existing behavior preserved per Section 90).
-   - COMPANY_ADMIN logs into `admin.constrai.ca/login` → 403 inline message, NO token stashed, audit row written. Verify the audit row via `psql` (or the `/api/super/audit` endpoint once it exists — for now psql).
-   - COMPANY_ADMIN logs into `app.constrai.ca/login` → tenant home (existing behavior).
-   - Direct curl: `curl -X POST https://admin.constrai.ca/api/super/companies/overview` (no token) → 401. With a tenant token → 401 (or 403, depending on auth.js shape — anti-leak should fire).
-   - Direct curl: `curl https://app.constrai.ca/admin.html` → 404 NOT_FOUND (anti-leak from 90-D).
-   - Open `admin.constrai.ca/login` in a browser → renders the dark-slate AdminLogin form, NOT the tenant green sign-in card (90-D-fix verified earlier).
-
-3. **Phase 5 closeout PR** (docs-only): record the prod deploy timestamp, the UAT outcomes, and flip Phase 5 status from "in progress" to ✅ DONE in MASTER_README.md + HANDOFF.md.
-
-**Out of scope for 90-F:**
-- No new code. 90-F is purely deploy + verify + close out the docs.
-- No SUPPORT_AGENT role (a future phase, not Phase 5).
-
-**Suggested PR title for the docs closeout:** `docs(s90-f): Phase 5 closeout — UAT pass, prod deploy log, status flip`.
+**Suggested PR title:** `fix(s90-g): auth.js uses superPool for pre-tenant lookup (closes Phase 4 Stage 3 outage)`.
 
 **Backlog items still open after Phase 4** (carried forward — not blockers for Phase 5 but should be tracked):
 
