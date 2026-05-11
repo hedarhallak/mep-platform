@@ -1,7 +1,7 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 11, 2026 ~05:30 UTC — **Phase 4 done (May 9).** **Phase 5: 90-A through 90-E ✅ DEPLOYED.** 90-F UAT (May 10–11) discovered a production-critical login bug: **89-E/3 strict RLS on `app_users` broke the auth.js login lookup** (uses pre-tenant pool with no GUC → strict policy filters every row → all logins return 400 INVALID_PIN_FORMAT or 401 INVALID_CREDENTIALS depending on role). **Migration 013 rolled back on prod** at ~05:08 UTC May 11 to restore service. Prod is now on Stage 1 permissive RLS (tenant isolation still enforced by tenantDb GUC; fail-closed guarantee temporarily lost). Section 90 / Piece 90-F documents the bug + rollback + planned fix. Pitfall #28 encoded. **Next task: Piece 90-G — auth.js uses superPool for the login lookup, then re-apply 013** (~½ day).
+> Last updated: May 11, 2026 ~08:30 UTC — **Phase 4 fully restored, Phase 5 closed.** Piece 90-G shipped (PR #204, squash `d149ac0`, merged 2026-05-11 08:00:53 UTC). db.js now exports `superPool`; routes/auth.js routes all pre-tenant strict-table SELECTs through `authPool = superPool || pool`. Migration 013 re-applied on prod at ~08:00 UTC, SA login + admin-portal login + refresh-token rotation all verified under Stage 3 strict RLS. New regression test `tests/integration/rls_stage3_login.test.js` covers Pitfall #28 end-to-end via `jest.isolateModules`. **Next task: Email migration SendGrid → Resend** (the carried-over pre-Phase-6 item).
 
 ---
 
@@ -23,11 +23,11 @@ When you receive the one-line command above:
 2. **Read these 4 files** (use the Read tool, NOT bash — bash sandbox can return stale content):
    - `HANDOFF.md` (this file — for current state + next task)
    - `CLAUDE.md` (working rules, Sections 1-9)
-   - `DECISIONS.md` (read ONLY the latest 2-3 sections referenced below — DON'T read the whole 8500+ line file)
+   - `DECISIONS.md` (read ONLY the latest 2-3 sections referenced below — DON'T read the whole 10,800+ line file)
    - `RECOVERY.md` Section 2.4 only (cost inventory) if relevant to today's task
 3. **Echo this exact line** as the first line of your reply so Hedar knows bootstrap completed:
    ```
-   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 90 / 90-F, prod on Stage 1 permissive, next is 90-G superPool fix)
+   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 90 / 90-G, Phase 5 closed, next is Email SendGrid → Resend)
    ```
 4. **Confirm the next task** in 1-2 lines (from "Next task" below).
 5. **Ask if Hedar is ready to start**, then wait.
@@ -41,13 +41,14 @@ When you receive the one-line command above:
 | Item | Value |
 |---|---|
 | Production URL | `https://app.constrai.ca` |
+| Admin portal | `https://admin.constrai.ca` (SUPER_ADMIN only, 90-E gate) |
 | Login (test) | Email: `hedar.hallak@gmail.com` / PIN: `hedar2026` (SUPER_ADMIN) |
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04) |
 | Backend | Node.js + Express + Postgres 16, pm2-managed at `/var/www/mep` |
-| Frontend | React + Vite + Tailwind, deployed to `/var/www/mep/mep-frontend/dist` |
-| Latest deployed to prod | **90-E auth gate + AdminLogin** — May 10–11, 2026. Plus an emergency **rollback of migration 013** (Stage 3 strict RLS) at ~05:08 UTC May 11 to restore login flow. Prod is on Stage 1 permissive RLS until Piece 90-G ships. |
-| Last merged to main | 90-E auth gate (squash `d8d74d0`) — May 10, 2026. No code PR pending; 90-F was UAT only. Docs PR for 90-F + 90-G plan pending. |
-| Active program | **Multi-Tenant Migration** (Section 85, Phases 1-8) — **Phase 5 ~90% done** (90-A through 90-E shipped + UAT in 90-F revealed login bug → rolled 013 back → fix planned in 90-G) |
+| Frontend | React + Vite + Tailwind, deployed to `/var/www/mep/mep-frontend/dist` (tenant) + admin entry served from same dist via Nginx vhost |
+| Latest deployed to prod | **90-G fix + migration 013 re-applied** — May 11, 2026 ~08:00 UTC. SA login, admin-portal login, and refresh-token rotation all verified under Stage 3 strict RLS. |
+| Last merged to main | 90-G auth.js superPool fix (squash `d149ac0`, PR #204) — May 11, 2026. No code PRs pending; docs PR for 90-G closeout pending. |
+| Active program | **Multi-Tenant Migration** (Section 85, Phases 1-8) — **Phase 5 closed** (90-A through 90-G all shipped, Phase 4 Stage 3 strict RLS fully restored on prod) |
 | Mobile app | Still on legacy username login — backend keeps backward-compat |
 
 ### Multi-tenant migration progress
@@ -58,75 +59,64 @@ When you receive the one-line command above:
 | Phase 1 — Cloudflare + Origin SSL | ✅ Deployed | 86 |
 | Phase 2 — Tenant Resolver | ✅ No-op (Model C) | 87 |
 | Phase 3 — DB schema 011 + email login | ✅ Deployed | 87 |
-| **Phase 4a — RLS Stage 1 (permissive policies)** | ✅ **Deployed to prod** | 88 |
-| **Phase 4b — RLS Stage 2 (req.db middleware)** | ✅ **Deployed to prod** (22/22 routes on req.db) | 89-A through 89-D |
-| **Phase 4c — RLS Stage 3 (strict policies)** | ✅ **Deployed to prod** (May 9, 2026, migration 013) | 89-E/1, 89-E/2, 89-E/3 |
-| **Phase 5 — SUPER_ADMIN portal split** | ⏳ **Next** | TBD |
+| Phase 4a — RLS Stage 1 (permissive policies) | ✅ Deployed | 88 |
+| Phase 4b — RLS Stage 2 (req.db middleware) | ✅ Deployed (22/22 routes on req.db) | 89-A through 89-D |
+| **Phase 4c — RLS Stage 3 (strict policies)** | ✅ **Deployed AND restored after 90-F outage** | 89-E/1, 89-E/2, 89-E/3, 90-G |
+| **Phase 5 — SUPER_ADMIN portal split** | ✅ **CLOSED** (90-A through 90-G shipped) | 90 |
 | Phase 6 — Frontend tenant context + branding | ⏳ Pending | TBD |
 | Phase 7 — 2FA + biometric + account security | ⏳ Pending | TBD |
 | Phase 8 — Audit + compliance | ⏳ Pending | TBD |
-| Email migration SendGrid → Resend (before Phase 6) | ⏳ Pending | TBD |
+| **Email migration SendGrid → Resend (before Phase 6)** | ⏳ **Next** | TBD |
 | UI smoke test (Section 84, 9 tasks) | ⏸️ Paused | Resume after Phase 8 |
 
-### 89-C bulk route migration progress
+### Phase 5 pieces (all done)
 
-| Batch | Routes | Status |
+| Piece | Scope | Status |
 |---|---|---|
-| 89-C/1 | `/api/bi`, `/api/project-foremen`, `/api/project-trades` | ✅ **Deployed to prod** (May 7, 2026) |
-| 89-C/2 | `/api/attendance` (single-route batch — see DECISIONS.md 89-C/2) | ✅ **Deployed to prod** (May 7, 2026) |
-| 89-C/3 | `/api/reports` (single-route batch — see DECISIONS.md 89-C/3) | ✅ **Deployed to prod** (May 8, 2026) |
-| 89-C/4 | `/api/assignments/auto-*` (auto_assign.js — see DECISIONS.md 89-C/4) | ✅ **Deployed to prod** (May 8, 2026) |
-| 89-C/5 | `/api/users` (user_management.js — see DECISIONS.md 89-C/5) | ✅ **Deployed to prod** (May 8, 2026) |
-| 89-C/6 | `/api/hub` (hub.js — see DECISIONS.md 89-C/6) | ✅ **Deployed to prod** (May 8, 2026) |
-| 89-C/7 | `/api/standup` (standup.js — see DECISIONS.md 89-C/7) | ✅ **Deployed to prod** (May 8, 2026) |
-| 89-C/8 | `/api/projects` (projects.js — see DECISIONS.md 89-C/8) | ✅ **Deployed to prod** (May 8, 2026) |
-| 89-C/9 | `/api/daily-dispatch` (daily_dispatch.js — see DECISIONS.md 89-C/9) | ✅ **Deployed to prod** (May 8, 2026) |
-| 89-C/10 | `/api/materials` (material_requests.js — see DECISIONS.md 89-C/10) | ✅ **Deployed to prod** (May 8, 2026) |
-| 89-C/11 | `/api/assignments` + `/api/permissions` (bundled — see DECISIONS.md 89-C/11) | ✅ **Deployed to prod** (May 8, 2026) |
-| 89-C/12 | `/api/employees` (employees.js — see DECISIONS.md 89-C/12) | ✅ **Deployed to prod** (May 8, 2026) |
-| 89-C/13 | `/api/profile` + push-token (paired, q() helper refactor — see DECISIONS.md 89-C/13) | ✅ **Deployed to prod** (May 8, 2026) |
-| 89-C/14 | `/api/invite-employee` + `/api/admin/users` (bundled — see DECISIONS.md 89-C/14) | ✅ **Deployed to prod** (May 8, 2026) |
-| 89-C/15 | `/api/super` + `/api/super/ccq-rates` (bundled SUPER_ADMIN routes — see DECISIONS.md 89-C/15) | ✅ **Deployed to prod** (May 8, 2026) |
-| Phase 4b status | ✅ **22 of 22 authenticated routes on req.db (100%)** — confirmed by audit at end of 89-C/15 (the "~25" estimate was high; actual is 22) |
-| 89-D | middleware/permissions.js → req.db (Pitfall #21 closed) | ✅ **Deployed to prod** (May 8, 2026) |
-| 89-E/1 | notifyAssignment helper → req.db (split DB-reads from email-sends) | ✅ **Deployed to prod** (May 8, 2026) |
-| 89-E/2 | audit + logAudit + calcDistanceKm helpers → req.db | ✅ **Deployed to prod** (May 8, 2026) |
-| 89-E/3 | migration 013 strict RLS flip + audit_logs INSERT permissive policy | ✅ **Deployed to prod** (May 9, 2026) |
+| 90-A | DNS + Cloudflare + Nginx for `admin.constrai.ca` | ✅ Deployed (May 9) |
+| 90-B | Backend vhost split (adminApp + tenantApp) | ✅ Deployed (May 9) |
+| 90-C | Frontend Vite multi-entry | ✅ Deployed (May 10) |
+| 90-D | Admin shell + All Companies list | ✅ Deployed (May 10) |
+| 90-D-fix | PWA service-worker scoping | ✅ Deployed (May 10) |
+| 90-E | Auth gate + AdminLogin form | ✅ Deployed (May 10) |
+| 90-F | UAT + critical 013 rollback (incident) | ✅ Closed (May 11 ~05:08 UTC) |
+| **90-G** | **auth.js superPool + re-apply 013** | ✅ **Deployed (May 11 ~08:00 UTC)** |
+
+### 89-C bulk route migration progress (Phase 4b — unchanged)
+
+All 22 authenticated routes on `req.db` (RLS-enforced). Phase 4b is closed. See DECISIONS.md Section 89 for the full history.
 
 ---
 
-## Next task: Piece 90-G — auth.js superPool + re-apply 013 strict RLS
+## Next task: Email migration SendGrid → Resend
 
-**Production-critical bug uncovered in 90-F UAT** (see DECISIONS.md Section 90 / Piece 90-F for the full incident report). 89-E/3's migration 013 added strict RLS to 19 tenant tables including `app_users`. `routes/auth.js#login` does a pre-tenant SELECT against `app_users` via the regular pool with no GUC set — strict policies filter every row, login lookup returns empty, every user got 400 INVALID_PIN_FORMAT or 401 INVALID_CREDENTIALS. Migration 013 was rolled back on prod at ~05:08 UTC May 11 to restore login. Prod is currently on **Stage 1 permissive RLS** until this piece ships. CI didn't catch it because the test DB connects as `postgres` (BYPASSRLS) — see Pitfall #28 in DECISIONS.md for the full lessons.
+The carried-over pre-Phase-6 item. SendGrid has been the transactional-email provider since Section 60 (invite emails, daily dispatch, PO PDFs, password reset, etc.). Resend has been on the backlog for a few sessions because (a) it's cheaper at low volumes, (b) the SDK and DX are simpler, (c) Hedar has already obtained an API key (stored in `.secrets/resend.txt`, gitignored).
 
-**90-G scope:** restore Stage 3 strict RLS by routing the auth.js user lookup through a BYPASSRLS connection.
+**Scope (proposed; confirm at session start):**
 
-1. **Implement `superPool` in `db.js`.** Today the file exports `{ pool }` only. Add a `superPool` that connects as `mepuser_super` using `DATABASE_URL_SUPER` from env. The role is already provisioned on prod (Section 89-A) — credentials in password manager. Pool config mirrors the regular pool, just a different connection string. `tenant_db.js` already destructures `{ pool, superPool }` and has a graceful-degradation path for when superPool is null, so adding it is a strict improvement.
-2. **Refactor `routes/auth.js`.** Change the `const { pool } = require('../db')` line to `const { pool, superPool } = require('../db')`. Use `superPool.query(...)` for the login user-lookup SELECT. Leave the audit writes on `pool` (they're INSERTs and audit_logs has the permissive INSERT policy when 013 is re-applied). Also check whether the refresh-token lookup and any other pre-tenant SELECTs need the same treatment — sweep the file.
-3. **Add the missing CI regression test.** A new integration test that exercises `/api/auth/login` against a `mepuser` (non-super) connection under strict RLS. The minimum viable shape is a CI matrix or a second test workflow that creates a temporary mepuser role + runs migration 013 + runs an end-to-end login test. Or simpler — a unit test that monkey-patches the pool to use a non-super connection. Whatever the shape, it MUST be the kind of test that would have failed before this fix and pass after.
-4. **Re-apply migration 013** on prod after the auth.js fix is deployed. DDL unchanged — same migration file (`migrations/013_rls_strict.sql`). The sequence:
-   - Code PR merges to main, deploys (frontend rebuild + pm2 restart).
-   - Verify SA login still works on prod (under Stage 1 permissive — should be unchanged from today).
-   - Apply `sudo -u postgres psql -d mepdb -f migrations/013_rls_strict.sql`.
-   - Verify SA login STILL works on prod (now under Stage 3 strict, going through superPool).
-   - Verify a tenant login also works.
-   - Verify the cross-portal gate (90-E) still 403s COMPANY_ADMIN on admin Host.
+1. **Add a thin `lib/email.js` abstraction** that wraps the active provider. Today every email call goes directly to `@sendgrid/mail`. Wrap behind a `sendEmail({ to, subject, html, text, from? })` function so the provider can be swapped in one place.
+2. **Implement the Resend backend.** Install `resend` npm package, add a `RESEND_API_KEY` env var, route `sendEmail` to Resend when the key is set.
+3. **Dual-write transition (one or two sessions).** Keep SendGrid as the default, add an opt-in env flag (`EMAIL_PROVIDER=resend`) for staging-style cutover. Once Resend is verified working, flip the default.
+4. **Domain + DNS.** Resend needs SPF + DKIM records for `constrai.ca`. Cloudflare DNS — straightforward. Verify in Resend dashboard.
+5. **Cutover.** Set `EMAIL_PROVIDER=resend` on prod, restart pm2, send a test email through each transactional path (invite, PO, dispatch reminder). After 24h with no incidents, remove the SendGrid fallback code.
+6. **Cost / cleanup.** Cancel SendGrid subscription after 30 days of clean Resend traffic.
 
-**Out of scope for 90-G:**
-- No new product features. Pure plumbing fix.
-- No SUPPORT_AGENT role (future phase, not Phase 5).
-- No reverting the `infra/nginx/admin-constrai.conf` or any frontend changes — all those work fine under either RLS stage.
+**Out of scope:**
+- Email template redesign (current FR-only templates stay).
+- Marketing emails (no marketing email today, deferred).
+- Bounce/click webhooks (Resend supports them, but only worth wiring if we add analytics).
 
-**Suggested PR title:** `fix(s90-g): auth.js uses superPool for pre-tenant lookup (closes Phase 4 Stage 3 outage)`.
+**Suggested first PR:** the `lib/email.js` abstraction + Resend backend behind a feature flag, no cutover. ~½ day. Followup PR does the actual cutover.
 
-**Backlog items still open after Phase 4** (carried forward — not blockers for Phase 5 but should be tracked):
+### Backlog items still open (carried forward — not blockers)
 
-**Backlog items still open after Phase 4** (carried forward — not blockers for Phase 5 but should be tracked):
+These were listed in the previous HANDOFF and remain open. Address opportunistically before Phase 6 starts.
 
-- **`routes/attendance.js` `notifyForeman` helper** still uses pool.query for the fire-and-forget DB read inside the SendGrid send. Under Stage 3 strict that read returns 0 rows; the email body would silently come out empty. Apply the 89-E/1 prepareNotifyData / fireNotifyEmails split pattern. **Action:** open a small PR before any feature work that exercises foreman notifications.
+- **`routes/attendance.js` `notifyForeman` helper** still uses `pool.query` for the fire-and-forget DB read inside the SendGrid send. Under Stage 3 strict that read returns 0 rows; the email body would silently come out empty. Apply the 89-E/1 prepareNotifyData / fireNotifyEmails split pattern. **Action:** open a small PR before any feature work that exercises foreman notifications. The Resend migration above is a natural moment to do this since `lib/email.js` will already touch attendance's email path.
 - **`routes/project_trades.js`** has a redundant top-level `router.use(auth)` (auth runs twice). Pre-existing, harmless, low-priority cleanup.
-- **pg DeprecationWarning: "Calling client.query() when the client is already executing a query"** — visible in pm2 logs after every prod restart. Pre-existing pattern issue (not from 013); a separate hygiene PR should track it down. Likely candidate: a route still doing parallel `Promise.all([client.query(...), client.query(...)])` on a single client.
-- **Coverage threshold ratchet** — Phase 4 added 2 new test files (rls.test.js + rls_stage1.test.js), both Stage-3-aware. Total integration suite is 41+. After a few quiet days, run `TEST_DATABASE_URL=… npx jest --coverage` and consider ratcheting if the measured value has crept ≥3 pp above the current threshold (per CLAUDE.md Section 4.6 convention).
+- **pg DeprecationWarning: "Calling client.query() when the client is already executing a query"** — visible in pm2 logs after every prod restart. Pre-existing pattern issue (not from 013); a separate hygiene PR should track it down. Likely candidate: a route still doing parallel `Promise.all([client.query(...), client.query(...)])` on a single client. Confirmed still showing in 90-G's pm2 restart output, so it's persistent.
+- **Coverage threshold ratchet** — Phase 4 + 90-G added 3 test files total (rls.test.js + rls_stage1.test.js + rls_stage3_login.test.js), all Stage-3-aware. Total integration suite is 42+. After a few quiet days, run `TEST_DATABASE_URL=… npx jest --coverage` and consider ratcheting if the measured value has crept ≥3 pp above the current threshold (per CLAUDE.md Section 4.6 convention).
+- **System restart required (kernel update on the Droplet).** Surfaced as a `*** System restart required ***` banner on SSH login during 90-G deploy. Schedule a low-traffic-window reboot at next maintenance window. Not urgent; backend keeps running.
 
 ---
 
@@ -142,13 +132,13 @@ All credentials live in Hedar's password manager. Secrets repo-side:
 | Server `.env` (full contents) | Password manager secure note |
 | DigitalOcean Spaces keys | Password manager |
 | Apple Developer / Expo / GitHub | Password manager |
-| `mepuser_super` DB password | Apple Passwords (`Constrai Prod - mepuser_super DB`) + `/var/www/mep/.env` (`DATABASE_URL_SUPER`) on prod |
+| `mepuser_super` DB password | Apple Passwords (`Constrai Prod - mepuser_super DB`) + `/var/www/mep/.env` (`DATABASE_URL_SUPER` — confirmed present on prod during 90-G deploy) |
 
 Cost inventory (services + monthly bill ~$37 USD): see `RECOVERY.md` Section 2.4.
 
 ---
 
-## Critical pitfalls (encoded from Sections 86 + 87 + 88 + 89)
+## Critical pitfalls (encoded from Sections 86 + 87 + 88 + 89 + 90)
 
 1. **Bash sandbox file sync lag** — bash may return stale file content. Always use the Read tool to verify file state, or use PowerShell from Hedar's machine.
 2. **Edit tool can silently lose changes** — after a sequence of Edit calls, verify each change with Read tool immediately. Don't assume "successfully" means "persisted on disk".
@@ -164,18 +154,20 @@ Cost inventory (services + monthly bill ~$37 USD): see `RECOVERY.md` Section 2.4
 12. **Replace this file at end of session, don't append** — `HANDOFF.md` is meant to be small and current. Long history goes in `DECISIONS.md`.
 13. **RLS doesn't apply to BYPASSRLS roles** (Section 88) — superusers (incl. `postgres`) and roles with the BYPASSRLS attribute bypass every policy. RLS integration tests must `SET LOCAL ROLE mepuser` (or any non-super role) inside the transaction so the policy actually filters. `FORCE ROW LEVEL SECURITY` doesn't help here — it only forces RLS on table OWNERS, not on BYPASSRLS roles.
 14. **CI uses `postgres` role for tests** — see `.github/workflows/ci.yml` line 55 (`TEST_DATABASE_URL: postgres://postgres:testpass@...`). The workflow also pre-creates `mepuser` (line 75) and (after PR #153) GRANTs it table privileges. Any RLS-specific test should switch to mepuser via `SET LOCAL ROLE mepuser` after granting it needed privileges.
-15. **`git checkout main` fails silently with dirty tree** (Section 88) — if you have uncommitted changes that conflict with the target branch, `git checkout main` quietly stays on the current branch instead of switching. A subsequent `git pull origin main` then merges main into your CURRENT branch (opening vim for the merge message). To switch cleanly: stash first (`git stash push`), then checkout, then pop. To recover from this happening: `git merge --abort` (or `:q!` in vim) → `git stash` → `git checkout` → `git stash pop`.
-16. **`git stash pop` can lose cleanly-applied files when there's a conflict in another file** (Section 88) — if stash pop succeeds on most files but conflicts on one, the cleanly-applied ones may revert silently to their pre-pop state in some workflows. After a stash pop with conflict, always Read each previously-stashed file via Claude's Read tool to verify content actually changed. Don't trust the absence of a conflict marker as proof the change applied.
-17. **PowerShell's bare `>` redirect uses UTF-16 with BOM** (Section 88) — files written this way come back with spaces between every character when Claude's Read tool parses them, and aren't easy to grep. Always `Out-File -Encoding utf8 -FilePath <name>.log`. See CLAUDE.md Section 4.7 for the full file-based log convention.
-18. **GitHub web "Update branch" button creates duplicate squash commits when clicked on already-merged branches** (Section 89, May 7, 2026) — after `gh pr merge --squash` succeeds, the local branch should be cleaned up immediately (`git branch -D` + `git push origin --delete`) and the GitHub web UI for that branch should NOT be touched. If "Update branch" is clicked, GitHub creates a new merge commit on top of the just-merged branch, which (combined with `gh pr merge --auto` still being enabled or a "Compare & pull request" yellow banner) can produce a second PR with the same content that auto-merges into a duplicate squash commit on main. Today's main has duplicate `(#150)` and `(#151)` for the 89-A docs — file content is correct, but git history has noise. Lesson: the merge button is the LAST web interaction with a PR; everything after is local-terminal cleanup only.
-19. **`openssl rand -hex N` over `-base64 N` for connection-string passwords** (Section 89, May 7, 2026) — base64 produces `+`, `/`, `=` characters that need percent-encoding inside `postgres://user:PASS@host/db` URLs, which adds friction during prod deploy. Hex is URL-safe by construction. 64 hex chars (32 bytes entropy = 256 bits) is plenty. Used for `mepuser_super` password during 89-A deployment.
-20. **Read untracked WIP files before writing fresh code** (Section 89, May 7, 2026) — when HANDOFF mentions "abandoned WIP files" left untracked, they may actually be 90% production-ready. The `middleware/tenant_db.js` and `tests/integration/rls.test.js` WIPs from a prior session were both shippable as-is, saving hours of re-implementation in 89-B. Convention: at the start of any session that targets a feature with WIP files mentioned in HANDOFF, run `git status` + `Read` each untracked file first. Document any deviations from the HANDOFF naming in DECISIONS.md (e.g., 89-B kept `tenant_db.js` rather than renaming to the original `db_context.js`).
-21. **`middleware/permissions.js` `can()` calls `pool.query` directly** ✅ **CLOSED by 89-D, May 8, 2026.** (Original observation, Section 89, 89-C/1: under Stage 1 permissive RLS this works, but under Stage 3 strict RLS every authenticated request will be rejected because `user_permissions` queries will return 0 rows when the GUC is unset on the pool client. Refactor must happen before 89-E ships.) **Resolution:** 89-D (squash `1c8bd8f`) added an optional `db` parameter to `userHasPermission(userId, role, permCode, db = pool)` and updated `can()`/`canAny()` to pass `req.db || pool`. Under Stage 2 either path works; under Stage 3 the pool fallback fails-closed. All 22 authenticated routes already mount tenantDb before `can()` fires, so `req.db` is always available; the pool fallback is defense-in-depth.
-22. **Per-request transaction middleware MUST commit BEFORE the response is flushed** (Section 89, 89-C/1-fix, May 7, 2026) — the original `tenantDb` design used `res.on('finish', () => release('commit'))`, which fires AFTER the response body reaches the client. Tests (and any client) doing a write via the API followed immediately by a read on a separate pool connection can see stale data because the SELECT executes BEFORE the COMMIT lands. Fix: override `res.end` so the response body is held until COMMIT resolves. Surfaced when CI #418 on main went red on `tests/integration/project_foremen.test.js` "DELETE removes the foreman" — same code that passed CI #416 on the 89-C/1 PR (race won that time). Convention: any future per-request transaction middleware (e.g., a future `req.db.write` or a refactor of `tenantDb` for SUPER pool) MUST follow the `res.end` override pattern, not 'finish' / 'close' listeners alone, to avoid resurrecting this race.
-23. **`try { INSERT } catch { handle dup }` patterns DO NOT survive inside a tenantDb transaction** (Section 89, 89-C/9, May 8, 2026) — under `pool.query` each query auto-commits, so an INSERT that fails on UNIQUE violation can be caught and the catch block can run a fresh SELECT. Under `req.db.query` (per-request transaction wrapping the whole handler), the INSERT failure aborts the transaction; subsequent queries fail with `current transaction is aborted, commands ignored until end of transaction block`. Refactor to `INSERT ... ON CONFLICT DO NOTHING RETURNING *` and check `rows.length` instead of catching. CI #452 on the 89-C/9 PR caught this — `daily_dispatch.test.js` "POST /prepare twice on same date returns 409 already_prepared" failed because the catch-block SELECT couldn't run after the dup INSERT poisoned the transaction. **Convention:** when migrating any route, grep for `try ... catch.*query|UNIQUE|ON CONFLICT` patterns BEFORE pushing the migration PR. Other patterns to watch: `try { UPDATE } catch { /* assume not found */ }` → use `RETURNING * + check rows.length`. For rare cases where catching a query error is unavoidable, use `SAVEPOINT` to wall off the failing query.
-24. **Orphan-account 401 from tenantDb is the cross-route contract — route-level 403 for missing company_id becomes dead code** (Section 89, 89-C/12, May 8, 2026) — when a route had its own `if (!companyId) return res.status(403).json({ error: 'COMPANY_CONTEXT_REQUIRED' })` defensive branch (e.g. `routes/employees.js` line 35), migrating onto tenantDb makes that branch unreachable: tenantDb's own missing-company guard returns **401 NO_TENANT_IN_TOKEN** before the route handler ever runs. Existing tests in `tenant_isolation.test.js` written around the 403 contract will fail with `Expected: 403, Received: 401`. **Convention:** before pushing a migration PR for a route that has its own 403 for missing company_id, grep `tests/integration/tenant_isolation.test.js` for the route's path + 403 expectation, and update the test to expect 401 NO_TENANT_IN_TOKEN. Keep the route-level 403 in code as defense-in-depth (in case anything ever bypasses tenantDb), but document it as dead code under the normal middleware chain. CI #465 on the 89-C/12 PR caught this; fixed in commit `c0c2c8f`.
-25. **SUPER_ADMIN seedUser needs an explicit 8+ char PIN** (Section 89, 89-C/15, May 8, 2026) — `routes/auth.js#isValidPin` enforces stricter format for SUPER_ADMIN: length 8-32 vs 4-8 for other roles. The default `seedUser` PIN `'1234'` (4 chars) is rejected by the auth/login endpoint with **400 INVALID_PIN_FORMAT** for SA, before any test logic runs. Surfaced when CI #480 on the 89-C/15 PR failed at test setup. Already documented in DECISIONS.md from CI #73 era but not previously encoded in HANDOFF's pitfalls list — re-encoding here. **Convention:** any test that logs in as SUPER_ADMIN must seed with an explicit `pin` override of length 8-32 chars: ``await seedUser({ role: 'SUPER_ADMIN', pin: 'sa-pin-1234' })``. Default `'1234'` works for every other role but not SA. Same gotcha applies if production ever ships a UI flow that creates SA accounts — the create endpoint must enforce ≥8 chars or the login will silently break.
-26. **Test files that pin a transitional stage's contract become blockers at the next stage's cutover** (Section 89, 89-E/3, May 9, 2026) — when a multi-stage migration ratchets behavior over time (Stage 1 permissive → Stage 3 strict), tests that assert the **current** stage's exact contract (`expect(rows).toHaveLength(2)` for the GUC-unset case under Stage 1) will fail mechanically when Stage 3 lands. Discovery is delayed: CI #497 for migration 013 went red on `tests/integration/rls.test.js` + `tests/integration/rls_stage1.test.js` even though the migration logic was correct. Fix is mechanical (flip the assertions), but cost is one extra CI cycle per affected test file. **Convention:** when writing tests for a known-transitional stage, label the test name with the stage + future migration (e.g., "Stage 1 permissive baseline (will flip in migration 013, Stage 3)") and add a comment near the assertion referencing the future change. The next session reading the test then knows it's expected to change without re-deriving the dependency chain. Note: `employee_profiles` was deliberately kept at 2 rows in the Stage-3 update because that table isn't in 013's strict_tables list (no `company_id` column; it's joined through `employees` for tenant scope). When Stage 3 affects only some tables, document which tables aren't affected at the assertion site.
+15. **`git checkout main` fails silently with dirty tree** (Section 88) — if you have uncommitted changes that conflict with the target branch, `git checkout main` quietly stays on the current branch instead of switching. To switch cleanly: stash first (`git stash push`), then checkout, then pop.
+16. **`git stash pop` can lose cleanly-applied files when there's a conflict in another file** (Section 88) — after a stash pop with conflict, always Read each previously-stashed file via Claude's Read tool to verify content actually changed.
+17. **PowerShell's bare `>` redirect uses UTF-16 with BOM** (Section 88) — Always `Out-File -Encoding utf8 -FilePath <name>.log`. See CLAUDE.md Section 4.7 for the full file-based log convention.
+18. **GitHub web "Update branch" button creates duplicate squash commits when clicked on already-merged branches** (Section 89, May 7, 2026) — after `gh pr merge --squash` succeeds, the local branch should be cleaned up immediately and the GitHub web UI for that branch should NOT be touched.
+19. **`openssl rand -hex N` over `-base64 N` for connection-string passwords** (Section 89, May 7, 2026) — base64 produces `+`, `/`, `=` characters that need percent-encoding inside `postgres://user:PASS@host/db` URLs. Hex is URL-safe by construction.
+20. **Read untracked WIP files before writing fresh code** (Section 89, May 7, 2026) — when HANDOFF mentions "abandoned WIP files" left untracked, they may actually be 90% production-ready. Convention: `git status` + `Read` each untracked file first.
+21. **`middleware/permissions.js` `can()` calls `pool.query` directly** ✅ **CLOSED by 89-D, May 8, 2026.**
+22. **Per-request transaction middleware MUST commit BEFORE the response is flushed** (Section 89, 89-C/1-fix, May 7, 2026) — override `res.end` so the response body is held until COMMIT resolves.
+23. **`try { INSERT } catch { handle dup }` patterns DO NOT survive inside a tenantDb transaction** (Section 89, 89-C/9, May 8, 2026) — refactor to `INSERT ... ON CONFLICT DO NOTHING RETURNING *` and check `rows.length` instead of catching. **Convention:** when migrating any route, grep for `try ... catch.*query|UNIQUE|ON CONFLICT` patterns BEFORE pushing the migration PR.
+24. **Orphan-account 401 from tenantDb is the cross-route contract** (Section 89, 89-C/12, May 8, 2026) — migrating onto tenantDb makes route-level 403 for missing company_id unreachable (tenantDb returns 401 NO_TENANT_IN_TOKEN first). Update `tenant_isolation.test.js` from 403 → 401 in the same PR.
+25. **SUPER_ADMIN seedUser needs an explicit 8+ char PIN** (Section 89, 89-C/15, May 8, 2026) — `routes/auth.js#isValidPin` enforces length 8-32 for SUPER_ADMIN. The default `seedUser` PIN `'1234'` (4 chars) is rejected. **Convention:** any test that logs in as SUPER_ADMIN must seed with `pin: 'sa-pin-1234'` or similar.
+26. **Test files that pin a transitional stage's contract become blockers at the next stage's cutover** (Section 89, 89-E/3, May 9, 2026) — when a multi-stage migration ratchets behavior over time, tests that assert the **current** stage's exact contract will fail mechanically when the next stage lands. **Convention:** label the test name with the stage + future migration; add a comment near the assertion referencing the future change.
+27. (reserved — folded into #28 below.)
+28. **Strict RLS breaks pre-tenant queries (login, signup, anything-running-before-tenant)** ✅ **CLOSED by 90-G, May 11, 2026.** (Section 90 / Piece 90-F + 90-G.) Strict RLS on a table that a pre-tenant route needs to SELECT from will silently break those routes in production. The pre-tenant route uses a tenant-unaware connection (no GUC set), strict policies filter every row, route returns "user not found" — but for callers it looks like wrong credentials, bad PIN format, expired invite, etc. **Resolution:** `db.js` now exports a `superPool` (BYPASSRLS via `mepuser_super`), `routes/auth.js` routes every pre-tenant lookup through `authPool = superPool || pool`. CI regression test `tests/integration/rls_stage3_login.test.js` covers the bug shape end-to-end via `jest.isolateModules` — an isolated Express app instance backed by a non-BYPASSRLS pool returns 200 when DATABASE_URL_SUPER is wired and non-200 when not. **General rule (carried forward):** any future pre-tenant code path that SELECTs from a strict-RLS table must use `superPool` (or its equivalent). The `jest.isolateModules` testing pattern is reusable — when a test needs to exercise the actual route handler against a production-shape pool (non-BYPASSRLS), reach for it.
 
 ---
 
@@ -194,10 +186,11 @@ Cost inventory (services + monthly bill ~$37 USD): see `RECOVERY.md` Section 2.4
   git branch -D <branch-name>
   git push origin --delete <branch-name>   # safety: ensures stale remote is gone
   ```
-  Skipping this leads to "Frankenstein PR" issues (Section 88 retro): if a remote branch with the same name lingers from a previous session, `git push -u origin <name>` from a recreated local branch will merge the two histories silently and your PR ends up with extra commits / wrong files.
+  Skipping this leads to "Frankenstein PR" issues (Section 88 retro).
 - **Don't put `"تم"` or any echo-only command inside PowerShell blocks** — Hedar types "تم" in chat to signal completion. Embedding it in the script just clutters his terminal without telling Claude anything.
 - **File-based log convention for large tool output** — see CLAUDE.md Section 4.7. Save big outputs (CI logs, test failures, diffs) to `<workspace>\<purpose>.log` (overwriting, UTF-8). Hedar types one-word ack in chat; Claude reads the file directly. Never paste 1000+ line outputs into chat.
 - **DECISIONS.md is the archive**, not the entry point — only read the 2-3 latest sections referenced in this HANDOFF.md.
+- **NEW from 90-G — testing pool-vs-role interactions:** when a test needs to exercise an Express route handler against a non-BYPASSRLS pool (i.e., production-shape pool identity), use `jest.isolateModules` with `process.env.DATABASE_URL` temporarily rewritten to the production role. See `tests/integration/rls_stage3_login.test.js` for the canonical pattern. Set `DATABASE_URL_SUPER=''` (empty string) rather than `delete process.env.DATABASE_URL_SUPER` so `dotenv` doesn't repopulate it from a local `.env` file.
 
 ---
 
@@ -208,19 +201,18 @@ Cost inventory (services + monthly bill ~$37 USD): see `RECOVERY.md` Section 2.4
    - "Last updated" timestamp
    - "Latest deployed to prod" / "Last merged to main" rows in Current state
    - Multi-tenant migration progress table (mark completed phase, advance NEXT)
-   - 89-C bulk route migration progress table (advance batch progress)
    - "Next task" section (rewrite for the new next task)
    - Add any new pitfalls discovered this session
-3. **DECISIONS.md** has a new Section (or extended existing one) for any non-trivial work this session. For Phase 4 stages, extend the existing Section (e.g., 89 covers all Stage 2 pieces) until that stage is fully done; Stage 3 will get its own section once it lands.
+3. **DECISIONS.md** has a new Section (or extended existing one) for any non-trivial work this session. Phase 5 / Piece 90-G uses the existing Section 90 — extended, not new.
 4. **Push HANDOFF.md to main** — separate small PR, auto-merge enabled. **Wait for the PR to actually merge before the user closes the session.**
-5. **Brief Hedar** with: "PR merged, HANDOFF updated, batch X done, next session starts on batch Y."
+5. **Brief Hedar** with: "PR merged, HANDOFF updated, Phase 5 closed, next session starts on Email SendGrid → Resend."
 
 ---
 
 ## Out-of-band notes (read on demand)
 
 - `CLAUDE.md` — full working rules, naming conventions, code map, communication rules
-- `DECISIONS.md` — full decision history (8500+ lines, archive). Search for specific Section numbers; don't read sequentially.
+- `DECISIONS.md` — full decision history (10,800+ lines, archive). Search for specific Section numbers; don't read sequentially.
 - `RECOVERY.md` — credentials inventory, cost summary, backup/recovery runbooks
 - `SCHEMA.md` — DB schema reference (read when doing DB work)
 - `API.md` — backend endpoint reference (read when doing route work)
