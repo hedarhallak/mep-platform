@@ -31,7 +31,9 @@ const crypto = require('crypto');
 const { hashPin } = require('../lib/auth_utils');
 const { normalizeRole } = require('../middleware/roles');
 const { can } = require('../middleware/permissions');
-const sgMail = require('@sendgrid/mail');
+// Provider-agnostic mail client (SendGrid by default, Resend via
+// EMAIL_PROVIDER=resend). See lib/email.js#getMailClient.
+const sgMail = require('../lib/email').getMailClient();
 const { escapeHtml } = require('../lib/email');
 
 const router = express.Router();

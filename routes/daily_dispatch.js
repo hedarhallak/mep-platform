@@ -290,7 +290,9 @@ router.post('/commit', async (req, res) => {
       });
     }
 
-    const sgMail = require('@sendgrid/mail');
+    // Provider-agnostic mail client (SendGrid by default, Resend via
+    // EMAIL_PROVIDER=resend). See lib/email.js#getMailClient.
+    const sgMail = require('../lib/email').getMailClient();
     sgMail.setApiKey(SENDGRID_API_KEY);
 
     const qDate = String(req.query.date || '').trim();

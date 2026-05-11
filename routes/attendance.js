@@ -104,7 +104,9 @@ async function notifyForeman(db, attendanceId, eventType) {
     if (!rows.length || !rows[0].foreman_email) return;
     const r = rows[0];
 
-    const sgMail = require('@sendgrid/mail');
+    // Provider-agnostic mail client (SendGrid by default, Resend via
+    // EMAIL_PROVIDER=resend). See lib/email.js#getMailClient.
+    const sgMail = require('../lib/email').getMailClient();
     sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
     const subject =

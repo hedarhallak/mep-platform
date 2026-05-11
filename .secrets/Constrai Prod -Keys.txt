@@ -1,0 +1,7 @@
+Database
+
+Website / Title: Constrai Prod - mepuser_super DB
+User Name: mepuser_super
+Password: a1a3a45ad9f7313db817e41df989010631a66442cbabad21eac989d90ab5e78c
+Notes: Phase 4b Stage 2 (89-A). Created May 7, 2026. Used in /var/www/mep/.env as DATABASE_URL_SUPER. Postgres BYPASSRLS role.
+
