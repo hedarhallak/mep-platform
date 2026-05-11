@@ -20,27 +20,22 @@
 
 const express = require('express');
 const router = express.Router();
-const { pool } = require('../db');
 const { can, canAny } = require('../middleware/permissions');
 const { audit, ACTIONS } = require('../lib/audit');
 
 // Section 89-C/2 (Phase 4 Stage 2): in-handler queries migrated to req.db
-// (RLS-enforced via middleware/tenant_db). The `pool` import is kept ONLY
-// for the fire-and-forget notifyForeman helper below — that function runs
-// after the request transaction has already committed (its caller does NOT
-// await it), so it cannot use req.db. WHERE company_id clauses are kept
-// for defense-in-depth — RLS does the actual filtering at the DB layer.
+// (RLS-enforced via middleware/tenant_db).
 //
-// audit() calls switched from `audit(pool, req, ...)` to `audit(req.db, ...)`
-// so the audit_logs INSERT is part of the same per-request transaction
-// (forward-compatible with Stage 3 strict RLS).
+// audit() calls use `audit(req.db, ...)` so the audit_logs INSERT is part
+// of the same per-request transaction (forward-compatible with Stage 3
+// strict RLS).
 //
-// TODO Stage 3 (Section 89-E): notifyForeman currently SELECTs via the
-// shared `pool`, which has no app.company_id GUC set. Under Stage 1
-// permissive RLS the SELECT returns rows; under strict RLS it would return
-// 0 rows and the email would silently not send. Refactor pattern: prefetch
-// the email-data fields via req.db BEFORE res.json, then fire-and-forget
-// the SendGrid send (no DB) afterwards.
+// Section 91 / Pitfall #28 closure (May 11, 2026): notifyForeman split into
+// DB-read (prepareNotifyData) and email-send (fireNotifyEmail) following
+// the 89-E/1 pattern. The DB read now runs through req.db so it survives
+// Stage 3 strict RLS; the email send is detached so the route's response
+// time only includes the DB-read portion. The `pool` import is gone — no
+// background helper in this file needs the shared pool anymore.
 
 // ── Hours calculation ─────────────────────────────────────────
 function timeToMin(t) {
@@ -70,64 +65,87 @@ function calcHours(shiftStart, checkInTime, checkOutTime) {
   return { rawMinutes, paidMinutes, regularHours, overtimeHours, lateMinutes };
 }
 
-// ── Foreman notification (fire and forget) ────────────────────
-// Param renamed from `pool` to `db` so the file-level `pool.query` text
-// only refers to the imported module pool, not this parameter. Caller
-// still passes the imported pool (notifyForeman is fire-and-forget and
-// must use a separate connection from req.db for the reasons described
-// in the file header — req.db is released back to the pool when the
-// per-request transaction commits).
+// ── Foreman notification ──────────────────────────────────────
+//
+// Section 91 / Pitfall #28 closure (May 11, 2026): two-phase split following
+// the 89-E/1 prepareNotifyData / fireNotifyEmail pattern.
+//
+//   notifyForeman(db, attendanceId, eventType)
+//     1. Awaits prepareNotifyData(db, attendanceId) — DB read via req.db,
+//        so RLS sees the request's tenant context (Stage 3 strict survives).
+//     2. Fires fireNotifyEmail(data, eventType) as a detached promise —
+//        no DB calls inside, just SendGrid network I/O, so it's safe to
+//        outlive res.end() / the per-request transaction COMMIT.
+//   Returns no value. Never throws — both phases log on failure.
+//
+// Callers `await notifyForeman(req.db, id, type)` BEFORE `res.json(...)`
+// so the DB read runs while req.db is still bound to the open transaction.
+
 async function notifyForeman(db, attendanceId, eventType) {
+  let data;
   try {
-    const { rows } = await db.query(
-      `SELECT
-         atr.check_in_time, atr.check_out_time,
-         atr.regular_hours, atr.overtime_hours,
-         atr.attendance_date,
-         ep.full_name    AS employee_name,
-         p.project_code, p.project_name,
-         fe.contact_email AS foreman_email,
-         fe.full_name     AS foreman_name
-       FROM public.attendance_records atr
-       JOIN public.employee_profiles ep ON ep.employee_id = atr.employee_id
-       JOIN public.projects p ON p.id = atr.project_id
-       LEFT JOIN (
-         SELECT ar2.project_id, ar2.company_id,
-                ep2.full_name, ep2.contact_email
-         FROM public.assignment_requests ar2
-         JOIN public.employee_profiles ep2 ON ep2.employee_id = ar2.requested_for_employee_id
-         WHERE ar2.assignment_role = 'FOREMAN' AND ar2.status = 'APPROVED'
-       ) fe ON fe.project_id = atr.project_id AND fe.company_id = atr.company_id
-       WHERE atr.id = $1 LIMIT 1`,
-      [attendanceId]
-    );
-    if (!rows.length || !rows[0].foreman_email) return;
-    const r = rows[0];
-
-    // Provider-agnostic mail client (SendGrid by default, Resend via
-    // EMAIL_PROVIDER=resend). See lib/email.js#getMailClient.
-    const sgMail = require('../lib/email').getMailClient();
-    sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-
-    const subject =
-      eventType === 'CHECKIN'
-        ? `[MEP Platform] Check-In — ${r.employee_name} @ ${r.project_code}`
-        : `[MEP Platform] Check-Out — ${r.employee_name} @ ${r.project_code}`;
-
-    const timeStr =
-      eventType === 'CHECKIN'
-        ? `Checked in at: ${String(r.check_in_time).substring(0, 5)}`
-        : `Checked out at: ${String(r.check_out_time).substring(0, 5)}\nRegular hours: ${r.regular_hours}h\nOvertime: ${r.overtime_hours}h`;
-
-    await sgMail.send({
-      to: r.foreman_email,
-      from: process.env.SENDGRID_FROM_EMAIL,
-      subject,
-      text: `Hi ${r.foreman_name},\n\n${r.employee_name} — ${r.project_code} (${r.attendance_date})\n\n${timeStr}\n\nPlease confirm hours on the MEP Platform.\n\n— MEP Platform`,
-    });
+    data = await prepareNotifyData(db, attendanceId);
   } catch (err) {
-    console.error('[attendance notify] error:', err.message);
+    console.error('[attendance notify] DB-read error:', err.message);
+    return;
   }
+  if (!data || !data.foreman_email) return;
+
+  // Detached: SendGrid call fires after this function returns. No DB
+  // access inside fireNotifyEmail, so survival past res.end() is fine.
+  fireNotifyEmail(data, eventType).catch((err) =>
+    console.error('[attendance notify] email error:', err?.response?.body || err.message)
+  );
+}
+
+async function prepareNotifyData(db, attendanceId) {
+  const { rows } = await db.query(
+    `SELECT
+       atr.check_in_time, atr.check_out_time,
+       atr.regular_hours, atr.overtime_hours,
+       atr.attendance_date,
+       ep.full_name    AS employee_name,
+       p.project_code, p.project_name,
+       fe.contact_email AS foreman_email,
+       fe.full_name     AS foreman_name
+     FROM public.attendance_records atr
+     JOIN public.employee_profiles ep ON ep.employee_id = atr.employee_id
+     JOIN public.projects p ON p.id = atr.project_id
+     LEFT JOIN (
+       SELECT ar2.project_id, ar2.company_id,
+              ep2.full_name, ep2.contact_email
+       FROM public.assignment_requests ar2
+       JOIN public.employee_profiles ep2 ON ep2.employee_id = ar2.requested_for_employee_id
+       WHERE ar2.assignment_role = 'FOREMAN' AND ar2.status = 'APPROVED'
+     ) fe ON fe.project_id = atr.project_id AND fe.company_id = atr.company_id
+     WHERE atr.id = $1 LIMIT 1`,
+    [attendanceId]
+  );
+  return rows[0] || null;
+}
+
+async function fireNotifyEmail(data, eventType) {
+  // Provider-agnostic mail client (SendGrid by default, Resend via
+  // EMAIL_PROVIDER=resend). See lib/email.js#getMailClient.
+  const sgMail = require('../lib/email').getMailClient();
+  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+
+  const subject =
+    eventType === 'CHECKIN'
+      ? `[MEP Platform] Check-In — ${data.employee_name} @ ${data.project_code}`
+      : `[MEP Platform] Check-Out — ${data.employee_name} @ ${data.project_code}`;
+
+  const timeStr =
+    eventType === 'CHECKIN'
+      ? `Checked in at: ${String(data.check_in_time).substring(0, 5)}`
+      : `Checked out at: ${String(data.check_out_time).substring(0, 5)}\nRegular hours: ${data.regular_hours}h\nOvertime: ${data.overtime_hours}h`;
+
+  return sgMail.send({
+    to: data.foreman_email,
+    from: process.env.SENDGRID_FROM_EMAIL,
+    subject,
+    text: `Hi ${data.foreman_name},\n\n${data.employee_name} — ${data.project_code} (${data.attendance_date})\n\n${timeStr}\n\nPlease confirm hours on the MEP Platform.\n\n— MEP Platform`,
+  });
 }
 
 // ── GET /api/attendance/projects ─────────────────────────────
@@ -331,7 +349,9 @@ router.post('/checkin', can('attendance.checkin'), async (req, res) => {
       new_values: { check_in_time: checkInTime, date: today },
     });
 
-    notifyForeman(pool, rows[0].id, 'CHECKIN');
+    // DB-read phase runs via req.db (Stage 3 strict-RLS-safe); email send
+    // is detached inside notifyForeman.
+    await notifyForeman(req.db, rows[0].id, 'CHECKIN');
 
     return res.status(201).json({ ok: true, record: rows[0] });
   } catch (err) {
@@ -409,7 +429,9 @@ router.patch('/:id/checkout', can('attendance.checkin'), async (req, res) => {
       },
     });
 
-    notifyForeman(pool, recordId, 'CHECKOUT');
+    // DB-read phase runs via req.db (Stage 3 strict-RLS-safe); email send
+    // is detached inside notifyForeman.
+    await notifyForeman(req.db, recordId, 'CHECKOUT');
 
     return res.json({ ok: true, record: rows[0] });
   } catch (err) {
