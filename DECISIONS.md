@@ -10784,3 +10784,96 @@ The third pattern is the most production-faithful — it tests the actual route 
 
 - **Today: 59 sections.** (Section 90 extended with Piece 90-G: db.js exports superPool, routes/auth.js routes all pre-tenant strict-table SELECTs through `authPool = superPool || pool`, regression test `rls_stage3_login.test.js` covers the bug shape end-to-end with jest.isolateModules. Migration 013 re-applied on prod at ~08:00 UTC May 11, 2026; SA login under Stage 3 strict RLS verified via login + admin-portal login + refresh-token rotation. Phase 5 closed.)
 
+---
+
+## Section 91 — Secrets leak incident + remediation (May 11, 2026 ~08:40–10:30 UTC)
+
+> **Same-day follow-on to Phase 5 closeout (Section 90).** While starting the Email migration (SendGrid → Resend) — the next backlog item carried forward from 90-G — a routine `git commit` swept four files from the workstation's `.secrets/` directory into a feature branch pushed to GitHub. GitGuardian detected the Resend API key within minutes. Remediation took ~2 hours; this section is the post-incident writeup so the next session can pick up the residual rotation work.
+
+### Detection timeline
+
+- **08:41:58 UTC** — Commit `0512476` pushed to remote branch `feat/resend-abstraction` of `hedarhallak/mep-platform` (intended scope: the Resend abstraction PR planned in 90-G's "Next task" section). The push included `.secrets/Constrai Prod -Keys.txt`, `.secrets/cloudflare-origin.key`, `.secrets/cloudflare-origin.pem`, `.secrets/resend.txt`, and a stray duplicate `migrations/012_enable_rls_permissive.sql`.
+- **08:43 UTC** — GitGuardian email alert: "Resend API Key exposed within your GitHub account." Indicator: the new commit on a public branch matching the Resend regex.
+- **08:48 UTC** — CI run #527 for PR #206 went red. Backend job failed on 4 RLS tests (`rls.test.js`, `rls_stage1.test.js`, `rls_stage3_login.test.js`) plus `email_resend_wrapper.test.js`. Root cause: the stray `012_enable_rls_permissive.sql` collided with the canonical `012_rls_stage1_permissive.sql` during the CI migration loop, breaking Stage 3 strict RLS installation.
+- **08:50 UTC** — Investigation started. The CI failure pattern (multiple "expected 0 rows under strict RLS, got N rows") pointed to migration ordering, which led to the directory listing of `.secrets/*` in the commit — and the secrets exposure was identified.
+
+### Root cause — three contributing factors
+
+1. **`.gitignore` was missing `.secrets/` entirely.** HANDOFF.md (lines about `.secrets/cloudflare-origin.pem (gitignored)`, etc.) claimed those files were ignored. They were not — the directory was simply untracked because Hedar had never run `git add` on it. Once `git add -A` ran in this session, the untracked-but-not-ignored files were swept in.
+2. **`git add -A` is the wrong tool for credential-adjacent work.** The session's commit block instructed `git add -A` to stage 12 intended files. The `-A` flag also stages ANY untracked-and-not-gitignored file in the tree — including `.secrets/*` (factor 1) and a stray `migrations/012_enable_rls_permissive.sql` that was a local copy with no equivalent in main.
+3. **The workstation accumulated stray files.** `migrations/012_enable_rls_permissive.sql` was a duplicate of the canonical `012_rls_stage1_permissive.sql` (different content, similar purpose — probably an earlier draft retained from when the migration was being authored). Not tracked, not gitignored, not noticed in any prior `git status`. Made it into the commit only because of factor 2.
+
+All three factors had to fire together. Fixing any one would have prevented the leak. Section 91 fixes all three.
+
+### Remediation — chronological
+
+1. **09:00 UTC — Branch force-deleted.** `git push origin --delete feat/resend-abstraction` removed the visible commit from GitHub. The blob `0512476` remains in GitHub's object database until automatic GC (typically days to weeks) but is unreferenced by any branch.
+2. **09:05 UTC — Resend API key revoked.** Hedar deleted the key from `https://resend.com/api-keys` ("Onboarding" key, `re_mDMdUTrp...`). The key showed "Last used: 8 minutes ago" in the dashboard — could not confirm whether this was legitimate use (Hedar's testing) or an attacker who scraped the leaked credential. Revoke is the only certain mitigation. No new Resend key created yet; not needed until the actual Resend cutover (separate session).
+3. **09:12 UTC — New Cloudflare Origin Certificate created.** Cloudflare dashboard → SSL/TLS → Origin Server → Create Certificate. RSA 2048, hostnames `*.constrai.ca` + `constrai.ca`, 15-year validity. Old cert (`May 2, 2041` expiry) stayed in the list deliberately so the new one could be deployed to prod before revoking.
+4. **09:20 UTC — `.gitignore` updated.** Added `.secrets/`, `*.key`, `*.pem`, `*.p12`, `*.pfx` rules. Defense in depth: the directory-level rule covers everything inside `.secrets/`, and the wildcards catch any private-key file dropped anywhere else in the tree by accident. The new rules merge into `.gitignore` immediately after the existing `.env*` block.
+5. **09:25 UTC — Resend abstraction PR recreated cleanly (PR #207).** Branch `feat/resend-abstraction-v2`. `git add` called with explicit file paths (12 files: `.gitignore`, `lib/email.js`, the 6 sgMail-callers, `.env.example`, `package.json`, `package-lock.json`, `tests/smoke/email_resend_wrapper.test.js`). `git status --short` reviewed before commit to confirm no stray files staged. CI green, auto-merged to main as squash `f8ce5bb`.
+6. **09:43 UTC — Cloudflare cert deployed to prod.**
+   - SCP'd cert + key from Hedar's workstation OneDrive folder to `/tmp/` on prod.
+   - `dos2unix` to strip CRLF/BOM (Pitfall #5).
+   - `openssl x509 -modulus` + `openssl rsa -modulus` hashed identically → cert and key match.
+   - Backup of `/etc/nginx` taken (`/root/nginx-backup-20260511-094438`).
+   - `mv` new files to `/etc/nginx/ssl/cloudflare/cloudflare-origin.{pem,key}`.
+   - `nginx -t` clean. `systemctl reload nginx` graceful.
+   - Verification: `openssl s_client -servername app.constrai.ca -connect localhost:443` returned `notBefore=May 11 09:12:00 2026 GMT`. Same for `admin.constrai.ca`. Both portals confirmed serving the new cert.
+   - md5 of installed file matched md5 of served cert → nginx-serves-from-disk consistency.
+7. **09:55 UTC — Old Cloudflare cert revoked.** Cloudflare dashboard → revoke the `May 2, 2041` cert. Cloudflare's edge will no longer trust connections signed with the leaked private key.
+8. **10:15 UTC — `mepuser_super` DB password rotated.**
+   - On prod, inside `sudo -u postgres psql -d mepdb`: `\! openssl rand -hex 32` to generate, `\password mepuser_super` to set, paste twice (psql doesn't echo).
+   - `sed -i` updated `DATABASE_URL_SUPER` line in `/var/www/mep/.env` (used `read -rsp` for silent paste so the password never appeared on screen or in shell history).
+   - `pm2 restart mep-backend`. SA login returned `HTTP=200` post-restart — rotation verified end-to-end.
+   - Apple Passwords entry `Constrai Prod - mepuser_super DB` updated with the new value.
+
+### What's still LEAKED but not yet rotated (deferred backlog)
+
+These secrets were inside the leaked `.secrets/Constrai Prod -Keys.txt` and remain unchanged on prod. The same screenshot Hedar shared mid-session (showing `/var/www/mep/.env` in nano) re-exposed them to the chat history, but the screenshot didn't materially increase risk — these values were already in the GitHub-leaked blob since 08:41 UTC. Rotation is still required.
+
+| Secret | Why deferred | Recommended order |
+|---|---|---|
+| `JWT_SECRET` | Rotation invalidates every active access + refresh token. Every user (web + TestFlight mobile) is forced to log in again. Worth scheduling for a low-traffic window. | Highest impact — schedule a dedicated session. |
+| `SENDGRID_API_KEY` | Will be retired by the Resend cutover (next email-related session). Rotating now is wasted work. | Skip — replaced by Resend. |
+| `mepuser` DB password | Postgres is bound to `localhost` only; the password alone is useless without SSH access to the Droplet. Lower exploit surface. | Medium priority. Combine with next `.env` edit. |
+| `ADMIN_API_KEY` | `.env.example` says "optional shared secret for super-admin endpoints. If unset, those endpoints fall back to role-based auth only." Unclear whether anything actually requires it today. | Low priority. Verify usage first; rotate if any code path checks it. |
+| `AUTH_SECRET` | Not documented in `.env.example`. Purpose unclear. May be unused. | Low priority. Audit codebase for references before rotating (or deleting). |
+| `MAPBOX_ACCESS_TOKEN` | `pk.` public token; abuse limited to quota theft. Rate-limited at Mapbox's end. | Low priority. |
+| `SENTRY_DSN` | DSN is semi-public by design (frontend would expose it anyway if Sentry browser SDK were ever wired in). Attack surface: error injection / quota exhaustion. | Optional. Don't bother unless a real misuse pattern shows up. |
+
+### Pitfall #29 (NEW) — never use `git add -A` near credential-bearing files
+
+The session's commit block included `git add -A` to stage 12 intended files. The flag also staged 4 untracked files in `.secrets/` (factor 1 of the root cause: missing gitignore rules) plus a stray duplicate migration file. The four credentials inside were pushed to GitHub.
+
+**Convention going forward:**
+
+1. **Use explicit `git add <file1> <file2> ...` for every commit that touches credentials-adjacent areas** (lib/email.js, anything in `.env`-related paths, any deployment script).
+2. **Always run `git status --short` BEFORE `git commit`** and review every line. Reject the commit if any unexpected path appears.
+3. **`.gitignore` MUST have rules for:**
+   - `.secrets/` (or whatever directory holds your workstation-side credentials).
+   - `*.key`, `*.pem`, `*.p12`, `*.pfx` (catch-all for private-key formats).
+   - `.env*` (already present in `.gitignore`).
+4. **Periodically prune stray files from the working tree.** Run `git status` regularly; if untracked files accumulate that don't belong (especially in `migrations/`, `scripts/`, or anywhere with side-effects on CI), delete them or move them out of the repo.
+
+The cost of an explicit `git add` is 10 seconds of typing per commit. The cost of getting it wrong is hours of revocation + rotation work, plus reputation risk if a publicly-scraped credential gets abused.
+
+### Pitfall #30 (NEW) — don't share `.env` screenshots, even in private chats
+
+Mid-session, Hedar shared a screenshot of `/var/www/mep/.env` in nano to ask whether to keep the password he was editing. Every secret in the file became visible in the chat history (JWT_SECRET, mepuser pw, SENDGRID_API_KEY, ADMIN_API_KEY, AUTH_SECRET, MAPBOX, SENTRY_DSN). In this case the same values were already in the GitHub-leaked blob from earlier in the session, so the screenshot didn't add new exposure — but the habit is dangerous because:
+
+- Private chat platforms (Cowork, Slack, Discord, email) all log conversations.
+- Logs are accessible to platform operators, included in backups, and may be subpoenaed.
+- Multimodal AI assistants store images and transcripts. Future audits or training pipelines can see them.
+- Screen-sharing during pair work can leak by accident (the receiver records the call).
+
+**Convention:**
+
+1. **Never paste `.env` contents (or screenshots of them) into any chat, ticket, doc, or pair-session.** Use a password manager attachment + verbal/text reference ("the value in Apple Passwords entry `XYZ`").
+2. **When editing `.env` interactively**, prefer commands that don't display the file body (`read -rsp` + `sed -i` is the canonical example; see Section 91's mepuser_super rotation step).
+3. **If `.env` MUST be reviewed**, mask sensitive parts before sharing: `grep '^FOO=' .env | sed 's/=.*/=***/'` shows the key name without the value.
+
+### Section/total update
+
+- **Today: 60 sections.** (Section 91 NEW — Secrets leak incident + remediation. Two new pitfalls encoded: #29 forbids `git add -A` near credential-bearing files; #30 forbids `.env` screenshots in chat. Three immediate rotations completed (Cloudflare cert + key, Resend API key, `mepuser_super` DB password). Seven secrets still pending rotation, with `JWT_SECRET` flagged as highest-impact + scheduled for a dedicated session.)
+
