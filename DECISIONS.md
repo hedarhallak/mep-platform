@@ -10693,3 +10693,94 @@ That's Piece 90-G. Estimated half-day. Next session.
 
 - **Today: 59 sections.** (Section 90 extended with Piece 90-F: Phase 5 UAT discovered a 12-hour production login outage caused by 89-E/3 strict RLS on `app_users`. Auth.js login uses pre-tenant pool query that strict policies blocked. Rolled migration 013 back on prod at ~05:08 UTC May 11; SA login restored; UAT Test A verified the full happy path. Pitfall #28 encoded. Piece 90-G plan documented — auth.js to use a properly-implemented superPool, then re-apply 013.)
 
+### Piece 90-G — auth.js superPool + re-apply 013 strict RLS (May 11, 2026)
+
+Phase 5 closeout piece. Production-critical login outage from Piece 90-F is fixed at the application layer (routes/auth.js uses a BYPASSRLS pool for pre-tenant lookups), migration 013 is back on prod, and CI now has a regression test that would have caught the original bug shape. Phase 4 Stage 3 strict RLS is fully restored; Phase 5 is closed.
+
+#### Fix shape
+
+Three production files + one test file changed in a single PR (#204, squash `d149ac0`, merged 2026-05-11 08:00:53 UTC).
+
+**1. `db.js` — export `superPool` alongside `pool`.** Before 90-G, `db.js` exported `{ pool }` only. The middleware in `tenant_db.js` was already destructuring `{ pool, superPool }` from this module with a documented null-fallback path — so the addition is strictly additive, no consumer of `db.js` needed to change. `superPool` connects via `DATABASE_URL_SUPER` (mepuser_super, BYPASSRLS); when the env var is unset, `superPool === null` and graceful degradation kicks in (callers fall through to the regular pool, which under Stage 1 permissive RLS still works but under Stage 3 strict zero-rows — i.e., the production-correct configuration MUST set `DATABASE_URL_SUPER`).
+
+**2. `routes/auth.js` — introduce `authPool = superPool || pool`.** A single computed const at the top of the module routes every pre-tenant SELECT against an RLS-strict table through the BYPASSRLS connection. Six query sites switched from `pool.query` → `authPool.query`:
+
+- `/login` — initial `app_users` user lookup (the original failure mode in 90-F).
+- `/login` — `companies` SUSPENDED check (the second strict table login touches; would have surfaced the same bug shape if a tenant ever hit the SUSPENDED branch in production).
+- `/refresh` — JOIN of `refresh_tokens × app_users × employee_profiles`. The JOIN to `app_users` is what gets filtered under strict RLS; refresh would have silently broken once any user attempted token rotation post-strict.
+- `/whoami` — `app_users LEFT JOIN companies` profile-status enrichment.
+- `/change-pin` — `app_users` SELECT for the current-PIN check.
+- `/change-pin` — `app_users` UPDATE for the new-PIN write.
+
+Three categories of query stayed on the regular `pool`:
+
+- INSERTs to `refresh_tokens` (the table itself isn't in 013's strict_tables list — no RLS at all on it).
+- UPDATEs to `refresh_tokens` (logout, logout-all, refresh rotation, refresh-revoke-on-reuse).
+- INSERTs to `audit_logs` (table has RLS but a permissive `tenant_isolation_write` INSERT policy — see migration 013 lines 134-136 — which lets pool-without-GUC writes through. This is the documented backdoor for pre-tenant audit writes from auth.js).
+
+Both decisions are encoded as comments at the top of `routes/auth.js` so anyone refactoring later sees the table-by-table reasoning.
+
+**3. `.env.example` — tighten the `DATABASE_URL_SUPER` comment.** The variable was added in Section 89-A as "required in production once Stage 2 middleware lands; safely unset on local dev." Updated to explicitly call out the Stage 3 strict RLS requirement and reference Pitfall #28 so a future operator deploying a fresh environment knows it's mandatory after migration 013.
+
+**4. `tests/integration/rls_stage3_login.test.js` (NEW) — regression test for Pitfall #28.** Seven test cases. Three SQL-level (`mepuser` + strict RLS + no GUC → 0 rows from the login SELECT; `mepuser_super` + same conditions → 1 row; the companies SUSPENDED check has the same shape). One contract guard (`db.js` exports a `superPool` property). Three end-to-end via `jest.isolateModules` — two separate isolated app instances are built:
+
+- **App A**: `DATABASE_URL=mepuser` + `DATABASE_URL_SUPER=mepuser_super`. Login returns 200 (the fix-applied case).
+- **App B**: `DATABASE_URL=mepuser` + `DATABASE_URL_SUPER=''` (forced empty so dotenv doesn't repopulate from .env). Login returns 400/401 (the bug-repro case).
+
+The "App B" test is the one HANDOFF.md asked for explicitly — the kind of test that "would have failed before this fix and pass after." If anyone ever reverts the `authPool = superPool || pool` line in auth.js, App A's login also returns 400/401 and that test goes red in CI. Plus a `/api/auth/refresh` smoke test on App A covers the second pre-tenant lookup site.
+
+The technique itself — `jest.isolateModules` with temporarily-overridden `process.env.DATABASE_URL*` so the in-process app instance reaches a non-BYPASSRLS pool — is reusable. Encoded as a convention in the file header for any future RLS-related test that needs production-shape pool isolation.
+
+#### CI didn't break and now catches the bug
+
+The new `rls_stage3_login.test.js` runs under CI's normal `npm test` step (Backend Node 20 job). CI applies every migration including 013 (loop at `.github/workflows/ci.yml` line 92-100), so strict RLS is active when the regression test runs. The CI workflow does NOT need any changes for the test to work — `mepuser` and `mepuser_super` roles were already provisioned by `setup_rls_roles.sql` (Section 89-A), and the test connects to them on demand by rewriting the role in `TEST_DATABASE_URL`.
+
+PR #204 CI summary: Backend (Node 20) 6m5s ✓, all other jobs ✓. No flakes, single-shot green.
+
+#### Deployment + verification (May 11, 2026 ~08:00 UTC)
+
+The sequence followed HANDOFF's prescribed gating. Each step verified before the next.
+
+1. **Code deploy.** Server `git pull origin main` brought in `d149ac0`. `DATABASE_URL_SUPER` was already populated in `/var/www/mep/.env` (added during Section 89-A's role provisioning, never relied upon until 90-G). `pm2 restart mep-backend` cycled the process; startup logs clean (only the pre-existing pg DeprecationWarning, which is unrelated and tracked separately).
+
+2. **Pre-013 sanity (Stage 1 permissive RLS still active).** SA login curl → `HTTP=200`, `{"ok":true,"error":null,"role":"SUPER_ADMIN"}`. The fix code paths are no-ops under Stage 1 because the regular pool fallback also works when policies are permissive, but this run confirmed the new code didn't introduce any startup or runtime regression.
+
+3. **Apply migration 013.** `sudo -u postgres psql -d mepdb -v ON_ERROR_STOP=1 -f /var/www/mep/migrations/013_rls_strict.sql` → `DROP POLICY`, `CREATE POLICY` (×N), `DO`, `COMMIT`. Idempotent run; same DDL as the May 9 apply. Strict RLS is now active on 19 tenant tables + the audit_logs read/write split is back.
+
+4. **Post-013 verification — the moment of truth.** Same SA login curl → `HTTP=200`, `{"ok":true,"error":null,"role":"SUPER_ADMIN"}`. The login lookup now goes through `superPool` (mepuser_super, BYPASSRLS), the row is returned, PIN verifies, response is 200. **The 90-F outage is fixed at the application layer; no more rollback needed.**
+
+5. **Extra surface checks.**
+   - Policy install verified: `tenant_isolation` on 19 tables + `tenant_isolation_read` (1) + `tenant_isolation_write` (1) for `audit_logs`. Matches the 013 design.
+   - SA login on `admin.constrai.ca` (the 90-E admin portal) → `HTTP=200`, SUPER_ADMIN. Proves the cross-portal flow + the new auth code coexist correctly.
+   - Refresh-token rotation: used the token from step 4's login, POST /api/auth/refresh → `HTTP=200`, SUPER_ADMIN. Proves the refresh path's JOIN-against-app_users SELECT also goes through superPool correctly.
+
+#### Phase 5 status after 90-G
+
+| Piece | Status |
+|---|---|
+| 90-A subdomain | ✅ Deployed |
+| 90-B vhost split | ✅ Deployed |
+| 90-C Vite multi-entry | ✅ Deployed |
+| 90-D companies list | ✅ Deployed |
+| 90-D-fix PWA scoping | ✅ Deployed |
+| 90-E auth gate + AdminLogin | ✅ Deployed |
+| 90-F UAT | ✅ Closed (incident found + documented + rolled-back) |
+| 90-G auth.js superPool + re-apply 013 | ✅ **Deployed (May 11, 2026)** |
+
+Phase 5 (SUPER_ADMIN portal split) is now fully closed. Phase 4c (Stage 3 strict RLS) is verifiably back in production.
+
+#### Convention: "test the production pool shape, not just the CI pool shape"
+
+Encoded for any future RLS or DB-permission work. The bug class in Pitfall #28 has a more general form:
+
+> **Tests connected as a privileged role (postgres BYPASSRLS, or a role with explicit grants beyond what production uses) will silently miss bugs that only manifest under the production role's privilege set.** This applies to RLS (the specific case here), to GRANT/REVOKE patterns, to SECURITY DEFINER functions, and to any feature that branches on `current_user` / `current_role` / role attributes.
+>
+> When adding tests for any of those features, the test MUST exercise the code path under the production role's identity — not the CI default. Three patterns work:
+>   - `BEGIN; SET LOCAL ROLE <prod_role>; ...; ROLLBACK;` inside a single connection (the pattern `rls.test.js` and `rls_stage2_super_role.test.js` use). Cheap; scoped to the transaction; ROLLBACK guarantees no test-data pollution.
+>   - A dedicated `pg.Pool` connected as the production role (when the test needs a sustained connection across multiple statements).
+>   - `jest.isolateModules` with `process.env.DATABASE_URL` rewritten to the production role — this is what the 90-G regression test introduced. Works when the test needs the full Express app to exercise the code path, not just a SQL fragment.
+
+The third pattern is the most production-faithful — it tests the actual route handler against an actual non-BYPASSRLS pool. Reach for it whenever a test wants e2e verification of pool-vs-role interactions.
+
+- **Today: 59 sections.** (Section 90 extended with Piece 90-G: db.js exports superPool, routes/auth.js routes all pre-tenant strict-table SELECTs through `authPool = superPool || pool`, regression test `rls_stage3_login.test.js` covers the bug shape end-to-end with jest.isolateModules. Migration 013 re-applied on prod at ~08:00 UTC May 11, 2026; SA login under Stage 3 strict RLS verified via login + admin-portal login + refresh-token rotation. Phase 5 closed.)
+
