@@ -11,20 +11,18 @@
  */
 
 const router = require('express').Router();
-const auth = require('../middleware/auth');
 const { can } = require('../middleware/permissions');
 
-// All routes require authentication
-router.use(auth);
-
-// Section 89-C/1 (Phase 4 Stage 2): this route now consumes req.db (RLS-
-// enforced via middleware/tenant_db). The pool import was removed. WHERE
-// company_id clauses kept for defense-in-depth — RLS does the actual
-// filtering at the DB layer once tenant_db sets the GUC. NOTE: auth is
-// already applied via app.js (`auth, tenantDb, ...`) before this router
-// is invoked; the router-level `router.use(auth)` is a pre-existing belt-
-// and-suspenders that verifies the token a second time. Harmless, but
-// future cleanup should remove it.
+// Section 89-C/1 (Phase 4 Stage 2): this route consumes req.db (RLS-enforced
+// via middleware/tenant_db). The pool import was removed. WHERE company_id
+// clauses kept for defense-in-depth — RLS does the actual filtering at the
+// DB layer once tenant_db sets the GUC.
+//
+// Section 94 cleanup (May 11, 2026): removed the redundant top-level
+// `router.use(auth)` + corresponding `auth` import. Auth is applied via
+// app.js (`auth, tenantDb, loadRouter(...)`) BEFORE this router is invoked,
+// so the router-level mount duplicated the check. Harmless but noisy —
+// each request was verifying the JWT twice and decoding the bearer twice.
 
 // ── GET /api/project-trades/:project_id ──────────────────────
 router.get('/:project_id', async (req, res) => {
