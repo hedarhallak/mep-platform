@@ -11090,3 +11090,134 @@ This pitfall is a Constrai-specific operational gap. The earlier sessions that s
 
 - **Today: 62 sections.** (Section 93 NEW — JWT_SECRET rotation + kernel reboot. Plus the operational discovery that pm2 was never configured for systemd auto-start, surfaced when the reboot took prod down for ~2 min. Fixed via `pm2 startup systemd`. New Pitfall #32 — always verify `pm2-root.service` is enabled before any planned reboot. ALL secrets from the Section 91 leak are now rotated or retired. The leak incident is fully closed except for the 24h Resend watch period that auto-expires May 12 ~12:00 UTC.)
 
+---
+
+## Section 94 — Product roadmap additions (May 11, 2026, end of marathon session)
+
+> **Six strategic backlog items added by Hedar at session close.** These are NOT next-session tasks — they're capture-now-design-later items so they don't get lost while attention is on Phase 6 frontend branding. Each section below has a brief shape + open questions. Implementation order, business case, and technical design get worked out in dedicated sessions.
+
+### 94.1 — Subscription billing for tenant companies
+
+**The need.** Constrai is multi-tenant SaaS. Each tenant company has been onboarded manually by Hedar via psql so far (Section 90 architectural review noted this explicitly as "deferred to a small follow-up after Phase 5 lands"). No billing flow exists today. As Constrai grows past Hedar-as-sole-operator, manual billing doesn't scale.
+
+**Shape.**
+- Plan tiers (likely: Basic / Pro / Enterprise — already a `companies.plan` column from migration 010, currently inert).
+- Per-tenant subscription state: active / past_due / suspended / cancelled (already a `companies.status` column from migration 010, currently inert beyond "ACTIVE/SUSPENDED").
+- Payment processing: Stripe is the default choice (Canadian charity / SaaS rate, well-documented Node.js SDK, no in-house PCI handling). Alternatives: Paddle (better for global VAT/tax), Lemon Squeezy (similar). Stripe wins on Quebec + Canada compliance.
+- Backend endpoints: `/api/billing/subscription` (GET own, POST upgrade/downgrade, POST cancel), `/api/billing/invoices` (GET list), Stripe webhook handler for state sync (`/api/webhooks/stripe`).
+- Frontend: tenant admin → Billing page (current plan, upgrade flow, payment method on file, invoice history).
+
+**Open questions.**
+1. Annual vs monthly billing? Recommend offering both (annual = 2-month discount).
+2. Per-user pricing vs flat-tier? Construction SaaS norm is per-user (e.g., per active foreman/worker seat). Aligns with Constrai's role model.
+3. Trial period length? Industry default 14 days. Constrai-specific: tie to the first-month-of-onboarding tenant journey.
+4. How to handle the Section 95 (future) project-achievement features for GCs — are those a separate product line / SKU?
+
+### 94.2 — Subscription renewal control
+
+**The need.** Auto-renewals must be handled robustly: card failures, dunning, grace periods, suspension, reactivation. Without this, a single failed renewal could lock a tenant out of prod (very bad UX) or, worse, silently keep them running unbilled.
+
+**Shape.**
+- Stripe handles the actual retry logic; we listen to webhooks for state transitions.
+- Webhook events to handle: `invoice.payment_succeeded`, `invoice.payment_failed`, `customer.subscription.updated`, `customer.subscription.deleted`.
+- Grace period (3-7 days post-failure) before flipping `companies.status` to `SUSPENDED`. Email tenant admin daily during grace period.
+- Suspended tenants: login disabled (auth gate already exists for `status='SUSPENDED'` — see `routes/auth.js#login` line ~187, "COMPANY_SUSPENDED" error). Tenant admin sees a "reactivate / fix payment" page only.
+- Audit log: every renewal event written to audit_logs for compliance.
+
+**Open questions.**
+1. Do failed-payment tenants lose data? Recommend NO — data stays for 90 days after suspension. After 90 days, archive offline.
+2. Reactivation flow: self-service via Stripe checkout, or admin-mediated?
+
+### 94.3 — Materials return request workflow
+
+**The need.** Workers / foremen on a project have surplus or unused materials at site close-out. Currently there's no formal return-request flow — surplus likely gets discarded or moved off-the-books between projects, both bad for cost tracking. The `public.material_returns` table exists in schema (migration baseline) but isn't connected to a UI flow yet.
+
+**Shape.**
+- New route group: `/api/material-returns` (POST create, GET own / list, PATCH approve/reject, etc.).
+- Worker submits: project, items, quantity, condition (new/opened/used), photos optional.
+- Routes through the foreman → tenant admin for approval.
+- On approval: items go back to inventory (`material_catalog` adjustments? or a `material_inventory` table that doesn't exist yet).
+- Email notifications via the Resend abstraction at each state transition.
+
+**Open questions.**
+1. Inventory tracking — does Constrai currently track stock anywhere? If not, this is a chicken-and-egg: returns flow needs inventory; inventory needs stock-tracking which doesn't exist.
+2. Should returns trigger billing adjustments (refund credit) if the original material was purchased via PO? Probably yes.
+
+### 94.4 — Equipment and tools request workflow
+
+**The need.** Distinct from materials. Workers request tools (power tools, hand tools, ladders, etc.) that the company owns and that move between sites. Currently informal — phone calls, texts, "where's the impact driver?"
+
+**Shape.**
+- New route group: `/api/equipment-requests`.
+- Equipment catalog table (new schema): name, serial number, category, current location (project_id or "warehouse"), status (available/in_use/maintenance/lost).
+- Request lifecycle: worker requests → tenant admin approves → equipment dispatched (location updated) → returned (location updated back).
+- Maintenance log per equipment item.
+
+**Open questions.**
+1. Equipment catalog seeding — manual UI for tenant admin, CSV import, or both?
+2. QR-code / barcode scanning on physical equipment? Mobile feature, post-MVP.
+3. Geofencing — if a piece of equipment leaves project geofence without check-out, alert?
+
+### 94.5 — Emergency purchase / invoice submission workflow
+
+**The need.** Workers buy tools or materials in emergencies (Home Depot run for a $40 part to keep the site moving). They submit the paper invoice for reimbursement. Currently informal — receipts on desk, lost, never reimbursed cleanly.
+
+**Shape.**
+- New route group: `/api/expense-claims`.
+- Worker submits: project, vendor, amount, photo of receipt (uploads/expense-receipts).
+- Approval routes through tenant admin.
+- On approval: integrates with whatever accounting system the tenant uses (export CSV for QuickBooks? Or just a paid/unpaid status in our DB?).
+- Audit trail.
+
+**Open questions.**
+1. Reimbursement processing — does Constrai handle the actual payment (no — we're not a payroll system) or just track the claim and let the tenant admin issue payment externally?
+2. OCR on receipt photo to auto-extract amount + vendor? Nice-to-have, not MVP.
+3. Currency handling — most tenants are CAD-only today, but a tenant operating cross-border (Ontario / NY) might submit USD receipts. Defer.
+
+### 94.6 — Project achievement methodology + General Contractor (GC) market expansion
+
+**The strategic angle.** Constrai today targets sub-contractors (MEP trades: mechanical, electrical, plumbing). GCs oversee a project across all trades. If Constrai can present a unified view of project progress across all sub-trades — and add GC-specific features like safety training records and accident reports — Constrai becomes interesting to GCs as well, expanding the market significantly.
+
+**The product angle (project achievement methodology).**
+- Each sub-contractor already tracks their own progress (attendance, assignments, hours, materials per project). Constrai has the data.
+- Aggregate this data into a project-level dashboard showing: % complete per trade, days ahead/behind schedule per trade, manpower utilization, materials throughput, etc.
+- Methodology question: how do we DEFINE "achievement"? Options:
+  - Earned value management (industry standard but complex).
+  - Milestone-based (simpler, configurable per project).
+  - Hours-burned vs. hours-estimated.
+  - Hybrid: configurable per trade, aggregated up.
+- This is a meaningful design exercise — likely a multi-session arc.
+
+**GC-specific features (the expansion).**
+- **Cross-trade project view** — see all sub-contractors' progress on a single project, even when each sub-contractor has their own Constrai tenancy (multi-tenant data sharing via consent).
+- **Safety training records** — track who completed which trainings (WHMIS, CCQ safety cards, fall protection certs). Expiry tracking + reminders. New schema needed.
+- **Accident reports** — incident form, witness statements, photos, OHS regulatory submission tracking. Compliance angle is strong.
+- **Document management** — drawings, RFIs, change orders. Big project management feature; could overlap with existing tools (Procore, Buildertrend) — need to decide whether to compete or integrate.
+- **Daily logs** — GCs typically write daily superintendent reports. Aggregate this from sub-trades' Constrai data.
+
+**Commercial implications.**
+- GCs are a different customer profile than MEP sub-contractors. Pricing, support, sales motion all differ.
+- Multi-tenancy gets MORE complicated: a GC sees data from multiple sub-contractor tenants (with consent / contract). Schema + RLS implications need careful design.
+- This is potentially a separate product (Constrai for Sub-Contractors vs. Constrai for GCs) or a single product with role-based views.
+
+**Open questions.**
+1. Validate with 2-3 prospective GC customers BEFORE investing engineering effort. Customer discovery.
+2. The cross-tenant view problem — how does data sharing work technically + legally? Section 85's Model C architecture makes cross-tenant queries possible via mepuser_super, but the UX + consent flow is new.
+3. Pricing: GCs typically pay more per seat than sub-contractors. Worth the engineering complexity if validated.
+
+### 94.7 — Priorities + sequencing thoughts (not commitments)
+
+Suggested order (engineering effort, low to high):
+
+1. **94.5 (Emergency purchase / invoice submission)** — smallest piece, mostly CRUD + receipt upload. Good warm-up.
+2. **94.3 (Materials return)** — already partly modeled in schema. Connects to existing material_requests flow.
+3. **94.4 (Equipment and tools)** — new but well-bounded (catalog + request lifecycle). Tools features are common SaaS construction patterns.
+4. **94.1 + 94.2 (Subscription billing + renewals)** — must be done together. Stripe integration is well-documented, but the full dunning + grace-period flow is non-trivial. ~2-3 weeks of focused work.
+5. **94.6 (GC market expansion)** — biggest scope, biggest commercial upside. Validate with customer interviews FIRST, then commit. ~2-3 months of design + iteration once committed.
+
+Pre-Phase-6 (Frontend tenant branding) was the originally-queued next task. Phase 6 is small and unblocks visual customization for tenants. It can ship before or in parallel with 94.5 / 94.3 — doesn't depend on anything in Section 94.
+
+### Section/total update
+
+- **Today: 63 sections.** (Section 94 NEW — Product roadmap additions: 6 strategic backlog items captured. Subscriptions billing + renewals (Stripe); materials return + equipment/tools + emergency-purchase workflows; project achievement methodology and the GC market expansion play. Sequencing thoughts noted but not committed. Each section has open questions for future dedicated-session refinement.)
+

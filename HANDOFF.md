@@ -116,7 +116,23 @@ If May 12 has come around and Resend has logged a healthy spread of backend-gene
 
 ---
 
-## Backlog items still open
+## Product roadmap — strategic backlog (DECISIONS.md Section 94, May 11, 2026)
+
+Six items added at end-of-session. NOT next-session tasks — capture-now-design-later. Each has full discussion in Section 94. Suggested sequencing (lightest first):
+
+| # | Item | Effort | Status |
+|---|---|---|---|
+| 94.5 | Emergency purchase / invoice submission (workers submit receipts for reimbursement) | Small | Ideation |
+| 94.3 | Materials return request workflow (surplus material flow back to inventory) | Small-medium | Schema partially exists |
+| 94.4 | Equipment and tools request workflow (catalog + dispatch + return) | Medium | New schema needed |
+| 94.1 + 94.2 | Subscription billing (Stripe) + renewals (dunning + grace + suspension) | Large (~2-3 weeks) | Critical for scaling past Hedar-as-sole-operator |
+| 94.6 | Project achievement methodology + GC market expansion (cross-trade view, safety training records, accident reports) | Very large (~2-3 months) | **Validate with customer interviews FIRST.** Commercial upside if validated. |
+
+These run in parallel with the Multi-Tenant Migration roadmap (Phases 6-8) above. Phase 6 (Frontend tenant branding) is independent and can ship alongside any of these.
+
+---
+
+## Backlog items still open (technical/operational)
 
 - **`routes/project_trades.js`** redundant top-level `router.use(auth)`. Low-priority.
 - **pg DeprecationWarning** — "Calling client.query() when the client is already executing a query". Hygiene PR opportunity.
