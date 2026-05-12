@@ -10999,3 +10999,94 @@ Risk assessment: the visible 25-char suffix alone is insufficient for unauthenti
 
 - **Today: 61 sections.** (Section 92 NEW — Same-day rotation marathon: notifyForeman Pitfall #28 closure shipped + 3 more rotations completed (mepuser DB pw, Mapbox token, ADMIN_API_KEY/AUTH_SECRET dead-vars deleted) + full Resend cutover deployed and verified end-to-end. New Pitfall #31 — sed mask regex must include underscores. Only JWT_SECRET + kernel reboot remain on the leak-remediation backlog; both scheduled for the same evening window.)
 
+---
+
+## Section 93 — JWT_SECRET rotation + kernel reboot + pm2 startup discovery (May 11, 2026 ~12:30–13:00 UTC)
+
+> **Final pass of the same-day leak remediation.** Closes the last two backlog items from Section 92: the JWT_SECRET rotation (highest-impact rotation — invalidates every active session) and the long-overdue kernel reboot. Plus a third unplanned discovery: pm2 was never configured to auto-start on boot, so the reboot took prod down for ~2 minutes until manual recovery. Section 93 documents the discovery + fix so it never happens again.
+
+### 93.1 — JWT_SECRET rotation
+
+Standard rotation pattern: `openssl rand -hex 32` on the server, written to `/tmp/new_jwt.txt` (chmod 600) for one-time read by Hedar to copy into OneDrive `Constrai Keys` folder, then `sed -i` to update `JWT_SECRET=` line in `/var/www/mep/.env`, then `shred -u /tmp/new_jwt.txt`. The shell variable `NEW_JWT` was unset immediately after `sed` consumed it, so the new value lived in shell environment for under one second.
+
+Mask regex used: `sed -E 's/=[A-Za-z0-9_.-]+$/=***/'` — the universal form from Pitfall #31. Output for diagnostic: `JWT_SECRET=***`. Correct masking confirmed before sharing.
+
+OneDrive entry created: `JWT_SECRET 2026-05-11.txt`. Not yet added to Apple Passwords because Hedar's workstation doesn't use Apple Passwords — all secrets live in OneDrive `Constrai Keys` going forward (corrects an assumption in earlier Sections 91/92 that referenced "Apple Passwords entries").
+
+### 93.2 — Kernel reboot via `shutdown -r now`
+
+The Droplet had been pending a kernel update for several days (the `*** System restart required ***` banner appeared on every SSH login since the May 5 apt-upgrade — Section 88-ish-era). Reboot was deferred until coordinated with the JWT_SECRET rotation (both invalidate in-flight state; doing them together = one notification window).
+
+`shutdown -r now` issued. SSH dropped immediately. Server came back online in ~90 seconds (cold boot + Postgres init + nginx start).
+
+### 93.3 — Discovery: pm2 was not configured to auto-start on boot
+
+**Symptom.** After the reboot, the first SSH session showed:
+- `uptime`: 2 min — server alive.
+- `pm2 status`: empty table. **No mep-backend, no mep-webhook.**
+- `[PM2] Spawning PM2 daemon` from the `pm2 status` command itself — daemon was spawned BY our command, not by systemd.
+- `curl https://app.constrai.ca/api/auth/login` returned **HTTP=502** — nginx had no backend to proxy to.
+- Same for `admin.constrai.ca`.
+
+So prod was DOWN for the ~2 minutes between reboot completion and our first SSH check. Total outage window: from kernel reboot finish (~12:33 UTC) until manual `pm2 resurrect` (~12:35 UTC). ~2 minutes of HTTP 502 for any incoming request.
+
+**Root cause.** `pm2 startup systemd` had never been run on this Droplet. Without it, there's no systemd unit (`pm2-root.service`) to spawn the pm2 daemon on boot. The daemon only starts when something explicitly invokes a `pm2` command. And without the daemon running, no processes resurrect automatically.
+
+The dump file `~/.pm2/dump.pm2` DID exist (auto-saved at some prior point) — so when `pm2 resurrect` finally ran, it restored mep-backend + mep-webhook cleanly. The data was never lost; it just sat in the dump file with no one to read it.
+
+**Fix.** Two commands:
+
+```bash
+pm2 startup systemd -u root --hp /root
+# Creates /etc/systemd/system/pm2-root.service and runs systemctl enable.
+
+pm2 save
+# Re-writes ~/.pm2/dump.pm2 with the current process list, ensuring the
+# next resurrect captures the post-93.1 state (new env from JWT rotation).
+```
+
+After this, the boot sequence is:
+1. systemd starts the `pm2-root.service` unit.
+2. The unit's `ExecStart` invokes `pm2 resurrect`.
+3. pm2 reads `/root/.pm2/dump.pm2` and starts each saved process.
+4. mep-backend + mep-webhook come online ~10 seconds after the kernel finishes booting.
+
+Verified by:
+- `systemctl is-enabled pm2-root` → `enabled`.
+- `pm2 save` confirmed dump written.
+- (Implicit final verification will come at the NEXT reboot — for now we trust the systemd unit is in place.)
+
+### 93.4 — Pitfall #32 (NEW) — verify `pm2-root.service` is enabled BEFORE any planned reboot
+
+Reboots are rare events. The first one after a deployment is the moment when "I configured pm2 startup, right?" turns into "wait, why is everything 502?" The check is one line:
+
+```bash
+systemctl is-enabled pm2-root
+# Expected: "enabled"
+# If "disabled" or "not-found": run `pm2 startup systemd -u root --hp /root && pm2 save` BEFORE rebooting.
+```
+
+**Convention going forward:**
+
+1. **Any planned reboot** (kernel updates, infra changes, security maintenance) — run the `systemctl is-enabled pm2-root` check first.
+2. **After ANY new pm2 process is added** (`pm2 start ...` of a new app) — run `pm2 save` immediately so the dump captures it.
+3. **Monitoring hook (future)**: when UptimeRobot / Better Stack alerts get wired up (HANDOFF Phase 4 idea), make sure they also alert on backend 502s so a reboot mishap surfaces in <60 seconds instead of "when Hedar happens to check".
+
+This pitfall is a Constrai-specific operational gap. The earlier sessions that set up pm2 (Section 86 / Phase 1 prod stand-up) did `pm2 start` but never `pm2 startup`. The Droplet had never been rebooted since (uptime stretched for weeks), so the gap stayed invisible.
+
+### 93.5 — Final state at end of Section 93
+
+| Item | Status |
+|---|---|
+| `JWT_SECRET` rotated + deployed | ✅ — SA login post-reboot returned 200 with token signed by new secret |
+| Kernel reboot | ✅ — 24 pending apt updates applied; banner cleared |
+| pm2 systemd auto-start | ✅ NEW — `pm2-root.service` enabled, dump saved |
+| All Section 91 leak rotations | ✅ Done (5 rotations + 2 deletes + Resend cutover + JWT) |
+| 24h Resend watch | ⏳ In progress (started ~12:00 UTC; eligible for SendGrid decommission ~12:00 UTC May 12) |
+| Pending: Phase 6 (Frontend tenant branding) | ⏳ Next product-feature task |
+| Pending: SendGrid decommission | ⏳ After 24h watch |
+
+### Section/total update
+
+- **Today: 62 sections.** (Section 93 NEW — JWT_SECRET rotation + kernel reboot. Plus the operational discovery that pm2 was never configured for systemd auto-start, surfaced when the reboot took prod down for ~2 min. Fixed via `pm2 startup systemd`. New Pitfall #32 — always verify `pm2-root.service` is enabled before any planned reboot. ALL secrets from the Section 91 leak are now rotated or retired. The leak incident is fully closed except for the 24h Resend watch period that auto-expires May 12 ~12:00 UTC.)
+
