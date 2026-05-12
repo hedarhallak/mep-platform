@@ -10877,3 +10877,125 @@ Mid-session, Hedar shared a screenshot of `/var/www/mep/.env` in nano to ask whe
 
 - **Today: 60 sections.** (Section 91 NEW — Secrets leak incident + remediation. Two new pitfalls encoded: #29 forbids `git add -A` near credential-bearing files; #30 forbids `.env` screenshots in chat. Three immediate rotations completed (Cloudflare cert + key, Resend API key, `mepuser_super` DB password). Seven secrets still pending rotation, with `JWT_SECRET` flagged as highest-impact + scheduled for a dedicated session.)
 
+---
+
+## Section 92 — Same-day rotation marathon + Resend cutover (May 11, 2026 ~10:30–12:30 UTC)
+
+> **Same-day continuation of Section 91.** After the initial 3 rotations + incident docs PR (Section 91, merged ~10:30 UTC), Hedar elected to keep going rather than break. The session continued with: notifyForeman Pitfall #28 closure (code fix PR), mepuser DB password rotation, Mapbox token rotation, ADMIN_API_KEY + AUTH_SECRET dead-env-var cleanup (delete instead of rotate), and the full Resend cutover on prod (originally scoped as a separate session per Section 91's HANDOFF). Section 92 covers the second half of the marathon.
+
+### 92.1 — notifyForeman Pitfall #28 closure (PR #210, squash `4858619`)
+
+Section 90-G's HANDOFF backlog flagged `routes/attendance.js#notifyForeman` as carrying the Stage 3 strict RLS bug: the helper called `pool.query` for a fire-and-forget DB read inside the SendGrid send, and under strict RLS that read returns 0 rows → email body silently empty (no foreman ever notified after Stage 3 rollout).
+
+The fix follows the 89-E/1 `prepareNotifyData` / `fireNotifyEmail` pattern already proven in `routes/assignments.js#notifyAssignment`. Three functions now:
+
+- **`notifyForeman(db, attendanceId, eventType)`** — outer wrapper. Awaits prepareNotifyData (fast DB), detaches fireNotifyEmail as a `.catch(...)` promise. Never throws.
+- **`prepareNotifyData(db, attendanceId)`** — DB read via `req.db` so RLS sees the request's tenant GUC. JOINs attendance_records / employee_profiles / projects / assignment_requests for foreman lookup.
+- **`fireNotifyEmail(data, eventType)`** — SendGrid (now Resend, see 92.4) send only. No DB. Safe to outlive res.end() / per-request transaction COMMIT.
+
+Callers (`/checkin` + `/checkout` handlers) now `await notifyForeman(req.db, id, type)` BEFORE `res.json(...)` so the DB read runs while req.db is still bound to the open transaction. Email send fires in the background.
+
+File-level `const { pool } = require('../db')` import removed — no background helper in `routes/attendance.js` needs the shared pool anymore. All DB access in this file consistently goes through `req.db`.
+
+Deployed to prod ~11:30 UTC together with the Resend abstraction (PR #207, which had merged earlier but hadn't been pulled). Server-side `git pull` blocked on local changes to `package-lock.json`; resolved with `git checkout -- package-lock.json` + re-pull. `npm install --omit=dev --ignore-scripts` (CLAUDE.md Pitfall #6 — bare `npm install` fails on husky prepare) added the new `resend` dep; verified `node_modules/resend/package.json` exists. `pm2 restart mep-backend`; SA login still 200.
+
+### 92.2 — Operational rotations completed mid-session
+
+Three more secrets rotated to mitigate the original `.secrets/` leak:
+
+**`mepuser` DB password.** Same flow as `mepuser_super` (Section 91). Inside `sudo -u postgres psql -d mepdb`: `\! openssl rand -hex 32` → copy → save to OneDrive `Constrai Keys` folder → `\password mepuser` paste twice (silent). Then on server: `read -rsp` + `sed -i` on `DATABASE_URL` line in `.env`, `pm2 restart mep-backend`, verify SA login + `/api/health` both 200. Apple Passwords entry updated.
+
+**`MAPBOX_ACCESS_TOKEN`.** Mapbox dashboard → Create Token → name `Constrai Prod 2026-05-11`, scope to constrai.ca, RSA public. Copy + save to OneDrive. Then on server: `read -rsp` + `sed -i` on `MAPBOX_ACCESS_TOKEN` line, `pm2 restart`, verify via `curl /api/config` (frontend gets token from here) + `curl /api/geocode/suggest?q=Montreal` returns 5 features → token + scopes correct. Then back to Mapbox dashboard for revoke of the leaked default token.
+
+The default-token revoke had a UI nuance: Mapbox doesn't let you delete the default — you have to **Refresh** it (which rotates the value in place and permanently deletes the old one). After the refresh, the visible Default token now has a new value (suffix `EfLmJxkQ`) different from the leaked one (suffix `-8iQ`). Prod uses the named `Constrai Prod 2026-05-11` token (suffix `kc7DDzg`), not the default. The new default sits unused — benign because it's never been deployed anywhere. Documentation correction: there's no way to "make a non-default token the default" in the Mapbox UI; you can only refresh the existing default.
+
+**`ADMIN_API_KEY` + `AUTH_SECRET` — audit-and-delete (PR #209, squash `693b02d`).** A grep across the backend codebase (`grep -rn "ADMIN_API_KEY\|AUTH_SECRET" --include="*.js"`) found **zero references** in any JS file, test, or doc. Both env vars were orphans — set in prod `.env` but never read. Delete is the correct cleanup, not rotation:
+
+- `.env.example`: removed the `ADMIN_API_KEY=` line with a comment block referencing the audit; `AUTH_SECRET` was never documented there so nothing to remove.
+- Prod `.env`: `sed -i '/^ADMIN_API_KEY=/d; /^AUTH_SECRET=/d' /var/www/mep/.env` deleted both lines. `pm2 restart` + SA login 200 (no functional impact since nothing reads them).
+
+This is the cheapest of all rotations: a deletion. The leaked values from the GitHub blob are now functionally inert — no code path uses them.
+
+### 92.3 — Resend cutover on prod (the main event of 92)
+
+The HANDOFF written at the end of Section 91 scoped the Resend cutover as a separate next-session task. Hedar elected to push through. Total cutover wall-clock: ~45 minutes including DNS verification, key creation, deploy, key rotation (mid-flow due to a regex bug, see 92.5), and two direct-API smoke tests.
+
+**DNS setup.** Resend's "Add domain" flow with **Auto configure** option. After authorizing Resend's Cloudflare OAuth (one-time, scope: DNS-write on the constrai.ca zone only), Resend added three records automatically:
+
+| Type | Name | Purpose |
+|---|---|---|
+| MX | `send.constrai.ca` | Receive bounce reports from Resend |
+| TXT | `resend._domainkey.constrai.ca` | DKIM public key for signing outbound mail |
+| TXT | `send.constrai.ca` | SPF record authorizing Resend to send as constrai.ca |
+
+Resend verified the domain within ~4 minutes (DNS propagation through Cloudflare is fast; the local resolver cache delay is the bigger variable). Region selected: **North Virginia (us-east-1)** — closest Resend region to Quebec, matching Constrai's customer geography.
+
+**API key.** Created `Constrai Prod 2026-05-11` with **Sending access** permission (least-privilege — no domain management, no audience editing) scoped to `constrai.ca` domain only. Value saved to OneDrive `Constrai Keys` folder, never typed in chat.
+
+**FROM email change.** Pre-cutover `.env`: `SENDGRID_FROM_EMAIL=hedar.hallak@gmail.com` (Hedar's personal Gmail; was a SendGrid single-sender verification). Resend requires the FROM domain to match the verified sending domain, so the value changed to `Constrai <noreply@constrai.ca>` (display name + email; both providers parse this format). The env var name remains `SENDGRID_FROM_EMAIL` because `lib/email.js` reads it directly — renaming would require a code change; the value is provider-agnostic.
+
+**Deploy.** On prod via SSH: `sed -i` updated three lines (`SENDGRID_FROM_EMAIL`, `EMAIL_PROVIDER`, `RESEND_API_KEY` — the last via `read -rsp` so the value never appeared in shell history). `pm2 restart mep-backend`; pm2 logs error file empty (no startup errors). `SENDGRID_API_KEY` left in place for emergency rollback.
+
+**Smoke tests.** Two direct-API tests via `curl https://api.resend.com/emails` from the server, sending to `hedar.hallak@gmail.com`:
+
+1. With the original `Constrai Prod 2026-05-11` key: returned `{"id":"01fe9e90-..."}`. Email arrived in Gmail Inbox (not spam) within ~30s. From header showed `Constrai <noreply@constrai.ca>` with proper display name + verified domain.
+2. With the rotated `Constrai Prod 2026-05-11-v2` key (see 92.5): returned a fresh email ID. Email arrived. Resend dashboard logged both sends as **Delivered**.
+
+Backend-handler smoke is deferred to organic traffic. The abstraction is unit-tested (10 tests in `tests/smoke/email_resend_wrapper.test.js`, all green in CI), and direct API works, so the remaining risk surface is small. Resend's Emails dashboard will populate as users go through invite / PO / dispatch / foreman flows over the next 24h. Rollback path: set `EMAIL_PROVIDER=sendgrid` in `.env` + `pm2 restart` (the SendGrid key is still in `.env` for one more cycle).
+
+### 92.4 — Behavioral consequence: all 7 sgMail.send call sites now route through Resend
+
+Worth pinning explicitly because the abstraction does this transparently and a future reader might lose the connection:
+
+| File | Site | Provider now |
+|---|---|---|
+| `lib/email.js` | `sendEmail()` | Resend |
+| `lib/email.js` | `sendPurchaseOrder()` (PO PDF with attachment — Resend translates SendGrid's `attachments[].type` → `content_type`, drops `disposition`) | Resend |
+| `lib/weeklyReport.js` | Weekly worker report | Resend |
+| `lib/weeklyReport.js` | Foreman unconfirmed-hours reminder | Resend |
+| `jobs/ccqRatesReminderJob.js` | Annual CCQ rates reminder (2028) | Resend |
+| `routes/admin_users.js` | SA-issued activation invite | Resend |
+| `routes/attendance.js#fireNotifyEmail` | Check-in/out foreman notify (post-92.1 split) | Resend |
+| `routes/daily_dispatch.js` | Daily worker dispatch email | Resend |
+| `routes/user_management.js` | Admin-resend activation link | Resend |
+
+All these reach Resend via the `getMailClient()` factory in `lib/email.js`. The factory was the entire point of PR #207 — it makes provider swaps a one-line config change.
+
+### 92.5 — Pitfall #31 (NEW) — sed mask regex must include underscores when masking API keys
+
+While verifying the post-deploy `.env` state, the diagnostic command was `sed -E 's/=re_[A-Za-z0-9]*/=re_***/'`. The character class `[A-Za-z0-9]` does NOT include underscore. Resend API keys have format `re_<random>_<random>` — an underscore separates the two random halves. So sed matched only up to the first underscore, leaving the SECOND half of the key visible in chat:
+
+```
+RESEND_API_KEY=re_***_MS1wchULvrAAMpzg8o1oDfrn
+                  ^^^^                          ← masked (correctly)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^ ← visible (the bug)
+```
+
+Risk assessment: the visible 25-char suffix alone is insufficient for unauthenticated API use (the hidden ~10-char middle is the larger search space; brute-force via Resend's rate-limited validation endpoint is computationally infeasible — ~62^10 ≈ 800 quadrillion combinations). But the partial exposure goes against defense-in-depth so the key was rotated as a precaution: deleted `Constrai Prod 2026-05-11`, created `Constrai Prod 2026-05-11-v2`, updated `.env` + `pm2 restart` + re-ran the direct-API smoke (which passed, see 92.3).
+
+**Convention going forward:**
+
+1. **API-key masking regexes MUST include underscores** in the character class. The correct form is `[A-Za-z0-9_-]` (also include `-` since some providers use it). Specifically for displaying `.env` values via `grep | sed`, the canonical form is:
+   ```bash
+   grep '^FOO=' .env | sed -E 's/=[A-Za-z0-9_.-]+$/=***/'
+   ```
+   This masks the entire value after `=`, regardless of which chars the secret contains — robust against any character class the provider uses.
+
+2. **Provider-specific patterns** are also acceptable but ONLY if the character class is verified against the provider's actual format. Resend uses `_`; SendGrid uses `.`; Mapbox uses `.` and base64url chars; Cloudflare API tokens use `_` and `-`. When in doubt, use the universal `[A-Za-z0-9_.-]+$` form.
+
+3. **Test the mask on a real value before sharing the output.** If the regex is wrong, the mask silently fails. A 5-second eyeball check of the masked output catches this.
+
+### 92.6 — Pending items at end of Section 92
+
+| Item | Status |
+|---|---|
+| Apple Passwords entries for new mepuser pw, mepuser_super pw, Resend key v2, Mapbox token | ⏳ Hedar to update manually after session ends. |
+| 24h watch period on Resend traffic | ⏳ Auto. After clean 24h, delete `SENDGRID_API_KEY` from prod `.env` + delete SendGrid sub-user account. |
+| Delete the (now-unused) extra Mapbox `Default` token from refresh | Optional. Mapbox doesn't allow deleting defaults; the new default sits unused but benign. |
+| `JWT_SECRET` rotation | ⚠️ **Highest remaining priority.** Scheduled for the evening session. Invalidates every active access + refresh token; every user logs in again. Combine with the kernel reboot (both cause in-flight session impact). |
+| Kernel reboot on prod Droplet (`*** System restart required ***` banner) | ⏳ Schedule with JWT_SECRET rotation. Total downtime ~60s. |
+
+### Section/total update
+
+- **Today: 61 sections.** (Section 92 NEW — Same-day rotation marathon: notifyForeman Pitfall #28 closure shipped + 3 more rotations completed (mepuser DB pw, Mapbox token, ADMIN_API_KEY/AUTH_SECRET dead-vars deleted) + full Resend cutover deployed and verified end-to-end. New Pitfall #31 — sed mask regex must include underscores. Only JWT_SECRET + kernel reboot remain on the leak-remediation backlog; both scheduled for the same evening window.)
+
