@@ -11334,3 +11334,101 @@ This isn't a new pitfall per se — Section 4.6 already flagged bash staleness. 
 
 - **Today: 65 sections.** (Section 96 NEW — Phase 5.1 Create Company UI shipped end-to-end. PR #221 merged after one CI iteration. The CI "failure" was a regression test in `CompaniesList.test.jsx` introduced by adding `<Link>` without updating the test render. Fixed by wrapping with `MemoryRouter`. Lint was a red herring: Frontend lint runs with `continue-on-error: true`, so the 115 informational lint errors don't gate CI. New Pitfall #33 — router primitives in a tested component require updating the test's render wrapper. Plus a same-day operational learning: docs PR #222 raced its Section number against PR #220 because Cowork bash mount staleness hid the already-merged Sections 94 + 95 — fixed by always reading via the Read tool, not bash `tail`.)
 
+---
+
+## Section 97 — Phase 6-B Closeout: public branding endpoint + Pitfall #34 (May 13, 2026 ~12:00–15:00 UTC)
+
+> **Same-day continuation after Section 96.** Phase 5 closed at lunch; Phase 6-B opened immediately after. One feature PR (#224) + one follow-up fix PR (#225) shipped the endpoint that the future frontend bootstrap will hit to theme the login screen pre-auth.
+
+### 97.1 — Scope: a single public read endpoint for tenant branding
+
+Phase 6-A (Section 94.x) added the schema columns: `companies.brand_color`, `companies.brand_logo_url`. Phase 6-B wires up the read path.
+
+**One endpoint, one file:**
+
+| File | Change |
+|---|---|
+| `routes/public_branding.js` (NEW, ~140 LOC) | Single `GET /:code/branding` route. Public (no `auth`, no `tenantDb`). Uses `superPool` (BYPASSRLS) — `companies` is RLS-strict and an anonymous request has no `app.company_id` GUC. Validates `:code` against a regex before hitting the DB. Filters on `status IN ('ACTIVE', 'TRIAL')`. Sets `Cache-Control: public, max-age=300`. |
+| `app.js` (modified) | Mounted on `/api/companies` inside `mountPublicRoutes()` — lands on both adminApp and tenantApp via the existing dual-mount pattern. |
+| `tests/integration/companies_branding.test.js` (NEW, ~210 LOC) | 10 scenarios — happy paths (custom branding, NULL branding, TRIAL status), validation surface (3 flavors of malformed input), case insensitivity (UPPERCASE URL → lowercase row and lowercase URL → uppercase row, the post-fix shape), 404 unknown code, 404 SUSPENDED filter, Cache-Control header, vhost coverage (admin Host + tenant Host). |
+
+### 97.2 — Design notes — lookup by `:code` not `:id`
+
+The HANDOFF spec said `:id` but in practice the integer PK isn't reachable by the frontend pre-login. `company_code` is the human-readable identifier (e.g. "ACM1234") that lives in:
+- Welcome emails sent on company creation.
+- The admin "Create company" success screen (one-time temp PIN display also shows the code).
+- Future bootstrap URL/subdomain (Phase 6-C will decide between path-param, query-string, or subdomain extraction).
+
+Codes are already semi-public — exposing them on a public route isn't an info leak. Filtering by `status IN ('ACTIVE', 'TRIAL')` ensures a SUSPENDED tenant's branding doesn't appear, and externally a suspended company looks identical to a missing one ("we don't acknowledge you exist" vs "you're suspended" should not be distinguishable to anonymous callers).
+
+### 97.3 — CI iteration: zero. Prod smoke: one bug surfaced
+
+PR #224 went green on the first try (Backend + Frontend + E2E + Mobile + Security + Schema all SUCCESS). Auto-merge didn't trigger automatically — `gh pr view` showed `mergeable: MERGEABLE`, `mergeStateStatus: CLEAN`, all checks SUCCESS, but `state: OPEN`. Manual `gh pr merge --squash --delete-branch` worked instantly. (Unclear why auto-merge stalled; possible GitHub-side hiccup on a fresh PR right after CI completion. Worth watching across future PRs — if it repeats, file a follow-up.)
+
+Deploy was clean: `git pull`, `pm2 restart mep-backend`. Backend came back up in <1s with the new route registered. Curl smoke against the only live tenant:
+
+```bash
+curl -s https://app.constrai.ca/api/companies/mep/branding
+# {"ok":false,"error":"COMPANY_NOT_FOUND"}
+curl -s https://app.constrai.ca/api/companies/MEP/branding
+# {"ok":false,"error":"COMPANY_NOT_FOUND"}
+```
+
+Both 404. The route was wired correctly — `mep` got past the regex (after the route's `.toUpperCase()` step) — but the SQL `WHERE company_code = 'MEP'` didn't match the stored `'mep'` (lowercase). PostgreSQL string compare is case-sensitive by default.
+
+### 97.4 — Root cause + fix
+
+The legacy seed company (the original tenant from before the multi-tenant migration) was stored with a 3-character lowercase code: `'mep'`. New companies created via `generateCompanyCode()` (`super_admin.js`) emit 3 uppercase letters + 4 digits like `'ACM1234'`. Two casings coexist; my Phase 6-B route assumed all uppercase.
+
+**Three options considered:**
+1. Migration to uppercase the legacy row — touches data, requires a deploy step, risks breaking any consumer that hardcoded the lowercase code (low risk in practice, but unnecessary).
+2. Case-sensitive endpoint, accept that lowercase URLs return 404 — user-hostile, would frustrate the future frontend bootstrap that reads URLs which are conventionally lowercase.
+3. **Case-insensitive lookup at the SQL layer** — `WHERE LOWER(company_code) = LOWER($1)`. Handles legacy + future. No data migration. ← chosen.
+
+PR #225 shipped:
+- Regex relaxed from `[A-Z0-9_-]{3,32}` to `[A-Za-z0-9_-]{3,32}`.
+- `.toUpperCase()` removed from input parsing (no longer needed).
+- SQL changed to `LOWER(company_code) = LOWER($1)` for case-insensitive match.
+- New regression test inserts a lowercase code directly and asserts both lowercase + UPPERCASE URLs resolve to it. This mirrors what surfaced on prod — without the SQL fix, the test fails.
+
+### 97.5 — Smoke after the fix
+
+All six smoke cases pass:
+
+| Test | Result |
+|---|---|
+| `GET /api/companies/mep/branding` (tenant Host) | 200, `{company_name: "MEP Construction", brand_color: null, brand_logo_url: null}` |
+| `GET /api/companies/MEP/branding` (tenant Host) | 200, same payload |
+| `GET /api/companies/mep/branding` (admin Host) | 200, same payload — vhost dual-mount confirmed |
+| `GET /api/companies/ZZZ9999/branding` | 404, `{error: "COMPANY_NOT_FOUND"}` |
+| `GET /api/companies/has%20space/branding` | 400, `{error: "INVALID_COMPANY_CODE"}` |
+| Cache-Control header | `public, max-age=300` ✓ |
+
+`null` values pass through correctly — the only live tenant hasn't customized branding yet, so the frontend will fall back to Constrai defaults (Phase 6-C's job).
+
+### 97.6 — Pitfall #34 (NEW) — never assume case homogeneity across legacy + generated data
+
+When designing a lookup that compares text against a stored value, **survey the actual data shape on prod before locking the endpoint** to a single case. Generated identifiers (UUIDs, generateCompanyCode output, etc.) tend to be consistent; pre-existing rows seeded in earlier sessions may not be. Case mismatches are silent — the query returns 0 rows, the endpoint 404s, and the symptom is indistinguishable from "the row doesn't exist." The smoke test catches it; the unit tests (which use generated data only) do not.
+
+**Convention going forward:**
+1. Before any text-key lookup endpoint goes live, run a `SELECT DISTINCT (...) FROM <table>` against prod to inspect the casing/format spread.
+2. If the spread is uniform, lock the regex + query to that case. Document the assumption.
+3. If the spread is heterogeneous (or could become so as legacy data ages in), use a case-insensitive comparison — `LOWER(col) = LOWER($1)` is the simplest, idiomatic-PostgreSQL form. At small scale the missing index hit is fine; add a functional unique index `(LOWER(col))` if the path becomes hot.
+
+This pitfall is the read-side counterpart to "always normalize on write." We don't (yet) normalize company_code on write — `generateCompanyCode` emits uppercase but the schema accepts whatever the INSERT sends. Tightening write-side normalization is a deferred hygiene item; for now the read-side defensiveness is sufficient.
+
+### 97.7 — Final state at end of Section 97
+
+| Item | Status |
+|---|---|
+| Phase 6-B public branding endpoint shipped | ✅ — PR #224 (feature) + PR #225 (fix) merged, deployed, smoke-verified |
+| Pitfall #34 added | ✅ — case-heterogeneity in legacy vs. generated text keys |
+| Pending: Phase 6-C frontend bootstrap reads branding | ⏳ Next product-feature task |
+| Pending: Phase 6-D admin upload UI + Spaces pipeline | ⏳ After 6-C |
+| Pending: SendGrid decommission | ⏳ Still overdue |
+| Auto-merge stall observation | ⏸️ Watch — if it repeats on a future "clean" PR, investigate |
+
+### 97.8 — Section/total update
+
+- **Today: 66 sections.** (Section 97 NEW — Phase 6-B public branding endpoint shipped + fixed + verified in one continuation thread. Feature PR went green on CI first try; prod smoke surfaced a case-sensitivity bug between legacy lowercase seed data and the route's uppercase assumption. Same-session fix PR (#225) shipped the case-insensitive SQL. New Pitfall #34 — never assume case homogeneity across legacy + generated text keys.)
+
