@@ -1,7 +1,7 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 13, 2026 ~12:00 UTC — **Phase 5.1 Create Company UI shipped + deployed.** Today's continuation thread added 1 PR merged (#221 — Create Company UI) + 1 new pitfall (#33 — router primitives in tested components need `MemoryRouter` wrapper) + DECISIONS Section 96. Phase 5 now FULLY closed: admin.constrai.ca live with login + list + create. Cumulative two-day totals: ~15 PRs merged, 7 rotations, 2 migrations, 5 new pitfalls (#29–#33). **Next task: Phase 6-B — public `GET /api/companies/:id/branding` endpoint.** Plus the overdue `SENDGRID_API_KEY` decommission (eligible since May 12 12:00 UTC).
+> Last updated: May 13, 2026 ~15:00 UTC — **Phase 6-B public branding endpoint shipped + deployed + smoke-verified.** Today's continuation thread added 3 PRs merged (#221 Create Company UI + #224 6-B feature + #225 6-B case-insensitive fix) + 2 new pitfalls (#33 router primitives in tested components, #34 case heterogeneity in legacy vs generated text keys) + DECISIONS Sections 96 + 97. Phase 5 FULLY closed; Phase 6-B fully closed. Cumulative two-day totals: ~17 PRs merged, 7 rotations, 2 migrations, 6 new pitfalls (#29–#34). **Next task: Phase 6-C — frontend bootstrap reads branding + applies CSS vars.** Plus the overdue `SENDGRID_API_KEY` decommission (eligible since May 12 12:00 UTC).
 
 ---
 
@@ -21,11 +21,11 @@ When you receive the one-line command above:
 2. **Read these 4 files** (use the Read tool, NOT bash):
    - `HANDOFF.md` (this file)
    - `CLAUDE.md` (working rules)
-   - `DECISIONS.md` (read ONLY the latest 2-3 sections referenced below — DON'T read the whole 11,000+ line file). Latest section is **96** (Phase 5.1 closeout + Pitfall #33). Also relevant: 94 (product roadmap), 95 (retrospective). **IMPORTANT:** Read DECISIONS.md via the Read tool ONLY (never `bash tail` / `grep`) — Cowork bash mount can lag and miss recently merged sections (Section 96.6 explains; cost us PR #222).
+   - `DECISIONS.md` (read ONLY the latest 2-3 sections referenced below — DON'T read the whole 11,000+ line file). Latest section is **97** (Phase 6-B closeout + Pitfall #34). Also relevant: 96 (Phase 5.1 closeout + Pitfall #33), 94 (product roadmap), 95 (retrospective). **IMPORTANT:** Read DECISIONS.md via the Read tool ONLY (never `bash tail` / `grep`) — Cowork bash mount can lag and miss recently merged sections (Section 96.6 explains; cost us PR #222).
    - `RECOVERY.md` Section 2.4 only if relevant
 3. **Echo this exact line** as the first line of your reply:
    ```
-   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 96, Phase 5.1 Create Company UI shipped + Phase 5 CLOSED, next is Phase 6-B branding endpoint)
+   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 97, Phase 6-B branding endpoint shipped + Phase 5 + 6-A + 6-B all CLOSED, next is Phase 6-C frontend bootstrap)
    ```
 4. **Confirm the next task** in 1-2 lines.
 5. **Ask if Hedar is ready to start**, then wait.
@@ -42,9 +42,9 @@ When you receive the one-line command above:
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04 — kernel up-to-date as of May 11, reboot banner cleared) |
 | Backend | Node.js + Express + Postgres 16, pm2-managed at `/var/www/mep`. **pm2 systemd auto-start NOW configured (Section 93.3).** |
 | Frontend | React + Vite + Tailwind |
-| Latest deployed to prod | **Phase 5.1 Create Company UI** — `mep-frontend/dist/admin.html` rebuilt + served on admin.constrai.ca (May 13 ~11:42 UTC). Visually confirmed: list + `+ New company` button + full create form rendering. Prior deploys still live: JWT rotation, Resend cutover, Phase 6-A migration 014, Section 94.5 migration 015 + route, all leak rotations. |
-| Last merged to main | PR #221 (Phase 5.1 Create Company UI). Section 96 docs PR follows (this commit). |
-| Active program | **Multi-Tenant Migration — Phase 6 (Frontend tenant context + branding) is next.** Phase 5 FULLY closed. Email cutover 24h watch period passed (eligible for SendGrid decommission). |
+| Latest deployed to prod | **Phase 6-B public branding endpoint** — `routes/public_branding.js` live on both admin.constrai.ca + app.constrai.ca (May 13 ~14:30 UTC), case-insensitive lookup fix deployed ~14:50 UTC. Smoke-verified end-to-end. Prior deploys still live: Phase 5.1 Create Company UI, JWT rotation, Resend cutover, migrations 014 + 015, all leak rotations. |
+| Last merged to main | PR #225 (Phase 6-B case-insensitive fix). Section 97 docs PR follows (this commit). |
+| Active program | **Multi-Tenant Migration — Phase 6-C (Frontend bootstrap reads branding + applies CSS vars) is next.** Phase 5 + 6-A + 6-B all FULLY closed. Email cutover 24h watch period passed (SendGrid decommission overdue). |
 | Mobile app | Still on legacy username login — backend keeps backward-compat |
 
 ### Multi-tenant migration progress
@@ -60,7 +60,10 @@ When you receive the one-line command above:
 | Phase 4c — RLS Stage 3 | ✅ Deployed and restored after 90-F outage |
 | Phase 5 — SUPER_ADMIN portal split | ✅ **FULLY CLOSED** — login + list + create all live on admin.constrai.ca (May 13). |
 | Email migration SendGrid → Resend | ✅ **CUTOVER COMPLETE** (May 11 ~12:00 UTC). 24h watch passed; SendGrid decommission overdue. |
-| **Phase 6 — Frontend tenant context + branding** | ⏳ **Next** |
+| Phase 6-A — companies branding columns (migration 014) | ✅ DEPLOYED |
+| Phase 6-B — public `GET /api/companies/:code/branding` | ✅ **DEPLOYED + smoke-verified** (May 13 ~15:00 UTC). |
+| **Phase 6-C — Frontend bootstrap reads branding + applies CSS vars** | ⏳ **Next** |
+| Phase 6-D — Admin upload UI + Spaces pipeline | ⏳ After 6-C |
 | Phase 7 — 2FA + biometric + account security | ⏳ Pending |
 | Phase 8 — Audit + compliance | ⏳ Pending |
 
@@ -147,7 +150,7 @@ Cost inventory + DigitalOcean Spaces + Apple Developer keys: see `RECOVERY.md`.
 
 ---
 
-## Critical pitfalls (encoded from Sections 86 + 87 + 88 + 89 + 90 + 91 + 92 + 93 + 96)
+## Critical pitfalls (encoded from Sections 86 + 87 + 88 + 89 + 90 + 91 + 92 + 93 + 96 + 97)
 
 1. **Bash sandbox file sync lag** — use Read tool to verify file state.
 2. **Edit tool can silently lose changes** — Read each file immediately after Edit.
@@ -182,6 +185,7 @@ Cost inventory + DigitalOcean Spaces + Apple Developer keys: see `RECOVERY.md`.
 31. **Sed mask regex MUST include underscores** (Section 92.5) — universal form: `sed -E 's/=[A-Za-z0-9_.-]+$/=***/'`. Eyeball masked output before sharing.
 32. **Verify `pm2-root.service` is enabled BEFORE any planned reboot** (NEW — Section 93.4, May 11, 2026). The first kernel reboot of the prod Droplet took prod down for ~2 min because `pm2 startup` was never run — no systemd unit to spawn the pm2 daemon on boot. Fixed via `pm2 startup systemd -u root --hp /root && pm2 save`. **Convention going forward:** run `systemctl is-enabled pm2-root` before any planned reboot; expected output `enabled`. If `disabled` or `not-found`, run the `pm2 startup` + `pm2 save` pair BEFORE rebooting. Also: after ANY new `pm2 start` of a new app, run `pm2 save` immediately so the dump captures the new process.
 33. **Adding router primitives to a tested component requires updating its test wrapper** (NEW — Section 96.5, May 13, 2026). Adding `<Link>`, `<NavLink>`, `useNavigate`, `useLocation`, `useParams`, or `<Outlet>` from `react-router-dom` to a component already covered by RTL tests throws `TypeError: Cannot destructure property 'basename' of useContext(...) as it is null` (from `LinkWithRef`) unless every `render()` happens under a Router. Fix: import `MemoryRouter` and create `renderWithRouter = (ui) => render(<MemoryRouter>{ui}</MemoryRouter>)`, swap all `render(...)` calls. **Convention:** when a PR adds router primitives to a previously router-free component, update its test file in the SAME PR. Cost us one CI iteration on PR #221.
+34. **Never assume case homogeneity across legacy + generated text keys** (NEW — Section 97.6, May 13, 2026). Phase 6-B shipped a lookup that uppercased the URL param then queried `WHERE company_code = $1` — and 404'd on the only live tenant because that row's code was stored lowercase (`'mep'`, legacy seed predating `generateCompanyCode`), while new codes are uppercase (`ACM1234`). Case mismatches are silent: 0 rows → 404 → indistinguishable from "row doesn't exist." Unit tests pass on generated data and miss it; smoke catches it. **Convention:** before any text-key lookup goes live, `SELECT DISTINCT (case_marker) FROM <table>` against prod to inspect spread. If uniform, lock and document. If heterogeneous (or could be), use `LOWER(col) = LOWER($1)` — the missing index is fine at small scale, add `CREATE INDEX ... ON <table> (LOWER(col))` if the path becomes hot. Fixed via PR #225 (same session).
 
 ---
 
