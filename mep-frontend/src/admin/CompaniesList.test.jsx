@@ -10,7 +10,16 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import CompaniesList from './CompaniesList.jsx'
+
+// Phase 5.1 — CompaniesList now renders a <Link to="/companies/new">. Links
+// require a Router context, so every render() in this file goes through a
+// MemoryRouter wrapper. Tests assert behaviour, not routing, so the in-memory
+// router is sufficient — no history navigation is exercised.
+function renderWithRouter(ui) {
+  return render(<MemoryRouter>{ui}</MemoryRouter>)
+}
 
 // --- Mock api -------------------------------------------------------------
 let nextApiResponse
@@ -83,7 +92,7 @@ function visibleCompanyRows() {
 describe('CompaniesList — render lifecycle', () => {
   test('shows loading then renders rows from the API', async () => {
     nextApiResponse = FIXTURE
-    render(<CompaniesList />)
+    renderWithRouter(<CompaniesList />)
 
     // Loading state — count text reads "Loading…" before the promise settles.
     expect(screen.getByText(/Loading/i)).toBeInTheDocument()
@@ -100,7 +109,7 @@ describe('CompaniesList — render lifecycle', () => {
     nextApiError = Object.assign(new Error('HTTP 500'), {
       response: { status: 500, data: { ok: false, error: 'SERVER_ERROR' } },
     })
-    render(<CompaniesList />)
+    renderWithRouter(<CompaniesList />)
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toBeInTheDocument()
@@ -110,7 +119,7 @@ describe('CompaniesList — render lifecycle', () => {
 
   test('shows the empty-state row when the API returns zero companies', async () => {
     nextApiResponse = { ok: true, companies: [] }
-    render(<CompaniesList />)
+    renderWithRouter(<CompaniesList />)
 
     await waitFor(() => {
       expect(screen.getByText(/No companies yet/i)).toBeInTheDocument()
@@ -126,7 +135,7 @@ describe('CompaniesList — search and sort', () => {
   test('search filters rows by name (case-insensitive substring)', async () => {
     nextApiResponse = FIXTURE
     const user = userEvent.setup()
-    render(<CompaniesList />)
+    renderWithRouter(<CompaniesList />)
 
     await waitFor(() => expect(screen.getByText('Acme Mechanical')).toBeInTheDocument())
 
@@ -142,7 +151,7 @@ describe('CompaniesList — search and sort', () => {
   test('search match counter reads "1 of 3" after filtering', async () => {
     nextApiResponse = FIXTURE
     const user = userEvent.setup()
-    render(<CompaniesList />)
+    renderWithRouter(<CompaniesList />)
 
     await waitFor(() => expect(screen.getByText('Acme Mechanical')).toBeInTheDocument())
 
@@ -155,7 +164,7 @@ describe('CompaniesList — search and sort', () => {
   test('clicking the Employees header sorts by employee_count ascending then descending', async () => {
     nextApiResponse = FIXTURE
     const user = userEvent.setup()
-    render(<CompaniesList />)
+    renderWithRouter(<CompaniesList />)
 
     await waitFor(() => expect(screen.getByText('Acme Mechanical')).toBeInTheDocument())
 
@@ -184,7 +193,7 @@ describe('CompaniesList — search and sort', () => {
   test('null last_activity_at sorts to the bottom regardless of direction', async () => {
     nextApiResponse = FIXTURE // Bolt's last_activity_at is null
     const user = userEvent.setup()
-    render(<CompaniesList />)
+    renderWithRouter(<CompaniesList />)
 
     await waitFor(() => expect(screen.getByText('Bolt Plumbing')).toBeInTheDocument())
 
