@@ -55,13 +55,11 @@ router.post('/', can('expense_claims.submit'), async (req, res) => {
 
     // Validation
     if (!project_id || !vendor || !amount_cents) {
-      return res
-        .status(400)
-        .json({
-          ok: false,
-          error: 'MISSING_FIELDS',
-          required: ['project_id', 'vendor', 'amount_cents'],
-        });
+      return res.status(400).json({
+        ok: false,
+        error: 'MISSING_FIELDS',
+        required: ['project_id', 'vendor', 'amount_cents'],
+      });
     }
 
     const cents = parseAmount(amount_cents);
