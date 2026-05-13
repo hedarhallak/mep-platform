@@ -11092,6 +11092,112 @@ This pitfall is a Constrai-specific operational gap. The earlier sessions that s
 
 ---
 
+## Section 94 — Phase 5.1 Closeout: Create Company UI on admin portal (May 13, 2026 ~08:00–12:00 UTC)
+
+> **Continuation note.** The May 11 marathon (Sections 91–93) was followed by a same-day continuation thread that drafted Sections 94 (strategic roadmap) and 95 (May 11 retrospective). Those drafts lived only in the conversation context and never reached this file before the context was compacted. The work they covered did land on disk and in prod (migrations 014 + 015, `routes/expense_claims.js`, Phase 6-A branding columns, hygiene PRs) — only the DECISIONS narrative is missing. To avoid renumbering churn, **this section reclaims number 94** as the next-available slot in the file and documents today's Phase 5.1 closeout. The earlier roadmap/retrospective drafts can be backfilled as Section 94a / 94b if Hedar wants the historical narrative later.
+
+### 94.1 — Scope: ship the Create Company UI
+
+Phase 5.1 was the last open feature in Phase 5 (SUPER_ADMIN portal split, Section 90). The backend (`POST /api/super/companies`) had been live since piece 89-C/15. What was missing: a UI on admin.constrai.ca to drive that endpoint without the SA hitting Postman or curl.
+
+**Three files**, all under `mep-frontend/src/`:
+
+| File | Change |
+|---|---|
+| `admin/CreateCompany.jsx` (NEW, 320 LOC) | Full-page form: company name + plan dropdown + first admin (username, 4-8-char temp PIN + confirm, email, optional phone). Client-side validation, POSTs to `/api/super/companies`, renders a success screen showing company code + temp PIN once (since the backend never echoes the PIN back after creation). |
+| `AdminApp.jsx` (modified) | One new `<Route path="/companies/new" element={<CreateCompany />} />`. |
+| `admin/CompaniesList.jsx` (modified) | Added a `<Link to="/companies/new">` styled as the toolbar's "+ New company" button. |
+
+PR #221 opened on `feat/s5-1-create-company-ui`.
+
+### 94.2 — CI #559 failure + diagnosis
+
+First CI run on the PR failed. Backend job green, Frontend job red.
+
+The failure log showed two surface symptoms:
+
+1. **`npm run lint` exited 1 with 115 errors / 8 warnings** — mostly `react-hooks/set-state-in-effect` from `eslint-plugin-react-hooks@^7.1.1` and `no-undef` on Node globals (`__dirname`, `process`) across many pre-existing files.
+2. **`npm test` (Vitest) exited 1** — `src/admin/CompaniesList.test.jsx` had all 7 tests failing with `TypeError: Cannot destructure property 'basename' of React10.useContext(...) as it is null` from `LinkWithRef`.
+
+The two failures look related but aren't. Confirmation came from comparing against `main`:
+
+```powershell
+gh run list --branch main --limit 5 --json conclusion
+# → all 5 success
+```
+
+Main was green with the exact same lint errors. The reason: `.github/workflows/ci.yml` line 178-180 marks the Frontend lint step `continue-on-error: true`. Lint is informational and never gates the job. The only blocking failure was the Vitest one — a regression we introduced by adding `<Link>` to `CompaniesList` without updating its test.
+
+### 94.3 — Fix
+
+`src/admin/CompaniesList.test.jsx` now wraps every render in `<MemoryRouter>`:
+
+```jsx
+import { MemoryRouter } from 'react-router-dom'
+
+function renderWithRouter(ui) {
+  return render(<MemoryRouter>{ui}</MemoryRouter>)
+}
+
+// every `render(<CompaniesList />)` → `renderWithRouter(<CompaniesList />)`
+```
+
+Five call sites updated. The in-memory router is sufficient because none of the tests exercise history navigation — they only need the Router context so `<Link>` resolves.
+
+Pushed as a follow-up commit to the same branch. CI #560 (on PR) and CI #561 (post-merge on main): both green.
+
+### 94.4 — Deploy
+
+PR auto-squash-merged. On prod:
+
+```bash
+ssh root@143.110.218.84
+cd /var/www/mep
+git pull origin main
+cd mep-frontend
+npm ci
+npm run build
+```
+
+Build output `dist/admin.html` updated at `2026-05-13 11:42`. Nginx already roots `admin.constrai.ca` at `/var/www/mep/mep-frontend/dist/` with `try_files $uri $uri/ /admin.html` (Section 90-C / Section 86), so no Nginx reload needed — static files are picked up on next request.
+
+Curl confirmation:
+
+```bash
+curl -sI https://admin.constrai.ca/admin.html | head -5
+# → 200 OK, last-modified 11:42:55 GMT  ✓ matches build
+curl -sI https://admin.constrai.ca/companies/new | head -5
+# → 200 OK, same admin.html  ✓ SPA fallback works
+```
+
+Visual confirmation by Hedar in browser at `https://admin.constrai.ca/companies/new`: form renders correctly, all fields present, "+ New company" button visible on the list view.
+
+### 94.5 — Lessons / Pitfall #33 (NEW) — adding `<Link>` to an existing tested component requires updating its test
+
+Adding any `react-router-dom` primitive — `<Link>`, `<NavLink>`, `useNavigate`, `useLocation` — to a component that's already covered by RTL tests will throw `Cannot destructure property 'basename' of useContext(...) as it is null` unless the test renders the component under a Router. The fix is trivial (wrap with `<MemoryRouter>`), but the symptom is opaque if you haven't seen it before — the error mentions `LinkWithRef` and `basename`, not "missing Router".
+
+**Convention:** whenever a PR adds router primitives to a previously router-free component, update its test file in the same PR. Test the failure locally with `npx vitest run <test>` before pushing if possible. (In Cowork, the Linux bash sandbox can't always run Vitest due to native module mismatch — Section 4.6 pitfall — fall back to CI.)
+
+This pitfall is the symmetric counterpart to "router context needed at the App boundary". Apps wrap their router at the top level once; tests wrap at the per-component-render boundary every time.
+
+### 94.6 — Final state at end of Section 94
+
+| Item | Status |
+|---|---|
+| Phase 5.1 Create Company UI shipped | ✅ — PR #221 merged, deployed, visually verified |
+| Phase 5 (SUPER_ADMIN portal split) | ✅ CLOSED — admin.constrai.ca live with list + create + login |
+| Pitfall #33 added | ✅ — router-primitives-need-test-wrapper |
+| Frontend lint debt | ⏸️ Known — 115 errors flagged informationally, mostly `react-hooks/set-state-in-effect` and Node globals. `continue-on-error: true` keeps CI green. Treat as a backlog item — fix in a dedicated `chore/lint-cleanup` PR, NOT mixed into product PRs. |
+| Pending: Phase 6-B public branding endpoint | ⏳ Next product-feature task |
+| Pending: SendGrid decommission | ⏳ Eligible since May 12 12:00 UTC — overdue |
+| Pending: Section 94 / 95 backfill (May 11 roadmap + retro) | ⏳ Optional cleanup |
+
+### Section/total update
+
+- **Today: 63 sections.** (Section 94 NEW — Phase 5.1 Create Company UI shipped end-to-end. PR #221 merged after one CI iteration. Lint was a red herring: Frontend lint runs with `continue-on-error: true`, so the 115 informational lint errors don't gate CI — main has been merging through them for days. The real failure was a CompaniesList test that broke when we added `<Link>` without updating the test render. Fixed by wrapping renders in `MemoryRouter`. New Pitfall #33 — router primitives in a tested component require updating the test's render wrapper.)
+
+---
+
 ## Section 94 — Product roadmap additions (May 11–13, 2026)
 
 > **Six strategic backlog items captured at end of session.** These are NOT next-session tasks — capture-now-design-later items so they don't get lost while attention is on Phase 6 frontend branding. Each subsection has a brief shape + open questions. Implementation order, business case, and technical design get worked out in dedicated sessions.

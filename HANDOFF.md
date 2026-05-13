@@ -1,7 +1,7 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 13, 2026 ~07:00 UTC — **Two-day marathon (May 11 + May 13) closed.** Session totals: ~14 PRs merged, 7 secret rotations, 2 prod migrations (014 + 015), 4 new pitfalls encoded (#29-#32), Phase 5 CLOSED, Email migration cutover DEPLOYED, Phase 6-A (companies branding columns) DEPLOYED, Section 94.5 starter (`expense_claims` schema + route) DEPLOYED, plus the unplanned secrets-leak incident fully remediated. **Next task: Phase 6-B — public `GET /api/companies/:id/branding` endpoint.** Plus the 24h-post-cutover `SENDGRID_API_KEY` decommission (eligible now, May 13).
+> Last updated: May 13, 2026 ~12:00 UTC — **Phase 5.1 Create Company UI shipped + deployed.** Today's totals: 1 PR merged (#221), 1 new pitfall encoded (#33 — router primitives in tested components need `MemoryRouter` wrapper), Phase 5 fully CLOSED (admin.constrai.ca now has list + create + login). DECISIONS Section 94 added covering the close-out. **Next task: Phase 6-B — public `GET /api/companies/:id/branding` endpoint.** Plus the overdue `SENDGRID_API_KEY` decommission (eligible since May 12 12:00 UTC).
 
 ---
 
@@ -21,11 +21,11 @@ When you receive the one-line command above:
 2. **Read these 4 files** (use the Read tool, NOT bash):
    - `HANDOFF.md` (this file)
    - `CLAUDE.md` (working rules)
-   - `DECISIONS.md` (read ONLY the latest 2-3 sections referenced below — DON'T read the whole 11,000+ line file). Today's session added Sections 91 + 92 + 93.
+   - `DECISIONS.md` (read ONLY the latest 2-3 sections referenced below — DON'T read the whole 11,000+ line file). Latest sessions added Sections 91 + 92 + 93 + 94. (Note: sections 94 and 95 were drafted in an earlier May-13 thread but never reached the file; today's Section 94 reclaims that slot. The migrations/code they covered did land — see migrations 014 + 015 + `routes/expense_claims.js`.)
    - `RECOVERY.md` Section 2.4 only if relevant
 3. **Echo this exact line** as the first line of your reply:
    ```
-   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Sections 91-95, all leak rotations done + Phase 6-A done + 94.5 starter done, next is Phase 6-B branding endpoint)
+   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 94, Phase 5.1 Create Company UI shipped + Phase 5 CLOSED, next is Phase 6-B branding endpoint)
    ```
 4. **Confirm the next task** in 1-2 lines.
 5. **Ask if Hedar is ready to start**, then wait.
@@ -42,9 +42,9 @@ When you receive the one-line command above:
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04 — kernel up-to-date as of May 11, reboot banner cleared) |
 | Backend | Node.js + Express + Postgres 16, pm2-managed at `/var/www/mep`. **pm2 systemd auto-start NOW configured (Section 93.3).** |
 | Frontend | React + Vite + Tailwind |
-| Latest deployed to prod | **JWT_SECRET rotation + kernel reboot + pm2-root.service enabled** (May 11 ~12:45 UTC). Plus all of today's work: Resend cutover, mepuser pw, Mapbox token, ADMIN/AUTH cleanup, notifyForeman fix. |
-| Last merged to main | Section 93 docs PR (todo) |
-| Active program | **Multi-Tenant Migration — Phase 6 (Frontend tenant context + branding) is next.** Email migration cutover complete (24h watch ongoing). |
+| Latest deployed to prod | **Phase 5.1 Create Company UI** — `mep-frontend/dist/admin.html` rebuilt + served on `admin.constrai.ca` (May 13 ~11:42 UTC). Visually confirmed: list + `+ New company` button + full create form rendering. Prior deploys still live: JWT rotation, Resend cutover, Phase 6-A migration 014, Section 94.5 migration 015 + route, all leak rotations. |
+| Last merged to main | PR #221 (Phase 5.1 Create Company UI) + Section 94 docs PR (this commit) |
+| Active program | **Multi-Tenant Migration — Phase 6 (Frontend tenant context + branding) is next.** Phase 5 fully closed. Email cutover 24h watch period passed (eligible for SendGrid decommission). |
 | Mobile app | Still on legacy username login — backend keeps backward-compat |
 
 ### Multi-tenant migration progress
