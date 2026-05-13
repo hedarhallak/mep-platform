@@ -225,6 +225,12 @@ function mountPublicRoutes(app) {
   app.use('/api/auth', loadRouter('./routes/auth'));
   app.use('/api/onboarding', require('./routes/onboarding'));
   app.use('/activate', loadRouter('./routes/activate'));
+
+  // Phase 6-B — public tenant branding lookup (`GET /api/companies/:code/branding`).
+  // Mounted on BOTH portals so the login screen can theme itself from either
+  // host. Uses superPool internally (companies is RLS-strict) — see the file
+  // header in routes/public_branding.js for the design notes.
+  app.use('/api/companies', require('./routes/public_branding'));
 }
 
 // =============================================================================
