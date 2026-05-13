@@ -147,18 +147,44 @@ describeIfDb('GET /api/companies/:code/branding — public branding lookup', () 
     }
   });
 
-  test('accepts a lowercase :code by uppercasing before the regex + lookup', async () => {
+  test('resolves a stored UPPERCASE code via a lowercase URL (case-insensitive lookup)', async () => {
     // URLs are conventionally lowercase — frontend bootstrap might pass
-    // `acm1234` even though the canonical code is `ACM1234`. The route
-    // uppercases the param BEFORE the regex check, so lowercase input
-    // resolves to the same row. Defensive: protects against href typos
-    // and clipboard noise.
+    // `acm1234` even though the canonical stored code is `ACM1234`. The
+    // route's regex accepts both cases on the wire, and the SQL query
+    // does `LOWER(company_code) = LOWER($1)`, so either direction resolves.
     const company = await insertBrandedCompany({ status: 'ACTIVE' });
     const res = await request(app).get(
       `/api/companies/${company.company_code.toLowerCase()}/branding`
     );
     expect(res.statusCode).toBe(200);
     expect(res.body.branding.company_name).toBe(company.name);
+  });
+
+  test('resolves a stored lowercase code via an UPPERCASE URL (legacy "mep" data shape)', async () => {
+    // Regression guard for the prod smoke-test that surfaced this on May 13:
+    // the original "mep" tenant predates generateCompanyCode() and is stored
+    // with a 3-char lowercase code. Without case-insensitive SQL, a request
+    // for /api/companies/MEP/branding 404s even though the row exists. Insert
+    // a lowercase company here and confirm both case directions resolve.
+    const pool = getPool();
+    _codeSeq += 1;
+    const lowerCode = `t${(Date.now() % 1_000_000).toString().padStart(6, '0')}s${_codeSeq}`;
+    const name = `test_co_lower_${Date.now()}`;
+    await pool.query(
+      `INSERT INTO public.companies
+         (name, company_code, status, plan, brand_color)
+       VALUES ($1, $2, 'ACTIVE', 'BASIC', '#445566')`,
+      [name, lowerCode]
+    );
+
+    const upperRes = await request(app).get(`/api/companies/${lowerCode.toUpperCase()}/branding`);
+    expect(upperRes.statusCode).toBe(200);
+    expect(upperRes.body.branding.company_name).toBe(name);
+    expect(upperRes.body.branding.brand_color).toBe('#445566');
+
+    const lowerRes = await request(app).get(`/api/companies/${lowerCode}/branding`);
+    expect(lowerRes.statusCode).toBe(200);
+    expect(lowerRes.body.branding.company_name).toBe(name);
   });
 
   // ──────────────────────────────────────────────────────────────────────

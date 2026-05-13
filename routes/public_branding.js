@@ -64,11 +64,15 @@ const brandingPool = superPool || pool;
 
 const router = express.Router();
 
-// company_code shape: uppercase alphanumerics plus underscore/hyphen, 3-32 chars.
-// generateCompanyCode() in super_admin.js currently emits PREFIX + 4 digits
-// (e.g. "ACM1234") so 3-32 is generous; the regex's job is just to reject
-// obvious junk (`'OR 1=1`, very long inputs, etc) before we hit the DB.
-const COMPANY_CODE_RE = /^[A-Z0-9_-]{3,32}$/;
+// company_code shape: alphanumerics plus underscore/hyphen, 3-32 chars.
+// generateCompanyCode() in super_admin.js currently emits 3 uppercase letters
+// + 4 digits (e.g. "ACM1234"), but at least one legacy row predating that
+// helper exists with a lowercase 3-letter code ("mep" — the original tenant
+// from the pre-multi-tenant migration). We accept both cases on the wire and
+// fold to lowercase in the SQL comparison below — see the WHERE clause. The
+// regex's only job is to reject obvious junk (`'OR 1=1`, multi-kilobyte
+// inputs, etc) before we hit the DB.
+const COMPANY_CODE_RE = /^[A-Za-z0-9_-]{3,32}$/;
 
 // Statuses for which we will return branding. SUSPENDED / PAST_DUE / CANCELLED
 // look like "not found" externally so suspended tenants don't get a "we know
@@ -102,18 +106,22 @@ const PUBLIC_STATUSES = ['ACTIVE', 'TRIAL'];
  */
 router.get('/:code/branding', async (req, res) => {
   try {
-    const code = String(req.params.code || '')
-      .trim()
-      .toUpperCase();
+    const code = String(req.params.code || '').trim();
 
     if (!COMPANY_CODE_RE.test(code)) {
       return res.status(400).json({ ok: false, error: 'INVALID_COMPANY_CODE' });
     }
 
+    // Case-insensitive compare: LOWER() on both sides so legacy lowercase
+    // codes (e.g. "mep") and new uppercase codes (generateCompanyCode emits
+    // "ACM1234") both resolve via the same path. At current scale (single-
+    // digit tenants) the missing index is fine; if this becomes hot, add a
+    // functional unique index `(LOWER(company_code))` in a follow-up
+    // migration.
     const { rows } = await brandingPool.query(
       `SELECT name, brand_color, brand_logo_url
          FROM public.companies
-        WHERE company_code = $1
+        WHERE LOWER(company_code) = LOWER($1)
           AND status = ANY($2::text[])
         LIMIT 1`,
       [code, PUBLIC_STATUSES]
