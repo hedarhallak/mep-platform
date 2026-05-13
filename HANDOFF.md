@@ -1,7 +1,7 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 11, 2026 ~13:00 UTC — **All Section 91 leak rotations COMPLETE.** Today's session was a marathon: 5 code/docs PRs + 6 secret rotations + 2 dead-env-var deletions + full Resend cutover (verified end-to-end) + JWT_SECRET rotation + first-ever kernel reboot (which uncovered pm2 startup wasn't configured → fixed, Pitfall #32). Phase 5 closed, Email migration cutover deployed (24h watch ongoing). **Next task: Phase 6 — Frontend tenant context + branding** OR `SENDGRID_API_KEY` decommission (after May 12 ~12:00 UTC).
+> Last updated: May 13, 2026 ~07:00 UTC — **Two-day marathon (May 11 + May 13) closed.** Session totals: ~14 PRs merged, 7 secret rotations, 2 prod migrations (014 + 015), 4 new pitfalls encoded (#29-#32), Phase 5 CLOSED, Email migration cutover DEPLOYED, Phase 6-A (companies branding columns) DEPLOYED, Section 94.5 starter (`expense_claims` schema + route) DEPLOYED, plus the unplanned secrets-leak incident fully remediated. **Next task: Phase 6-B — public `GET /api/companies/:id/branding` endpoint.** Plus the 24h-post-cutover `SENDGRID_API_KEY` decommission (eligible now, May 13).
 
 ---
 
@@ -25,7 +25,7 @@ When you receive the one-line command above:
    - `RECOVERY.md` Section 2.4 only if relevant
 3. **Echo this exact line** as the first line of your reply:
    ```
-   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Sections 91/92/93, all leak rotations done, next is Phase 6 frontend tenant branding)
+   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Sections 91-95, all leak rotations done + Phase 6-A done + 94.5 starter done, next is Phase 6-B branding endpoint)
    ```
 4. **Confirm the next task** in 1-2 lines.
 5. **Ask if Hedar is ready to start**, then wait.
@@ -84,35 +84,35 @@ ALL rotations COMPLETE. Only the 24h watch + decommission remains.
 
 ---
 
-## Next task: Phase 6 — Frontend tenant context + branding
+## Next task: Phase 6-B — public `GET /api/companies/:id/branding` endpoint
 
-Section 85 architecture queued Phase 6 to follow Phase 5 (which closed today). The Phase 6 deliverable:
+Phase 6-A shipped (migration 014). Columns `companies.brand_color` + `companies.brand_logo_url` exist on prod. 6-B exposes them via a public endpoint so the login screen can load tenant branding BEFORE the user authenticates.
 
-> **Per-tenant branding in the tenant React app.** Each company gets its own logo + accent colors, loaded from the backend on app boot. The admin portal stays unbranded (cross-tenant tool).
+**Scope:**
 
-**Scope (proposed; refine at session start):**
+1. **Backend endpoint** — `GET /api/companies/:id/branding`. Returns `{ ok, branding: { brand_color, brand_logo_url, company_name } }`. **Public route** (no `auth` middleware). Mount on BOTH adminApp and tenantApp via `mountPublicRoutes()` in app.js. The endpoint uses `superPool` (BYPASSRLS) because it runs pre-tenant — same pattern as `routes/auth.js#login` (Pitfall #28 / Section 90-G).
+2. **Caching headers** — `Cache-Control: public, max-age=300` (5 minutes). Logos + colors change rarely; the frontend can refresh on its own boot cycle.
+3. **Error handling** — 404 if company not found, 400 if `:id` isn't a positive integer.
+4. **Audit log** — NO (public endpoint, no user context). Frequency could be high (every frontend boot); no useful signal in audit_logs.
+5. **Tests** — `tests/integration/companies_branding.test.js` covering: (a) GET on existing company returns branding fields; (b) GET on missing company returns 404; (c) NULL values returned as-is (frontend handles defaults).
 
-1. **DB schema (migration 014?):** add `companies.brand_color` (varchar 7, hex) + `companies.brand_logo_url` (text, S3/Spaces URL or relative path). Backfill with defaults for existing tenants.
-2. **Backend endpoint:** `GET /api/companies/:id/branding` — returns `{ brand_color, brand_logo_url, company_name }`. Public route (no auth) so login screen can load branding before user is authenticated.
-3. **Frontend bootstrap:** on app load, resolve tenant from hostname → fetch branding → apply CSS variables (`--color-primary`, `--color-primary-dark`) + swap logo. Login screen shows tenant branding instead of generic Constrai.
-4. **Admin upload UI** (probably a Phase 6 sub-piece): tenant admin uploads logo + picks accent color. Stored in DigitalOcean Spaces. Saved to `companies.brand_*` fields.
-5. **Mobile app:** later — out of scope for the first PR.
+**Out of scope (Phase 6-C + 6-D):**
+- Frontend bootstrap reads branding + applies CSS variables — Phase 6-C.
+- Admin upload UI + DigitalOcean Spaces pipeline — Phase 6-D.
+- Mobile app branding — later.
 
-**Out of scope for Phase 6:**
-- Multi-region branding (each region = different logo). Not needed today.
-- Theming the admin portal per SA preference. Admin stays unbranded.
-- Per-user (vs per-tenant) preferences. Tenant-level only.
+**Suggested first step:** Write the route + smoke test + PR. ~1-1.5 hours. Then Phase 6-C in a follow-up session.
 
-**Suggested first step at next session:** discuss the schema migration shape (single new table vs columns on existing companies table) + the upload pipeline (DigitalOcean Spaces direct vs. backend-proxied).
+### Alternative: SendGrid decommission (eligible May 12 ~12:00 UTC onward)
 
-### Alternative: SendGrid decommission (after May 12 ~12:00 UTC)
+Now eligible. 24h Resend watch period passed. ~15-min task to clear the SendGrid surface:
 
-If May 12 has come around and Resend has logged a healthy spread of backend-generated emails (invite, PO, dispatch, foreman) over the past 24 hours, this is the perfect 15-minute task to clear the SendGrid surface:
-
-1. SSH to prod, `sed -i '/^SENDGRID_API_KEY=/d' /var/www/mep/.env`, `pm2 restart mep-backend`, verify SA login + a Resend-routed email path.
+1. SSH to prod: `sed -i '/^SENDGRID_API_KEY=/d' /var/www/mep/.env` + `pm2 restart mep-backend` + verify SA login (and trigger one Resend-routed email path manually for sanity).
 2. SendGrid dashboard → Settings → API Keys → delete the Constrai key.
 3. SendGrid dashboard → Settings → Account → optionally delete the sub-user.
 4. Update HANDOFF "Credentials" section to remove SendGrid entries.
+
+Worth doing first (smaller scope) before tackling Phase 6-B.
 
 ---
 

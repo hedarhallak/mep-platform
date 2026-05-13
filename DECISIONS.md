@@ -11090,3 +11090,121 @@ This pitfall is a Constrai-specific operational gap. The earlier sessions that s
 
 - **Today: 62 sections.** (Section 93 NEW — JWT_SECRET rotation + kernel reboot. Plus the operational discovery that pm2 was never configured for systemd auto-start, surfaced when the reboot took prod down for ~2 min. Fixed via `pm2 startup systemd`. New Pitfall #32 — always verify `pm2-root.service` is enabled before any planned reboot. ALL secrets from the Section 91 leak are now rotated or retired. The leak incident is fully closed except for the 24h Resend watch period that auto-expires May 12 ~12:00 UTC.)
 
+---
+
+## Section 94 — Product roadmap additions (May 11–13, 2026)
+
+> **Six strategic backlog items captured at end of session.** These are NOT next-session tasks — capture-now-design-later items so they don't get lost while attention is on Phase 6 frontend branding. Each subsection has a brief shape + open questions. Implementation order, business case, and technical design get worked out in dedicated sessions.
+
+### 94.1 — Subscription billing for tenant companies
+
+**Shape.** Plan tiers (Basic / Pro / Enterprise — `companies.plan` column already exists from migration 010). Per-tenant subscription state (already `companies.status` column). Payment via Stripe (Canadian SaaS standard; alternatives Paddle / Lemon Squeezy). Backend endpoints: `/api/billing/subscription`, `/api/billing/invoices`, `/api/webhooks/stripe`. Frontend: tenant admin → Billing page (current plan, upgrade, payment method, invoice history).
+
+**Open questions.** Annual vs monthly; per-user vs flat-tier (recommend per-user for construction SaaS); trial period (14 days standard); GC-line as separate SKU.
+
+### 94.2 — Subscription renewal control
+
+**Shape.** Stripe handles retry logic; we listen to webhooks (`invoice.payment_succeeded`, `invoice.payment_failed`, `customer.subscription.updated`, `customer.subscription.deleted`). Grace period (3-7 days post-failure) before `companies.status='SUSPENDED'`. Email tenant admin daily during grace. Suspended tenants: login disabled (gate already exists in `routes/auth.js`). Audit every renewal event.
+
+**Open questions.** Data retention post-suspension (recommend 90 days then archive); reactivation self-service via Stripe checkout vs admin-mediated.
+
+### 94.3 — Materials return request workflow
+
+**Shape.** New `/api/material-returns` route group. Worker submits: project, items, quantity, condition (new/opened/used), photos optional. Routes through foreman → tenant admin for approval. On approval: items rejoin inventory. Email notifications at each state transition via Resend.
+
+**Open questions.** Inventory tracking — chicken-and-egg if Constrai doesn't track stock yet; returns triggering billing adjustments (refund credit) if material was on a PO.
+
+### 94.4 — Equipment and tools request workflow
+
+**Shape.** Distinct from materials. New `/api/equipment-requests` + equipment catalog table. Catalog fields: name, serial, category, current location (project_id or "warehouse"), status (available/in_use/maintenance/lost). Lifecycle: worker requests → admin approves → dispatched (location updated) → returned. Maintenance log per item.
+
+**Open questions.** Catalog seeding (UI vs CSV import); QR/barcode scanning (mobile feature, post-MVP); geofencing for equipment that leaves project area.
+
+### 94.5 — Emergency purchase / invoice submission workflow
+
+**Status: STARTER SHIPPED.** Migration 015 + minimal POST/GET route deployed May 13. Admin approve/reject + tests + receipt upload pipeline + frontend remain.
+
+### 94.6 — Project achievement methodology + General Contractor (GC) market expansion
+
+**The strategic angle.** Constrai today targets sub-contractors (MEP trades). GCs oversee a project across all trades. Aggregate sub-contractors' progress data into a project-level dashboard → Constrai becomes interesting to GCs, expanding the market significantly.
+
+**Project achievement.** Aggregate attendance + assignments + hours + materials per project into trade-level + project-level metrics. Define "achievement" — options: earned value management (complex), milestone-based (simpler, per-project configurable), hours-burned vs estimated, hybrid. Likely multi-session design arc.
+
+**GC features.** Cross-trade project view (multi-tenant data sharing via consent). Safety training records (WHMIS, CCQ cards, fall protection certs; expiry + reminders). Accident reports (OHS compliance angle). Daily superintendent logs aggregating sub-trades' data. Document management (overlaps with Procore/Buildertrend — decide compete vs integrate).
+
+**Commercial.** GCs are a different customer profile. Pricing higher; sales motion different. Multi-tenancy gets more complex (cross-tenant queries with consent/contract). Could be separate product or role-based views.
+
+**Open questions.** Validate with 2-3 prospective GC customers BEFORE engineering investment. Cross-tenant data-sharing UX + legal flow. Pricing tier vs sub-contractor.
+
+### 94.7 — Priorities + sequencing thoughts
+
+Suggested order (effort low → high):
+
+1. 94.5 — Emergency purchase ✅ STARTED (deployed May 13).
+2. 94.3 — Materials return (next, ~3-5 days).
+3. 94.4 — Equipment and tools (~1 week).
+4. 94.1 + 94.2 — Subscription billing + renewals (~2-3 weeks together).
+5. 94.6 — GC market (~2-3 months; validate first).
+
+Phase 6 (Frontend tenant branding) is independent of all of these and can ship in parallel.
+
+---
+
+## Section 95 — Session retrospective (May 11–13, 2026 marathon)
+
+> **End-of-marathon retro.** This session ran ~10 hours of focused work across two days. Two major arcs interleaved: the planned Phase 5 closeout / Email migration AND an unplanned secrets-leak incident that ate the middle of the day. Section 95 records the metrics, the lessons, the pitfalls, and the carry-forwards.
+
+### 95.1 — Outcomes by the numbers
+
+**PRs merged to main: ~14.** Code-feature PRs: 5 (Phase 5 + abstraction + RLS fix + 2 schema starters). Hygiene PRs: 2. Dependabot routine: 3. Docs PRs: 4.
+
+**Secrets rotations: 7 unique credentials.** Cloudflare cert + private key; Resend API key (initial + rotated mid-session per Pitfall #31); `mepuser_super` DB pw; `mepuser` DB pw; `MAPBOX_ACCESS_TOKEN`; `JWT_SECRET`; `ADMIN_API_KEY` + `AUTH_SECRET` (deleted as orphan env vars).
+
+**Migrations applied on prod: 2.** Migration 014 (companies branding columns); migration 015 (`expense_claims` table + 3 permissions + 20 role-permission grants).
+
+**New pitfalls encoded: 4 (1 closed).** #28 CLOSED via 90-G. #29 NEW — `git add -A` near credentials. #30 NEW — `.env` screenshots. #31 NEW — sed mask regex universal form. #32 NEW — `pm2-root.service` pre-flight.
+
+**Multi-Tenant Migration:** Phase 5 CLOSED, Phase 4c restored after 90-F outage, Email migration cutover deployed, Phase 6-A done.
+
+**Production deployments:** 4 distinct restart cycles + 2 migrations + 1 kernel reboot. Total prod-downtime: ~2 minutes (kernel reboot caught pm2 startup wasn't configured; future reboots auto-resume).
+
+### 95.2 — What went well
+
+- **Document-as-you-go discipline held.** Sections 91, 92, 93, 94, 95 written in the same session as the work. No docs backlog.
+- **Pitfalls captured in real time.** All 4 new pitfalls encoded the moment they surfaced.
+- **Rotation work was systematic.** All 7 leaked credentials traced and rotated by end of session.
+- **Smoke-test discipline.** Every prod deploy got verified end-to-end before declared done.
+- **CLAUDE.md conventions paid off.** File-based log convention, explicit `git add` rule, read-untracked-files-first all earned their keep.
+
+### 95.3 — What could improve
+
+- **`git add -A`** mistake cost ~1.5 hours of remediation. Encoded as Pitfall #29.
+- **`.env` screenshot** mistake. Encoded as Pitfall #30.
+- **Sed regex bug** re-rotated a 1-hour-old key. Encoded as Pitfall #31.
+- **pm2 startup gap** was a latent issue invisible until first reboot. Encoded as Pitfall #32. Other latent assumptions likely lurk → pre-flight checklist for major ops.
+- **Branch protection vs Dependabot mismatch** caused ~30-min detour. Follow-up: drop `if:` skip OR remove jobs from required checks for Dependabot.
+- **Server `package-lock.json` drift** caught twice today on `git pull`. Worth a hygiene investigation in a future session.
+- **Session length** (~10 hours) pushes focused-output limits. Future marathons should plan breakpoints every 3 PRs.
+
+### 95.4 — Carry-forwards for next session
+
+**Immediate (next 1-2 sessions):**
+- Phase 6-B — public `GET /api/companies/:id/branding` endpoint.
+- Section 94.5 follow-up — PATCH endpoints (approve/reject/paid) + tests for `expense_claims`.
+- 24h Resend watch ends ~May 12 12:00 UTC → delete `SENDGRID_API_KEY` from prod `.env` + delete SendGrid sub-user.
+
+**Medium-term:**
+- Branch protection vs Dependabot reconciliation.
+- Server `package-lock.json` drift investigation.
+- pg DeprecationWarning hunt (needs `--trace-deprecation` on prod).
+- Coverage threshold ratchet.
+
+**Strategic (Section 94):**
+- 94.3 / 94.4 — materials return / equipment workflows.
+- 94.1 + 94.2 — Stripe subscriptions.
+- 94.6 — GC market (customer validation first).
+
+### 95.5 — Section/total update
+
+- **Today: 64 sections.** (Section 94 NEW — Product roadmap additions: 6 strategic backlog items captured. Section 95 NEW — Session retrospective. 14 PRs, 7 rotations, 2 migrations, 4 new pitfalls + 1 closed. Phase 5 closed, Email migration cutover deployed, Phase 6-A done, Section 94.5 starter shipped, pm2 startup gap fixed.)
+
