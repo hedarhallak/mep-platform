@@ -15,6 +15,7 @@
 //   which renders this same component again. 90-E adds proper auth UI.
 
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import api from '../lib/api'
 
 const COLUMNS = [
@@ -151,6 +152,12 @@ export default function CompaniesList() {
           <span className="text-sm text-slate-500">
             {loading ? 'Loading…' : `${sorted.length} of ${companies.length}`}
           </span>
+          <Link
+            to="/companies/new"
+            className="ml-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded text-white text-sm font-medium"
+          >
+            + New company
+          </Link>
         </div>
 
         {error && (

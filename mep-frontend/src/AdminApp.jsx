@@ -7,9 +7,10 @@
 // + AdminLogin component so SUPER_ADMIN can authenticate without
 // borrowing a token from the tenant portal.
 //
-//   /         → CompaniesList (read-only dashboard, 90-D)
-//   /login    → AdminLogin    (sign-in form, 90-E)
-//   *         → NotFound      (stub linking back to /)
+//   /                 → CompaniesList  (read-only dashboard, 90-D)
+//   /companies/new    → CreateCompany  (form, Phase 5.1)
+//   /login            → AdminLogin     (sign-in form, 90-E)
+//   *                 → NotFound       (stub linking back to /)
 //
 // Future screens (CompanyDetail, AuditLog) land here as new <Route>
 // entries. Anything that doesn't match a registered route falls
@@ -18,6 +19,7 @@
 
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom'
 import CompaniesList from './admin/CompaniesList.jsx'
+import CreateCompany from './admin/CreateCompany.jsx'
 import AdminLogin from './admin/AdminLogin.jsx'
 
 function NotFound() {
@@ -42,6 +44,7 @@ export default function AdminApp() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<CompaniesList />} />
+        <Route path="/companies/new" element={<CreateCompany />} />
         <Route path="/login" element={<AdminLogin />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
