@@ -271,6 +271,14 @@ function mountTenantRoutes(app) {
   // Section 89-C/10: material_requests migrated to req.db (RLS-enforced).
   app.use('/api/materials', auth, tenantDb, require('./routes/material_requests'));
 
+  // ── Expense claims (Section 94.5 starter) ───────────────────
+  // Emergency-purchase claims submitted by workers, approved by admin.
+  // Mounted on the tenant sub-app only — admin portal has no expense
+  // claim view (cross-tenant claim aggregation is out of scope; if a
+  // future SUPER_ADMIN audit view is needed, mount a read-only copy
+  // on adminApp at /api/super/expense-claims).
+  app.use('/api/expense-claims', auth, tenantDb, require('./routes/expense_claims'));
+
   // ── Business Intelligence ───────────────────────────────────
   // Section 89-C/1: bi route migrated to req.db.
   app.use('/api/bi', auth, tenantDb, require('./routes/bi'));
