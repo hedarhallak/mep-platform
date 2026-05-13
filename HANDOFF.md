@@ -1,7 +1,7 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 13, 2026 ~07:00 UTC — **Two-day marathon (May 11 + May 13) closed.** Session totals: ~14 PRs merged, 7 secret rotations, 2 prod migrations (014 + 015), 4 new pitfalls encoded (#29-#32), Phase 5 CLOSED, Email migration cutover DEPLOYED, Phase 6-A (companies branding columns) DEPLOYED, Section 94.5 starter (`expense_claims` schema + route) DEPLOYED, plus the unplanned secrets-leak incident fully remediated. **Next task: Phase 6-B — public `GET /api/companies/:id/branding` endpoint.** Plus the 24h-post-cutover `SENDGRID_API_KEY` decommission (eligible now, May 13).
+> Last updated: May 13, 2026 ~12:00 UTC — **Phase 5.1 Create Company UI shipped + deployed.** Today's continuation thread added 1 PR merged (#221 — Create Company UI) + 1 new pitfall (#33 — router primitives in tested components need `MemoryRouter` wrapper) + DECISIONS Section 96. Phase 5 now FULLY closed: admin.constrai.ca live with login + list + create. Cumulative two-day totals: ~15 PRs merged, 7 rotations, 2 migrations, 5 new pitfalls (#29–#33). **Next task: Phase 6-B — public `GET /api/companies/:id/branding` endpoint.** Plus the overdue `SENDGRID_API_KEY` decommission (eligible since May 12 12:00 UTC).
 
 ---
 
@@ -21,11 +21,11 @@ When you receive the one-line command above:
 2. **Read these 4 files** (use the Read tool, NOT bash):
    - `HANDOFF.md` (this file)
    - `CLAUDE.md` (working rules)
-   - `DECISIONS.md` (read ONLY the latest 2-3 sections referenced below — DON'T read the whole 11,000+ line file). Today's session added Sections 91 + 92 + 93.
+   - `DECISIONS.md` (read ONLY the latest 2-3 sections referenced below — DON'T read the whole 11,000+ line file). Latest section is **96** (Phase 5.1 closeout + Pitfall #33). Also relevant: 94 (product roadmap), 95 (retrospective). **IMPORTANT:** Read DECISIONS.md via the Read tool ONLY (never `bash tail` / `grep`) — Cowork bash mount can lag and miss recently merged sections (Section 96.6 explains; cost us PR #222).
    - `RECOVERY.md` Section 2.4 only if relevant
 3. **Echo this exact line** as the first line of your reply:
    ```
-   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Sections 91-95, all leak rotations done + Phase 6-A done + 94.5 starter done, next is Phase 6-B branding endpoint)
+   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 96, Phase 5.1 Create Company UI shipped + Phase 5 CLOSED, next is Phase 6-B branding endpoint)
    ```
 4. **Confirm the next task** in 1-2 lines.
 5. **Ask if Hedar is ready to start**, then wait.
@@ -42,9 +42,9 @@ When you receive the one-line command above:
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04 — kernel up-to-date as of May 11, reboot banner cleared) |
 | Backend | Node.js + Express + Postgres 16, pm2-managed at `/var/www/mep`. **pm2 systemd auto-start NOW configured (Section 93.3).** |
 | Frontend | React + Vite + Tailwind |
-| Latest deployed to prod | **JWT_SECRET rotation + kernel reboot + pm2-root.service enabled** (May 11 ~12:45 UTC). Plus all of today's work: Resend cutover, mepuser pw, Mapbox token, ADMIN/AUTH cleanup, notifyForeman fix. |
-| Last merged to main | Section 93 docs PR (todo) |
-| Active program | **Multi-Tenant Migration — Phase 6 (Frontend tenant context + branding) is next.** Email migration cutover complete (24h watch ongoing). |
+| Latest deployed to prod | **Phase 5.1 Create Company UI** — `mep-frontend/dist/admin.html` rebuilt + served on admin.constrai.ca (May 13 ~11:42 UTC). Visually confirmed: list + `+ New company` button + full create form rendering. Prior deploys still live: JWT rotation, Resend cutover, Phase 6-A migration 014, Section 94.5 migration 015 + route, all leak rotations. |
+| Last merged to main | PR #221 (Phase 5.1 Create Company UI). Section 96 docs PR follows (this commit). |
+| Active program | **Multi-Tenant Migration — Phase 6 (Frontend tenant context + branding) is next.** Phase 5 FULLY closed. Email cutover 24h watch period passed (eligible for SendGrid decommission). |
 | Mobile app | Still on legacy username login — backend keeps backward-compat |
 
 ### Multi-tenant migration progress
@@ -58,8 +58,8 @@ When you receive the one-line command above:
 | Phase 4a — RLS Stage 1 | ✅ Deployed |
 | Phase 4b — RLS Stage 2 | ✅ Deployed |
 | Phase 4c — RLS Stage 3 | ✅ Deployed and restored after 90-F outage |
-| Phase 5 — SUPER_ADMIN portal split | ✅ CLOSED |
-| Email migration SendGrid → Resend | ✅ **CUTOVER COMPLETE** (May 11 ~12:00 UTC). 24h watch ends May 12 ~12:00 UTC, then SendGrid decommission. |
+| Phase 5 — SUPER_ADMIN portal split | ✅ **FULLY CLOSED** — login + list + create all live on admin.constrai.ca (May 13). |
+| Email migration SendGrid → Resend | ✅ **CUTOVER COMPLETE** (May 11 ~12:00 UTC). 24h watch passed; SendGrid decommission overdue. |
 | **Phase 6 — Frontend tenant context + branding** | ⏳ **Next** |
 | Phase 7 — 2FA + biometric + account security | ⏳ Pending |
 | Phase 8 — Audit + compliance | ⏳ Pending |
@@ -147,7 +147,7 @@ Cost inventory + DigitalOcean Spaces + Apple Developer keys: see `RECOVERY.md`.
 
 ---
 
-## Critical pitfalls (encoded from Sections 86 + 87 + 88 + 89 + 90 + 91 + 92 + 93)
+## Critical pitfalls (encoded from Sections 86 + 87 + 88 + 89 + 90 + 91 + 92 + 93 + 96)
 
 1. **Bash sandbox file sync lag** — use Read tool to verify file state.
 2. **Edit tool can silently lose changes** — Read each file immediately after Edit.
@@ -181,6 +181,7 @@ Cost inventory + DigitalOcean Spaces + Apple Developer keys: see `RECOVERY.md`.
 30. **NEVER paste `.env` contents/screenshots in any chat** (Section 91) — use `read -rsp` + `sed -i`. Mask via `sed 's/=.*/=***/'`.
 31. **Sed mask regex MUST include underscores** (Section 92.5) — universal form: `sed -E 's/=[A-Za-z0-9_.-]+$/=***/'`. Eyeball masked output before sharing.
 32. **Verify `pm2-root.service` is enabled BEFORE any planned reboot** (NEW — Section 93.4, May 11, 2026). The first kernel reboot of the prod Droplet took prod down for ~2 min because `pm2 startup` was never run — no systemd unit to spawn the pm2 daemon on boot. Fixed via `pm2 startup systemd -u root --hp /root && pm2 save`. **Convention going forward:** run `systemctl is-enabled pm2-root` before any planned reboot; expected output `enabled`. If `disabled` or `not-found`, run the `pm2 startup` + `pm2 save` pair BEFORE rebooting. Also: after ANY new `pm2 start` of a new app, run `pm2 save` immediately so the dump captures the new process.
+33. **Adding router primitives to a tested component requires updating its test wrapper** (NEW — Section 96.5, May 13, 2026). Adding `<Link>`, `<NavLink>`, `useNavigate`, `useLocation`, `useParams`, or `<Outlet>` from `react-router-dom` to a component already covered by RTL tests throws `TypeError: Cannot destructure property 'basename' of useContext(...) as it is null` (from `LinkWithRef`) unless every `render()` happens under a Router. Fix: import `MemoryRouter` and create `renderWithRouter = (ui) => render(<MemoryRouter>{ui}</MemoryRouter>)`, swap all `render(...)` calls. **Convention:** when a PR adds router primitives to a previously router-free component, update its test file in the SAME PR. Cost us one CI iteration on PR #221.
 
 ---
 
