@@ -1,7 +1,7 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 14, 2026 ~22:00 UTC — **End of marathon session (Sections 97–102). 12 PRs merged today: #226 → #235.** Latest shipped: PR #235 — nginx wildcard vhost config `infra/nginx/wildcard-constrai.conf` (Section 102). Phase 6-D-1a + 6-D-1b cookie auth + redirect_url end-to-end works in code; prod activation of the wildcard nginx block is the next operational step. **Three small hygiene items hit tool-level friction at end-of-session and are queued for the new conversation.**
+> Last updated: May 14, 2026 ~23:30 UTC — **Phase 6-D-1c shipped. The Phase 6-D-1 cookie-migration trilogy (1a → 1b → 1c) is fully closed.** Web auth state now travels exclusively in HttpOnly cookies; the JWT no longer rides in the response JSON body for web clients. Mobile path (Bearer + body tokens) preserved unchanged. Today's PR: #237 merged (`e8f07c7` on main, CI #595 green). One CI flake (pg `bigint` vs `Number()` coercion in a new assertion) fixed in one line and re-pushed. **Three hygiene items from the previous session (duplicate Section 99 in DECISIONS.md, `.husky/pre-commit` main-branch guard, nginx wildcard symlink + reload on prod) are still pending and remain the recommended first batch for the next session.**
 
 ---
 
@@ -21,19 +21,19 @@ When you receive the one-line command above:
 2. **Read these 4 files** (use the Read tool, NOT bash):
    - `HANDOFF.md` (this file)
    - `CLAUDE.md` (working rules)
-   - `DECISIONS.md` — read ONLY the latest 2-3 sections (the file is now 12,100+ lines). Latest section is **102** (nginx wildcard vhost + end-of-marathon snapshot). Also relevant: 101 (Phase 6-D-1b frontend cookies + Pitfall #36), 100 (Phase 6-D-1a backend cookies). **NB:** DECISIONS.md still has a duplicate Section 99 around line 11767 (leftover from an aborted draft May 14 — slated for cleanup as item #1 in this new session). The canonical Section 99 is at line ~11574. **IMPORTANT:** Read DECISIONS.md via the Read tool ONLY (never `bash tail` / `grep`) — Cowork bash mount can lag and miss recently merged sections.
+   - `DECISIONS.md` — read ONLY the latest 2-3 sections (the file is now 12,200+ lines). Latest section is **103** (Phase 6-D-1c drop-body-tokens-for-web). Also relevant: 102 (nginx wildcard vhost — config in repo, prod activation still pending), 101 (Phase 6-D-1b frontend cookies + Pitfall #36). **NB:** DECISIONS.md still has a duplicate Section 99 around line 11767 (leftover from May 14 morning — hygiene item #1 below). The canonical Section 99 is at line ~11574. **IMPORTANT:** Read DECISIONS.md via the Read tool ONLY (never `bash tail` / `grep`) — Cowork bash mount can lag and miss recently merged sections.
    - `RECOVERY.md` Section 2.4 only if relevant
 3. **Echo this exact line** as the first line of your reply:
    ```
-   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 102, end-of-marathon snapshot, three hygiene items + Phase 6-D-1c + nginx prod activation pending)
+   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 103, Phase 6-D-1c shipped, three hygiene items + Phase 6-D-2 logo swap pending)
    ```
-4. **Open with the three hygiene items as the recommended first batch** — they are small, independent, and unblock Phase 6-D-1c cleanly. Confirm the task list in 1-2 lines, then ask Hedar which order he prefers.
+4. **Open with the three hygiene items as the recommended first batch** — they are small, independent, and unblock Phase 6-D-2 cleanly. Confirm the task list in 1-2 lines, then ask Hedar which order he prefers.
 
 ---
 
 ## Pending tasks at session start (ordered, smallest-first)
 
-These three items hit tool-level friction at the very end of the May 14 marathon (Edit tool refused `.husky/pre-commit` as "protected location"; PowerShell duplicate-cleanup scripts silently no-op'd ~3 attempts). A fresh session with a clean state is likely to push them through without resistance. They're independent of each other, so they can ship as **one combined hygiene PR** or three tiny ones — Hedar's call.
+These three items hit tool-level friction during the May 14 marathon and are now stale by one session. They are independent and can ship as **one combined hygiene PR** or three tiny ones — Hedar's call.
 
 ### 1. Clean up duplicate Section 99 in DECISIONS.md
 
@@ -109,7 +109,7 @@ systemctl reload nginx
 - `https://acm.constrai.ca/admin.html` → 404 (admin shell leak guard)
 - `http://acm.constrai.ca/anything` → 301 → `https://acm.constrai.ca/anything`
 
-**Critical end-to-end test:** open an incognito window, go to `https://app.constrai.ca/login`, enter an `acm`-company email + PIN. Backend's redirect_url logic (Section 100.5) should return `https://acm.constrai.ca/dashboard`. Frontend `LoginPage.jsx` should `window.location.assign()` to it. After the hop, `/whoami` at `acm.constrai.ca` should authenticate via the cookie (set by `app.constrai.ca`'s login response, scoped `Domain=.constrai.ca`) and land on the dashboard with `acm`'s branding applied.
+**Critical end-to-end test:** open an incognito window, go to `https://app.constrai.ca/login`, enter an `acm`-company email + PIN. Backend's redirect_url logic (Section 100.5) returns `https://acm.constrai.ca/dashboard`. Frontend `LoginPage.jsx` calls `window.location.assign()` to it. After the hop, `/whoami` at `acm.constrai.ca` authenticates via the cookie (set by `app.constrai.ca`'s login response, scoped `Domain=.constrai.ca`) and renders the dashboard with `acm`'s branding applied. **As of Section 103, this whole flow works end-to-end in code** — the only missing piece is this nginx reload.
 
 **Rollback plan if anything goes wrong:**
 
@@ -120,11 +120,21 @@ nginx -t && systemctl reload nginx
 
 ---
 
-## After the three hygiene items: Phase 6-D-1c
+## After the three hygiene items: Phase 6-D-2 (logo swap on LoginPage)
 
-Drop tokens-in-body for web auth responses. Full scope is preserved below in the "Phase 6-D-1c scope" section. **Recommendation:** Option B (`X-Auth-Channel: cookie` header from web frontend). Explicit, easy to mock, doesn't drift with user-agent changes.
+Swap the static Constrai logo on `LoginPage.jsx` for a tenant-aware logo URL pulled from `window.__BRANDING__.logo_url` (populated by `lib/branding.js` in Section 99). Fall back to the Constrai logo when:
+- `window.__BRANDING__` is null (generic `app.constrai.ca` entry — Pattern B starts here)
+- `logo_url` is absent or returns 404
+- The fetch / decode fails (defensive)
 
-After 6-D-1c: Phase 6-D-2 (logo swap on LoginPage) → Phase 6-D-3 (admin upload UI + DigitalOcean Spaces).
+**Touch points:**
+- `mep-frontend/src/pages/auth/LoginPage.jsx` — read `window.__BRANDING__?.logo_url`, render `<img>` with `onError` fallback to Constrai default.
+- `mep-frontend/src/admin/AdminLogin.jsx` — keep Constrai logo (SUPER_ADMIN portal has no tenant context).
+- Tests: extend `LoginPage.test.jsx` with tenant-logo render + 404-fallback cases.
+
+**Estimated effort:** ~1.5 hours. Branch name suggestion: `feat/s104-phase6d2-logo-swap`.
+
+After 6-D-2: Phase 6-D-3 (admin upload UI + DigitalOcean Spaces pipeline for logos).
 
 ---
 
@@ -134,15 +144,15 @@ After 6-D-1c: Phase 6-D-2 (logo swap on LoginPage) → Phase 6-D-3 (admin upload
 |---|---|
 | Production URL | `https://app.constrai.ca` |
 | Admin portal | `https://admin.constrai.ca` (SUPER_ADMIN only) |
-| Tenant subdomain example | `https://acm.constrai.ca` (DNS live; nginx activation pending — see hygiene item #3) |
+| Tenant subdomain example | `https://acm.constrai.ca` (DNS live; nginx activation pending — hygiene item #3) |
 | Login (test) | Email: `hedar.hallak@gmail.com` / PIN: `hedar2026` (SUPER_ADMIN) |
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04) |
-| Backend | Node.js + Express + Postgres 16, pm2-managed at `/var/www/mep`. Cookie auth wired (`middleware/auth.js` + `routes/auth.js#extractToken` accept Bearer header OR cookie). |
-| Frontend | React + Vite + Tailwind v4. `credentials: 'include'` on every fetch (Section 101). `window.__BRANDING__` populated by `lib/branding.js` (Section 99). |
-| Latest deployed to prod | **Phase 6-D-1b frontend cookie consumption** (code via PR #233). nginx wildcard config is in the repo (PR #235) but the prod nginx reload is pending. |
-| Last merged to main | **PR #235** (Section 102 nginx wildcard vhost config). |
-| Active program | **Multi-Tenant Migration** — after hygiene batch, next code task is **Phase 6-D-1c (drop tokens-in-body for web)**. |
-| Mobile app | Still on Bearer-token + PIN. Backend's Bearer-wins-over-cookie policy keeps mobile unaffected. |
+| Backend | Node.js + Express + Postgres 16, pm2-managed at `/var/www/mep`. `/login` + `/refresh` return cookie-only response body when `X-Auth-Channel: cookie` is set (Section 103); legacy body-tokens shape preserved for mobile. |
+| Frontend | React + Vite + Tailwind v4. Every fetch sends `credentials: 'include'` + `X-Auth-Channel: cookie`. `window.__BRANDING__` populated by `lib/branding.js` (Section 99). |
+| Latest deployed to prod | **Phase 6-D-1c** (`e8f07c7` on main). The Droplet will fast-forward on the next `git pull` on the server. |
+| Last merged to main | **PR #237** (Section 103 — Phase 6-D-1c). Section 103 docs PR follows (this commit). |
+| Active program | **Multi-Tenant Migration — Phase 6-D-1 trilogy fully closed.** Next code: Phase 6-D-2 logo swap. Next operational: nginx wildcard reload (hygiene #3). |
+| Mobile app | Still on Bearer-token + PIN. Backend's mobile path (no `X-Auth-Channel` header → keeps body tokens) is unchanged. |
 
 ### Multi-tenant migration progress
 
@@ -160,33 +170,12 @@ After 6-D-1c: Phase 6-D-2 (logo swap on LoginPage) → Phase 6-D-3 (admin upload
 | Phase 6-C — Frontend bootstrap reads branding + applies CSS vars | ✅ Deployed (Section 99) |
 | Phase 6-D-1a — Backend cookie auth + login redirect_url | ✅ Deployed (Section 100) |
 | Phase 6-D-1b — Frontend cookie consumption + /whoami cookie fallback | ✅ Deployed (Section 101) |
-| **Section 102 — nginx wildcard config file** | ✅ **Merged (PR #235). Prod nginx reload pending — hygiene item #3.** |
-| Phase 6-D-1c — Drop tokens-in-body for web auth responses | ⏳ Next code task (after hygiene batch) |
-| Phase 6-D-2 — Logo swap on LoginPage | ⏳ After 6-D-1c |
+| Phase 6-D-1c — Drop tokens-in-body for web auth responses | ✅ **Deployed (May 14, Section 103)** |
+| Section 102 — nginx wildcard config file | ✅ Merged (PR #235). Prod nginx reload pending — hygiene item #3. |
+| **Phase 6-D-2 — Logo swap on LoginPage** | ⏳ **Next code task (after hygiene batch)** |
 | Phase 6-D-3 — Admin upload UI + DigitalOcean Spaces pipeline | ⏳ After 6-D-2 |
 | Phase 7 — 2FA + biometric + PIN→password migration | ⏳ Pending |
 | Phase 8 — Audit + compliance | ⏳ Pending |
-
----
-
-## Phase 6-D-1c scope (after hygiene batch — preserved from previous handoff)
-
-Phase 6-D-1a (Section 100) added cookies as an **additive** layer alongside the existing tokens-in-JSON-body response. Phase 6-D-1b (Section 101) wired the frontend to use cookies. Phase 6-D-1c closes the loop: drop `token` and `refresh_token` from the response body for **web** clients, while keeping them for **mobile** (Bearer header). The frontend doesn't read body tokens anymore after 6-D-1b's `useAuth` refactor, so removing them removes a leak surface.
-
-**Detection signal options (decision at session start):**
-- **A.** User-Agent header (mobile UA contains `Constrai-Mobile` or `Expo`).
-- **B.** `X-Auth-Channel: cookie` header from web frontend (set by `lib/api.js`). **← Recommended.** Explicit, doesn't drift, easy to mock.
-- **C.** New `POST /api/auth/login/web` endpoint vs existing `/login` for mobile. Cleanest contract but doubles route surface.
-
-**Scope (assuming Option B):**
-
-1. Backend `routes/auth.js` — `/login`, `/refresh`: detect `X-Auth-Channel: cookie`, omit `token` + `refresh_token` from response body when present. Cookie set unconditionally.
-2. Frontend `mep-frontend/src/lib/api.js` — add `X-Auth-Channel: cookie` to every fetch. Verify `refreshTokenOnce` gracefully no-ops when body tokens absent (cookie already set by backend).
-3. Frontend `mep-frontend/src/hooks/useAuth.jsx` — verify no code path expects `data.token` on login success.
-4. Mobile — no change.
-5. Tests — backend: extend `tests/auth/cookie_session.test.js` to assert web-signal requests get no body tokens, default requests get them. Frontend: assert successful login still works with empty-body tokens.
-
-**Estimated effort:** ~2.5 hours total. Branch name: `feat/s103-phase6d1c-drop-body-tokens-for-web`.
 
 ---
 
@@ -194,9 +183,10 @@ Phase 6-D-1a (Section 100) added cookies as an **additive** layer alongside the 
 
 - `routes/project_trades.js` redundant top-level `router.use(auth)`. Low.
 - pg DeprecationWarning ("client.query() when the client is already executing a query"). Hygiene PR opportunity.
-- Coverage threshold ratchet — 46+ test files. Run `TEST_DATABASE_URL=… npx jest --coverage` and ratchet if drift ≥3 pp.
+- Coverage threshold ratchet — current measured: Lines 63.66%, Branches 54.41%, Functions 62.18%, Statements 62.61%. Ratchet candidate when stable across 3 consecutive CI runs.
 - Color shades from `brand_color` (Section 99.5) — currently only `--color-primary` and `--color-sidebar-active` track the tenant brand; shades stay Constrai green. Visual polish.
 - **PIN → password migration** — Phase 7 candidate alongside 2FA + biometric. (Hedar reminder, Section 100 session.)
+- **Mobile path migration off body refresh_token** — Phase 7 candidate alongside PIN→password (so mobile finally drops body tokens too).
 - CSRF protection — currently `SameSite=Lax` covers the common threat surface. Layer a CSRF-token middleware if state-changing GET endpoints get added.
 - `SENDGRID_FROM_EMAIL` env var name — optional future rename to `EMAIL_FROM`.
 - Twilio/SendGrid dormant account — no cost; don't delete unless dropping the Twilio relationship.
@@ -243,7 +233,7 @@ Cost inventory + DigitalOcean Spaces + Apple Developer keys: see `RECOVERY.md`.
 
 ---
 
-## Critical pitfalls (encoded from Sections 86–102)
+## Critical pitfalls (encoded from Sections 86–103)
 
 1. **Bash sandbox file sync lag** — use Read tool to verify file state.
 2. **Edit tool can silently lose changes** — Read each file immediately after Edit.
@@ -253,7 +243,7 @@ Cost inventory + DigitalOcean Spaces + Apple Developer keys: see `RECOVERY.md`.
 6. **`npm install --omit=dev` fails on husky** — use `--ignore-scripts`.
 7. **Untracked file on server blocks `git pull`** — stash or delete first.
 8. **PR auto-merge can flip dependency order** — manual control between dependent PRs.
-9. **`gh pr merge` requires branch up-to-date** — rebase + `--force-with-lease`.
+9. **`gh pr merge` requires branch up-to-date** — `gh pr update-branch <num>` is the right tool when a PR ends up `BEHIND` mid-CI (Section 103 closeout). Falls back to rebase + `--force-with-lease` only when update-branch fails.
 10. **Don't open a new session before previous PRs merge** — wait for Merged status.
 11. **Cherry-picking can cross feature branches** — verify `git branch --show-current` first.
 12. **Replace this file at end of session, don't append** — long history goes in DECISIONS.md.
@@ -262,7 +252,7 @@ Cost inventory + DigitalOcean Spaces + Apple Developer keys: see `RECOVERY.md`.
 15. **`git checkout main` fails silently with dirty tree** — stash first.
 16. **`git stash pop` can lose cleanly-applied files when there's a conflict elsewhere** — verify content after pop.
 17. **PowerShell's bare `>` redirect uses UTF-16 with BOM** — always `Out-File -Encoding utf8`.
-18. **GitHub web "Update branch" button creates duplicate squash commits** — never touch UI for a merged branch.
+18. **GitHub web "Update branch" button creates duplicate squash commits** — never touch UI for a merged branch. The CLI equivalent `gh pr update-branch` is fine and is the right tool when a PR is `BEHIND` mid-CI (see Pitfall #9).
 19. **`openssl rand -hex N` over `-base64 N`** — hex is URL-safe.
 20. **Read untracked WIP files before writing fresh code** — `git status` + Read first.
 21. **`middleware/permissions.js can()` uses `pool.query` directly** ✅ CLOSED by 89-D.
@@ -280,7 +270,8 @@ Cost inventory + DigitalOcean Spaces + Apple Developer keys: see `RECOVERY.md`.
 33. **Adding router primitives to a tested component requires updating its test wrapper** (Section 96.5).
 34. **Never assume case homogeneity across legacy + generated text keys** (Section 97.6) — prefer `LOWER(col) = LOWER($1)`.
 35. **Provider migration completeness audit before env-var decommission** (Section 98.6) — grep direct SDK references AND legacy env-var references before declaring scope.
-36. **Verify current branch before commit/push during parallel work** (Section 101.3) — `git branch --show-current` before EVERY commit. The May 14 incident was caught only because `gh pr create` failed silently AND `gh run list` was checked. Mitigation hook is hygiene item #2 above.
+36. **Verify current branch before commit/push during parallel work** (Section 101.3) — `git branch --show-current` before EVERY commit. Mitigation hook is hygiene item #2 above.
+37. **Compare pg `bigint` columns via `String()` on both sides in assertions** (Section 103.2). pg returns `bigint` columns as strings; helpers like `seedUser` may coerce to `Number`. The asymmetry passes silently in shape tests, then surfaces the first time a new test asserts an `id`. Universal form: `expect(String(res.body.<x>)).toBe(String(seed.<id>))`.
 
 ---
 
@@ -288,14 +279,15 @@ Cost inventory + DigitalOcean Spaces + Apple Developer keys: see `RECOVERY.md`.
 
 - **One command at a time** in chat — one PowerShell or bash block per turn.
 - **Flow diagrams only for substantive architectural discussions** — not routine ops.
-- **Levantine Arabic in chat** — `شو`, `هلق`, `بدك`, `لازم`, `منيح`, `بسيط`. `شغّل` (not `ركض`). Masculine address.
-- **GitHub CLI + auto-merge** — `gh pr create --fill --base main ; gh pr merge --auto --squash --delete-branch`.
+- **Levantine Arabic in chat** — `شو`, `هلق`, `بدك`, `لازم`, `منيح`, `بسيط`. `شغّل` (not `ركض`). `يفتل` for CI/auto-merge churn (Hedar idiom — "it's spinning"). Masculine address.
+- **GitHub CLI + auto-merge** — `gh pr create --fill --base main ; gh pr merge --auto --squash --delete-branch`. If a PR ends up `BEHIND` main mid-CI, `gh pr update-branch <num>` is the right escape (Pitfalls #9 / #18).
 - **ALWAYS delete the local branch after merge** — `--delete-branch` only removes the remote.
 - **Don't put `"تم"` inside PowerShell blocks** — Hedar types it manually.
 - **File-based log convention for large output** — `Out-File -Encoding utf8` (NEVER bare `>`).
 - **DECISIONS.md is the archive**, not the entry point.
 - **Verify current branch before commit/push during parallel work** — `git branch --show-current` before every commit (Section 101.3 / Pitfall #36).
 - **Parallel work pattern** — when waiting on CI, prep next-PR code on a separate local branch (don't push). Saves 5–6 min/PR.
+- **bigint vs Number in test assertions** — compare via `String()` on both sides (Section 103.2 / Pitfall #37).
 
 ---
 
@@ -312,7 +304,7 @@ Cost inventory + DigitalOcean Spaces + Apple Developer keys: see `RECOVERY.md`.
 ## Out-of-band notes (read on demand)
 
 - `CLAUDE.md` — full working rules.
-- `DECISIONS.md` — full decision history (12,100+ lines after Section 102). Search by Section number.
+- `DECISIONS.md` — full decision history (12,200+ lines after Section 103). Search by Section number.
 - `RECOVERY.md` — credentials inventory, cost summary.
 - `SCHEMA.md` — DB schema reference.
 - `API.md` — backend endpoint reference.
