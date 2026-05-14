@@ -125,10 +125,10 @@ async function prepareNotifyData(db, attendanceId) {
 }
 
 async function fireNotifyEmail(data, eventType) {
-  // Provider-agnostic mail client (SendGrid by default, Resend via
-  // EMAIL_PROVIDER=resend). See lib/email.js#getMailClient.
+  // Provider-agnostic mail client. Section 98 cleanup: setApiKey call removed
+  // — Resend wrapper makes setApiKey a no-op and SendGrid is no longer
+  // referenced at route level. See lib/email.js#getMailClient.
   const sgMail = require('../lib/email').getMailClient();
-  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
   const subject =
     eventType === 'CHECKIN'

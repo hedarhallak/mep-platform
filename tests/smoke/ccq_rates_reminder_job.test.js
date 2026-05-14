@@ -133,17 +133,11 @@ describe('jobs/ccqRatesReminderJob — registration', () => {
     global.Date = realDate;
   });
 
-  test('sets the SendGrid API key when SENDGRID_API_KEY is present at module load', () => {
-    process.env.SENDGRID_API_KEY = 'SG.fake-key';
-    loadJob();
-
-    expect(mockSgSetApiKey).toHaveBeenCalledWith('SG.fake-key');
-  });
-
-  test('does NOT call setApiKey when SENDGRID_API_KEY is unset at module load', () => {
-    loadJob();
-    expect(mockSgSetApiKey).not.toHaveBeenCalled();
-  });
+  // Section 98 (May 13, 2026): the module-level `if (SENDGRID_API_KEY)
+  // { sgMail.setApiKey(...) }` block was removed. sgMail is the
+  // provider-agnostic client from lib/email.js#getMailClient — in prod
+  // (EMAIL_PROVIDER=resend) setApiKey is a no-op anyway. The two tests
+  // that asserted the module-load setApiKey behaviour are gone.
 });
 
 describe('jobs/ccqRatesReminderJob — sendCCQReminder', () => {

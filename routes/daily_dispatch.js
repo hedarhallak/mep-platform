@@ -280,20 +280,20 @@ async function getEmployeesEmailColumn(db) {
 router.post('/commit', async (req, res) => {
   const startedAt = Date.now();
   try {
-    const SENDGRID_API_KEY = mustEnv('SENDGRID_API_KEY');
+    // Section 98 (May 13, 2026): SENDGRID_API_KEY no longer checked here.
+    // Mail goes through getMailClient() which routes to Resend in prod.
     const SENDGRID_FROM_EMAIL = mustEnv('SENDGRID_FROM_EMAIL');
-    if (!SENDGRID_API_KEY || !SENDGRID_FROM_EMAIL) {
+    if (!SENDGRID_FROM_EMAIL) {
       return res.status(500).json({
         ok: false,
         error: 'EMAIL_NOT_CONFIGURED',
-        message: 'Missing SENDGRID_API_KEY / SENDGRID_FROM_EMAIL in .env',
+        message: 'Missing SENDGRID_FROM_EMAIL in .env',
       });
     }
 
-    // Provider-agnostic mail client (SendGrid by default, Resend via
-    // EMAIL_PROVIDER=resend). See lib/email.js#getMailClient.
+    // Provider-agnostic mail client (Resend in prod, SendGrid fallback).
+    // See lib/email.js#getMailClient.
     const sgMail = require('../lib/email').getMailClient();
-    sgMail.setApiKey(SENDGRID_API_KEY);
 
     const qDate = String(req.query.date || '').trim();
     const date = qDate || new Date().toISOString().slice(0, 10);

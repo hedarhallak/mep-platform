@@ -210,11 +210,12 @@ router.post('/:id/resend', can('settings.user_management'), async (req, res) => 
     const targetId = Number(req.params.id);
     const companyId = req.user.company_id;
 
-    const SENDGRID_API_KEY = mustEnv('SENDGRID_API_KEY');
+    // Section 98 (May 13, 2026): SENDGRID_API_KEY no longer checked here.
+    // Mail goes through getMailClient() which routes to Resend in prod.
     const SENDGRID_FROM_EMAIL = mustEnv('SENDGRID_FROM_EMAIL');
     const APP_BASE_URL = mustEnv('APP_BASE_URL');
 
-    if (!SENDGRID_API_KEY || !SENDGRID_FROM_EMAIL || !APP_BASE_URL) {
+    if (!SENDGRID_FROM_EMAIL || !APP_BASE_URL) {
       return res.status(500).json({ ok: false, error: 'EMAIL_NOT_CONFIGURED' });
     }
 
@@ -258,7 +259,6 @@ router.post('/:id/resend', can('settings.user_management'), async (req, res) => 
 
     const activateLink = `${APP_BASE_URL.replace(/\/$/, '')}/activate?token=${rawToken}`;
 
-    sgMail.setApiKey(SENDGRID_API_KEY);
     await sgMail.send({
       to: target.email,
       from: SENDGRID_FROM_EMAIL,

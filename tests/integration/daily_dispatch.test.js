@@ -137,11 +137,11 @@ describeIfDb('Daily dispatch — POST /api/daily-dispatch/commit', () => {
   });
 
   test('POST /commit without SendGrid env returns 500 EMAIL_NOT_CONFIGURED', async () => {
-    // The route checks SENDGRID_API_KEY / SENDGRID_FROM_EMAIL BEFORE looking
-    // up the run. Explicitly clear those env vars for the duration of the
-    // test so the assertion holds regardless of whether the dev's local .env
-    // has SendGrid configured. (CI doesn't, but local devs often do — this
-    // was the failure mode that left the test red across Sections 65-78.)
+    // Section 98 (May 13, 2026): the route now only checks SENDGRID_FROM_EMAIL
+    // (SENDGRID_API_KEY is no longer referenced at route level — Resend wrapper
+    // routes the actual send via lib/email.js#getMailClient). We still clear
+    // SENDGRID_API_KEY for hygiene so dev .env doesn't bleed into the test,
+    // but the assertion only requires SENDGRID_FROM_EMAIL to be unset.
     const origKey = process.env.SENDGRID_API_KEY;
     const origFrom = process.env.SENDGRID_FROM_EMAIL;
     delete process.env.SENDGRID_API_KEY;

@@ -101,15 +101,19 @@ async function ensureUniqueUsername(req, base) {
 // Requires: settings.user_management permission
 router.post('/', can('settings.user_management'), async (req, res) => {
   try {
-    const SENDGRID_API_KEY = mustEnv('SENDGRID_API_KEY');
+    // Section 98 (May 13, 2026): SENDGRID_API_KEY no longer checked here.
+    // Mail goes through getMailClient() which routes to Resend in prod
+    // (EMAIL_PROVIDER=resend). The setApiKey call on the resend-shaped
+    // wrapper is a no-op (lib/email.js#67-71), so the SendGrid key is dead
+    // weight at the route level.
     const SENDGRID_FROM_EMAIL = mustEnv('SENDGRID_FROM_EMAIL');
     const APP_BASE_URL = mustEnv('APP_BASE_URL');
 
-    if (!SENDGRID_API_KEY || !SENDGRID_FROM_EMAIL || !APP_BASE_URL) {
+    if (!SENDGRID_FROM_EMAIL || !APP_BASE_URL) {
       return res.status(500).json({
         ok: false,
         error: 'EMAIL_NOT_CONFIGURED',
-        message: 'Missing SENDGRID_API_KEY / SENDGRID_FROM_EMAIL / APP_BASE_URL in .env',
+        message: 'Missing SENDGRID_FROM_EMAIL / APP_BASE_URL in .env',
       });
     }
 
@@ -235,12 +239,11 @@ router.post('/', can('settings.user_management'), async (req, res) => {
     if (!inviteId) throw new Error('Failed to create invite');
 
     // Send activation email — pre-migration behavior was to send INSIDE
-    // the manual transaction so that a SendGrid failure rolled back the
-    // user + invite. Same semantics under tenantDb: if sgMail.send
+    // the manual transaction so that a mail provider failure rolled back
+    // the user + invite. Same semantics under tenantDb: if sgMail.send
     // throws, the catch returns 500 and tenantDb rolls back via the
     // 'close' event listener (the transaction is poisoned, COMMIT
     // would fail; close fires a ROLLBACK).
-    sgMail.setApiKey(SENDGRID_API_KEY);
     const activateLink = `${APP_BASE_URL.replace(/\/$/, '')}/activate?token=${rawToken}`;
 
     const roleLabel =
