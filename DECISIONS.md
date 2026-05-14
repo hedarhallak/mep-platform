@@ -11432,3 +11432,140 @@ This pitfall is the read-side counterpart to "always normalize on write." We don
 
 - **Today: 66 sections.** (Section 97 NEW — Phase 6-B public branding endpoint shipped + fixed + verified in one continuation thread. Feature PR went green on CI first try; prod smoke surfaced a case-sensitivity bug between legacy lowercase seed data and the route's uppercase assumption. Same-session fix PR (#225) shipped the case-insensitive SQL. New Pitfall #34 — never assume case homogeneity across legacy + generated text keys.)
 
+---
+
+## Section 98 — SendGrid Decommission Complete + Pitfall #35 (May 14, 2026 ~09:30–10:30 UTC)
+
+> Phase 1 (refactor) + Phase 2 (env + dashboard) of the SendGrid decommission shipped in a single continuation thread. HANDOFF estimated this as a "15-min decommission" — actual scope was 7 production files + 3 test files because the Resend cutover (Section 92.5) only swapped the abstraction layer (`lib/email.js#getMailClient`) but didn't touch the 4 routes + 1 lib + 1 job that bypass the wrapper and call `sgMail.setApiKey` / `mustEnv('SENDGRID_API_KEY')` directly. The actual decommission therefore required a refactor PR before the env var could be safely removed from prod.
+
+### 98.1 — Plan vs. discovered scope
+
+When the session opened with Phase 6-C as the planned next task, HANDOFF.md also listed an "Alternative: SendGrid decommission (~15 min)". The 15-min figure assumed the Resend cutover was code-complete and only the env var + dashboard cleanup remained.
+
+A simple grep for `SENDGRID_API_KEY` in the repo surfaced a different reality:
+
+| File | Pattern | Risk if env removed without refactor |
+|---|---|---|
+| `routes/admin_users.js` | `mustEnv` + `setApiKey` + `send` | `POST /api/admin/users` returns 500 EMAIL_NOT_CONFIGURED |
+| `routes/attendance.js` | `setApiKey` only | no-op in Resend mode (setApiKey is a noop on the wrapper) |
+| `routes/daily_dispatch.js` | `mustEnv` + `setApiKey` + `send` | `POST /api/daily-dispatch/commit` returns 500 |
+| `routes/user_management.js` | `mustEnv` + `setApiKey` + `send` | `POST /api/users/:id/resend` returns 500 |
+| `lib/weeklyReport.js` | `setApiKey` only | no-op in Resend mode |
+| `jobs/ccqRatesReminderJob.js` | guard + `setApiKey` | safe (guard skips when env unset) |
+
+`lib/email.js#getMailClient` already returned a Resend-shaped wrapper in prod (`EMAIL_PROVIDER=resend`), so the actual `send()` calls flowed through Resend. The `setApiKey` calls were no-ops. But the `mustEnv('SENDGRID_API_KEY')` calls — which returned `null` silently (the local `mustEnv` is non-throwing, returns `null` on missing) — would have failed the env-gate in 3 routes and returned 500 to the user. So the dashboard cleanup couldn't happen until those routes stopped reading the var.
+
+The pattern is consistent: each route called `mustEnv('SENDGRID_API_KEY')`, then guarded the 500 branch on missing key, then later did `sgMail.setApiKey(SENDGRID_API_KEY)` before `sgMail.send(...)`. Both the const and the setApiKey call are now removed; the env-gate now only checks `SENDGRID_FROM_EMAIL` (and `APP_BASE_URL` where applicable).
+
+### 98.2 — Phase 1: Refactor PR (#227)
+
+Single feature PR removed all route-level SENDGRID_API_KEY references:
+
+| File | Change |
+|---|---|
+| `routes/admin_users.js` | Removed `mustEnv('SENDGRID_API_KEY')` + the disjunctive guard arm + `sgMail.setApiKey` call |
+| `routes/attendance.js` | Removed `sgMail.setApiKey(process.env.SENDGRID_API_KEY)` line |
+| `routes/daily_dispatch.js` | Same pattern as `admin_users.js` |
+| `routes/user_management.js` | Same pattern as `admin_users.js` |
+| `lib/weeklyReport.js` | Removed `sgMail.setApiKey` call |
+| `jobs/ccqRatesReminderJob.js` | Removed module-load `if (process.env.SENDGRID_API_KEY) { sgMail.setApiKey(...) }` block |
+| `.env.example` | Reorganized to lead with Resend as the production default; SendGrid block commented out with Section 98 reference |
+
+Test updates (3 files):
+- `tests/smoke/ccq_rates_reminder_job.test.js` — 2 obsolete tests removed (they asserted setApiKey was/wasn't called at module load — no longer relevant)
+- `tests/integration/daily_dispatch.test.js` — comment-only update (the test still passes because it deletes both env vars; only the assertion premise changed)
+- `tests/integration/user_management.test.js` — comment-only update (same reasoning)
+
+CI passed on first try. PR #227 squash-merged as `6f3c9f4`. Local + remote branch cleanup followed the post-merge convention.
+
+### 98.3 — Phase 2: Production env + pm2 restart
+
+After the PR merged, SSH'd to prod (`ssh root@143.110.218.84`) and:
+
+```bash
+cd /var/www/mep
+git pull origin main      # Already up to date — server pulled on its own (auto-deploy)
+cp .env .env.bak.YYYYMMDD-HHMMSS
+
+# Sanity: confirm exactly 1 line matches
+grep -c '^SENDGRID_API_KEY=' .env    # → 1
+
+# Mask + show value (visual confirm)
+grep '^SENDGRID_API_KEY=' .env | sed -E 's/=[A-Za-z0-9_.-]+$/=***/'    # → SENDGRID_API_KEY=***
+
+# Remove the line
+sed -i '/^SENDGRID_API_KEY=/d' .env
+
+# Verify removed
+grep '^SENDGRID_API_KEY=' .env && echo "DELETE FAILED" || echo "DELETE OK"    # → DELETE OK
+
+# Restart pm2 to spawn a new node process that reloads .env via dotenv
+pm2 restart mep-backend
+sleep 3
+pm2 status
+```
+
+`mep-backend` came back online. The pm2 warning `Use --update-env to update environment variables` is benign in our setup — the app uses `dotenv` to read `.env` at process startup, and `pm2 restart` spawns a fresh node process, so the new `.env` (without SENDGRID_API_KEY) is loaded automatically.
+
+### 98.4 — Phase 2: Smoke verification
+
+```bash
+curl -sS https://app.constrai.ca/api/health
+# → {"ok":true,"service":"mep-site-workforce","time":"2026-05-14T10:14:15.973Z"}
+
+pm2 logs mep-backend --lines 30 --nostream
+# Clean startup:
+#   [sentry] initialized — env=production
+#   Server running on http://localhost:3000
+#   Health: http://localhost:3000/api/health
+#   [weeklyReportJob] Scheduled: 0 23 * * 1
+#   [ccqRatesReminder] Scheduled: Mar 1 + Apr 1, 2028
+# Only error.log entry was the pre-existing pg DeprecationWarning (backlog item, not new).
+```
+
+No startup errors, no "missing env var" failures. Backend is now SendGrid-free at runtime.
+
+### 98.5 — Phase 2: SendGrid dashboard cleanup
+
+Logged in to `https://app.sendgrid.com` → Settings → API Keys → deleted the Constrai key. Verified empty list afterwards.
+
+Notes for the future:
+- The SendGrid account is **linked to Twilio** ("Your Sendgrid and Twilio credentials are linked" banner on the Account page). Hedar's main Twilio identity remains; only the SendGrid API key was deleted. The dormant SendGrid account stays — no recurring cost (free trial expired March 30, 2026; no paid plan).
+- No sub-users existed on this account, so the "delete sub-user" step from the original HANDOFF runbook didn't apply. HANDOFF was overly cautious — this is a single-user free SendGrid account. Section 98 onward: the sub-user cleanup step is N/A for this account.
+
+### 98.6 — Pitfall #35 (NEW) — provider migration completeness audit before env-var decommission
+
+When migrating between SDKs at the abstraction layer (e.g., Resend wrapper added inside `lib/email.js#getMailClient`), the abstraction does **not** guarantee that every caller goes through it. The Section 92.5 cutover (May 11) flipped `EMAIL_PROVIDER=resend` and the runtime `send()` calls were correctly routed via the wrapper. But 4 routes + 1 lib + 1 job still carried legacy code — `mustEnv('SENDGRID_API_KEY')`, `sgMail.setApiKey(...)` — that no longer served any function but blocked the env-var decommission.
+
+**Convention going forward:** when a provider migration is declared "complete" (and especially before declaring the old env var safe to remove), run two greps against the repo:
+
+```bash
+# 1. Find every direct SDK call that bypasses the abstraction layer.
+grep -rn 'sgMail\.\|setApiKey\|mustEnv.*SENDGRID' routes/ jobs/ lib/ middleware/
+
+# 2. Find every reference to the legacy env var.
+grep -rn 'SENDGRID_API_KEY\|SENDGRID_FROM_EMAIL' . --include='*.js'
+```
+
+If either grep returns results outside the abstraction layer (i.e., outside `lib/email.js`), the migration is **not** complete. Either refactor the calls through the wrapper or accept that the legacy env var must stay. Don't conflate "the cutover succeeded" with "the legacy provider is fully decommissioned."
+
+The Resend wrapper in `lib/email.js` already provides a no-op `setApiKey` for SDK-shape compatibility — that's a graceful runtime behavior, but it hides callers that would otherwise have failed loudly and pointed to the migration gap. Audit *before* removing the env var, not after.
+
+This pitfall generalizes beyond email: same shape applies to ANY swap-the-SDK migration (Stripe→other payment gateway, S3→Backblaze, etc.). The abstraction layer alone isn't a sufficient migration scope.
+
+### 98.7 — Final state at end of Section 98
+
+| Item | Status |
+|---|---|
+| Refactor PR (#227) merged | ✅ — 10 files, +57/-59 lines, CI green on first try |
+| Prod `.env` no longer contains SENDGRID_API_KEY | ✅ — deleted by sed, pm2 restarted, smoke green |
+| SendGrid dashboard API key deleted | ✅ — list is empty post-cleanup |
+| Section 91 leak remediation table | ✅ — SENDGRID_API_KEY row moves from ⏳ to ✅ |
+| Pitfall #35 added | ✅ — provider migration completeness audit |
+| Pending: Phase 6-C frontend bootstrap | ⏳ Next product-feature task |
+| Pending: Phase 6-D admin upload UI + Spaces pipeline | ⏳ After 6-C |
+
+### 98.8 — Section/total update
+
+- **Today: 67 sections.** (Section 98 NEW — SendGrid decommission complete. Phase 1 refactor + Phase 2 prod env removal + dashboard cleanup in one continuation thread. Discovered the migration was abstraction-layer-only and required 7 production-file refactor before env removal. New Pitfall #35 — provider migration completeness audit. Leak remediation loop now fully closed.)
+
