@@ -265,8 +265,10 @@ describeIfDb('Phase 6-D-1c — X-Auth-Channel: cookie response shape', () => {
     expect(res.body.token).toBeUndefined();
     expect(res.body.refresh_token).toBeUndefined();
     // User payload and must_change_pin remain (frontend needs them).
+    // user_id is compared via String() because pg returns bigint columns
+    // as strings while seedUser coerces its return value to Number.
     expect(res.body.user).toBeDefined();
-    expect(res.body.user.user_id).toBe(user.id);
+    expect(String(res.body.user.user_id)).toBe(String(user.id));
     expect(typeof res.body.must_change_pin).toBe('boolean');
     // Cookies are still set — that's how the web client gets auth state.
     const setCookies = res.headers['set-cookie'];
