@@ -1,7 +1,7 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 14, 2026 ~11:30 UTC — **Phase 6-C frontend branding bootstrap shipped.** Continuation thread that also closed SendGrid decommission. Today's PRs: #227 (s98 refactor — remove SENDGRID_API_KEY route-level refs), #228 (s98 docs + Pitfall #35), #229 (s99 Phase 6-C frontend bootstrap). DECISIONS Sections 98 + 99 added. Tenant subdomain `<code>.constrai.ca` now loads brand color before React mounts; HTTP cache makes repeat visits ~10ms. Leak remediation FULLY CLOSED. **Next task: Phase 6-D — login response redirect_url + logo swap + admin upload UI.**
+> Last updated: May 14, 2026 ~14:00 UTC — **Phase 6-D-1a backend cookie auth + login redirect_url shipped.** Continuation thread that closed: Section 97 docs + SendGrid decommission (Section 98) + Phase 6-C frontend branding bootstrap (Section 99) + Phase 6-D-1a backend cookies (Section 100). Today's PRs: #226 #227 #228 #229 #230 #231. Backend now supports HttpOnly cookie sessions alongside Bearer; login returns `redirect_url` for tenant users on `app.constrai.ca`. All additive — frontend still uses localStorage (Phase 6-D-1b will refactor). **Next task: Phase 6-D-1b — frontend useAuth + LoginPage + api.js consume cookies, drop localStorage.**
 
 ---
 
@@ -21,11 +21,11 @@ When you receive the one-line command above:
 2. **Read these 4 files** (use the Read tool, NOT bash):
    - `HANDOFF.md` (this file)
    - `CLAUDE.md` (working rules)
-   - `DECISIONS.md` (read ONLY the latest 2-3 sections referenced below — DON'T read the whole 11,000+ line file). Latest section is **99** (Phase 6-C frontend branding bootstrap). Also relevant: 98 (SendGrid decommission + Pitfall #35), 97 (Phase 6-B closeout + Pitfall #34). **IMPORTANT:** Read DECISIONS.md via the Read tool ONLY (never `bash tail` / `grep`) — Cowork bash mount can lag and miss recently merged sections (Section 96.6 explains; cost us PR #222).
+   - `DECISIONS.md` (read ONLY the latest 2-3 sections referenced below — DON'T read the whole 11,000+ line file). Latest section is **100** (Phase 6-D-1a backend cookie auth + login redirect_url). Also relevant: 99 (Phase 6-C frontend branding bootstrap), 98 (SendGrid decommission + Pitfall #35). **IMPORTANT:** Read DECISIONS.md via the Read tool ONLY (never `bash tail` / `grep`) — Cowork bash mount can lag and miss recently merged sections (Section 96.6 explains; cost us PR #222).
    - `RECOVERY.md` Section 2.4 only if relevant
 3. **Echo this exact line** as the first line of your reply:
    ```
-   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 99, Phase 6-C frontend branding bootstrap shipped, next is Phase 6-D admin upload UI + login redirect_url)
+   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 100, Phase 6-D-1a backend cookies shipped, next is Phase 6-D-1b frontend useAuth refactor)
    ```
 4. **Confirm the next task** in 1-2 lines.
 5. **Ask if Hedar is ready to start**, then wait.
@@ -40,12 +40,12 @@ When you receive the one-line command above:
 | Admin portal | `https://admin.constrai.ca` (SUPER_ADMIN only) |
 | Login (test) | Email: `hedar.hallak@gmail.com` / PIN: `hedar2026` (SUPER_ADMIN) |
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04 — kernel up-to-date as of May 11, reboot banner cleared) |
-| Backend | Node.js + Express + Postgres 16, pm2-managed at `/var/www/mep`. pm2 systemd auto-start configured (Section 93.3). |
-| Frontend | React + Vite + Tailwind v4 — branding bootstrap shipped (Section 99) |
-| Latest deployed to prod | **Phase 6-C frontend branding bootstrap** — `mep-frontend/src/lib/branding.js` lives in the built bundle; tenant subdomain `<code>.constrai.ca` will load brand color pre-React once the nginx wildcard vhost is verified. Prior deploys still live: SendGrid decommission (May 14 ~10:14), Phase 6-B endpoint, Phase 5.1 Create Company UI. |
-| Last merged to main | PR #229 (Phase 6-C frontend bootstrap). Section 99 docs PR follows (this commit). |
-| Active program | **Multi-Tenant Migration — Phase 6-D (admin upload UI + login redirect_url + logo swap) is next.** Phase 5 + 6-A + 6-B + 6-C all FULLY closed. Leak remediation FULLY CLOSED. |
-| Mobile app | Still on legacy username login — backend keeps backward-compat |
+| Backend | Node.js + Express + Postgres 16, pm2-managed at `/var/www/mep`. pm2 systemd auto-start configured (Section 93.3). **Cookie-based auth additive (Section 100).** |
+| Frontend | React + Vite + Tailwind v4. Tenant branding bootstrap at `mep-frontend/src/lib/branding.js` (Section 99). Still using localStorage for tokens — Phase 6-D-1b refactor pending. |
+| Latest deployed to prod | **Phase 6-D-1a backend cookie support** — `POST /api/auth/login` returns `redirect_url` for tenant users on `app.constrai.ca` + sets HttpOnly access/refresh cookies. Phase 6-C bootstrap still live. SendGrid fully decommissioned. |
+| Last merged to main | PR #231 (s100 backend cookies + login redirect_url). Section 100 docs PR follows (this commit). |
+| Active program | **Multi-Tenant Migration — Phase 6-D-1b (frontend useAuth + LoginPage + api.js consume cookies, drop localStorage) is next.** Phase 5 + 6-A + 6-B + 6-C + 6-D-1a all FULLY closed. |
+| Mobile app | Still on legacy username + Bearer-token login — backend keeps backward-compat |
 
 ### Multi-tenant migration progress
 
@@ -62,9 +62,12 @@ When you receive the one-line command above:
 | Email migration SendGrid → Resend | ✅ FULLY DECOMMISSIONED (Section 98) |
 | Phase 6-A — companies branding columns (migration 014) | ✅ DEPLOYED |
 | Phase 6-B — public `GET /api/companies/:code/branding` | ✅ DEPLOYED + smoke-verified (May 13) |
-| Phase 6-C — Frontend bootstrap reads branding + applies CSS vars | ✅ **DEPLOYED (May 14, Section 99)** |
-| **Phase 6-D — Admin upload UI + login redirect_url + logo swap** | ⏳ **Next** |
-| Phase 7 — 2FA + biometric + account security | ⏳ Pending |
+| Phase 6-C — Frontend bootstrap reads branding + applies CSS vars | ✅ DEPLOYED (May 14, Section 99) |
+| Phase 6-D-1a — Backend cookie auth + login redirect_url | ✅ **DEPLOYED (May 14, Section 100)** |
+| **Phase 6-D-1b — Frontend useAuth + LoginPage cookie consumption** | ⏳ **Next** |
+| Phase 6-D-1c — Drop tokens-in-body for web routes | ⏳ After 6-D-1b |
+| Phase 6-D — Logo swap on LoginPage + admin upload UI + Spaces pipeline | ⏳ After 6-D-1c |
+| Phase 7 — 2FA + biometric + account security + PIN→password migration | ⏳ Pending |
 | Phase 8 — Audit + compliance | ⏳ Pending |
 
 ---
@@ -82,50 +85,38 @@ When you receive the one-line command above:
 | `MAPBOX_ACCESS_TOKEN` | ✅ Rotated + leaked default refreshed (Section 92.2) |
 | `JWT_SECRET` | ✅ Rotated (Section 93.1) |
 | `ADMIN_API_KEY` + `AUTH_SECRET` | ✅ Deleted (dead env vars, audit-and-delete) |
-| `SENDGRID_API_KEY` | ✅ DECOMMISSIONED (Section 98) — code refs removed, env var deleted, dashboard key deleted |
+| `SENDGRID_API_KEY` | ✅ DECOMMISSIONED (Section 98) |
 | `SENTRY_DSN` | Optional — DSN is semi-public, skip unless misuse appears |
 
 ---
 
-## Next task: Phase 6-D — Admin upload UI + login redirect_url + logo swap
+## Next task: Phase 6-D-1b — Frontend cookie consumption (drop localStorage)
 
-Phase 6-C shipped the frontend bootstrap (tenant subdomain → brand color from `<style>` injection at `:root`). Phase 6-D closes the multi-tenant branding loop with the remaining three pieces. Likely splits into 2–3 sub-PRs depending on appetite.
+Phase 6-D-1a shipped the backend side: HttpOnly cookies set on every login/refresh, `redirect_url` returned for tenant users on `app.constrai.ca`. Phase 6-D-1b finishes the migration on the frontend.
 
-**Scope (3 sub-pieces, sequenceable in any order):**
+**Scope:**
 
-1. **Login response `redirect_url`** (backend + frontend, small)
-   - Backend `POST /api/auth/login` returns `{ ok, token, refresh_token, user, company: { code, name }, redirect_url: 'https://<code>.constrai.ca/dashboard?...token...' }`.
-   - Frontend on `app.constrai.ca/login`: after successful login, `window.location.assign(redirect_url)` so the browser hops to the tenant subdomain. The tenant's bootstrap (Section 99) then re-loads the page on the new origin with branding applied.
-   - Tests: login response shape includes redirect_url; frontend hops on successful login.
-
-2. **Logo swap on LoginPage** (frontend, small)
-   - `mep-frontend/src/pages/auth/LoginPage.jsx` reads `window.__BRANDING__.brand_logo_url`. When non-null, render the tenant logo `<img>` in place of the Constrai logo. Null → Constrai default stays.
-   - Optionally wrap `window.__BRANDING__` in a small React Context (`BrandingContext` in `src/contexts/`) so later components can read it without touching window.
-   - Tests: render branch with logo URL set + null fallback render branch.
-
-3. **Admin upload UI + DigitalOcean Spaces pipeline** (full-stack, medium)
-   - Admin portal screen: SUPER_ADMIN selects a company, sees current branding, can pick a new `brand_color` (color picker) and upload a new `brand_logo_url` (logo file).
-   - Backend: `PATCH /api/admin/companies/:id/branding` (SUPER_ADMIN-only) — accepts color hex + uploaded logo file. Logo upload goes through multer → DigitalOcean Spaces (`constrai-branding` bucket, TOR1, public-read CDN). Returns the public CDN URL to persist in `companies.brand_logo_url`.
-   - DO Spaces setup: new bucket `constrai-branding` (separate from `constrai-backups` for clarity + ACL boundaries), CDN endpoint enabled, access keys saved to OneDrive + prod `.env`.
-   - Tests: PATCH endpoint guards (SUPER_ADMIN only, hex color validation, file size + mime), logo upload happy path.
+1. **`mep-frontend/src/lib/api.js`** — switch all `fetch` calls to `credentials: 'include'` so cookies travel with same-site requests. Remove the `Authorization: Bearer` header injection (or gate it behind a "mobile-shaped path" if needed for a future webview; for now web doesn't need it once cookies arrive).
+2. **`mep-frontend/src/hooks/useAuth.jsx`** — stop reading/writing `mep_token` / `mep_refresh_token` from localStorage. `whoami` / `refresh` rely on cookies. The hook still exposes `user`, `loading`, `login(...)`, `logout()` to consumers — internals change, surface stays.
+3. **`mep-frontend/src/pages/auth/LoginPage.jsx`** — after `login()` resolves successfully, check the response for `redirect_url`. If present, do `window.location.assign(redirect_url)` (cross-origin hop). If null/absent, navigate via React Router to `/dashboard` as today.
+4. **`mep-frontend/src/admin/AdminLogin.jsx`** — same treatment: admin portal flow stays React-Router-navigation (admin response never has `redirect_url`). Verify behavior unchanged.
+5. **Tests:**
+   - `useAuth.test.jsx` (if missing — likely add) — exercise login → state set → logout → state cleared, all via the new credentials-include path.
+   - `LoginPage.test.jsx` — assert `window.location.assign` is called when `redirect_url` is returned; assert React Router navigate is called when it isn't.
+   - `AdminLogin.test.jsx` — confirm no `redirect_url` consumption (admin flow unchanged).
+6. **Hard prerequisite — nginx wildcard vhost for `*.constrai.ca`** — once the frontend redirects to `acm.constrai.ca`, nginx must serve the tenant `index.html` for that host. Add a wildcard server block (or one-per-onboarded-tenant). This is a server-side ops task, separate from the frontend PR.
 
 **Decisions to make at session start:**
-- Sub-piece order. Recommended: redirect_url first (unblocks Pattern B email-routing), then logo swap (low-cost visual polish), then admin upload UI last.
-- Color picker library — `react-colorful` (3kb, popular) vs raw `<input type="color">` (zero deps, less polish).
-- DO Spaces bucket name + region — propose `constrai-branding` in TOR1 (same region as `constrai-backups`).
+- Which approach for the nginx wildcard? Option α: one `server { server_name ~^(?<sub>[a-z0-9_-]+)\.constrai\.ca$; }` regex block that catches everything not already matched by the explicit `app` / `admin` / `www` blocks. Option β: add a new explicit block for each tenant subdomain at onboarding time (more friction, more visibility).
+- Do we want to ship the nginx change BEFORE the frontend PR, alongside it, or after (with a one-tenant test scenario)? Recommend before, so the frontend PR's end-to-end path actually works the moment it merges.
 
-**Out of scope (later phases):**
-- Color shades (`--color-primary-dark`, etc.) — compute via HSL or CSS `color-mix()`. Phase 6-E or hygiene.
-- Mobile app branding — separate phase.
-- nginx wildcard vhost for `*.constrai.ca` — operational task, see below.
+**Out of scope (Phase 6-D-1c + later):**
+- Drop `token` + `refresh_token` from the body on web auth responses. Phase 6-D-1c — once useAuth doesn't read them anymore. Mobile path stays Bearer.
+- Logo swap on LoginPage — Phase 6-D-2 (after 1a/1b/1c close out the auth refactor).
+- Admin upload UI + DigitalOcean Spaces pipeline — Phase 6-D-3.
+- Color shades from brand_color — later polish.
 
-**Estimated effort:** sub-piece 1 + 2 = ~1.5 hours together; sub-piece 3 = ~3-4 hours (UI + Spaces setup + backend route + tests). Branch name suggestion: `feat/s100-phase6d-login-redirect-and-logo`.
-
----
-
-## Operational follow-up (Phase 6-C tail)
-
-- **Verify nginx wildcard vhost for `*.constrai.ca`** before declaring tenant subdomains production-ready. Currently nginx has explicit blocks for `app.constrai.ca` and `admin.constrai.ca`. The wildcard config (or one block per onboarded tenant) needs to exist before `acm.constrai.ca` actually resolves to the backend. Cloudflare DNS wildcard is already in place. This is the one piece between Phase 6-C and "tenants can actually visit their subdomain" that wasn't in PR scope.
+**Estimated effort:** Frontend PR ~1.5–2 hours (~6 files, mostly small). Nginx wildcard config + smoke ~30 min on the server. Branch name suggestion: `feat/s101-phase6d1b-frontend-cookie-consumption`.
 
 ---
 
@@ -138,7 +129,10 @@ Phase 6-C shipped the frontend bootstrap (tenant subdomain → brand color from 
 - **Mapbox `Default public token`** — unused, can't delete (Mapbox UI limitation). Benign.
 - **`SENDGRID_FROM_EMAIL` env var name** — still used as the from-address (kept for backward compat; just a name, not a secret). Optional future rename to `EMAIL_FROM` for cleanliness — defer to a hygiene PR.
 - **Twilio/SendGrid account itself** — dormant after API key delete. No recurring cost. Don't delete unless Twilio relationship is also being dropped.
-- **Color shades from brand_color** — Section 99.5. Currently only `--color-primary` and `--color-sidebar-active` track the tenant brand; shades stay Constrai green. Visual polish for hover/active states; queue as Phase 6-E or hygiene.
+- **Color shades from brand_color** — Section 99.5. Currently only `--color-primary` and `--color-sidebar-active` track the tenant brand; shades stay Constrai green. Visual polish for hover/active states; queue as Phase 6-D-3 or hygiene.
+- **PIN → password migration** (NEW — Hedar reminder this session). Current auth uses 4–8 char PINs (8+ for SA). Long-term, regular users should have full passwords. Queue for Phase 7 alongside 2FA + biometric. Touches: routes/auth.js login + change-pin + onboarding/activate, mobile activation flow, admin Reset PIN button → Reset Password, plus a migration that adds a `password_hash` column and a transitional `auth_method` flag per user. Estimate: medium-large.
+- **nginx wildcard vhost for `*.constrai.ca`** — Phase 6-D-1b hard prerequisite. See "Next task" above.
+- **CSRF protection** — currently `SameSite=Lax` covers the common threat surface (Section 100.6). If any state-changing GET endpoints are added, layer a CSRF-token middleware.
 
 ---
 
@@ -162,7 +156,7 @@ Cost inventory + DigitalOcean Spaces + Apple Developer keys: see `RECOVERY.md`.
 
 ---
 
-## Critical pitfalls (encoded from Sections 86 + 87 + 88 + 89 + 90 + 91 + 92 + 93 + 96 + 97 + 98 — Section 99 added none)
+## Critical pitfalls (encoded from Sections 86 + 87 + 88 + 89 + 90 + 91 + 92 + 93 + 96 + 97 + 98 — Sections 99 + 100 added none)
 
 1. **Bash sandbox file sync lag** — use Read tool to verify file state.
 2. **Edit tool can silently lose changes** — Read each file immediately after Edit.
@@ -217,7 +211,7 @@ Cost inventory + DigitalOcean Spaces + Apple Developer keys: see `RECOVERY.md`.
 - **Universal sed mask** — `sed -E 's/=[A-Za-z0-9_.-]+$/=***/'` (Section 92.5).
 - **Verify pm2 systemd unit before reboots** — `systemctl is-enabled pm2-root` (Section 93.4).
 - **Provider migration completeness check** — grep direct SDK calls + env-var refs before decommissioning (Section 98.6 / Pitfall #35).
-- **AskUserQuestion for irreversible architectural decisions** — confirm user-flow + strategy BEFORE writing code (Section 99.1 — the pre-code clarification saved us from coding the wrong shape).
+- **Confirm user-flow before technical strategy** — narrate user journey before AskUserQuestion on technical details (Section 99 / Section 100 retro habit — saved us from coding the wrong shape twice).
 
 ---
 
