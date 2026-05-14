@@ -12081,4 +12081,82 @@ Patterns that hit friction at end-of-session:
 
 - **Today: 71 sections.** (Section 102 NEW — nginx wildcard vhost ships into the repo as PR #235, with the prod symlink + reload deferred to a fresh session along with two leftover hygiene items.)
 
+---
+
+## Section 103 — Phase 6-D-1c: Drop body tokens for web auth responses (May 14, 2026 ~22:00–23:30 UTC)
+
+> Phase 6-D-1c shipped — `/login` and `/refresh` now omit `token` + `refresh_token` from the JSON response body when the request identifies as the web channel via `X-Auth-Channel: cookie`. Mobile (no header) keeps the legacy body-tokens shape so the Bearer-header flow stays unchanged. Cookies are still set unconditionally. Web frontend (`mep-frontend/`) opts in by default; `lib/api.js`, `useAuth.jsx`, and `admin/AdminLogin.jsx` all send the header + `credentials: 'include'`, gracefully handle the cookie-only response, and clear stale `mep_token` / `mep_refresh_token` from `localStorage` to prevent a `Bearer-stale-beats-cookie-fresh` 401 loop.
+>
+> Closes the migration shape from Section 100 (Phase 6-D-1a backend cookies, additive) + Section 101 (Phase 6-D-1b frontend cookie consumption + `/whoami` fallback) — the web client's auth state now travels exclusively in HttpOnly cookies; the JWT no longer rides in the response JSON where logs / proxies could capture it.
+
+### 103.1 — Implementation (PR #237)
+
+Backend (`routes/auth.js`):
+
+| Change | Detail |
+|---|---|
+| `isWebClient(req)` helper (NEW) | `req.headers['x-auth-channel']?.toLowerCase() === 'cookie'`. Case-insensitive so a frontend typo (`Cookie`, `COOKIE`) still hits the cookie path. Any other value (or absence) falls back to the mobile shape — fail-open toward backward compat. |
+| `/login` response body | `token` + `refresh_token` now conditionally included via `if (!isWebClient(req)) responseBody.token = ...`. Cookie set is unchanged (unconditional). |
+| `/refresh` response body | Same conditional. Cookie rotation unchanged. |
+
+Frontend:
+
+| File | Change |
+|---|---|
+| `mep-frontend/src/lib/api.js` | (1) Default `X-Auth-Channel: cookie` header on every `apiFetch` (including `refreshTokenOnce`). (2) `refreshTokenOnce` returns `null` when the response is cookie-only; the apiFetch retry handler interprets `null` as "drop `Authorization` header and let the browser send the rotated cookie". (3) Clears `mep_token` / `mep_refresh_token` from `localStorage` when the refresh response omits body tokens (prevents stale-Bearer 401 loop under middleware/auth.js's Bearer-beats-cookie policy). |
+| `mep-frontend/src/hooks/useAuth.jsx` | `login()` writes to `localStorage` only when `res.data.token` is truthy; clears stale entries otherwise. |
+| `mep-frontend/src/admin/AdminLogin.jsx` | Adds `credentials: 'include'` + `X-Auth-Channel: cookie` to its direct `fetch` call. Drops the "no token returned" inline error (cookie shape is happy-path). Clears stale `localStorage` on a cookie-only success. |
+
+Tests (8 new):
+
+| File | Cases |
+|---|---|
+| `tests/auth/cookie_session.test.js` | 5 cases: (a) login with `X-Auth-Channel: cookie` returns NO body tokens; cookies still set. (b) login WITHOUT the header keeps body tokens (mobile-shaped). (c) refresh with the header returns NO body tokens but still rotates cookies. (d) header value case-insensitive (`Cookie` / `COOKIE` / `cookie` all accepted). (e) unknown header value (e.g. `something-else`) falls back to mobile shape. |
+| `mep-frontend/src/pages/auth/LoginPage.test.jsx` | 2 cases: navigates to `/dashboard` when the response carries no body tokens; hops to `redirect_url` when the response carries no body tokens. Both verify the cookie shape doesn't break Pattern B. |
+| `mep-frontend/src/admin/AdminLogin.test.jsx` | 1 case: cookie-only success doesn't surface an error, clears stale `localStorage`, sends `X-Auth-Channel: cookie` + `credentials: 'include'`. |
+
+### 103.2 — One CI flake: pg `bigint` vs `Number`
+
+First CI run (#592) failed with one assertion in the new web-shape login test:
+
+```
+Expected: 131
+Received: "131"
+
+at expect(res.body.user.user_id).toBe(user.id)
+```
+
+Root cause: `tests/helpers/db.js` `seedUser()` returns `id: Number(rows[0].id)`, but pg's default `bigint` parser returns the column as a string. `res.body.user.user_id` is therefore `"131"` while `user.id` is `131`. The existing tests in this file never probed `user_id` directly so the asymmetry hadn't surfaced.
+
+Fix (one-line) — coerce both sides to `String()` before comparing: `expect(String(res.body.user.user_id)).toBe(String(user.id))`. CI #593 green on first re-push. No backend or seed-helper change needed; the existing convention "compare bigint via String() because pg returns strings" is now visible in the test for next time.
+
+### 103.3 — Branch state quirk encountered during closeout
+
+After the PR merged, the standard close-out (`git checkout main && git pull && git branch -D <feat> && git push origin --delete <feat> && git checkout -b docs/...`) produced a `git checkout -b` that didn't switch HEAD on the first attempt (the branch got created but the working tree stayed on `main`; verified via `git branch --list` finding the branch + `git branch --show-current` still reporting `main`). Re-running `git checkout docs/s102-phase6d1c-closeout` (without `-b`) succeeded immediately.
+
+Root cause: most likely the wrapping PowerShell block executed all commands in one block where the prior `git checkout main && git pull` produced output that ate the subsequent prompt's working-directory state. Not a git bug; just a shell-block ordering quirk under `Out-File` redirection. Encoded here so a future session that hits the same pattern doesn't waste time investigating: if `git checkout -b X` creates the branch but doesn't switch, just run `git checkout X` explicitly.
+
+Marginal pitfall (not promoted to a numbered Pitfall since the workaround is one line and the cause is environmental, not architectural).
+
+### 103.4 — Final state at end of Section 103
+
+| Item | Status |
+|---|---|
+| PR #237 (Phase 6-D-1c) — code | ✅ MERGED (`e8f07c7` on main, CI #595 green) |
+| Backend `/login` + `/refresh` cookie-only shape for web channel | ✅ |
+| Frontend `X-Auth-Channel: cookie` on every request + cookie-only-response handling | ✅ |
+| Stale localStorage cleanup on cookie-only response (prevents Bearer-stale 401 loop) | ✅ |
+| Backend tests `cookie_session.test.js` extended (5 new cases) | ✅ |
+| Frontend tests `LoginPage.test.jsx` + `AdminLogin.test.jsx` extended (3 new cases) | ✅ |
+| Pending: nginx wildcard symlink + reload on prod Droplet (Section 102.3 runbook) | ⏳ Operational — next session |
+| Pending: Phase 6-D-2 — logo swap on LoginPage | ⏳ Code — next session |
+| Pending: Phase 6-D-3 — admin upload UI + DigitalOcean Spaces pipeline | ⏳ After 6-D-2 |
+| Pending: duplicate Section 99 in DECISIONS.md (line ~11767) cleanup | ⏳ Punted from Section 102 (tool friction) |
+| Pending: `.husky/pre-commit` main-branch guard (Pitfall #36) | ⏳ Punted from Section 102 (tool friction) |
+| Pending: PIN → password migration | ⏳ Phase 7 candidate |
+
+### 103.5 — Section/total update
+
+- **Today: 72 sections.** (Section 103 NEW — Phase 6-D-1c closes the 3-PR Phase 6-D-1 migration: web auth state now travels exclusively in HttpOnly cookies, the JWT no longer rides in the response JSON for web clients, and stale localStorage is actively cleaned up on the first cookie-only response. Mobile path is preserved end-to-end via Bearer header + body-tokens response. One CI flake — pg bigint vs `Number()` — fixed in one line. No new numbered pitfalls; one minor `git checkout -b` shell quirk captured inline.)
+
 
