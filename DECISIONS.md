@@ -12159,4 +12159,100 @@ Marginal pitfall (not promoted to a numbered Pitfall since the workaround is one
 
 - **Today: 72 sections.** (Section 103 NEW — Phase 6-D-1c closes the 3-PR Phase 6-D-1 migration: web auth state now travels exclusively in HttpOnly cookies, the JWT no longer rides in the response JSON for web clients, and stale localStorage is actively cleaned up on the first cookie-only response. Mobile path is preserved end-to-end via Bearer header + body-tokens response. One CI flake — pg bigint vs `Number()` — fixed in one line. No new numbered pitfalls; one minor `git checkout -b` shell quirk captured inline.)
 
+---
+
+## Section 104 — Production outage post-mortem: ~14h `MODULE_NOT_FOUND` restart loop after Section 100 deploy (May 14, 2026 13:41 UTC → May 15, 2026 03:50 UTC)
+
+> **Severity: HIGH.** Production was completely down for ~14 hours on May 14. Root cause: `git pull origin main` on the Droplet brought in code requiring `cookie-parser` (added by PR #231 / Section 100), but `npm install` was never run on the server, so PM2 entered a `MODULE_NOT_FOUND` restart loop and stayed there. Discovered when Hedar checked a Sentry email alert at ~03:30 UTC (May 15). Recovered in <5 minutes with `npm ci --omit=dev --ignore-scripts` + `pm2 restart`. No user-visible data loss because no users could reach the system during the outage. New Pitfall #38 encodes the mandatory deploy sequence to prevent recurrence.
+
+### 104.1 — Timeline (UTC)
+
+| Time | Event |
+|---|---|
+| 2026-05-14 ~12:00–14:00 | Section 100 / Phase 6-D-1a shipped (PR #231 merged). PR added `cookie-parser@^1.4.7` as a backend dep + required it from `app.js`. |
+| ~13:30 | Someone (Hedar or a scheduled deploy hook) ran `git pull origin main` + `pm2 restart mep-backend` on the Droplet. **`npm install` was NOT run.** |
+| 13:41 | Sentry captures the first `MODULE_NOT_FOUND: 'cookie-parser'` fatal. Email alert fires (subject "New issue → email Hedar"). PM2 begins its restart loop. |
+| 13:41 → 03:50 next day | PM2 keeps restarting (`↺` counter eventually reaches 112+). Every restart fails with the same `MODULE_NOT_FOUND`. The error log grows. `node_modules/@sentry/node` likely gets partially corrupted somewhere along the way (a later restart's error trace points inside Sentry's internal http integration). Backend serves no requests; nginx returns 502 on every upstream attempt. |
+| 14:00–22:00 | Sections 101 + 102 ship (Phase 6-D-1b frontend + nginx wildcard config) — **none of this reaches prod because prod is dead.** Hedar works in CI + local; doesn't smoke-test prod because session focus is on PRs, not deploys. |
+| 22:00–03:30 | Section 103 (today's Phase 6-D-1c) ships. Same situation — prod still dead, undetected. |
+| ~03:30 (May 15) | Hedar mentions the Sentry email in chat. Claude diagnoses immediately. |
+| ~03:50 | SSH into Droplet. `pm2 status` reveals high `↺` + low memory (crash-loop tell). `curl /api/health` returns 502. `ls node_modules/cookie-parser` returns "No such file or directory" — confirmed root cause. |
+| ~03:52 | `cd /var/www/mep && npm ci --omit=dev --ignore-scripts` runs. 349 packages installed. 3 npm-audit findings (1 moderate, 2 high) — backlog. |
+| ~03:53 | `pm2 restart mep-backend`. Memory immediately jumps to 101.7mb (healthy boot, not crash-loop). |
+| ~03:54 | `curl /api/health` returns **200**. Out logs show `[sentry] initialized` + `Server running` + cron jobs scheduled. Recovery complete. |
+
+Total downtime: **~14h 9min** (13:41 UTC → 03:50 UTC).
+
+### 104.2 — Why this went undetected for 14 hours
+
+Three independent gaps stacked:
+
+1. **No external uptime monitor.** Constrai has Sentry for application errors but no synthetic ping-every-5-min from outside the Droplet. The Sentry email at 13:41 went to Hedar's inbox but didn't trigger a phone alert, and Hedar was deep in a coding marathon for the rest of the day.
+2. **Sessions never smoke-tested prod after PR merges.** Every PR merge in Sections 100/101/102/103 was treated as "shipped" once GitHub marked it merged. The HANDOFF even says "the Droplet will fast-forward on the next `git pull` on the server" — but no session actually ran that `git pull` and verified the result. The assumption was that prod was current; the reality was that prod was dead.
+3. **The bad deploy happened OUT OF BAND.** Whoever (or whatever) ran `git pull` + `pm2 restart` after Section 100 isn't documented. No session log captures that step. It might have been a forgotten manual command from earlier in the marathon, or a partial deploy script. Either way: untracked operational action on prod with no verification.
+
+### 104.3 — Recovery commands (preserved for posterity)
+
+Run from the Droplet shell (already SSH'd in):
+
+```bash
+cd /var/www/mep
+git status                               # confirm clean tree on origin/main
+npm ci --omit=dev --ignore-scripts       # nukes node_modules + reinstalls from package-lock
+pm2 restart mep-backend
+sleep 5
+pm2 status mep-backend                   # memory should be >50mb (not crash-loop tiny)
+curl -sS -o /dev/null -w "%{http_code}\n" https://app.constrai.ca/api/health  # expect 200
+pm2 logs mep-backend --lines 20 --nostream  # no MODULE_NOT_FOUND, Server running visible
+```
+
+`--ignore-scripts` is required to avoid the husky postinstall failure on prod (Pitfall #6). `--omit=dev` excludes test/build deps that prod doesn't need.
+
+### 104.4 — Pitfall #38 (NEW) — npm ci before pm2 restart on every deploy
+
+Encoded in HANDOFF.md and copy-pasted here for the archive:
+
+> **Every deploy that touches `package.json` MUST run `npm ci` on the server BEFORE `pm2 restart`.** On May 14, PR #231 added `cookie-parser` as a dep. A `git pull` + `pm2 restart` without `npm install` → `MODULE_NOT_FOUND` → PM2 restart loop → ~14 hours of production downtime before discovery via Sentry. The same crash later corrupted `node_modules/@sentry/node` (partial state from interrupted installs), making the recovery require a full `npm ci`, not just an `npm install <newdep>`.
+>
+> **Mandatory deploy block — paste verbatim, never break it up:**
+>
+> ```bash
+> cd /var/www/mep
+> git pull origin main
+> npm ci --omit=dev --ignore-scripts
+> pm2 restart mep-backend
+> sleep 3
+> pm2 status mep-backend
+> curl -sS -o /dev/null -w "Health: %{http_code}\n" https://app.constrai.ca/api/health
+> pm2 logs mep-backend --lines 15 --nostream
+> ```
+>
+> Sub-Pitfall: PM2's `↺ N` restart counter does NOT reset on a manual `pm2 restart`; a high `↺` value is historical and not a sign of a current loop. Use `cpu > 0%` + `memory > 50mb` + `Health: 200` as the real "alive" signal.
+
+### 104.5 — Backlog items surfaced by this incident
+
+1. **External uptime monitor.** Sentry alerts on app errors but not on app being entirely unreachable. Add UptimeRobot / Healthchecks.io / Better Stack with a ping every 5 minutes against `https://app.constrai.ca/api/health` and SMS/email notification on failure. Even a free-tier external monitor would have caught this within 5 minutes instead of 14 hours.
+2. **npm-audit vulnerabilities.** `npm ci` on May 15 surfaced 3 findings: 1 moderate, 2 high. Run `npm audit` in a fresh session to identify + decide upgrade vs accept.
+3. **Working tree drift on the Droplet.** `git status` showed deleted icon PNGs in `public/icons/` + many untracked WIP files (`mep-frontend/src/src/`, `migrations/029_new_roles.sql.bak`, `public/assets/`, `public/index.html`, `public/manifest.webmanifest`, `public/registerSW.js`, `public/sw.js`, `public/vite.svg`, `public/workbox-4b126c97.js`, `schema_full.sql`, `uploads/hub/`, `webhook.js`). None of this is blocking but it should be cleaned up so a future `git pull` doesn't conflict. The deleted icons are particularly odd — they're tracked in the repo but not on disk. Restore via `git checkout public/icons/` in a follow-up cleanup session.
+4. **Deploy script / hook documentation.** Whoever ran the `git pull` + `pm2 restart` that triggered this incident isn't documented. Either there's a hook we're not tracking, or it was a forgotten manual command. A future session should grep `/etc/cron.d/`, `/etc/cron.*`, `/var/spool/cron/`, and check if there's a webhook-triggered deploy via the `mep-webhook` PM2 process for context — and document whatever is found.
+5. **Browser smoke test of prod after PR merges.** Add to every session's end-of-session checklist: "After merging any PR that touched backend or frontend code, open `https://app.constrai.ca` in incognito and smoke-test login → dashboard. If the merge is purely docs, skip." This catches outages within minutes.
+
+### 104.6 — Final state at end of Section 104
+
+| Item | Status |
+|---|---|
+| Prod backend recovered | ✅ Health 200, memory 101.7mb, logs clean |
+| Pitfall #38 added to HANDOFF + DECISIONS | ✅ |
+| Section 104 retro in DECISIONS.md | ✅ (this section) |
+| URGENT FIRST CHECK block at top of HANDOFF | ✅ |
+| Browser smoke test of prod login | ⏳ Hedar to verify at next session start |
+| External uptime monitor (UptimeRobot etc.) | ⏳ Backlog item 104.5 #1 |
+| npm-audit vulnerabilities (3 findings) | ⏳ Backlog item 104.5 #2 |
+| Working tree cleanup on Droplet | ⏳ Backlog item 104.5 #3 |
+| Deploy hook audit | ⏳ Backlog item 104.5 #4 |
+
+### 104.7 — Section/total update
+
+- **Today: 73 sections.** (Section 104 NEW — post-mortem for the ~14h prod outage. New Pitfall #38 — `npm ci` before `pm2 restart` for any deploy that touches `package.json`. The incident itself was a single missing module, but the 14-hour-undetected delay points to a deeper gap: no external uptime monitor + no post-merge prod verification. Both are now on backlog as concrete next-session tasks.)
+
 

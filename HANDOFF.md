@@ -1,7 +1,27 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 14, 2026 ~23:30 UTC — **Phase 6-D-1c shipped. The Phase 6-D-1 cookie-migration trilogy (1a → 1b → 1c) is fully closed.** Web auth state now travels exclusively in HttpOnly cookies; the JWT no longer rides in the response JSON body for web clients. Mobile path (Bearer + body tokens) preserved unchanged. Today's PR: #237 merged (`e8f07c7` on main, CI #595 green). One CI flake (pg `bigint` vs `Number()` coercion in a new assertion) fixed in one line and re-pushed. **Three hygiene items from the previous session (duplicate Section 99 in DECISIONS.md, `.husky/pre-commit` main-branch guard, nginx wildcard symlink + reload on prod) are still pending and remain the recommended first batch for the next session.**
+> Last updated: May 15, 2026 ~04:00 UTC — **Phase 6-D-1c shipped (PR #237) + Section 103 docs (PR #238) + Section 104 prod-incident retro (PR #239).**
+>
+> **⚠️ PROD INCIDENT TODAY — RECOVERED.** Production was down ~14 hours (May 14 13:41 UTC → May 15 03:50 UTC) due to a missing `cookie-parser` module after this morning's Section 100 deploy. `git pull` brought the new `require('cookie-parser')` but `npm install` was never run on the server, so PM2 spent ~14h in a `MODULE_NOT_FOUND` restart loop. Recovered via `npm ci --omit=dev --ignore-scripts` on the Droplet. Health endpoint now returns 200. End-to-end smoke (browser login) NOT YET verified — Hedar should test from incognito at session start. **New Pitfall #38 encoded — every deploy that adds an npm dep MUST run `npm ci` BEFORE `pm2 restart`.**
+
+---
+
+## 🚨 URGENT FIRST CHECK (next session — do this BEFORE any other work)
+
+1. **Verify prod is still healthy:**
+   ```
+   ssh root@143.110.218.84
+   ```
+   ```bash
+   pm2 status mep-backend
+   curl -sS -o /dev/null -w "Health: %{http_code}\n" https://app.constrai.ca/api/health
+   ```
+   Expected: PM2 status `online`, memory >50mb (not crash-loop tiny), Health `200`. If anything off, see Section 104 in DECISIONS.md for the recovery runbook.
+
+2. **Browser smoke test:** Open `https://app.constrai.ca` in incognito → login with `hedar.hallak@gmail.com` / `hedar2026` → dashboard renders. This is the user-facing verification that was deferred at end of May 14 session.
+
+3. **Only after both above are green**, continue with the regular task list below.
 
 ---
 
@@ -272,6 +292,18 @@ Cost inventory + DigitalOcean Spaces + Apple Developer keys: see `RECOVERY.md`.
 35. **Provider migration completeness audit before env-var decommission** (Section 98.6) — grep direct SDK references AND legacy env-var references before declaring scope.
 36. **Verify current branch before commit/push during parallel work** (Section 101.3) — `git branch --show-current` before EVERY commit. Mitigation hook is hygiene item #2 above.
 37. **Compare pg `bigint` columns via `String()` on both sides in assertions** (Section 103.2). pg returns `bigint` columns as strings; helpers like `seedUser` may coerce to `Number`. The asymmetry passes silently in shape tests, then surfaces the first time a new test asserts an `id`. Universal form: `expect(String(res.body.<x>)).toBe(String(seed.<id>))`.
+38. **Every deploy that touches `package.json` MUST run `npm ci` on the server BEFORE `pm2 restart`** (Section 104, May 14 incident). On May 14, PR #231 added `cookie-parser` as a dep. Someone (or the deploy script) ran `git pull` + `pm2 restart` without `npm install` → `MODULE_NOT_FOUND` → PM2 restart loop → **~14 hours of production downtime** before discovery via Sentry alert. The same crash later corrupted `node_modules/@sentry/node` (partial state from interrupted installs), making the recovery require a full `npm ci`, not just an `npm install <newdep>`. **Mandatory deploy block — paste verbatim, never break it up:**
+    ```bash
+    cd /var/www/mep
+    git pull origin main
+    npm ci --omit=dev --ignore-scripts
+    pm2 restart mep-backend
+    sleep 3
+    pm2 status mep-backend
+    curl -sS -o /dev/null -w "Health: %{http_code}\n" https://app.constrai.ca/api/health
+    pm2 logs mep-backend --lines 15 --nostream
+    ```
+    `--ignore-scripts` is needed because of Pitfall #6 (husky postinstall fails on prod). Sub-Pitfall: PM2's `↺ N` restart counter does NOT reset on a manual `pm2 restart`; a high `↺` value is historical and not a sign of a current loop. Use `cpu > 0%` + `memory > 50mb` + `Health: 200` as the real "alive" signal.
 
 ---
 
