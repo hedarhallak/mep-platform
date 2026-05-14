@@ -132,11 +132,10 @@ describeIfDb('User management — POST /:id/resend', () => {
   });
 
   test('POST /:id/resend without SendGrid env returns 500 EMAIL_NOT_CONFIGURED', async () => {
-    // Same env-pinning pattern as daily_dispatch.test.js POST /commit.
-    // The route checks SENDGRID_API_KEY / SENDGRID_FROM_EMAIL / APP_BASE_URL
-    // BEFORE looking up the user, so locally-set env vars caused this test
-    // to flap (404 instead of 500) across Sections 65-78. Pin the env
-    // explicitly so the result is deterministic.
+    // Section 98 (May 13, 2026): the route now only checks SENDGRID_FROM_EMAIL
+    // and APP_BASE_URL — SENDGRID_API_KEY is no longer referenced (mail goes
+    // through Resend via lib/email.js#getMailClient). Keep the API-key delete
+    // for hygiene; the 500 assertion only needs FROM_EMAIL or BASE_URL unset.
     const origKey = process.env.SENDGRID_API_KEY;
     const origFrom = process.env.SENDGRID_FROM_EMAIL;
     const origBase = process.env.APP_BASE_URL;

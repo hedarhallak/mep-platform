@@ -8,13 +8,10 @@
 
 const cron = require('node-cron');
 const { pool } = require('../db');
-// Provider-agnostic mail client (SendGrid by default, Resend via
-// EMAIL_PROVIDER=resend). See lib/email.js#getMailClient.
+// Provider-agnostic mail client. Section 98 cleanup: module-load setApiKey
+// removed — Resend wrapper makes setApiKey a no-op and SendGrid is no longer
+// referenced. See lib/email.js#getMailClient.
 const sgMail = require('../lib/email').getMailClient();
-
-if (process.env.SENDGRID_API_KEY) {
-  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-}
 
 async function sendCCQReminder(poolInstance) {
   const db = poolInstance || pool;
