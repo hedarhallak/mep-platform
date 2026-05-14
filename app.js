@@ -36,6 +36,11 @@ const express = require('express');
 const path = require('path');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+// Phase 6-D-1a (Section 100, May 14, 2026): cookie-parser enables the
+// auth middleware to read the access_token cookie as a fallback when no
+// Authorization: Bearer header is present (web uses cookies, mobile
+// keeps Bearer). Mounted at root so both sub-apps see parsed req.cookies.
+const cookieParser = require('cookie-parser');
 
 // =============================================================================
 // vhost middleware — inline (no npm dep). Dispatches by Host header.
@@ -362,6 +367,10 @@ root.use(
 );
 
 root.use(express.json());
+// Cookie parsing — applied at root before vhost dispatch so every route
+// (auth, middleware/auth, etc.) sees req.cookies populated. No signed
+// cookies in this app yet; if introduced later, pass a secret here.
+root.use(cookieParser());
 
 // Rate limiters at root level — they fire BEFORE vhost dispatch so the
 // IP-based limit applies regardless of which Host the request targeted.

@@ -7,6 +7,13 @@ const crypto = require('crypto');
 const { pool, superPool } = require('../db');
 const { JWT_SECRET, hashPin, verifyPin } = require('../lib/auth_utils');
 const { audit, ACTIONS } = require('../lib/audit');
+// Phase 6-D-1a (Section 100, May 14, 2026): cookie-based session for web.
+// See lib/cookie_options.js for the policy. Mobile still uses Bearer.
+const {
+  accessTokenCookieOptions,
+  refreshTokenCookieOptions,
+  clearCookieOptions,
+} = require('../lib/cookie_options');
 
 // =============================================================================
 // authPool — pool used for PRE-TENANT lookups against RLS-strict tables.
@@ -148,11 +155,18 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'MISSING_FIELDS' });
     }
 
-    // Pre-tenant lookup against app_users (strict RLS table — needs authPool).
+    // Pre-tenant lookup against app_users + companies (both strict RLS —
+    // needs authPool). companies JOIN added in Section 100 / Phase 6-D-1a
+    // to surface `company_code` for the post-login redirect_url (the
+    // generic `app.constrai.ca` login redirects to `<code>.constrai.ca`).
     const { rows } = await authPool.query(
-      `SELECT au.id, au.username, au.email, au.employee_id, au.company_id, au.role, au.is_active, au.pin_hash, au.must_change_pin, ep.full_name
+      `SELECT au.id, au.username, au.email, au.employee_id, au.company_id, au.role,
+              au.is_active, au.pin_hash, au.must_change_pin,
+              ep.full_name,
+              c.company_code, c.name AS company_name
        FROM public.app_users au
        LEFT JOIN public.employee_profiles ep ON ep.employee_id = au.employee_id
+       LEFT JOIN public.companies c          ON c.company_id   = au.company_id
        WHERE lower(au.email) = lower($1) OR lower(au.username) = lower($1)
        LIMIT 1`,
       [loginIdentifier]
@@ -246,11 +260,34 @@ router.post('/login', async (req, res) => {
       details: { role },
     });
 
+    // Section 100 / Phase 6-D-1a: set HttpOnly cookies for web clients.
+    // Additive — the response body still carries the tokens so existing
+    // localStorage-based flows + mobile (Bearer) keep working unchanged.
+    // Phase 6-D-1b will drop the body tokens for web routes.
+    res.cookie('access_token', accessToken, accessTokenCookieOptions(req));
+    res.cookie('refresh_token', refreshToken, refreshTokenCookieOptions(req));
+
+    // Section 100 / Phase 6-D-1a: Pattern B (generic-entry → email lookup
+    // → tenant subdomain). Only set redirect_url when:
+    //   1. The request came in on `app.constrai.ca` (the generic entry).
+    //      A request that already hit a tenant subdomain is by definition
+    //      not redirecting anywhere, and admin.constrai.ca is SUPER_ADMIN
+    //      only (no tenant to redirect to).
+    //   2. The user has a company_code (every tenant role has one;
+    //      SUPER_ADMIN may not).
+    //   3. The user is NOT SUPER_ADMIN (they live on admin.constrai.ca).
+    const userCompanyCode = user.company_code ? String(user.company_code).toLowerCase() : null;
+    let redirectUrl = null;
+    if (reqHost === 'app.constrai.ca' && userCompanyCode && userRole !== 'SUPER_ADMIN') {
+      redirectUrl = `https://${userCompanyCode}.constrai.ca/dashboard`;
+    }
+
     return res.json({
       ok: true,
       token: accessToken,
       refresh_token: refreshToken,
       must_change_pin: mustChangePin,
+      redirect_url: redirectUrl,
       user: {
         user_id: user.id,
         username: user.username,
@@ -258,6 +295,7 @@ router.post('/login', async (req, res) => {
         name: user.full_name || user.username,
         employee_id: user.employee_id,
         company_id: user.company_id,
+        company_code: user.company_code || null,
         role,
         must_change_pin: mustChangePin,
       },
@@ -273,7 +311,16 @@ router.post('/login', async (req, res) => {
 // ===================
 router.post('/refresh', async (req, res) => {
   try {
-    const { refresh_token } = req.body || {};
+    // Section 100 / Phase 6-D-1a: web clients send the refresh token via
+    // an HttpOnly cookie; mobile sends it in the JSON body. Cookie wins
+    // when both arrive (cookie path is the more secure default once web
+    // moves off localStorage in 6-D-1b).
+    const cookieRefresh =
+      req.cookies && typeof req.cookies.refresh_token === 'string'
+        ? req.cookies.refresh_token
+        : null;
+    const bodyRefresh = req.body && req.body.refresh_token;
+    const refresh_token = cookieRefresh || bodyRefresh;
 
     if (!refresh_token) {
       return res.status(400).json({ ok: false, error: 'MISSING_REFRESH_TOKEN' });
@@ -340,6 +387,12 @@ router.post('/refresh', async (req, res) => {
 
     await saveRefreshToken(record.user_id, newRefreshToken, req);
 
+    // Section 100 / Phase 6-D-1a: rotate the cookie pair alongside the
+    // body tokens so web clients on the cookie path stay authenticated
+    // after rotation. Same additive policy as /login.
+    res.cookie('access_token', newAccessToken, accessTokenCookieOptions(req));
+    res.cookie('refresh_token', newRefreshToken, refreshTokenCookieOptions(req));
+
     return res.json({
       ok: true,
       token: newAccessToken,
@@ -365,7 +418,14 @@ router.post('/refresh', async (req, res) => {
 // ===================
 router.post('/logout', async (req, res) => {
   try {
-    const { refresh_token } = req.body || {};
+    // Section 100 / Phase 6-D-1a: accept refresh token from cookie OR
+    // body so logout works for both web and mobile clients.
+    const cookieRefresh =
+      req.cookies && typeof req.cookies.refresh_token === 'string'
+        ? req.cookies.refresh_token
+        : null;
+    const bodyRefresh = req.body && req.body.refresh_token;
+    const refresh_token = cookieRefresh || bodyRefresh;
 
     if (refresh_token) {
       const tokenHash = hashRefreshToken(refresh_token);
@@ -373,6 +433,13 @@ router.post('/logout', async (req, res) => {
         tokenHash,
       ]);
     }
+
+    // Clear both cookies. Domain + Path on clearCookie MUST match the
+    // original Set-Cookie or the browser keeps the old cookie alive —
+    // clearCookieOptions(req) mirrors what was used on the Set-Cookie path.
+    const cookieOpts = clearCookieOptions(req);
+    res.clearCookie('access_token', cookieOpts);
+    res.clearCookie('refresh_token', cookieOpts);
 
     return res.json({ ok: true, message: 'Logged out successfully' });
   } catch (err) {
