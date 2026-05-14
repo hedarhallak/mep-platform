@@ -1,7 +1,7 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 14, 2026 ~14:00 UTC — **Phase 6-D-1a backend cookie auth + login redirect_url shipped.** Continuation thread that closed: Section 97 docs + SendGrid decommission (Section 98) + Phase 6-C frontend branding bootstrap (Section 99) + Phase 6-D-1a backend cookies (Section 100). Today's PRs: #226 #227 #228 #229 #230 #231. Backend now supports HttpOnly cookie sessions alongside Bearer; login returns `redirect_url` for tenant users on `app.constrai.ca`. All additive — frontend still uses localStorage (Phase 6-D-1b will refactor). **Next task: Phase 6-D-1b — frontend useAuth + LoginPage + api.js consume cookies, drop localStorage.**
+> Last updated: May 14, 2026 ~17:00 UTC — **Phase 6-D-1b frontend cookie consumption + backend inline-JWT cookie fallback shipped.** Continuation thread today closed: Section 97 docs + SendGrid decommission (Section 98) + Phase 6-C frontend branding bootstrap (Section 99) + Phase 6-D-1a backend cookies (Section 100) + Phase 6-D-1b frontend cookies (Section 101). Today's PRs: #226–#233 (8 merged). Frontend now sends cookies on every request; backend's three inline-JWT endpoints (`/whoami`, `/change-pin`, `/logout-all`) accept cookie fallback. Mid-session "committed to wrong branch" incident → clean recovery + new Pitfall #36. **Next task: Phase 6-D-1c — drop tokens-in-body for web responses, or nginx wildcard vhost (hard prereq for end-to-end Pattern B).**
 
 ---
 
@@ -21,11 +21,11 @@ When you receive the one-line command above:
 2. **Read these 4 files** (use the Read tool, NOT bash):
    - `HANDOFF.md` (this file)
    - `CLAUDE.md` (working rules)
-   - `DECISIONS.md` (read ONLY the latest 2-3 sections referenced below — DON'T read the whole 11,000+ line file). Latest section is **100** (Phase 6-D-1a backend cookie auth + login redirect_url). Also relevant: 99 (Phase 6-C frontend branding bootstrap), 98 (SendGrid decommission + Pitfall #35). **IMPORTANT:** Read DECISIONS.md via the Read tool ONLY (never `bash tail` / `grep`) — Cowork bash mount can lag and miss recently merged sections (Section 96.6 explains; cost us PR #222).
+   - `DECISIONS.md` (read ONLY the latest 2-3 sections referenced below — DON'T read the whole 11,800+ line file). Latest section is **101** (Phase 6-D-1b frontend cookie consumption + Pitfall #36). Also relevant: 100 (Phase 6-D-1a backend cookies), 99 (Phase 6-C frontend branding bootstrap). **NB:** DECISIONS.md currently has a duplicate Section 99 around line 11767 (leftover from an aborted draft — to be removed in a follow-up docs PR). The canonical Section 99 is at line ~11574. **IMPORTANT:** Read DECISIONS.md via the Read tool ONLY (never `bash tail` / `grep`) — Cowork bash mount can lag and miss recently merged sections (Section 96.6 explains; cost us PR #222).
    - `RECOVERY.md` Section 2.4 only if relevant
 3. **Echo this exact line** as the first line of your reply:
    ```
-   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 100, Phase 6-D-1a backend cookies shipped, next is Phase 6-D-1b frontend useAuth refactor)
+   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 101, Phase 6-D-1b frontend cookie consumption shipped, next is Phase 6-D-1c drop tokens-in-body)
    ```
 4. **Confirm the next task** in 1-2 lines.
 5. **Ask if Hedar is ready to start**, then wait.
@@ -40,12 +40,12 @@ When you receive the one-line command above:
 | Admin portal | `https://admin.constrai.ca` (SUPER_ADMIN only) |
 | Login (test) | Email: `hedar.hallak@gmail.com` / PIN: `hedar2026` (SUPER_ADMIN) |
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04 — kernel up-to-date as of May 11, reboot banner cleared) |
-| Backend | Node.js + Express + Postgres 16, pm2-managed at `/var/www/mep`. pm2 systemd auto-start configured (Section 93.3). **Cookie-based auth additive (Section 100).** |
-| Frontend | React + Vite + Tailwind v4. Tenant branding bootstrap at `mep-frontend/src/lib/branding.js` (Section 99). Still using localStorage for tokens — Phase 6-D-1b refactor pending. |
-| Latest deployed to prod | **Phase 6-D-1a backend cookie support** — `POST /api/auth/login` returns `redirect_url` for tenant users on `app.constrai.ca` + sets HttpOnly access/refresh cookies. Phase 6-C bootstrap still live. SendGrid fully decommissioned. |
-| Last merged to main | PR #231 (s100 backend cookies + login redirect_url). Section 100 docs PR follows (this commit). |
-| Active program | **Multi-Tenant Migration — Phase 6-D-1b (frontend useAuth + LoginPage + api.js consume cookies, drop localStorage) is next.** Phase 5 + 6-A + 6-B + 6-C + 6-D-1a all FULLY closed. |
-| Mobile app | Still on legacy username + Bearer-token login — backend keeps backward-compat |
+| Backend | Node.js + Express + Postgres 16, pm2-managed at `/var/www/mep`. Cookie auth fully wired: `middleware/auth.js` + `routes/auth.js#extractToken` accept Bearer header OR cookie. |
+| Frontend | React + Vite + Tailwind v4. `credentials: 'include'` on every fetch (Section 101). `window.__BRANDING__` populated by `lib/branding.js` (Section 99). |
+| Latest deployed to prod | **Phase 6-D-1b frontend cookie consumption** — once PR #233 merge fast-forwards prod via `git pull` on the server. `redirect_url` flow at `app.constrai.ca` login + cookie-based auth at `acm.constrai.ca` post-redirect both work end-to-end IF nginx serves tenant subdomains (see operational backlog). |
+| Last merged to main | PR #233 (Phase 6-D-1b frontend cookie consumption). Section 101 docs PR follows (this commit). |
+| Active program | **Multi-Tenant Migration — Phase 6-D-1c (drop tokens-in-body for web responses) is next.** Phase 5 + 6-A + 6-B + 6-C + 6-D-1a + 6-D-1b all FULLY closed. |
+| Mobile app | Still on Bearer-token + PIN. Backend's Bearer-wins-over-cookie policy keeps mobile unaffected. |
 
 ### Multi-tenant migration progress
 
@@ -63,12 +63,21 @@ When you receive the one-line command above:
 | Phase 6-A — companies branding columns (migration 014) | ✅ DEPLOYED |
 | Phase 6-B — public `GET /api/companies/:code/branding` | ✅ DEPLOYED + smoke-verified (May 13) |
 | Phase 6-C — Frontend bootstrap reads branding + applies CSS vars | ✅ DEPLOYED (May 14, Section 99) |
-| Phase 6-D-1a — Backend cookie auth + login redirect_url | ✅ **DEPLOYED (May 14, Section 100)** |
-| **Phase 6-D-1b — Frontend useAuth + LoginPage cookie consumption** | ⏳ **Next** |
-| Phase 6-D-1c — Drop tokens-in-body for web routes | ⏳ After 6-D-1b |
-| Phase 6-D — Logo swap on LoginPage + admin upload UI + Spaces pipeline | ⏳ After 6-D-1c |
-| Phase 7 — 2FA + biometric + account security + PIN→password migration | ⏳ Pending |
+| Phase 6-D-1a — Backend cookie auth + login redirect_url | ✅ DEPLOYED (May 14, Section 100) |
+| Phase 6-D-1b — Frontend cookie consumption + /whoami cookie fallback | ✅ **DEPLOYED (May 14, Section 101)** |
+| **Phase 6-D-1c — Drop tokens-in-body for web auth responses** | ⏳ **Next code task** |
+| Phase 6-D-2 — Logo swap on LoginPage | ⏳ After 6-D-1c |
+| Phase 6-D-3 — Admin upload UI + DigitalOcean Spaces pipeline | ⏳ After 6-D-2 |
+| Phase 7 — 2FA + biometric + PIN→password migration | ⏳ Pending |
 | Phase 8 — Audit + compliance | ⏳ Pending |
+
+---
+
+## Pending operational work (hard prereqs / cleanup)
+
+- **nginx wildcard vhost for `*.constrai.ca`** — HARD PREREQ for Pattern B to work end-to-end. Currently nginx serves only explicit `app.constrai.ca` + `admin.constrai.ca`. Without a wildcard server block (or one-per-tenant), `acm.constrai.ca` resolves at DNS (Cloudflare wildcard is in place since Phase 1) but nginx returns its default vhost. Action: add `server { server_name *.constrai.ca; root /var/www/mep/public; ... try_files $uri /index.html; }` after the explicit vhosts. Will require an nginx reload + smoke test against a real tenant subdomain.
+- **Docs cleanup — duplicate Section 99 in DECISIONS.md** (~line 11767). Leftover from an aborted draft earlier today. Remove in next docs PR. Harmless but confusing.
+- **Pre-commit hook refusing direct commits to `main`** — per Pitfall #36 / Section 101.3. Candidate for next hygiene PR. Snippet in Section 101.3.
 
 ---
 
@@ -90,33 +99,31 @@ When you receive the one-line command above:
 
 ---
 
-## Next task: Phase 6-D-1b — Frontend cookie consumption (drop localStorage)
+## Next task: Phase 6-D-1c — Drop tokens-in-body for web auth responses
 
-Phase 6-D-1a shipped the backend side: HttpOnly cookies set on every login/refresh, `redirect_url` returned for tenant users on `app.constrai.ca`. Phase 6-D-1b finishes the migration on the frontend.
+Phase 6-D-1a (Section 100) added cookies as an **additive** layer alongside the existing tokens-in-JSON-body response. Phase 6-D-1b (Section 101) wired the frontend to use cookies. Phase 6-D-1c closes the loop: drop `token` and `refresh_token` from the response body for **web** clients, while keeping them for **mobile** (Bearer header). The frontend doesn't read them anymore (after 6-D-1b's useAuth refactor), so removing them removes a leak surface — the JSON response no longer carries the bearer token where it could be inadvertently logged / cached.
 
 **Scope:**
 
-1. **`mep-frontend/src/lib/api.js`** — switch all `fetch` calls to `credentials: 'include'` so cookies travel with same-site requests. Remove the `Authorization: Bearer` header injection (or gate it behind a "mobile-shaped path" if needed for a future webview; for now web doesn't need it once cookies arrive).
-2. **`mep-frontend/src/hooks/useAuth.jsx`** — stop reading/writing `mep_token` / `mep_refresh_token` from localStorage. `whoami` / `refresh` rely on cookies. The hook still exposes `user`, `loading`, `login(...)`, `logout()` to consumers — internals change, surface stays.
-3. **`mep-frontend/src/pages/auth/LoginPage.jsx`** — after `login()` resolves successfully, check the response for `redirect_url`. If present, do `window.location.assign(redirect_url)` (cross-origin hop). If null/absent, navigate via React Router to `/dashboard` as today.
-4. **`mep-frontend/src/admin/AdminLogin.jsx`** — same treatment: admin portal flow stays React-Router-navigation (admin response never has `redirect_url`). Verify behavior unchanged.
+1. **Backend `routes/auth.js`** — `/login`, `/refresh` responses. Detect "web client" vs "mobile client" and conditionally include / omit `token` + `refresh_token` in the body:
+   - Detection signal options (pick one at session start):
+     - **A.** User-Agent header: mobile app's User-Agent contains `Constrai-Mobile` or `Expo` — easy to ship, easy for an attacker to spoof, but the security gain isn't about attacker resistance, it's about not leaking the token by default.
+     - **B.** Request header `X-Auth-Channel: cookie` from web frontend (set by `lib/api.js`) vs absent for mobile. More explicit, less heuristic.
+     - **C.** Differentiate at the route level: a new `POST /api/auth/login/web` endpoint that omits body tokens vs the existing `/login` keeping them for mobile. Cleanest contract but doubles the route surface.
+   - Backend keeps the cookie set unconditionally (web ignores body tokens, mobile ignores cookie).
+2. **Frontend `mep-frontend/src/lib/api.js`** — verify the frontend doesn't accidentally still read body tokens. The `refreshTokenOnce` helper currently reads `data.token` / `data.refresh_token` on refresh — after 6-D-1c the response body for web will omit these, so the helper should gracefully no-op (the cookie is already set by the backend; no client-side action needed).
+3. **Frontend `mep-frontend/src/hooks/useAuth.jsx`** — same: verify no code path expects `data.token` on login success. After 6-D-1b the hook reads `data.redirect_url` and `data.user` but not the tokens themselves; double-check.
+4. **Mobile app** — no change. Mobile sends `User-Agent: Constrai-Mobile/...` (or whatever signal we pick) and the backend returns tokens in body as today.
 5. **Tests:**
-   - `useAuth.test.jsx` (if missing — likely add) — exercise login → state set → logout → state cleared, all via the new credentials-include path.
-   - `LoginPage.test.jsx` — assert `window.location.assign` is called when `redirect_url` is returned; assert React Router navigate is called when it isn't.
-   - `AdminLogin.test.jsx` — confirm no `redirect_url` consumption (admin flow unchanged).
-6. **Hard prerequisite — nginx wildcard vhost for `*.constrai.ca`** — once the frontend redirects to `acm.constrai.ca`, nginx must serve the tenant `index.html` for that host. Add a wildcard server block (or one-per-onboarded-tenant). This is a server-side ops task, separate from the frontend PR.
+   - Backend: `tests/auth/cookie_session.test.js` — extend to assert that requests with the web signal get NO `token` / `refresh_token` in body, while requests without it (default — mobile-shaped) get them as today.
+   - Frontend: `useAuth.test.jsx` / `LoginPage.test.jsx` — assert successful login still works when response has no body token (just cookies).
 
 **Decisions to make at session start:**
-- Which approach for the nginx wildcard? Option α: one `server { server_name ~^(?<sub>[a-z0-9_-]+)\.constrai\.ca$; }` regex block that catches everything not already matched by the explicit `app` / `admin` / `www` blocks. Option β: add a new explicit block for each tenant subdomain at onboarding time (more friction, more visibility).
-- Do we want to ship the nginx change BEFORE the frontend PR, alongside it, or after (with a one-tenant test scenario)? Recommend before, so the frontend PR's end-to-end path actually works the moment it merges.
 
-**Out of scope (Phase 6-D-1c + later):**
-- Drop `token` + `refresh_token` from the body on web auth responses. Phase 6-D-1c — once useAuth doesn't read them anymore. Mobile path stays Bearer.
-- Logo swap on LoginPage — Phase 6-D-2 (after 1a/1b/1c close out the auth refactor).
-- Admin upload UI + DigitalOcean Spaces pipeline — Phase 6-D-3.
-- Color shades from brand_color — later polish.
+- Which detection signal (A / B / C above)? My recommendation: **B (X-Auth-Channel header from web)**. Explicit, doesn't drift if user agents change, easy to mock in tests, no new endpoints.
+- Should mobile authentication path also stop returning the body refresh_token someday and move to expo-secure-store-only? Out of scope for 6-D-1c; flag as a Phase 7 candidate alongside PIN→password.
 
-**Estimated effort:** Frontend PR ~1.5–2 hours (~6 files, mostly small). Nginx wildcard config + smoke ~30 min on the server. Branch name suggestion: `feat/s101-phase6d1b-frontend-cookie-consumption`.
+**Estimated effort:** ~1 hour backend + 30 min frontend verify + 1 hour test extend. ~2.5 hours total. Branch name suggestion: `feat/s102-phase6d1c-drop-body-tokens-for-web`.
 
 ---
 
@@ -124,15 +131,17 @@ Phase 6-D-1a shipped the backend side: HttpOnly cookies set on every login/refre
 
 - **`routes/project_trades.js`** redundant top-level `router.use(auth)`. Low-priority.
 - **pg DeprecationWarning** — "Calling client.query() when the client is already executing a query". Hygiene PR opportunity.
-- **Coverage threshold ratchet** — total test suite is 44+ files now. Run `TEST_DATABASE_URL=… npx jest --coverage` and ratchet if drift ≥3 pp.
+- **Coverage threshold ratchet** — total test suite is now 46+ files. Run `TEST_DATABASE_URL=… npx jest --coverage` and ratchet if drift ≥3 pp.
 - **Stale GitHub blob `0512476`** — remains in object DB until GC; no action needed (all credentials inside revoked).
 - **Mapbox `Default public token`** — unused, can't delete (Mapbox UI limitation). Benign.
-- **`SENDGRID_FROM_EMAIL` env var name** — still used as the from-address (kept for backward compat; just a name, not a secret). Optional future rename to `EMAIL_FROM` for cleanliness — defer to a hygiene PR.
-- **Twilio/SendGrid account itself** — dormant after API key delete. No recurring cost. Don't delete unless Twilio relationship is also being dropped.
-- **Color shades from brand_color** — Section 99.5. Currently only `--color-primary` and `--color-sidebar-active` track the tenant brand; shades stay Constrai green. Visual polish for hover/active states; queue as Phase 6-D-3 or hygiene.
-- **PIN → password migration** (NEW — Hedar reminder this session). Current auth uses 4–8 char PINs (8+ for SA). Long-term, regular users should have full passwords. Queue for Phase 7 alongside 2FA + biometric. Touches: routes/auth.js login + change-pin + onboarding/activate, mobile activation flow, admin Reset PIN button → Reset Password, plus a migration that adds a `password_hash` column and a transitional `auth_method` flag per user. Estimate: medium-large.
-- **nginx wildcard vhost for `*.constrai.ca`** — Phase 6-D-1b hard prerequisite. See "Next task" above.
-- **CSRF protection** — currently `SameSite=Lax` covers the common threat surface (Section 100.6). If any state-changing GET endpoints are added, layer a CSRF-token middleware.
+- **`SENDGRID_FROM_EMAIL` env var name** — still used as the from-address (kept for backward compat). Optional future rename to `EMAIL_FROM`.
+- **Twilio/SendGrid account itself** — dormant, no cost. Don't delete unless Twilio relationship is also being dropped.
+- **Color shades from `brand_color`** — Section 99.5. Currently only `--color-primary` and `--color-sidebar-active` track the tenant brand; shades stay Constrai green. Visual polish for hover/active states.
+- **PIN → password migration** (Hedar reminder from Section 100 session). Queue for Phase 7 alongside 2FA + biometric.
+- **nginx wildcard vhost for `*.constrai.ca`** — see "Pending operational work" above.
+- **Docs cleanup — duplicate Section 99 in DECISIONS.md** — see Section 101.4.
+- **Pre-commit hook refusing direct commits to `main`** — see Pitfall #36 in Section 101.3.
+- **CSRF protection** — currently `SameSite=Lax` covers the common threat surface. If state-changing GET endpoints get added, layer a CSRF-token middleware.
 
 ---
 
@@ -144,19 +153,19 @@ All credentials live in **OneDrive `Constrai Keys` folder** (`C:\Users\Lenovo\On
 |---|---|---|
 | Cloudflare Origin Certificate (May 7, 2041) | `Cloudflare Origin Certificate.txt` | 2026-05-11 |
 | Cloudflare Origin Private Key | `Cloudflare Private Key.txt` | 2026-05-11 |
-| Resend API key (`Constrai Prod 2026-05-11-v2`) | `Resend API key 2026-05-11.txt` | 2026-05-11 (rotated mid-session) |
+| Resend API key (`Constrai Prod 2026-05-11-v2`) | `Resend API key 2026-05-11.txt` | 2026-05-11 |
 | `mepuser_super` DB pw | (saved in OneDrive) | 2026-05-11 |
 | `mepuser` DB pw | (saved in OneDrive) | 2026-05-11 |
 | `MAPBOX_ACCESS_TOKEN` (`Constrai Prod 2026-05-11`) | `Mapbox token 2026-05-11.txt` | 2026-05-11 |
 | `JWT_SECRET` | `JWT_SECRET 2026-05-11.txt` | 2026-05-11 |
 
-Prod `/var/www/mep/.env` is in sync with all of the above. `SENDGRID_API_KEY` no longer present (Section 98).
+Prod `/var/www/mep/.env` is in sync with all of the above. `SENDGRID_API_KEY` no longer present.
 
 Cost inventory + DigitalOcean Spaces + Apple Developer keys: see `RECOVERY.md`.
 
 ---
 
-## Critical pitfalls (encoded from Sections 86 + 87 + 88 + 89 + 90 + 91 + 92 + 93 + 96 + 97 + 98 — Sections 99 + 100 added none)
+## Critical pitfalls (encoded from Sections 86 + 87 + 88 + 89 + 90 + 91 + 92 + 93 + 96 + 97 + 98 + 101)
 
 1. **Bash sandbox file sync lag** — use Read tool to verify file state.
 2. **Edit tool can silently lose changes** — Read each file immediately after Edit.
@@ -192,7 +201,8 @@ Cost inventory + DigitalOcean Spaces + Apple Developer keys: see `RECOVERY.md`.
 32. **Verify `pm2-root.service` is enabled BEFORE any planned reboot** (Section 93.4). Run `systemctl is-enabled pm2-root` before reboots. Run `pm2 save` after any new `pm2 start`.
 33. **Adding router primitives to a tested component requires updating its test wrapper** (Section 96.5). Use `MemoryRouter` + `renderWithRouter` helper.
 34. **Never assume case homogeneity across legacy + generated text keys** (Section 97.6). `SELECT DISTINCT` against prod before locking a text-key lookup; prefer `LOWER(col) = LOWER($1)` when in doubt.
-35. **Provider migration completeness audit before env-var decommission** (Section 98.6). Wrapper / abstraction layer doesn't guarantee every caller goes through it. Grep direct SDK references AND legacy env-var references across the whole repo before declaring decommission scope.
+35. **Provider migration completeness audit before env-var decommission** (Section 98.6). Wrapper / abstraction layer doesn't guarantee every caller goes through it. Grep direct SDK references AND legacy env-var references before declaring decommission scope.
+36. **Verify current branch before commit/push during parallel work** (NEW — Section 101.3, May 14, 2026). When juggling multiple branches in parallel (the "do other work while CI runs" pattern), a `git commit` may accidentally land on `main` instead of the intended feature branch — the source-of-truth branch gets polluted with code that hasn't been CI-gated. Detection: `gh pr create` errors silently; `gh pr view` says "no PR for branch main"; `gh run list --branch main` shows no CI for the latest local commit; `git ls-remote --heads origin main` differs from `.git/refs/heads/main`. Recovery: save the commit on a side branch (`git branch <save> <bad-sha>`), `git reset --hard origin/<bad-branch>`, rename `<save>` to the intended branch name, push. **Convention:** `git branch --show-current` before EVERY commit during parallel work; configure shell prompt to display current branch always; pre-commit hook to refuse `main` commits (snippet in Section 101.3 — candidate for next hygiene PR). The May 14 incident was caught only because `gh pr create` failed silently AND `gh run list` was checked — without those, the bad commit could have landed on origin/main without CI gate.
 
 ---
 
@@ -211,7 +221,8 @@ Cost inventory + DigitalOcean Spaces + Apple Developer keys: see `RECOVERY.md`.
 - **Universal sed mask** — `sed -E 's/=[A-Za-z0-9_.-]+$/=***/'` (Section 92.5).
 - **Verify pm2 systemd unit before reboots** — `systemctl is-enabled pm2-root` (Section 93.4).
 - **Provider migration completeness check** — grep direct SDK calls + env-var refs before decommissioning (Section 98.6 / Pitfall #35).
-- **Confirm user-flow before technical strategy** — narrate user journey before AskUserQuestion on technical details (Section 99 / Section 100 retro habit — saved us from coding the wrong shape twice).
+- **Verify current branch before commit/push during parallel work** — `git branch --show-current` before every commit (Section 101.3 / Pitfall #36).
+- **Parallel work pattern** — when waiting on CI, prep next-PR work in a separate local branch (don't push). After current PR merges, rebase and push the prepared work. Saves ~5-6 minutes per PR.
 
 ---
 
@@ -228,7 +239,7 @@ Cost inventory + DigitalOcean Spaces + Apple Developer keys: see `RECOVERY.md`.
 ## Out-of-band notes (read on demand)
 
 - `CLAUDE.md` — full working rules.
-- `DECISIONS.md` — full decision history (11,000+ lines). Search by Section number.
+- `DECISIONS.md` — full decision history (11,800+ lines). Search by Section number.
 - `RECOVERY.md` — credentials inventory, cost summary.
 - `SCHEMA.md` — DB schema reference.
 - `API.md` — backend endpoint reference.

@@ -11868,3 +11868,125 @@ This is the user-flow analogue of Section 4 ("Always Suggest Better Tools" — f
 
 - **Today: 68 sections.** (Section 99 NEW — Phase 6-C frontend branding bootstrap shipped. Mid-design Hedar caught a user-flow mismatch and we corrected: bootstrap brands tenant subdomains, NOT generic entry. New Pitfall #36 — confirm user-facing flow before technical strategy.)
 
+---
+
+## Section 101 — Phase 6-D-1b: Frontend Cookie Consumption + Recovery from "Committed-to-Main" + Pitfall #36 (May 14, 2026 ~14:00–17:00 UTC)
+
+> Phase 6-D-1b shipped — frontend uses cookies via `credentials: 'include'`, backend's three inline-JWT-verify endpoints (`/whoami`, `/change-pin`, `/logout-all`) get cookie fallback via a new `extractToken()` helper. Mid-session "committed to wrong branch" incident: the Phase 6-D-1b commit landed on local `main` instead of `feat/s101-...`, but never reached origin/main thanks to `gh pr create` failing silently. Recovered cleanly by saving the commit on a recovery branch and resetting local main to origin/main. New Pitfall #36 — verify current branch before commit/push during parallel-work patterns.
+>
+> **Docs hygiene note:** while editing DECISIONS.md for this section, found a duplicate Section 99 at line ~11767 (a leftover from an aborted drafting attempt earlier in this session). The duplicate references "Pitfall #36 — confirm user-facing flow before technical strategy" — different meaning from the Pitfall #36 below. A follow-up docs PR should remove the duplicate. The canonical Section 99 (line ~11574) stands; ignore the duplicate.
+
+### 101.1 — Implementation (PR #233)
+
+Backend (gap fix from Section 100 / Phase 6-D-1a):
+
+| File / endpoint | Change |
+|---|---|
+| `routes/auth.js` — new `extractToken(req)` helper | Reads JWT from `Authorization: Bearer` header OR `req.cookies.access_token`. Bearer wins when both present (mobile-compat — matches `middleware/auth.js` policy from Section 100). |
+| `routes/auth.js` — `/whoami`, `/change-pin`, `/logout-all` | Each previously had inline `req.headers.authorization` parsing. Now all three call `extractToken(req)`. These endpoints bypass `middleware/auth.js` and so didn't get the Phase 6-D-1a cookie support. Critical for cross-subdomain flow: after redirect from `app.constrai.ca` to `acm.constrai.ca`, the frontend's first call is `/whoami` and localStorage at the new origin is empty — the response depends on the cookie fallback. |
+
+Frontend (additive — keeps localStorage path for transition; 6-D-1c will drop it):
+
+| File | Change |
+|---|---|
+| `mep-frontend/src/lib/api.js` | `credentials: 'include'` on every fetch (main `apiFetch` + the `refreshTokenOnce` retry path). Browsers send the auth cookie automatically with same-site and same-eTLD+1 cross-origin requests. |
+| `mep-frontend/src/hooks/useAuth.jsx` | Removed the `localStorage.getItem('mep_token')` short-circuit on mount. Always calls `/whoami` regardless — needed so cross-subdomain entry (new origin, empty localStorage, cookie traveled) authenticates. A 401 from `/whoami` lands the user on the login screen, same as before. |
+| `mep-frontend/src/pages/auth/LoginPage.jsx` | After successful `login()`, check the response for `redirect_url`. If present, `window.location.assign(redirect_url)` for the cross-origin hop. Else, React-Router `navigate('/dashboard')`. |
+| `mep-frontend/src/admin/AdminLogin.jsx` | Mirrors the redirect_url handling defensively. SUPER_ADMIN should never receive one (Section 100.5), but consistent code prevents future surprises. |
+
+Tests (8 new):
+
+| File | Coverage |
+|---|---|
+| `tests/auth/whoami_cookie.test.js` (NEW) | 4 backend tests: cookie path returns user, no auth returns 401 MISSING_TOKEN, Bearer beats cookie when both arrive, malformed JWT in cookie returns 401 INVALID_TOKEN. |
+| `mep-frontend/src/pages/auth/LoginPage.test.jsx` (NEW) | 4 frontend tests: `redirect_url` present → `window.location.assign`, null → React Router navigate, absent (legacy shape) → React Router navigate, login failure → no navigation/redirect. |
+
+Local vitest pre-push: 4/4 LoginPage tests pass + 61/61 other frontend tests pass (one `act()` warning is advisory — the test still passes; mocking pattern uses `Object.defineProperty(window, 'location', ...)` to override jsdom's non-configurable `assign`).
+
+### 101.2 — Recovery from the "committed to wrong branch" incident
+
+Mid-session, during the parallel-work pattern (write Phase 6-D-1b code while Section 100 docs CI ran), the Phase 6-D-1b commit landed on **local `main`** instead of `feat/s101-phase6d1b-frontend-cookie-consumption`. Sequence:
+
+1. Hedar correctly created `feat/s101-phase6d1b-frontend-cookie-consumption` earlier in the session.
+2. Some intermediate `git` command (most likely a `git checkout main` Hedar didn't recall running, or auto-completion misfire) put HEAD back on `main` without an obvious visual cue.
+3. `git add` + `git commit -m "feat(s101): ..."` ran on `main` → committed to local main as `e080f6c`.
+4. `git push -u origin feat/s101-phase6d1b-frontend-cookie-consumption` pushed local HEAD (== main's HEAD == `e080f6c`) to remote `feat/s101-...` (fast-forward from the stale `d1f0b56` it had been at).
+5. `gh pr create --fill --base main` FAILED silently — the remote branch's HEAD now equals main's HEAD, so there's no diff to PR.
+6. `gh pr view --json ...` and `gh pr merge --auto --squash --delete-branch` errored with "no pull requests found for branch 'main'" — both defaulted to current branch (which was `main`).
+7. Detection: (a) `gh run list --branch main` showed NO CI run for `e080f6c`; (b) `.git/refs/heads/main` returned `e080f6c` but `git ls-remote --heads origin main` returned `5e5f5c0`; (c) `gh pr list` had no PR #233.
+
+The kicker: **remote `main` was never touched**. The `git push` only updated `origin/feat/s101-...`. The `gh pr create` failure broke the auto-merge chain. So origin/main remained at `5e5f5c0` (the Section 100 docs commit) — no damage to the source-of-truth branch.
+
+Recovery, executed cleanly in one batch (`s101-recovery.log` captures the full output):
+
+```bash
+git branch feat/s101-recovery e080f6c                                   # 1. save the commit on a side branch
+git fetch origin main                                                   # 2. fresh remote state
+git reset --hard origin/main                                            # 3. reset local main to 5e5f5c0
+git branch -D feat/s101-phase6d1b-frontend-cookie-consumption           # 4. drop the stale local branch
+git branch -m feat/s101-recovery feat/s101-phase6d1b-frontend-cookie-consumption  # 5. rename recovery → proper name
+git checkout feat/s101-phase6d1b-frontend-cookie-consumption
+git push -u origin feat/s101-phase6d1b-frontend-cookie-consumption      # 6. fast-forward push (d1f0b56..e080f6c)
+gh pr create --fill --base main                                          # 7. PR #233 created cleanly
+gh pr merge --auto --squash --delete-branch
+```
+
+End state: `e080f6c` on a proper feature branch → PR #233 → squash-merge to main → standard CI gate honored. Zero impact on prod.
+
+### 101.3 — Pitfall #36 (NEW) — verify current branch before commit/push during parallel work
+
+When juggling multiple branches in parallel (the "do other work while CI runs" pattern Hedar adopted this session to fill the 10–12-minute waits between PRs), it is easy to lose track of which branch is currently checked out. `git commit` always lands on the current branch. If that's accidentally `main`, the source-of-truth branch gets polluted with code that has not been CI-gated.
+
+The specific failure mode in this session is documented in §101.2 above. The fact that origin/main was spared is luck: `gh pr create`'s silent failure broke the auto-merge chain before the bad commit could propagate. Had Hedar instead run `git push origin main` directly (an easy slip), the commit would have reached origin/main without CI.
+
+**Convention going forward:**
+
+1. **Before any `git commit`** during parallel work: `git branch --show-current`. Even better, configure the shell prompt (posh-git on PowerShell, oh-my-posh, Starship) to show the current branch always. Two seconds of friction beats a recovery exercise.
+2. **`git status`** as the routine pre-commit check — its first line shows the current branch.
+3. **If `gh pr create` errors or `gh pr merge` says "no pull requests found"** — STOP. Investigate before any follow-up. The most common cause is the local commit went to the wrong branch.
+4. **Recovery template** for "committed to wrong branch but the bad commit has not yet reached origin/main":
+
+   ```bash
+   git branch <save-branch> <bad-commit-sha>          # save the work
+   git fetch origin <wrong-branch>                    # refresh remote state
+   git reset --hard origin/<wrong-branch>             # restore local wrong-branch
+   git branch -D <intended-branch> || true            # drop the stale intended branch
+   git branch -m <save-branch> <intended-branch>      # rename recovery → intended
+   git push -u origin <intended-branch>               # push as intended
+   ```
+
+5. **Detection script** (candidate for next hygiene PR — pre-commit hook):
+
+   ```bash
+   #!/usr/bin/env bash
+   # .husky/pre-commit — extension
+   if [ "$(git rev-parse --abbrev-ref HEAD)" = "main" ]; then
+     echo "ERROR: direct commits to main are forbidden. Switch to a feature branch."
+     exit 1
+   fi
+   ```
+
+This hook isn't installed yet but is on the backlog. Without it, the only safeguards are the conventions above plus the GitHub branch-protection rules (which currently let direct pushes through for the maintainer).
+
+### 101.4 — Final state at end of Section 101
+
+| Item | Status |
+|---|---|
+| PR #233 (Phase 6-D-1b) — code | ⏳ Open + auto-merge enabled at time of writing; CI in progress |
+| Backend `/whoami`, `/change-pin`, `/logout-all` cookie fallback | ✅ via `extractToken()` |
+| Frontend `credentials: 'include'` + useAuth always-/whoami + LoginPage redirect handling | ✅ |
+| Backend tests `whoami_cookie.test.js` (4 cases) | ✅ |
+| Frontend tests `LoginPage.test.jsx` (4 cases) | ✅ |
+| Recovery from "committed to wrong branch" | ✅ — clean, no prod impact |
+| Pitfall #36 (verify-branch-before-commit) added | ✅ |
+| Pending: Phase 6-D-1c — drop tokens-in-body for web routes | ⏳ Next code task |
+| Pending: nginx wildcard vhost for `*.constrai.ca` | ⏳ Hard prereq for end-to-end Phase 6-D-1b |
+| Pending: Phase 6-D-2 — logo swap on LoginPage | ⏳ After 6-D-1c |
+| Pending: Phase 6-D-3 — admin upload UI + Spaces pipeline | ⏳ After 6-D-2 |
+| Pending: docs cleanup — remove duplicate Section 99 in DECISIONS.md (~line 11767) | ⏳ Next docs PR |
+| Pending: pre-commit hook refusing direct commits to `main` | ⏳ Hygiene PR candidate |
+
+### 101.5 — Section/total update
+
+- **Today: 70 sections.** (Section 101 NEW — Phase 6-D-1b frontend cookie consumption + backend inline-JWT cookie fallback. Mid-session "committed to wrong branch" incident caught and recovered cleanly via save-commit-and-reset-main pattern — no prod impact because `gh pr create`'s silent failure prevented the auto-merge chain from reaching origin/main. New Pitfall #36 — verify current branch before commit/push, especially during parallel-work patterns. Also captured a docs-cleanup TODO — duplicate Section 99 to be removed in a follow-up docs PR.)
+
