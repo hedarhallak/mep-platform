@@ -11657,6 +11657,113 @@ Local vitest pre-push: 6/6 test files passing, 61/61 tests passing in 5.3s. CI p
 
 ---
 
+## Section 100 — Phase 6-D-1a: Backend Cookie Auth + Login redirect_url (May 14, 2026 ~12:00–14:00 UTC)
+
+> Phase 6-D-1a shipped — backend now supports HttpOnly cookie sessions alongside the existing Bearer-token flow, and the login endpoint returns `redirect_url` for Pattern B (generic-entry → email lookup → tenant subdomain). PR #231 is purely additive: response body still carries `token` + `refresh_token` for backward compat with the current frontend localStorage flow and mobile Bearer header. Phase 6-D-1b will refactor the frontend to consume cookies + drop localStorage.
+
+### 100.1 — User-flow context
+
+Section 99 closed Phase 6-C (frontend bootstrap reads tenant branding from the subdomain). The mid-design clarification surfaced Pattern B (generic Constrai login at `app.constrai.ca` → email lookup → cross-origin redirect to `acm.constrai.ca` → branded dashboard). Phase 6-D-1a implements the backend half of Pattern B:
+
+- `POST /api/auth/login` now returns `redirect_url: 'https://<code>.constrai.ca/dashboard'` when:
+  1. The request hit `app.constrai.ca` (the generic entry — Pattern B only)
+  2. User is NOT a SUPER_ADMIN (they belong at `admin.constrai.ca`)
+  3. User has a `company_code` (tenant users; SA may not)
+- Returns `null` otherwise — `admin.constrai.ca`, default test host (`127.0.0.1`), and tenant subdomains all skip the redirect because the user is already where they need to be.
+
+### 100.2 — Transport architecture decision (mid-session pivot)
+
+The session opened with three transport options for cross-subdomain auth state:
+
+- **Option A — Cookie `Domain=.constrai.ca`**: clean, HttpOnly = XSS-immune, browser handles transport.
+- **Option B — One-time handoff token in URL**: small DB table + exchange endpoint, slightly more complex.
+- **Option C — Refactor to full cookie-based auth**: same as A but encompassing the whole web auth flow, not just cross-subdomain handoff.
+
+Mid-session pivot: I proposed Option A under the assumption the existing auth was already cookie-based. After reading `routes/auth.js` + `LoginPage.jsx`, discovered the current architecture uses tokens-in-JSON-body + frontend `localStorage`. So Option A as originally described didn't fit (no cookies to extend with `Domain=`). Reframed to:
+
+- **Option A2 — Tokens in URL** (band-aid, ~30 lines, leaks tokens to browser history + nginx logs).
+- **Option B — Handoff token** (cleaner but adds DB + endpoint).
+- **Option C — Full refactor to cookies** (the proper long-term shape).
+
+Hedar's stance is "I always pick the best regardless of time" → **Option C, phased over 2–3 PRs** to keep each PR scoped and avoid a big-bang refactor:
+
+| Sub-phase | Scope | Status |
+|---|---|---|
+| **6-D-1a** | Backend cookie support (additive, no breaking changes) | ✅ This section / PR #231 |
+| 6-D-1b | Frontend useAuth + LoginPage + api.js consume cookies, drop localStorage | ⏳ Next |
+| 6-D-1c | Drop `token` + `refresh_token` from the body on web auth responses (mobile path stays Bearer) | ⏳ After 6-D-1b |
+
+### 100.3 — Implementation (PR #231)
+
+Backend changes (additive — every existing client keeps working):
+
+| File | Change |
+|---|---|
+| `lib/cookie_options.js` (new) | Centralized cookie-options builder. Policy: `HttpOnly` + `SameSite=Lax` + `Path=/` always; `Secure` in prod only; `Domain=.constrai.ca` in prod only AND only for constrai.ca hosts. TTLs match JWT (1h) / refresh-token (7d) so cookies don't outlive their bearer-token siblings. |
+| `package.json` + `package-lock.json` | Added `cookie-parser@^1.4.7` dep. Standard Express middleware (was not previously installed — auth used Bearer-only). |
+| `app.js` | Mounts `cookieParser()` at root, before vhost dispatch. Both adminApp and tenantApp see parsed `req.cookies`. |
+| `middleware/auth.js` | Now reads JWT from `Authorization: Bearer` header (existing path) OR `req.cookies.access_token` (new fallback). Bearer wins when both present so mobile builds can't be silently downgraded by stale cookies. |
+| `routes/auth.js` — login | JOINs `companies` to surface `company_code`. Computes `redirect_url` per the Pattern B rule above. Sets `Set-Cookie: access_token` + `refresh_token` on success. Response body unchanged otherwise. |
+| `routes/auth.js` — refresh | Reads refresh token from cookie OR body (cookie wins when both arrive). On rotation, sets new cookies alongside the body response. |
+| `routes/auth.js` — logout | Reads refresh token from cookie OR body. Clears both cookies via `res.clearCookie` with matching Domain/Path. |
+
+Test coverage:
+
+| File | Tests | Notes |
+|---|---|---|
+| `tests/smoke/cookie_options.test.js` (new) | 13 tests | Pure-function unit tests for the cookie helper. No DB. Covers HttpOnly + SameSite + Path always-on, Secure flips with NODE_ENV, Domain scoping (constrai.ca only AND prod only), TTL distinction, `clearCookieOptions` omits maxAge, set/clear policy parity. |
+| `tests/auth/cookie_session.test.js` (new) | 8 tests | DB-backed integration tests. Covers `redirect_url` presence/null cases, Set-Cookie headers + attributes on login, middleware cookie fallback, Bearer-beats-cookie precedence, refresh rotation sets new cookies, logout clears both cookies. |
+
+Local smoke pre-push: 13/13 cookie_options tests pass. Full CI: 13 + 8 + all existing suites green on first try.
+
+### 100.4 — Backward compatibility verification
+
+Existing behavior preserved end-to-end:
+
+- Response body still carries `token` + `refresh_token` — frontend localStorage flow unchanged.
+- Mobile app sends `Authorization: Bearer` — middleware path unchanged, prioritized over cookie.
+- `redirect_url` is a NEW field; existing login tests use `toMatchObject` (partial match) so they ignore it.
+- Cookies are additive on the wire (Set-Cookie added to existing response); no test asserts the absence of Set-Cookie, so existing tests pass unchanged.
+- Existing tests for login (10 cases), refresh (rotation), logout (revoke), middleware/auth all pass without modification.
+
+### 100.5 — Why redirect_url ONLY fires from app.constrai.ca
+
+The rule has three guards:
+
+| Condition | Why |
+|---|---|
+| `reqHost === 'app.constrai.ca'` | Pattern B only fires from the generic entry. A request that hit `acm.constrai.ca` directly is by definition not redirecting — the user is already on the right tenant URL. Including a redirect_url there would create a loop or surprise the frontend. |
+| `userRole !== 'SUPER_ADMIN'` | SA lives on `admin.constrai.ca`. They have no tenant subdomain to redirect to. Including a `redirect_url` for SA on `app.constrai.ca` would point them at a tenant they don't belong to. |
+| `user.company_code` is truthy | Every tenant user has a code (post-Section 85). The guard protects against the SUPER_ADMIN-without-company edge case + any pre-Section-85 seed data with null codes. |
+
+When all three conditions match: `redirect_url = 'https://<lowercased company_code>.constrai.ca/dashboard'`. Otherwise: `null`. The frontend will treat `null` as "no redirect, stay where you are" — the correct behavior for SA, for tenant subdomains, and for default test hosts.
+
+### 100.6 — Pending operational work for Phase 6-D-1b/1c
+
+- **nginx wildcard vhost for `*.constrai.ca`** — Section 99 listed this as a Phase 6-C tail item. It remains pending and is now a HARD prerequisite for Phase 6-D-1b: once the frontend hits `window.location.assign(redirect_url)`, the browser will try to load `acm.constrai.ca` and nginx needs to serve the tenant `index.html` for it. Currently nginx serves only the explicit `app.constrai.ca` + `admin.constrai.ca`.
+- **PIN → password migration** (NEW backlog — Hedar's reminder this session). Current auth uses 4–8 char PINs (and 8+ chars for SA). Long-term, regular users should have full passwords. Out of scope for Phase 6 entirely; capture as a Phase 7 candidate alongside 2FA.
+- **CSRF protection beyond `SameSite=Lax`** — current `SameSite=Lax` handles browser-initiated cross-site requests, covering the common CSRF threat surface. State-changing GET requests would be a residual risk; we don't have those today. If/when we add admin/SUPER_ADMIN actions accessible via GET, add a CSRF-token middleware.
+
+### 100.7 — Final state at end of Section 100
+
+| Item | Status |
+|---|---|
+| PR #231 merged | ✅ — `d1f0b56` on main, CI green first try |
+| Backend cookie support live (login/refresh/logout) | ✅ |
+| `redirect_url` returned on `app.constrai.ca` for tenant users | ✅ |
+| Frontend behavior unchanged (still using localStorage) | ✅ — backward-compat verified |
+| Mobile behavior unchanged (Bearer path) | ✅ — Bearer prioritized over cookie |
+| Pending: Phase 6-D-1b frontend useAuth refactor | ⏳ Next |
+| Pending: nginx wildcard vhost for `*.constrai.ca` | ⏳ Hard prereq for 6-D-1b end-to-end |
+| Pending: Phase 6-D logo swap + admin upload UI | ⏳ After 6-D-1b/1c |
+| Pending: PIN → password migration | ⏳ Phase 7 candidate |
+
+### 100.8 — Section/total update
+
+- **Today: 69 sections.** (Section 100 NEW — Phase 6-D-1a backend cookie auth + login `redirect_url`. Discovered mid-session that existing auth was tokens-in-body, not cookies — pivoted from a band-aid handoff approach to a proper phased refactor toward HttpOnly cookies. Phase 6-D-1a is the first of 2-3 PRs in the migration: additive backend cookie support, no breaking changes to existing clients. Captured a new backlog item — PIN → password migration is now tracked for Phase 7 alongside 2FA. No new pitfalls; the option-A→A2/B/C re-framing happened cleanly thanks to the Section 99 / Pitfall #36 user-flow-first discipline.)
+
+---
+
 ## Section 99 — Phase 6-C Frontend Branding Bootstrap + Pitfall #36 (May 14, 2026 ~10:45–11:30 UTC)
 
 > Phase 6-C shipped — frontend bootstrap reads tenant branding from the subdomain and applies CSS variables before React mounts. PR #229 added 3 files (~370 lines): `branding.js` helper, `main.jsx` integration, 23 unit tests. Mid-design Hedar caught a user-flow mismatch: HANDOFF described "load branding BEFORE the login screen renders" (implying tenant subdomain login), but his actual vision is "generic Constrai entry at app.constrai.ca → email lookup → route to acm.constrai.ca → branded post-login". Phase 6-C as implemented brands the tenant subdomain page (`acm.constrai.ca`), NOT the generic entry. The "generic → email → redirect" wiring is Phase 6-D scope. New Pitfall #36 — confirm user-facing flow before technical strategy.
