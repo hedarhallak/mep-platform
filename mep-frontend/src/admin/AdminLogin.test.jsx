@@ -91,6 +91,49 @@ describe('AdminLogin — submit', () => {
     })
   })
 
+  test('successful login with NO body token (Phase 6-D-1c cookie shape) does not stash localStorage, still renders without error', async () => {
+    // Phase 6-D-1c (Section 102): web responses omit `token` /
+    // `refresh_token` from the body. AdminLogin should:
+    //   - NOT write `undefined` to localStorage
+    //   - CLEAR any stale localStorage from a pre-6-D-1c session
+    //   - NOT surface an error
+    //   - send X-Auth-Channel: cookie + credentials: 'include' on the fetch
+    localStorage.setItem('mep_token', 'stale-token-from-old-session')
+    localStorage.setItem('mep_refresh_token', 'stale-refresh-from-old-session')
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        ok: true,
+        // No `token` / `refresh_token` fields — cookie-shaped response.
+        user: { user_id: 1, role: 'SUPER_ADMIN' },
+      }),
+    })
+
+    const user = userEvent.setup()
+    renderLogin()
+
+    await user.type(screen.getByLabelText(/email/i), 'sa@example.com')
+    await user.type(screen.getByLabelText(/pin/i), 'sa-pin-1234')
+    await user.click(screen.getByRole('button', { name: /sign in/i }))
+
+    await waitFor(() => {
+      // No alert should be raised — cookie-only is a happy path.
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    })
+
+    // Stale localStorage should be cleared, not overwritten with `undefined`.
+    expect(localStorage.getItem('mep_token')).toBeNull()
+    expect(localStorage.getItem('mep_refresh_token')).toBeNull()
+
+    // Verify the request shape: X-Auth-Channel + credentials: 'include'.
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const [, calledInit] = fetchMock.mock.calls[0]
+    expect(calledInit.credentials).toBe('include')
+    expect(calledInit.headers['X-Auth-Channel']).toBe('cookie')
+  })
+
   test('403 BLOCKED_PORTAL_LOGIN renders the friendly inline message', async () => {
     fetchMock.mockResolvedValueOnce({
       ok: false,

@@ -35,12 +35,30 @@ export function AuthProvider({ children }) {
   // Section 87 / migration 011: login is now email-based for the Model C
   // single-domain architecture. Backend still accepts `username` as a legacy
   // fallback, but the frontend always sends `email`.
+  //
+  // Phase 6-D-1c (Section 102, May 14, 2026): web responses no longer
+  // include `token` / `refresh_token` in the body — the backend sets them
+  // as HttpOnly cookies instead. The localStorage writes below are
+  // guarded so they no-op for the cookie-shaped response (and never write
+  // `undefined`). They stay in place as a transitional safety net for
+  // any code path that still expects to find a Bearer token on disk.
   const login = async (email, pin) => {
     const res = await api.post('/auth/login', { email, pin })
     if (res.data.ok) {
-      localStorage.setItem('mep_token', res.data.token)
+      if (res.data.token) {
+        localStorage.setItem('mep_token', res.data.token)
+      } else {
+        // Phase 6-D-1c: cookie-only response (web). Clear any stale
+        // localStorage token from a pre-6-D-1c session so the next
+        // apiFetch doesn't attach a stale `Authorization: Bearer` (which
+        // the backend's Bearer-beats-cookie policy would reject with
+        // 401 INVALID_TOKEN, then loop on refresh).
+        try { localStorage.removeItem('mep_token') } catch { /* ignore */ }
+      }
       if (res.data.refresh_token) {
         localStorage.setItem('mep_refresh_token', res.data.refresh_token)
+      } else {
+        try { localStorage.removeItem('mep_refresh_token') } catch { /* ignore */ }
       }
       setUser(res.data.user)
       return res.data

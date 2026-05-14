@@ -148,6 +148,44 @@ describe('LoginPage — Phase 6-D-1b redirect_url handling', () => {
     expect(mockAssign).not.toHaveBeenCalled();
   });
 
+  test('navigates to /dashboard when the response carries NO body tokens (Phase 6-D-1c cookie shape)', async () => {
+    // Phase 6-D-1c (Section 102): web responses no longer echo `token`
+    // or `refresh_token` in the body — the HttpOnly cookies set by the
+    // backend carry the auth state. The login flow must still complete
+    // and route the user into the dashboard.
+    mockLogin.mockResolvedValue({
+      ok: true,
+      // No token / refresh_token fields at all.
+      redirect_url: null,
+      user: { user_id: '1', role: 'WORKER' },
+    });
+
+    renderLogin();
+    await submitLogin();
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/dashboard');
+    });
+    expect(mockAssign).not.toHaveBeenCalled();
+  });
+
+  test('hops to redirect_url when response carries NO body tokens (cookie shape + Pattern B)', async () => {
+    // Cross-subdomain hop must still fire even on the cookie-only shape.
+    mockLogin.mockResolvedValue({
+      ok: true,
+      redirect_url: 'https://acm.constrai.ca/dashboard',
+      user: { user_id: '1', role: 'FOREMAN' },
+    });
+
+    renderLogin();
+    await submitLogin();
+
+    await waitFor(() => {
+      expect(mockAssign).toHaveBeenCalledWith('https://acm.constrai.ca/dashboard');
+    });
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
   test('does not navigate or redirect on login failure', async () => {
     mockLogin.mockRejectedValue(new Error('INVALID_CREDENTIALS'));
 
