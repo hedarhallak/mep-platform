@@ -91,6 +91,19 @@ function buildTokenPayload(user, role, mustChangePin) {
   };
 }
 
+// Phase 6-D-1b (Section 101, May 14, 2026): inline JWT-using handlers
+// (/whoami, /change-pin, /logout-all) bypass middleware/auth.js and need
+// their own cookie fallback. Bearer header beats cookie when both arrive,
+// mirroring middleware/auth.js's policy so mobile builds can't be
+// silently downgraded.
+function extractToken(req) {
+  const authHeader = req.headers.authorization || '';
+  const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  const cookieToken =
+    req.cookies && typeof req.cookies.access_token === 'string' ? req.cookies.access_token : null;
+  return bearerToken || cookieToken;
+}
+
 // ===================
 // LOGIN
 // ===================
@@ -452,8 +465,8 @@ router.post('/logout', async (req, res) => {
 // LOGOUT ALL DEVICES
 // ===================
 router.post('/logout-all', async (req, res) => {
-  const authHeader = req.headers.authorization || '';
-  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  // Phase 6-D-1b: accept JWT from Bearer header OR access_token cookie.
+  const token = extractToken(req);
 
   if (!token) return res.status(401).json({ ok: false, error: 'MISSING_TOKEN' });
 
@@ -495,8 +508,12 @@ router.post('/signup-invite', (req, res) => {
 // WHOAMI
 // ===================
 router.get('/whoami', async (req, res) => {
-  const auth = req.headers.authorization || '';
-  const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+  // Phase 6-D-1b: accept JWT from Bearer header OR access_token cookie.
+  // Critical for cross-subdomain hop: after redirect from app.constrai.ca
+  // to acm.constrai.ca, the frontend has no localStorage at the new
+  // origin and must rely on the Domain=.constrai.ca cookie to identify
+  // the user on first paint.
+  const token = extractToken(req);
   if (!token) return res.status(401).json({ ok: false, error: 'MISSING_TOKEN' });
 
   try {
@@ -535,8 +552,8 @@ router.get('/whoami', async (req, res) => {
 // CHANGE PIN
 // ===================
 router.post('/change-pin', async (req, res) => {
-  const authHeader = req.headers.authorization || '';
-  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  // Phase 6-D-1b: accept JWT from Bearer header OR access_token cookie.
+  const token = extractToken(req);
   if (!token) return res.status(401).json({ ok: false, error: 'MISSING_TOKEN' });
 
   let payload;

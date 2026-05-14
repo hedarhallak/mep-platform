@@ -79,6 +79,16 @@ export default function AdminLogin() {
         setError('Signed in, but session storage is unavailable — token will not persist after reload.')
       }
 
+      // Phase 6-D-1b: defensive — the admin login should never produce a
+      // redirect_url (SUPER_ADMIN doesn't redirect to a tenant subdomain),
+      // but mirror the LoginPage handling so an unexpected redirect_url
+      // doesn't get silently dropped. In practice this branch never fires
+      // on admin.constrai.ca.
+      if (data.redirect_url) {
+        window.location.assign(data.redirect_url)
+        return
+      }
+
       navigate('/', { replace: true })
     } catch (networkErr) {
       setError(networkErr.message || 'Network error')

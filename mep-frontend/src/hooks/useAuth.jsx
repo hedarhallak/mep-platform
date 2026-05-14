@@ -8,14 +8,26 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const token = localStorage.getItem('mep_token')
-    if (!token) { setLoading(false); return }
-
+    // Phase 6-D-1b: drop the localStorage-presence short-circuit. Even
+    // without a localStorage token, an HttpOnly access_token cookie may
+    // carry valid auth (e.g., right after a cross-subdomain redirect
+    // from app.constrai.ca to acm.constrai.ca, where localStorage is
+    // per-origin but the Domain=.constrai.ca cookie travels). Always
+    // ask /whoami; the backend treats Bearer and cookie equivalently
+    // (Phase 6-D-1a + Phase 6-D-1b backend cookie fallback). A 401 means
+    // "not logged in" and we render the login screen, same as before.
     api.get('/auth/whoami')
-      .then(res => { if (res.data.ok) setUser(res.data.user) })
+      .then(res => { if (res.data?.ok) setUser(res.data.user) })
       .catch(() => {
-        localStorage.removeItem('mep_token')
-        localStorage.removeItem('mep_refresh_token')
+        // Stale localStorage from a Phase 6-D-1a / earlier session — clean
+        // it up so it doesn't keep advertising a session that no longer
+        // exists. Best-effort; ignore if storage is unavailable.
+        try {
+          localStorage.removeItem('mep_token')
+          localStorage.removeItem('mep_refresh_token')
+        } catch {
+          /* ignore */
+        }
       })
       .finally(() => setLoading(false))
   }, [])

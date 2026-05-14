@@ -20,7 +20,20 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
     try {
-      await login(form.email, form.pin)
+      const result = await login(form.email, form.pin)
+      // Phase 6-D-1b: Pattern B routing. If the backend returned a
+      // redirect_url (login came in on app.constrai.ca and the user
+      // belongs to a tenant), do a full cross-origin navigation to the
+      // tenant subdomain. The Domain=.constrai.ca auth cookies set by
+      // /api/auth/login travel with the navigation; the branding
+      // bootstrap on the target origin reads /api/companies/<code>/branding
+      // and renders the dashboard already styled for the tenant.
+      // If redirect_url is null/absent (admin portal, default host, or
+      // already at a tenant subdomain), stay in the React Router shell.
+      if (result && result.redirect_url) {
+        window.location.assign(result.redirect_url)
+        return
+      }
       navigate('/dashboard')
     } catch (err) {
       const code = err.message

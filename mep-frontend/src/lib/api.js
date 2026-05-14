@@ -67,13 +67,18 @@ function shouldAttemptRefresh(res, url) {
 }
 
 async function refreshTokenOnce() {
+  // Phase 6-D-1b: send cookies via credentials:'include' so the backend
+  // can fall back to the refresh_token HttpOnly cookie when localStorage
+  // is empty (e.g., right after a cross-subdomain redirect where
+  // localStorage doesn't follow the origin change). Backend cookie path
+  // wins inside /api/auth/refresh when both arrive.
   const refreshToken = localStorage.getItem('mep_refresh_token')
-  if (!refreshToken) return null
 
   const res = await fetch(`${BASE_URL}/auth/refresh`, {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ refresh_token: refreshToken }),
+    body: JSON.stringify(refreshToken ? { refresh_token: refreshToken } : {}),
   })
 
   if (!res.ok) {
@@ -115,7 +120,16 @@ async function apiFetch(method, url, body, options = {}) {
   const token = getToken()
   if (token) headers.Authorization = `Bearer ${token}`
 
-  const init = { method, headers }
+  const init = {
+    method,
+    headers,
+    // Phase 6-D-1b: include cookies on every request. Same-origin auth
+    // flows (app.constrai.ca → /api/...) pick up the access_token cookie
+    // even without an Authorization header. Cross-subdomain navigations
+    // (acm.constrai.ca after redirect from app.constrai.ca) rely on the
+    // Domain=.constrai.ca cookie set by Phase 6-D-1a.
+    credentials: 'include',
+  }
   if (body !== undefined && body !== null) {
     init.body = typeof body === 'string' ? body : JSON.stringify(body)
   }
