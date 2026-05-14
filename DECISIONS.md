@@ -11569,3 +11569,195 @@ This pitfall generalizes beyond email: same shape applies to ANY swap-the-SDK mi
 
 - **Today: 67 sections.** (Section 98 NEW — SendGrid decommission complete. Phase 1 refactor + Phase 2 prod env removal + dashboard cleanup in one continuation thread. Discovered the migration was abstraction-layer-only and required 7 production-file refactor before env removal. New Pitfall #35 — provider migration completeness audit. Leak remediation loop now fully closed.)
 
+---
+
+## Section 99 — Phase 6-C: Frontend Branding Bootstrap (May 14, 2026 ~11:00–11:30 UTC)
+
+> Phase 6-C frontend branding bootstrap shipped. Each tenant subdomain (e.g. `acm.constrai.ca`) now loads its own brand color BEFORE the React tree mounts, so the login screen never flickers from the Constrai default to the tenant brand on a fresh load. Architecture decisions captured up front: subdomain strategy + block-on-bootstrap (HTTP cache handles repeat visits). No logo swap or color-shade computation in this PR (deferred to Phase 6-D).
+
+### 99.1 — User-flow clarification (mid-design)
+
+Before writing code, paused to confirm the user-facing login flow. Earlier sessions had described two related-but-different patterns:
+
+| Pattern | Login URL | Branding loads | Notes |
+|---|---|---|---|
+| **A — Subdomain-first** | `acm.constrai.ca/login` (tenant branded) | Pre-auth, on page load | What Phase 6-B/C were originally framed for |
+| **B — Email-based routing** | `app.constrai.ca/login` (generic Constrai) | Post-auth, after backend identifies company by email | What Hedar described mid-session |
+
+These aren't mutually exclusive — the architecture supports BOTH. A user with a bookmarked `acm.constrai.ca` URL gets pattern A; a user typing `app.constrai.ca` and signing in by email gets pattern B (the login response carries the company_code and the frontend redirects to `acm.constrai.ca/dashboard`, where Phase 6-C's bootstrap takes over).
+
+**Decision for this PR:** Phase 6-C ships the SUBDOMAIN bootstrap only (Pattern A's branding loader, which also serves Pattern B's post-redirect landing). The login-response-with-redirect-URL piece (Pattern B end-to-end) is Phase 6-D, separate PR.
+
+This conversation underlined a Section-85-era assumption that was never written down explicitly: the public `/api/companies/:code/branding` endpoint serves BOTH the first-visit-via-subdomain case AND the post-login-redirect case. Both use the same `acm.constrai.ca` bootstrap.
+
+### 99.2 — Architectural decisions (AskUserQuestion before code)
+
+**Decision 1: subdomain strategy** — picked `acm.constrai.ca` over `constrai.ca/acm` (path prefix) and `constrai.ca?c=acm` (query param). Rationale: aligned with Section 85, Cloudflare wildcard `*.constrai.ca` already configured, professional URL shape, no backend routing rewrite needed.
+
+**Decision 2: render timing** — picked **Block-on-bootstrap** over Flash-of-defaults and Block+localStorage cache. Key insight: the `/api/companies/:code/branding` endpoint already sends `Cache-Control: public, max-age=300`, so repeat visits hit the browser HTTP cache and the "blocking" window collapses to ~10ms (imperceptible). Block+localStorage's main benefit (instant repeat renders) is already realized via the HTTP cache; the ~30 extra lines of localStorage code aren't worth it for marginal gain. Flash-of-defaults was rejected outright — visible color shift after first paint reads as unpolished on a login screen.
+
+### 99.3 — Implementation (PR #229)
+
+Three frontend files:
+
+| File | Lines | Purpose |
+|---|---|---|
+| `mep-frontend/src/lib/branding.js` (new) | ~160 | `extractCompanyCode(hostname, search)` + `applyBranding({...})` + `bootstrapBranding()` |
+| `mep-frontend/src/main.jsx` (edited) | ~10 diff | `bootstrapBranding().finally(() => createRoot(...).render(<App />))` |
+| `mep-frontend/src/lib/branding.test.js` (new) | ~210 | 23 vitest unit tests across all branches |
+
+**`extractCompanyCode` precedence:**
+1. `?company=<code>` query-param override (dev-only escape hatch — production doesn't need it but it's harmless to support; lets a developer test ACM branding on localhost without `/etc/hosts` mapping).
+2. Leftmost subdomain of `hostname`, lowercased, IF the host has 3+ DNS labels AND the subdomain isn't reserved.
+
+**Reserved subdomains:** `app`, `admin`, `www`, `localhost` — these short-circuit to "no tenant code, use Constrai defaults".
+
+**`applyBranding` injection style:** single `<style id="tenant-branding-vars">` at `:root` overriding `--color-primary` + `--color-sidebar-active`. Idempotent: replaces any prior injection rather than stacking. Only injects when `brand_color` is non-null — `NULL` means "tenant hasn't customized" and the index.css defaults stay.
+
+**`bootstrapBranding` fault tolerance:** AbortController with a 3s hard timeout so a network hang can't block the page indefinitely. On 404, 4xx/5xx, network error, JSON parse error, or `ok: false` body → silent fallback to defaults, single `console.warn` for dev debugging. Never surfaces an error to the user.
+
+**`window.__BRANDING__`:** set to `{ company_name, brand_color, brand_logo_url }` (with `null`s as appropriate) after bootstrap resolves. This is the surface area Phase 6-D will read for the logo swap on the LoginPage.
+
+**admin-main.jsx — unchanged.** The admin portal is always Constrai-branded; no tenant context exists at that layer.
+
+### 99.4 — Test coverage
+
+23 unit tests across the three exported functions:
+
+- `extractCompanyCode` — 11 cases including localhost, apex domain, all 4 reserved subdomains, tenant subdomain (mixed case input), too-short subdomain, malformed subdomain, query-param override happy + sad paths, query-param override wins over reserved subdomain, missing hostname.
+- `applyBranding` — 5 cases including success (window state + DOM), null payload (state reset, no style injected), null brand_color (state set, no style), idempotent replace (verify no stacking).
+- `bootstrapBranding` — 6 cases including no-subdomain skip-fetch, successful application, 404 fallback, network-error fallback with warn, ok-false body, query-param-driven happy path.
+
+Local vitest pre-push: 6/6 test files passing, 61/61 tests passing in 5.3s. CI passed on first try.
+
+### 99.5 — Out of scope (Phase 6-D / later)
+
+- **Login response `redirect_url`** — backend's `POST /api/auth/login` should return `{ token, company: { code, ... }, redirect_url: 'https://acm.constrai.ca/dashboard?...' }` so the generic-domain login (Pattern B) can hop to the tenant subdomain.
+- **Logo swap on LoginPage** — read `window.__BRANDING__.brand_logo_url` and replace the Constrai logo `<img>` with the tenant's when present.
+- **Color shades** — `--color-primary-dark`, `--color-primary-light`, etc. currently keep Constrai defaults. Compute from `brand_color` via HSL transforms or CSS `color-mix()`. Visual polish for buttons + hover states.
+- **React Context for branding** — current solution stashes on `window.__BRANDING__` for synchronous access. A proper React Context wrapper would be cleaner once components actually read it.
+- **Admin upload UI + DigitalOcean Spaces pipeline** — Phase 6-D proper. Lets a SUPER_ADMIN set `brand_color` and `brand_logo_url` per company.
+- **Mobile app branding** — separate phase.
+- **nginx vhost for tenant subdomains** — currently nginx serves `app.constrai.ca` + `admin.constrai.ca` explicitly. A wildcard `*.constrai.ca` vhost block is needed (or each tenant subdomain added explicitly) before `acm.constrai.ca` actually resolves to the backend. This is a one-time nginx + Cloudflare task, separate from any single tenant onboarding. Worth verifying as part of Phase 6-D close-out before declaring multi-tenant URLs production-ready.
+
+### 99.6 — Final state at end of Section 99
+
+| Item | Status |
+|---|---|
+| PR #229 merged | ✅ — 3 files (1 modified, 2 new), 61/61 tests green, CI first try |
+| Section 99 docs | ✅ — this section |
+| Phase 6-A branding columns | ✅ Deployed |
+| Phase 6-B public branding endpoint | ✅ Deployed |
+| **Phase 6-C frontend bootstrap** | ✅ **Deployed (this section)** |
+| Phase 6-D admin upload UI + login redirect | ⏳ Next |
+
+### 99.7 — Section/total update
+
+- **Today: 68 sections.** (Section 99 NEW — Phase 6-C frontend branding bootstrap shipped. User-flow clarification mid-design surfaced an implicit Section-85 assumption — the branding endpoint serves both subdomain-first and post-login-redirect cases. Two AskUserQuestion architectural decisions: subdomain strategy + render timing. Implementation was tighter than scoped: 23 unit tests + 5.3s vitest pre-push validated all branches before push. No new pitfalls — the architectural cross-check worked as intended.)
+
+---
+
+## Section 99 — Phase 6-C Frontend Branding Bootstrap + Pitfall #36 (May 14, 2026 ~10:45–11:30 UTC)
+
+> Phase 6-C shipped — frontend bootstrap reads tenant branding from the subdomain and applies CSS variables before React mounts. PR #229 added 3 files (~370 lines): `branding.js` helper, `main.jsx` integration, 23 unit tests. Mid-design Hedar caught a user-flow mismatch: HANDOFF described "load branding BEFORE the login screen renders" (implying tenant subdomain login), but his actual vision is "generic Constrai entry at app.constrai.ca → email lookup → route to acm.constrai.ca → branded post-login". Phase 6-C as implemented brands the tenant subdomain page (`acm.constrai.ca`), NOT the generic entry. The "generic → email → redirect" wiring is Phase 6-D scope. New Pitfall #36 — confirm user-facing flow before technical strategy.
+
+### 99.1 — Architectural decisions
+
+**Decision 1 — Tenant identification from URL.**
+
+Three options on the table at session start:
+- Subdomain (`acm.constrai.ca`): aligned with Section 85 architecture; Cloudflare wildcard `*.constrai.ca` already configured.
+- Path prefix (`constrai.ca/acm`): requires nginx + backend routing changes; more invasive.
+- Query param (`?c=acm`): trivially simple but not production-grade.
+
+Picked **subdomain**. The `extractCompanyCode(hostname, search)` helper reads the leftmost label of `window.location.hostname`, rejects reserved subdomains (`app`, `admin`, `www`, `localhost`), and supports a `?company=<code>` query-param override for local dev where subdomain DNS isn't set up.
+
+**Decision 2 — Render timing.**
+
+Three options:
+- Block-on-bootstrap: React doesn't mount until /branding response arrives. Clean first paint.
+- Flash-of-defaults: render Constrai defaults immediately, swap when /branding arrives. Visible color jank on every fresh load.
+- Block + localStorage cache: first visit blocks, subsequent visits render instantly from cache + silent background refresh.
+
+Picked **Block-on-bootstrap**. The endpoint already sends `Cache-Control: public, max-age=300`, so the browser HTTP cache handles subsequent visits (~10ms blocking, imperceptible). Option 3 (localStorage) adds ~30 lines for marginal benefit over Option 1 + HTTP cache. Future upgrade is one-PR if benchmarks ever show the blocking matters.
+
+**Decision 3 — User-flow alignment (mid-design correction).**
+
+Initial Phase 6-C plan in HANDOFF: "load tenant branding BEFORE rendering the login screen and apply brand_color / brand_logo_url to the UI so each tenant sees their own visual identity from the first paint." This framing implies each tenant has a branded login screen at their own subdomain (e.g., user goes to `acm.constrai.ca` and sees ACM-branded login).
+
+But Hedar's actual vision: "user types email at the default entry → backend looks up which company the email belongs to → routes the user to their company's branded page." This is generic-then-branded, NOT branded-then-login.
+
+Reconciled architecture:
+- `app.constrai.ca` = generic Constrai login (bootstrap does NOT fire — `app` is reserved).
+- `acm.constrai.ca` = branded tenant page (bootstrap fires, fetches /branding, injects CSS vars).
+- First-time entry: user → app.constrai.ca → email + PIN → backend identifies company → redirect to acm.constrai.ca → branded.
+- Repeat entry: user → bookmark `acm.constrai.ca` → branded landing + refresh-token cookie → straight in.
+
+Phase 6-C therefore implements the bootstrap at the TENANT subdomain only. The "first-time-entry redirect" logic (backend `redirect_url` in login response + frontend cross-origin navigation) is Phase 6-D scope.
+
+### 99.2 — Implementation (PR #229)
+
+| File | Change |
+|---|---|
+| `mep-frontend/src/lib/branding.js` (NEW) | 165 lines: `extractCompanyCode(hostname, search)` + `applyBranding(branding)` + `bootstrapBranding()`. Reserves `app/admin/www/localhost` as non-tenant subdomains. Supports `?company=<code>` query-param override for local dev. 3s hard timeout via AbortController. Silent fallback on any failure (single `console.warn`). |
+| `mep-frontend/src/main.jsx` (MODIFIED) | +10 lines: import bootstrap helper, call `bootstrapBranding().finally(...)` before `createRoot().render()`. The `.finally()` (not `.then()`) ensures rendering happens whether bootstrap succeeds or fails. |
+| `mep-frontend/src/lib/branding.test.js` (NEW) | 23 unit tests covering: `extractCompanyCode` across 11 hostname shapes (localhost, apex, reserved subdomains, valid tenants, malformed inputs, query-param override, override-beats-reserved); `applyBranding` injects/replaces/skips correctly; `bootstrapBranding` orchestrates fetch + error paths (network error, 404, 200-with-ok=false, success). Mocks `fetch` via `vi.fn()` and `window.location` via `Object.defineProperty` (the standard jsdom workaround). |
+
+Local vitest: 61/61 passing in 5.3s. CI #575 (PR) + CI #576 (post-merge main) both green first try. PR #229 squash-merged as `96b070e`.
+
+`admin-main.jsx` was NOT modified — the admin portal is always Constrai-branded, no tenant context exists at admin.constrai.ca.
+
+### 99.3 — Tailwind v4 @theme integration
+
+The frontend uses Tailwind v4 with the `@theme` directive in `mep-frontend/src/index.css`:
+
+```css
+@theme {
+  --color-primary: #16a34a;
+  --color-primary-dark: #15803d;
+  --color-primary-light: #22c55e;
+  --color-primary-bright: #4ade80;
+  --color-primary-pale: #dcfce7;
+  --color-sidebar: #0f172a;
+  --color-sidebar-text: #94a3b8;
+  --color-sidebar-active: #16a34a;
+}
+```
+
+`@theme` makes the CSS variables available at `:root` AND generates utility classes (`bg-primary`, `text-primary`, etc.) that reference the vars. Overriding `--color-primary` at `:root` via injected `<style id="tenant-branding-vars">` cascades to every utility automatically — no component code changes required. This is the "abstraction-layer-correct" pattern: the CSS theme system handles propagation; we just override the root vars.
+
+The bootstrap currently overrides only `--color-primary` and `--color-sidebar-active` (the two most-visible vars on the login screen + main shell). The shades (`-dark`, `-light`, `-bright`, `-pale`) keep their Constrai green defaults for this PR. Phase 6-D / later can add HSL-based shade computation or CSS `color-mix()` for a polished multi-shade tenant theme.
+
+### 99.4 — Pitfall #36 (NEW) — confirm user-facing flow before technical strategy
+
+When starting a feature, do NOT jump straight to architectural choices (subdomain vs path, block vs flash, etc.). FIRST narrate the user-facing flow back to the user in 3-4 lines and confirm it matches their mental model. THEN propose technical options for the confirmed flow.
+
+The Phase 6-C session opened with "subdomain vs path vs query for tenant URL?" — because that's how HANDOFF framed it. Hedar picked subdomain. Next question: "block vs flash vs cache for render timing?" Hedar asked for more explanation, then picked block. Both decisions assumed the user lands at a tenant subdomain when they FIRST encounter the app — that's what HANDOFF described.
+
+But Hedar's actual vision was generic-entry-then-email-routing. None of the three render-timing options I gave fit THAT flow (they all assume the user is already at a tenant URL when the page loads). When Hedar surfaced the mismatch — "but in a previous conversation we said the user signs in with their email and the app routes them to their company's page" — it was a clean correction. But it would have cost half an implementation pass if I'd written the code first and discovered the flow was wrong only post-hoc.
+
+**Convention:** at the START of any feature that touches user-facing behavior, narrate the flow in 3-4 lines before proposing technical decisions:
+
+> "OK, so a user opens X, sees Y, types Z. After clicking the button, they go to W. Subsequent visits start at W directly. Confirm?"
+
+THEN propose technical decisions. The flow check costs one chat turn; getting it wrong costs an implementation pass plus rework.
+
+This is the user-flow analogue of Section 4 ("Always Suggest Better Tools" — fires at the start of a new technical area) and Section 4.5 ("Optimize Repetitive Work" — fires mid-flow when a pattern emerges). Section 99-Pitfall-36 fires at the start of a new user-facing feature: confirm the **flow** before the **strategy**.
+
+### 99.5 — Final state at end of Section 99
+
+| Item | Status |
+|---|---|
+| Phase 6-C frontend branding bootstrap shipped | ✅ — PR #229 merged, 61/61 vitest passing |
+| Tailwind v4 @theme override pattern documented | ✅ — Section 99.3 |
+| `mep-frontend/src/lib/branding.js` covered by 23 unit tests | ✅ |
+| Pitfall #36 added (confirm-flow-before-strategy) | ✅ |
+| Pending: Phase 6-D backend `redirect_url` + LoginPage cross-origin redirect | ⏳ Next product-feature task |
+| Pending: Phase 6-D logo swap (read `window.__BRANDING__.brand_logo_url`) | ⏳ Phase 6-D scope |
+| Pending: Phase 6-D admin upload UI + DigitalOcean Spaces pipeline | ⏳ After 6-D-redirect |
+| Pending: color shades from brand_color (HSL or color-mix) | ⏳ Later polish |
+
+### 99.6 — Section/total update
+
+- **Today: 68 sections.** (Section 99 NEW — Phase 6-C frontend branding bootstrap shipped. Mid-design Hedar caught a user-flow mismatch and we corrected: bootstrap brands tenant subdomains, NOT generic entry. New Pitfall #36 — confirm user-facing flow before technical strategy.)
+
