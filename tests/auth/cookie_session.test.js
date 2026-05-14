@@ -235,6 +235,142 @@ describeIfDb('Phase 6-D-1a — middleware/auth cookie fallback', () => {
   });
 });
 
+describeIfDb('Phase 6-D-1c — X-Auth-Channel: cookie response shape', () => {
+  // Phase 6-D-1c (Section 102): web clients send X-Auth-Channel: cookie
+  // and receive a cookie-only response (no `token` / `refresh_token` in
+  // the JSON body). Mobile (no header) keeps the legacy body-tokens
+  // shape so the Bearer flow stays unchanged.
+
+  afterAll(async () => {
+    await cleanupTestRows();
+    await closePool();
+  });
+
+  test('login WITH X-Auth-Channel: cookie omits token + refresh_token from body', async () => {
+    const company = await seedCompanyWithCode('WEB6D1C');
+    const user = await seedUser({
+      company_id: company.company_id,
+      role: 'WORKER',
+      pin: '1234',
+    });
+
+    const res = await request(app)
+      .post('/api/auth/login')
+      .set('X-Auth-Channel', 'cookie')
+      .send({ email: user.email, pin: '1234' });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+    // Body must NOT carry the tokens for the web channel.
+    expect(res.body.token).toBeUndefined();
+    expect(res.body.refresh_token).toBeUndefined();
+    // User payload and must_change_pin remain (frontend needs them).
+    // user_id is compared via String() because pg returns bigint columns
+    // as strings while seedUser coerces its return value to Number.
+    expect(res.body.user).toBeDefined();
+    expect(String(res.body.user.user_id)).toBe(String(user.id));
+    expect(typeof res.body.must_change_pin).toBe('boolean');
+    // Cookies are still set — that's how the web client gets auth state.
+    const setCookies = res.headers['set-cookie'];
+    expect(Array.isArray(setCookies)).toBe(true);
+    expect(findCookie(setCookies, 'access_token')).not.toBeNull();
+    expect(findCookie(setCookies, 'refresh_token')).not.toBeNull();
+  });
+
+  test('login WITHOUT X-Auth-Channel keeps tokens in body (mobile-shaped)', async () => {
+    const company = await seedCompanyWithCode('MOB6D1C');
+    const user = await seedUser({
+      company_id: company.company_id,
+      role: 'WORKER',
+      pin: '1234',
+    });
+
+    const res = await request(app).post('/api/auth/login').send({ email: user.email, pin: '1234' });
+
+    expect(res.statusCode).toBe(200);
+    expect(typeof res.body.token).toBe('string');
+    expect(typeof res.body.refresh_token).toBe('string');
+  });
+
+  test('refresh WITH X-Auth-Channel: cookie omits tokens from body, still rotates cookies', async () => {
+    const company = await seedCompanyWithCode('WREF1C');
+    const user = await seedUser({
+      company_id: company.company_id,
+      role: 'WORKER',
+      pin: '1234',
+    });
+
+    // Login on the mobile path first to grab a refresh_token to send up.
+    // (We could also dig the cookie out of a web login, but body access
+    //  is simpler for the test and the backend doesn't care how the
+    //  refresh token arrived — only the response shape changes.)
+    const login = await request(app)
+      .post('/api/auth/login')
+      .send({ email: user.email, pin: '1234' });
+    expect(login.statusCode).toBe(200);
+    const initialRefresh = login.body.refresh_token;
+    expect(typeof initialRefresh).toBe('string');
+
+    const refresh = await request(app)
+      .post('/api/auth/refresh')
+      .set('X-Auth-Channel', 'cookie')
+      .send({ refresh_token: initialRefresh });
+
+    expect(refresh.statusCode).toBe(200);
+    expect(refresh.body.ok).toBe(true);
+    // Body must NOT carry the rotated tokens for the web channel.
+    expect(refresh.body.token).toBeUndefined();
+    expect(refresh.body.refresh_token).toBeUndefined();
+    // Cookies ARE rotated.
+    const newAccess = findCookie(refresh.headers['set-cookie'], 'access_token');
+    const newRefresh = findCookie(refresh.headers['set-cookie'], 'refresh_token');
+    expect(newAccess).not.toBeNull();
+    expect(newRefresh).not.toBeNull();
+    expect(typeof newAccess.value).toBe('string');
+    expect(newAccess.value.length).toBeGreaterThan(0);
+  });
+
+  test('X-Auth-Channel value is case-insensitive (Cookie / COOKIE accepted)', async () => {
+    const company = await seedCompanyWithCode('CASE6DC');
+    const user = await seedUser({
+      company_id: company.company_id,
+      role: 'WORKER',
+      pin: '1234',
+    });
+
+    for (const channelValue of ['Cookie', 'COOKIE', 'cookie']) {
+      const res = await request(app)
+        .post('/api/auth/login')
+        .set('X-Auth-Channel', channelValue)
+        .send({ email: user.email, pin: '1234' });
+      expect(res.statusCode).toBe(200);
+      expect(res.body.token).toBeUndefined();
+      expect(res.body.refresh_token).toBeUndefined();
+    }
+  });
+
+  test('Unknown X-Auth-Channel value falls back to mobile-shaped body', async () => {
+    // Defensive: anything other than the explicit 'cookie' channel is
+    // treated as the legacy/mobile path. Prevents a typo'd header from
+    // accidentally locking a client out of body tokens it expected.
+    const company = await seedCompanyWithCode('UNK6DC1');
+    const user = await seedUser({
+      company_id: company.company_id,
+      role: 'WORKER',
+      pin: '1234',
+    });
+
+    const res = await request(app)
+      .post('/api/auth/login')
+      .set('X-Auth-Channel', 'something-else')
+      .send({ email: user.email, pin: '1234' });
+
+    expect(res.statusCode).toBe(200);
+    expect(typeof res.body.token).toBe('string');
+    expect(typeof res.body.refresh_token).toBe('string');
+  });
+});
+
 describeIfDb('Phase 6-D-1a — refresh + logout cookie handling', () => {
   afterAll(async () => {
     await cleanupTestRows();

@@ -104,6 +104,23 @@ function extractToken(req) {
   return bearerToken || cookieToken;
 }
 
+// Phase 6-D-1c (Section 102, May 14, 2026): web clients opt-in to the
+// cookie-only response shape via the X-Auth-Channel: cookie header. When
+// set, /login and /refresh omit `token` and `refresh_token` from the JSON
+// body — the auth state travels via HttpOnly cookies (set unconditionally,
+// see Section 100). Mobile (no header) keeps receiving body tokens for
+// the Bearer-header flow.
+//
+// Why a request header rather than User-Agent sniffing: explicit, easy
+// to mock in tests, and immune to UA-string drift across Expo / WebView
+// updates. The security gain isn't about attacker resistance (the cookie
+// is HttpOnly + SameSite=Lax either way) — it's about not echoing the
+// JWT in a place where it could be inadvertently logged or cached.
+function isWebClient(req) {
+  const channel = req.headers['x-auth-channel'];
+  return typeof channel === 'string' && channel.toLowerCase() === 'cookie';
+}
+
 // ===================
 // LOGIN
 // ===================
@@ -295,10 +312,11 @@ router.post('/login', async (req, res) => {
       redirectUrl = `https://${userCompanyCode}.constrai.ca/dashboard`;
     }
 
-    return res.json({
+    // Phase 6-D-1c: web clients (X-Auth-Channel: cookie) get the cookies
+    // only; the body omits `token` + `refresh_token`. Mobile (no header)
+    // keeps the legacy body-tokens shape for the Bearer flow.
+    const responseBody = {
       ok: true,
-      token: accessToken,
-      refresh_token: refreshToken,
       must_change_pin: mustChangePin,
       redirect_url: redirectUrl,
       user: {
@@ -312,7 +330,12 @@ router.post('/login', async (req, res) => {
         role,
         must_change_pin: mustChangePin,
       },
-    });
+    };
+    if (!isWebClient(req)) {
+      responseBody.token = accessToken;
+      responseBody.refresh_token = refreshToken;
+    }
+    return res.json(responseBody);
   } catch (err) {
     console.error('LOGIN ERROR:', err);
     return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
@@ -406,10 +429,9 @@ router.post('/refresh', async (req, res) => {
     res.cookie('access_token', newAccessToken, accessTokenCookieOptions(req));
     res.cookie('refresh_token', newRefreshToken, refreshTokenCookieOptions(req));
 
-    return res.json({
+    // Phase 6-D-1c: same web-vs-mobile body shape as /login.
+    const responseBody = {
       ok: true,
-      token: newAccessToken,
-      refresh_token: newRefreshToken,
       user: {
         user_id: record.user_id,
         username: record.username,
@@ -419,7 +441,12 @@ router.post('/refresh', async (req, res) => {
         role,
         must_change_pin: mustChangePin,
       },
-    });
+    };
+    if (!isWebClient(req)) {
+      responseBody.token = newAccessToken;
+      responseBody.refresh_token = newRefreshToken;
+    }
+    return res.json(responseBody);
   } catch (err) {
     console.error('REFRESH ERROR:', err);
     return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });

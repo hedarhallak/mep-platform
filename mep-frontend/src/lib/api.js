@@ -72,12 +72,24 @@ async function refreshTokenOnce() {
   // is empty (e.g., right after a cross-subdomain redirect where
   // localStorage doesn't follow the origin change). Backend cookie path
   // wins inside /api/auth/refresh when both arrive.
+  //
+  // Phase 6-D-1c: identify as a web client via X-Auth-Channel so the
+  // backend omits body tokens. The fresh access_token rides in the new
+  // Set-Cookie header (rotated by the backend alongside the refresh
+  // token); no client-side localStorage write is needed for the cookie
+  // path. The legacy localStorage writes are kept ONLY for the
+  // transitional case where the backend returns body tokens (older
+  // server build) — guarded with truthy checks so `undefined` never
+  // gets serialised into localStorage.
   const refreshToken = localStorage.getItem('mep_refresh_token')
 
   const res = await fetch(`${BASE_URL}/auth/refresh`, {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Auth-Channel': 'cookie',
+    },
     body: JSON.stringify(refreshToken ? { refresh_token: refreshToken } : {}),
   })
 
@@ -94,9 +106,32 @@ async function refreshTokenOnce() {
     throw err
   }
 
-  localStorage.setItem('mep_token', data.token)
-  localStorage.setItem('mep_refresh_token', data.refresh_token)
-  return data.token
+  // Phase 6-D-1c: body tokens are absent for web responses — the rotated
+  // access_token cookie has already been Set-Cookie'd by the backend.
+  // The retry path in apiFetch will resend with `credentials: 'include'`
+  // and the browser will attach the new cookie automatically; no Bearer
+  // header needs rebuilding. Returns the body token if present (legacy /
+  // mobile-shaped response) or `null` for the cookie-only response —
+  // apiFetch interprets `null` as "refresh succeeded, retry without
+  // mutating Authorization header".
+  //
+  // When the response is cookie-only, also CLEAR any stale localStorage
+  // tokens left over from a pre-6-D-1c session. Without this cleanup the
+  // next apiFetch would call getToken(), find the stale value, attach
+  // `Authorization: Bearer <stale>`, and the backend's Bearer-beats-cookie
+  // policy in middleware/auth.js would return 401 INVALID_TOKEN —
+  // triggering a fresh refresh-retry loop that never terminates.
+  if (data.token) {
+    localStorage.setItem('mep_token', data.token)
+  } else {
+    try { localStorage.removeItem('mep_token') } catch { /* ignore */ }
+  }
+  if (data.refresh_token) {
+    localStorage.setItem('mep_refresh_token', data.refresh_token)
+  } else {
+    try { localStorage.removeItem('mep_refresh_token') } catch { /* ignore */ }
+  }
+  return data.token || null
 }
 
 function clearAuthAndRedirect() {
@@ -116,7 +151,16 @@ function clearAuthAndRedirect() {
 async function apiFetch(method, url, body, options = {}) {
   const fullUrl = url.startsWith('http') ? url : `${BASE_URL}${url}`
 
-  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) }
+  // Phase 6-D-1c: identify this client as the web/cookie channel. The
+  // backend uses this to decide whether to echo tokens in the response
+  // body (mobile: yes; web: no — cookies travel the auth state). The
+  // header is set BEFORE options.headers merges so a caller can override
+  // it deliberately if needed (e.g., to test the mobile-shaped response).
+  const headers = {
+    'Content-Type': 'application/json',
+    'X-Auth-Channel': 'cookie',
+    ...(options.headers || {}),
+  }
   const token = getToken()
   if (token) headers.Authorization = `Bearer ${token}`
 
@@ -153,25 +197,39 @@ async function apiFetch(method, url, body, options = {}) {
   // 401 → try refresh, then retry the original request once
   if (shouldAttemptRefresh(res, fullUrl) && !options._retry) {
     if (isRefreshing) {
-      // Queue this request until the in-flight refresh resolves
+      // Queue this request until the in-flight refresh resolves. The
+      // queue resolves with the new Bearer token OR null (Phase 6-D-1c
+      // cookie path — refresh succeeded but no body token, the rotated
+      // access_token cookie is already on the document).
       const newToken = await new Promise((resolve, reject) => {
         failedQueue.push({ resolve, reject })
       })
-      const retryHeaders = { ...headers, Authorization: `Bearer ${newToken}` }
+      const retryHeaders = { ...headers }
+      if (newToken) {
+        retryHeaders.Authorization = `Bearer ${newToken}`
+      } else {
+        delete retryHeaders.Authorization
+      }
       return apiFetch(method, url, body, { ...options, _retry: true, headers: retryHeaders })
     }
 
     isRefreshing = true
     try {
+      // refreshTokenOnce returns:
+      //   - string: new Bearer token (legacy / mobile-shaped response).
+      //     Use it on the retry's Authorization header.
+      //   - null: refresh succeeded via cookies; no Bearer token to add.
+      //     Retry WITHOUT an Authorization header — the browser will send
+      //     the rotated access_token cookie.
+      //   - throws: refresh failed → clear local state + redirect to /login.
       const newToken = await refreshTokenOnce()
-      if (!newToken) {
-        clearAuthAndRedirect()
-        const err = new Error('No refresh token')
-        err.response = { status: 401, data: null }
-        throw err
-      }
       processQueue(null, newToken)
-      const retryHeaders = { ...headers, Authorization: `Bearer ${newToken}` }
+      const retryHeaders = { ...headers }
+      if (newToken) {
+        retryHeaders.Authorization = `Bearer ${newToken}`
+      } else {
+        delete retryHeaders.Authorization
+      }
       return apiFetch(method, url, body, { ...options, _retry: true, headers: retryHeaders })
     } catch (refreshErr) {
       processQueue(refreshErr, null)

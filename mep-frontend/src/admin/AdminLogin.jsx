@@ -35,9 +35,18 @@ export default function AdminLogin() {
     setSubmitting(true)
 
     try {
+      // Phase 6-D-1c (Section 102): identify as the web channel so the
+      // backend uses the cookie shape (no body tokens). credentials:
+      // 'include' ensures the browser stores the Set-Cookie response on
+      // admin.constrai.ca even though this `fetch` call bypasses
+      // lib/api.js.
       const res = await fetch('/api/auth/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Auth-Channel': 'cookie',
+        },
         body: JSON.stringify({ email: email.trim(), pin }),
       })
 
@@ -62,21 +71,30 @@ export default function AdminLogin() {
         return
       }
 
-      if (!data || !data.token) {
-        setError('Sign-in succeeded but no token was returned.')
-        return
-      }
-
+      // Phase 6-D-1c (Section 102): the web response no longer includes
+      // a body `token` — the HttpOnly access_token cookie set by the
+      // backend is the source of truth. We only persist to localStorage
+      // for the transitional / mobile-shaped response (data.token
+      // present). When the response is cookie-only, also CLEAR any
+      // stale localStorage tokens left over from an older session so
+      // future requests don't attach a stale `Authorization: Bearer`
+      // header (which the backend's Bearer-beats-cookie policy would
+      // reject as INVALID_TOKEN). Storage unavailability is no longer
+      // a fatal error since the cookie path doesn't need it.
       try {
-        localStorage.setItem('mep_token', data.token)
-        if (data.refresh_token) {
-          localStorage.setItem('mep_refresh_token', data.refresh_token)
+        if (data && data.token) {
+          localStorage.setItem('mep_token', data.token)
+          if (data.refresh_token) {
+            localStorage.setItem('mep_refresh_token', data.refresh_token)
+          }
+        } else {
+          localStorage.removeItem('mep_token')
+          localStorage.removeItem('mep_refresh_token')
         }
       } catch {
-        // localStorage may be unavailable (private mode in some browsers).
-        // The token still works for this session via React state, but a
-        // reload would lose it. Surface a soft warning rather than failing.
-        setError('Signed in, but session storage is unavailable — token will not persist after reload.')
+        // localStorage may be unavailable (private mode in some
+        // browsers). The cookie path continues to work for this
+        // session and future requests — no need to surface an error.
       }
 
       // Phase 6-D-1b: defensive — the admin login should never produce a
