@@ -1,7 +1,7 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 13, 2026 ~15:00 UTC — **Phase 6-B public branding endpoint shipped + deployed + smoke-verified.** Today's continuation thread added 3 PRs merged (#221 Create Company UI + #224 6-B feature + #225 6-B case-insensitive fix) + 2 new pitfalls (#33 router primitives in tested components, #34 case heterogeneity in legacy vs generated text keys) + DECISIONS Sections 96 + 97. Phase 5 FULLY closed; Phase 6-B fully closed. Cumulative two-day totals: ~17 PRs merged, 7 rotations, 2 migrations, 6 new pitfalls (#29–#34). **Next task: Phase 6-C — frontend bootstrap reads branding + applies CSS vars.** Plus the overdue `SENDGRID_API_KEY` decommission (eligible since May 12 12:00 UTC).
+> Last updated: May 14, 2026 ~10:30 UTC — **SendGrid decommission complete.** Continuation from Section 97 closeout. This thread shipped PR #227 refactor (removed SENDGRID_API_KEY from 4 routes + 2 lib/job files + .env.example + 3 tests), prod env var deletion via sed + pm2 restart + smoke (May 14 ~10:14 UTC), and SendGrid dashboard API key deletion (Twilio-linked account remains dormant, no cost). DECISIONS Section 98 added + new Pitfall #35 (provider migration completeness audit). **Leak remediation loop NOW FULLY CLOSED — all items ✅.** Next task: **Phase 6-C — frontend bootstrap reads branding + applies CSS vars.**
 
 ---
 
@@ -21,11 +21,11 @@ When you receive the one-line command above:
 2. **Read these 4 files** (use the Read tool, NOT bash):
    - `HANDOFF.md` (this file)
    - `CLAUDE.md` (working rules)
-   - `DECISIONS.md` (read ONLY the latest 2-3 sections referenced below — DON'T read the whole 11,000+ line file). Latest section is **97** (Phase 6-B closeout + Pitfall #34). Also relevant: 96 (Phase 5.1 closeout + Pitfall #33), 94 (product roadmap), 95 (retrospective). **IMPORTANT:** Read DECISIONS.md via the Read tool ONLY (never `bash tail` / `grep`) — Cowork bash mount can lag and miss recently merged sections (Section 96.6 explains; cost us PR #222).
+   - `DECISIONS.md` (read ONLY the latest 2-3 sections referenced below — DON'T read the whole 11,000+ line file). Latest section is **98** (SendGrid decommission complete + Pitfall #35). Also relevant: 97 (Phase 6-B closeout + Pitfall #34), 96 (Phase 5.1 closeout + Pitfall #33). **IMPORTANT:** Read DECISIONS.md via the Read tool ONLY (never `bash tail` / `grep`) — Cowork bash mount can lag and miss recently merged sections (Section 96.6 explains; cost us PR #222).
    - `RECOVERY.md` Section 2.4 only if relevant
 3. **Echo this exact line** as the first line of your reply:
    ```
-   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 97, Phase 6-B branding endpoint shipped + Phase 5 + 6-A + 6-B all CLOSED, next is Phase 6-C frontend bootstrap)
+   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 98, SendGrid decommission complete, all leak remediation closed, next is Phase 6-C frontend bootstrap)
    ```
 4. **Confirm the next task** in 1-2 lines.
 5. **Ask if Hedar is ready to start**, then wait.
@@ -40,11 +40,11 @@ When you receive the one-line command above:
 | Admin portal | `https://admin.constrai.ca` (SUPER_ADMIN only) |
 | Login (test) | Email: `hedar.hallak@gmail.com` / PIN: `hedar2026` (SUPER_ADMIN) |
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04 — kernel up-to-date as of May 11, reboot banner cleared) |
-| Backend | Node.js + Express + Postgres 16, pm2-managed at `/var/www/mep`. **pm2 systemd auto-start NOW configured (Section 93.3).** |
+| Backend | Node.js + Express + Postgres 16, pm2-managed at `/var/www/mep`. pm2 systemd auto-start configured (Section 93.3). |
 | Frontend | React + Vite + Tailwind |
-| Latest deployed to prod | **Phase 6-B public branding endpoint** — `routes/public_branding.js` live on both admin.constrai.ca + app.constrai.ca (May 13 ~14:30 UTC), case-insensitive lookup fix deployed ~14:50 UTC. Smoke-verified end-to-end. Prior deploys still live: Phase 5.1 Create Company UI, JWT rotation, Resend cutover, migrations 014 + 015, all leak rotations. |
-| Last merged to main | PR #225 (Phase 6-B case-insensitive fix). Section 97 docs PR follows (this commit). |
-| Active program | **Multi-Tenant Migration — Phase 6-C (Frontend bootstrap reads branding + applies CSS vars) is next.** Phase 5 + 6-A + 6-B all FULLY closed. Email cutover 24h watch period passed (SendGrid decommission overdue). |
+| Latest deployed to prod | **SendGrid decommission complete** — `SENDGRID_API_KEY` removed from prod `.env` + dashboard key deleted (May 14 ~10:14 UTC). Backend SendGrid-free at runtime. Phase 6-B public branding endpoint live since May 13 ~14:30 UTC. |
+| Last merged to main | PR #227 (s98 refactor: remove SENDGRID_API_KEY route-level refs). Section 98 docs PR follows (this commit). |
+| Active program | **Multi-Tenant Migration — Phase 6-C (Frontend bootstrap reads branding + applies CSS vars) is next.** Phase 5 + 6-A + 6-B all FULLY closed. Leak remediation loop NOW FULLY CLOSED. |
 | Mobile app | Still on legacy username login — backend keeps backward-compat |
 
 ### Multi-tenant migration progress
@@ -59,9 +59,9 @@ When you receive the one-line command above:
 | Phase 4b — RLS Stage 2 | ✅ Deployed |
 | Phase 4c — RLS Stage 3 | ✅ Deployed and restored after 90-F outage |
 | Phase 5 — SUPER_ADMIN portal split | ✅ **FULLY CLOSED** — login + list + create all live on admin.constrai.ca (May 13). |
-| Email migration SendGrid → Resend | ✅ **CUTOVER COMPLETE** (May 11 ~12:00 UTC). 24h watch passed; SendGrid decommission overdue. |
+| Email migration SendGrid → Resend | ✅ **FULLY DECOMMISSIONED** (May 14, Section 98). Code refs removed (PR #227), env var deleted from prod, SendGrid dashboard API key deleted. |
 | Phase 6-A — companies branding columns (migration 014) | ✅ DEPLOYED |
-| Phase 6-B — public `GET /api/companies/:code/branding` | ✅ **DEPLOYED + smoke-verified** (May 13 ~15:00 UTC). |
+| Phase 6-B — public `GET /api/companies/:code/branding` | ✅ DEPLOYED + smoke-verified (May 13 ~15:00 UTC). |
 | **Phase 6-C — Frontend bootstrap reads branding + applies CSS vars** | ⏳ **Next** |
 | Phase 6-D — Admin upload UI + Spaces pipeline | ⏳ After 6-C |
 | Phase 7 — 2FA + biometric + account security | ⏳ Pending |
@@ -71,7 +71,7 @@ When you receive the one-line command above:
 
 ## Pending items from leak remediation (Section 91)
 
-ALL rotations COMPLETE. Only the 24h watch + decommission remains.
+**ALL items COMPLETE.** No leak-remediation work remains.
 
 | Secret | Status |
 |---|---|
@@ -80,42 +80,39 @@ ALL rotations COMPLETE. Only the 24h watch + decommission remains.
 | `mepuser_super` DB pw | ✅ Rotated (Section 91) |
 | `mepuser` DB pw | ✅ Rotated (Section 92.2) |
 | `MAPBOX_ACCESS_TOKEN` | ✅ Rotated + leaked default refreshed (Section 92.2) |
-| `JWT_SECRET` | ✅ **Rotated** (Section 93.1) |
-| `ADMIN_API_KEY` + `AUTH_SECRET` | ✅ **Deleted** (dead env vars, audit-and-delete) |
-| `SENDGRID_API_KEY` | ⏳ Auto-retire after 24h Resend watch (May 12 ~12:00 UTC) |
+| `JWT_SECRET` | ✅ Rotated (Section 93.1) |
+| `ADMIN_API_KEY` + `AUTH_SECRET` | ✅ Deleted (dead env vars, audit-and-delete) |
+| `SENDGRID_API_KEY` | ✅ **DECOMMISSIONED** (Section 98) — code refs removed, env var deleted from prod, dashboard key deleted |
 | `SENTRY_DSN` | Optional — DSN is semi-public, skip unless misuse appears |
 
 ---
 
-## Next task: Phase 6-B — public `GET /api/companies/:id/branding` endpoint
+## Next task: Phase 6-C — Frontend bootstrap reads branding + applies CSS vars
 
-Phase 6-A shipped (migration 014). Columns `companies.brand_color` + `companies.brand_logo_url` exist on prod. 6-B exposes them via a public endpoint so the login screen can load tenant branding BEFORE the user authenticates.
+Phase 6-B shipped the public `GET /api/companies/:code/branding` endpoint. Phase 6-C is the frontend side: load the branding response BEFORE rendering the login screen and apply `brand_color` / `brand_logo_url` to the UI so each tenant sees their own visual identity from the first paint.
 
 **Scope:**
 
-1. **Backend endpoint** — `GET /api/companies/:id/branding`. Returns `{ ok, branding: { brand_color, brand_logo_url, company_name } }`. **Public route** (no `auth` middleware). Mount on BOTH adminApp and tenantApp via `mountPublicRoutes()` in app.js. The endpoint uses `superPool` (BYPASSRLS) because it runs pre-tenant — same pattern as `routes/auth.js#login` (Pitfall #28 / Section 90-G).
-2. **Caching headers** — `Cache-Control: public, max-age=300` (5 minutes). Logos + colors change rarely; the frontend can refresh on its own boot cycle.
-3. **Error handling** — 404 if company not found, 400 if `:id` isn't a positive integer.
-4. **Audit log** — NO (public endpoint, no user context). Frequency could be high (every frontend boot); no useful signal in audit_logs.
-5. **Tests** — `tests/integration/companies_branding.test.js` covering: (a) GET on existing company returns branding fields; (b) GET on missing company returns 404; (c) NULL values returned as-is (frontend handles defaults).
+1. **Determine company code from URL.** Strategy options to choose at session start:
+   - Subdomain (e.g. `acm.constrai.ca`) — favored by Section 85 architecture; Cloudflare wildcard `*.constrai.ca` already configured.
+   - Path prefix (e.g. `constrai.ca/acm`) — requires nginx + backend routing changes.
+   - Query param (e.g. `?c=acm`) — simplest, but lowest production polish.
+2. **Bootstrap fetch** — in `mep-frontend/src/main.jsx` (and `admin-main.jsx`), fetch `/api/companies/{code}/branding` BEFORE the React tree mounts. Block rendering until the response arrives (or a 200ms timeout falls back to defaults).
+3. **CSS variable injection** — apply `--color-primary` from `brand_color` on `:root` via inline `<style>` injected during bootstrap. The `@theme` directive in `src/index.css` already references `--color-primary-*` shades.
+4. **Logo handling** — replace the Constrai logo on the login screen with `brand_logo_url` when present; fallback to Constrai default when null.
+5. **Caching** — the endpoint already sends `Cache-Control: public, max-age=300`. The browser handles it; no SW caching layer needed in this phase.
+6. **404 / network failure handling** — fall back to Constrai defaults silently. Log to console for debugging but don't surface error to user.
+7. **Tests** — `mep-frontend/src/App.test.jsx` (or a new `branding.test.jsx`) covering: (a) bootstrap fetches the endpoint; (b) successful response applies CSS vars; (c) 404 falls back to defaults; (d) network error falls back to defaults.
 
-**Out of scope (Phase 6-C + 6-D):**
-- Frontend bootstrap reads branding + applies CSS variables — Phase 6-C.
+**Decisions to make at session start:**
+- Which company-code-from-URL strategy? (subdomain vs path vs query — affects backend routing too if path-based)
+- Synchronous block-on-bootstrap vs flash-of-default-styling-then-rebrand?
+
+**Out of scope (Phase 6-D + later):**
 - Admin upload UI + DigitalOcean Spaces pipeline — Phase 6-D.
-- Mobile app branding — later.
+- Mobile app branding — later phase.
 
-**Suggested first step:** Write the route + smoke test + PR. ~1-1.5 hours. Then Phase 6-C in a follow-up session.
-
-### Alternative: SendGrid decommission (eligible May 12 ~12:00 UTC onward)
-
-Now eligible. 24h Resend watch period passed. ~15-min task to clear the SendGrid surface:
-
-1. SSH to prod: `sed -i '/^SENDGRID_API_KEY=/d' /var/www/mep/.env` + `pm2 restart mep-backend` + verify SA login (and trigger one Resend-routed email path manually for sanity).
-2. SendGrid dashboard → Settings → API Keys → delete the Constrai key.
-3. SendGrid dashboard → Settings → Account → optionally delete the sub-user.
-4. Update HANDOFF "Credentials" section to remove SendGrid entries.
-
-Worth doing first (smaller scope) before tackling Phase 6-B.
+**Estimated effort:** 2-3 hours. Branch name suggestion: `feat/s99-phase6c-frontend-branding-bootstrap`.
 
 ---
 
@@ -126,7 +123,8 @@ Worth doing first (smaller scope) before tackling Phase 6-B.
 - **Coverage threshold ratchet** — total test suite is 44+ files now. Run `TEST_DATABASE_URL=… npx jest --coverage` and ratchet if drift ≥3 pp.
 - **Stale GitHub blob `0512476`** — remains in object DB until GC; no action needed (all credentials inside revoked).
 - **Mapbox `Default public token`** — unused, can't delete (Mapbox UI limitation). Benign.
-- **Apple Passwords → OneDrive migration of all credential entries** — Hedar uses OneDrive `Constrai Keys` folder, not Apple Passwords. Earlier HANDOFFs referenced "Apple Passwords entries" inaccurately. Update next time you do a credentials inventory pass.
+- **`SENDGRID_FROM_EMAIL` env var name** — still used as the from-address (kept for backward compat; just a name, not a secret). Optional future rename to `EMAIL_FROM` for cleanliness — defer to a hygiene PR.
+- **Twilio/SendGrid account itself** — dormant after API key delete. No recurring cost (free trial expired). Don't delete unless Twilio relationship is also being dropped.
 
 ---
 
@@ -139,18 +137,18 @@ All credentials live in **OneDrive `Constrai Keys` folder** (`C:\Users\Lenovo\On
 | Cloudflare Origin Certificate (May 7, 2041) | `Cloudflare Origin Certificate.txt` | 2026-05-11 |
 | Cloudflare Origin Private Key | `Cloudflare Private Key.txt` | 2026-05-11 |
 | Resend API key (`Constrai Prod 2026-05-11-v2`) | `Resend API key 2026-05-11.txt` | 2026-05-11 (rotated mid-session) |
-| `mepuser_super` DB pw | (saved this session in OneDrive) | 2026-05-11 |
-| `mepuser` DB pw | (saved this session in OneDrive) | 2026-05-11 |
+| `mepuser_super` DB pw | (saved in OneDrive) | 2026-05-11 |
+| `mepuser` DB pw | (saved in OneDrive) | 2026-05-11 |
 | `MAPBOX_ACCESS_TOKEN` (`Constrai Prod 2026-05-11`) | `Mapbox token 2026-05-11.txt` | 2026-05-11 |
 | `JWT_SECRET` | `JWT_SECRET 2026-05-11.txt` | 2026-05-11 |
 
-Prod `/var/www/mep/.env` is in sync with all of the above.
+Prod `/var/www/mep/.env` is in sync with all of the above. `SENDGRID_API_KEY` no longer present (Section 98).
 
 Cost inventory + DigitalOcean Spaces + Apple Developer keys: see `RECOVERY.md`.
 
 ---
 
-## Critical pitfalls (encoded from Sections 86 + 87 + 88 + 89 + 90 + 91 + 92 + 93 + 96 + 97)
+## Critical pitfalls (encoded from Sections 86 + 87 + 88 + 89 + 90 + 91 + 92 + 93 + 96 + 97 + 98)
 
 1. **Bash sandbox file sync lag** — use Read tool to verify file state.
 2. **Edit tool can silently lose changes** — Read each file immediately after Edit.
@@ -183,9 +181,10 @@ Cost inventory + DigitalOcean Spaces + Apple Developer keys: see `RECOVERY.md`.
 29. **NEVER `git add -A` in branches touching credentials** (Section 91) — explicit paths. `.gitignore` MUST cover `.secrets/`, `*.key`, `*.pem`, `*.p12`, `*.pfx`.
 30. **NEVER paste `.env` contents/screenshots in any chat** (Section 91) — use `read -rsp` + `sed -i`. Mask via `sed 's/=.*/=***/'`.
 31. **Sed mask regex MUST include underscores** (Section 92.5) — universal form: `sed -E 's/=[A-Za-z0-9_.-]+$/=***/'`. Eyeball masked output before sharing.
-32. **Verify `pm2-root.service` is enabled BEFORE any planned reboot** (NEW — Section 93.4, May 11, 2026). The first kernel reboot of the prod Droplet took prod down for ~2 min because `pm2 startup` was never run — no systemd unit to spawn the pm2 daemon on boot. Fixed via `pm2 startup systemd -u root --hp /root && pm2 save`. **Convention going forward:** run `systemctl is-enabled pm2-root` before any planned reboot; expected output `enabled`. If `disabled` or `not-found`, run the `pm2 startup` + `pm2 save` pair BEFORE rebooting. Also: after ANY new `pm2 start` of a new app, run `pm2 save` immediately so the dump captures the new process.
-33. **Adding router primitives to a tested component requires updating its test wrapper** (NEW — Section 96.5, May 13, 2026). Adding `<Link>`, `<NavLink>`, `useNavigate`, `useLocation`, `useParams`, or `<Outlet>` from `react-router-dom` to a component already covered by RTL tests throws `TypeError: Cannot destructure property 'basename' of useContext(...) as it is null` (from `LinkWithRef`) unless every `render()` happens under a Router. Fix: import `MemoryRouter` and create `renderWithRouter = (ui) => render(<MemoryRouter>{ui}</MemoryRouter>)`, swap all `render(...)` calls. **Convention:** when a PR adds router primitives to a previously router-free component, update its test file in the SAME PR. Cost us one CI iteration on PR #221.
-34. **Never assume case homogeneity across legacy + generated text keys** (NEW — Section 97.6, May 13, 2026). Phase 6-B shipped a lookup that uppercased the URL param then queried `WHERE company_code = $1` — and 404'd on the only live tenant because that row's code was stored lowercase (`'mep'`, legacy seed predating `generateCompanyCode`), while new codes are uppercase (`ACM1234`). Case mismatches are silent: 0 rows → 404 → indistinguishable from "row doesn't exist." Unit tests pass on generated data and miss it; smoke catches it. **Convention:** before any text-key lookup goes live, `SELECT DISTINCT (case_marker) FROM <table>` against prod to inspect spread. If uniform, lock and document. If heterogeneous (or could be), use `LOWER(col) = LOWER($1)` — the missing index is fine at small scale, add `CREATE INDEX ... ON <table> (LOWER(col))` if the path becomes hot. Fixed via PR #225 (same session).
+32. **Verify `pm2-root.service` is enabled BEFORE any planned reboot** (Section 93.4). Run `systemctl is-enabled pm2-root` before reboots. Run `pm2 save` after any new `pm2 start`.
+33. **Adding router primitives to a tested component requires updating its test wrapper** (Section 96.5). Use `MemoryRouter` + `renderWithRouter` helper.
+34. **Never assume case homogeneity across legacy + generated text keys** (Section 97.6). `SELECT DISTINCT` against prod before locking a text-key lookup; prefer `LOWER(col) = LOWER($1)` when in doubt.
+35. **Provider migration completeness audit before env-var decommission** (NEW — Section 98.6, May 14, 2026). A wrapper / abstraction layer (e.g. `lib/email.js#getMailClient` for the SendGrid→Resend swap) doesn't guarantee every caller goes through it. Routes / jobs / libs can call the legacy SDK directly (`sgMail.setApiKey`, etc.) and bypass the abstraction silently. Before removing the legacy env var, grep for direct SDK references AND direct env-var references across the whole repo — `grep -rn 'sgMail\.\|setApiKey\|mustEnv.*SENDGRID' routes/ jobs/ lib/ middleware/` and `grep -rn 'SENDGRID_API_KEY' . --include='*.js'`. Results outside the abstraction layer = migration is NOT complete. HANDOFF estimated SendGrid decommission as "15-min"; actual scope was 7 production files + 3 tests + a refactor PR. Encoded so future provider migrations don't repeat the audit miss.
 
 ---
 
@@ -203,6 +202,7 @@ Cost inventory + DigitalOcean Spaces + Apple Developer keys: see `RECOVERY.md`.
 - **Explicit `git add <file>` paths** for any credential-adjacent commit (Section 91).
 - **Universal sed mask** — `sed -E 's/=[A-Za-z0-9_.-]+$/=***/'` (Section 92.5).
 - **Verify pm2 systemd unit before reboots** — `systemctl is-enabled pm2-root` (Section 93.4).
+- **Provider migration completeness check** — grep direct SDK calls + env-var refs before decommissioning (Section 98.6 / Pitfall #35).
 
 ---
 
