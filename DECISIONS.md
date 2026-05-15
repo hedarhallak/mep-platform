@@ -12665,5 +12665,90 @@ Out of scope (Phase 6-D-3 + later):
 
 - **Today (May 14-15 marathon final close): 78 sections.** (Section 109 NEW — Phase 6-D-2 shipped: tenant logo swap on LoginPage with 3-layer fallback, remember-me checkbox on both LoginPage and AdminLogin with separate localStorage keys for tenant vs admin email persistence, 14 new tests + i18n EN+FR. No backend or mobile changes. Phase 6-D-3 admin upload UI + DigitalOcean Spaces pipeline remains the only remaining branding-stack task before the September conference demo.)
 
+---
+
+## Section 110 — Phase 6-D-2 production verification + Pitfall #44 (dual logo columns) (May 15, 2026 ~10:30–11:30 UTC)
+
+> Phase 6-D-2 verified end-to-end in production on `https://mep.constrai.ca/login`: tenant placeholder logo (green square with "MEP" text) renders instead of the default Constrai Building2 icon, "Remember me" checkbox visible and functional, branding bootstrap → API → frontend swap chain all working. Verification took 3 extra PRs (#244 → #246) because of two bugs caught during the prod smoke: (a) the new remember-me label originally read "Remember my email" — the substring "email" collided with `getByLabelText(/email/i)` in existing AdminLogin tests; (b) my Phase 6-D-2 code read `window.__BRANDING__.logo_url` but `branding.js` from Section 99 actually exposes the field as `brand_logo_url` — a mismatch caused by the `companies` table having TWO logo columns (`logo_url` legacy + `brand_logo_url` canonical) and me grepping the wrong one when writing the Phase 6-D-2 reader. New Pitfall #44 captures both column confusion + the verification habit needed.
+
+### 110.1 — Production verification flow
+
+After PR #246 merged (commit `3d6af9b`), the prod deploy block ran cleanly:
+
+```bash
+cd /var/www/mep
+git pull origin main                      # "Already up to date" — main was current
+cd mep-frontend
+npm run build                              # New bundle main-CuzsHeEx.js
+grep -oE 'brand_logo_url' dist/assets/main-CuzsHeEx.js | head -5  # 4 hits confirmed
+```
+
+Browser smoke (Chrome with Google DoH to bypass Videotron's stale NXDOMAIN cache from Section 107.2):
+
+| URL | Expected | Result |
+|---|---|---|
+| `https://mep.constrai.ca/login` | MEP placeholder logo (green square, "MEP" text) instead of Constrai Building2 | ✅ Confirmed |
+| Same page | "Remember me" checkbox below PIN field | ✅ Confirmed |
+| Same page | Other UI unchanged (title "Constrai" + subtitle "Construction ERP" — see backlog item) | ✅ |
+
+The placeholder URL was set via SQL (since admin upload UI ships in Phase 6-D-3):
+
+```sql
+UPDATE companies SET brand_logo_url='https://placehold.co/200x200/16a34a/white?text=MEP' WHERE company_code='mep';
+```
+
+Hedar can replace this with a real MEP Construction logo whenever desired; the Phase 6-D-3 admin form will provide a click-to-upload UI for the same column.
+
+### 110.2 — Pitfall #44 (NEW) — DB column duplication + verify field-name chain end-to-end
+
+The May 15 verification loop took 3 extra PRs because of two field-name and column mismatches. The pattern that caught us:
+
+1. **Two logo columns in `companies`:**
+   - `logo_url` (TEXT, legacy — present since some pre-Section-85 schema iteration)
+   - `brand_logo_url` (TEXT, canonical — added in Phase 6-A / migration 014, returned by GET `/api/companies/:code/branding`)
+
+2. **My Phase 6-D-2 code grepped `branding.js`'s comment header, which mentioned both names in different places, and I assumed `logo_url`** — wrong assumption. The actual `applyBranding()` function stashes `safe.brand_logo_url` on `window.__BRANDING__.brand_logo_url`. The legacy `logo_url` column exists in the DB but is NOT read by the API.
+
+3. **First SQL UPDATE on `logo_url`** (the legacy column) returned `UPDATE 1` and looked successful — but the API kept returning `brand_logo_url: null` because that's a different column.
+
+**Detection cost:** ~3 turns of "logo isn't showing" → "is it cached?" → "is the build deployed?" → "is the JS code reading the right field?" → finally "wait, are there TWO columns?". The smoking-gun moment was `curl /api/companies/mep/branding` returning `brand_logo_url: null` after the UPDATE 1 success — that mismatch proved the wrong column.
+
+**Convention going forward:**
+
+When adding a feature that reads from a new DB-backed API field, do a 3-point chain verification BEFORE writing the frontend code:
+
+1. `\d <table>` in psql to LIST EVERY column whose name contains the keyword (logo / brand / etc.). Catch column duplication early.
+2. `curl <endpoint>` to see the EXACT response field name the API returns.
+3. `grep -n "<field_name>" <relevant frontend lib>` to see the EXACT property name the frontend exposes on `window.__BRANDING__` (or equivalent).
+
+All three must match before writing the feature. The Section 99 `branding.js` comment header lists both column names in different docstring sentences ("companies.brand_logo_url is the source of truth, exposed as ...") — easy to misread without the 3-point chain check.
+
+### 110.3 — Backlog items surfaced today
+
+Three concrete items added to the backlog for a future hygiene session:
+
+1. **Drop the legacy `companies.logo_url` column.** It's not read anywhere in the API or frontend. Verify with `grep -rn "logo_url[^_]" --include="*.js" --include="*.jsx"` (excluding `brand_logo_url` matches). Then a one-line migration `ALTER TABLE companies DROP COLUMN logo_url;`. Run after taking a backup since DROP is irreversible.
+
+2. **Dynamic title from `company_name` on the LoginPage.** Currently the LoginPage hardcodes "Constrai" + "Construction ERP" as the page title. `window.__BRANDING__.company_name` is already populated for tenant subdomains (e.g., "MEP Construction"). A small PR can swap the title to `branding?.company_name || 'Constrai'` and the subtitle could fade away or stay as the universal product tagline. Polish item for Phase 6-D-3 PR window or later.
+
+3. **Color shades from `brand_color` via CSS `color-mix()` or HSL.** Section 99.5 / 105.2 noted this. Today's verification confirmed only `--color-primary` overrides (the "Sign In" button stays the right tenant green via the existing override path). The shades (`-dark` / `-light` / `-pale`) remain Constrai green — visible in hover/active states. Not blocking the conference demo but a polish-week candidate.
+
+### 110.4 — Final state at end of Section 110
+
+| Item | Status |
+|---|---|
+| Phase 6-D-2 production verification | ✅ — MEP placeholder visible on `mep.constrai.ca/login` |
+| 4 production deploys today (backend + frontend, twice over the marathon) | ✅ — Health 200 throughout, Better Stack monitors green |
+| Pitfall #44 added (DB column dup + 3-point chain verification) | ✅ |
+| Backlog: drop `companies.logo_url` (legacy) | ⏳ Next hygiene window |
+| Backlog: dynamic title from `company_name` | ⏳ Bundle into Phase 6-D-3 PR |
+| Backlog: color shades from `brand_color` | ⏳ Polish week (June-July) |
+| Phase 6-D-3 — Admin upload UI + DigitalOcean Spaces pipeline | ⏳ Next major code task |
+
+### 110.5 — Section/total update
+
+- **Today (May 14-15 absolute close): 79 sections.** (Section 110 NEW — Phase 6-D-2 verified end-to-end in production via browser smoke on `mep.constrai.ca/login`. Verification surfaced two small bugs across PRs #244-#246 — label substring "email" colliding with test regex, and a DB column duplication confusion between legacy `logo_url` and canonical `brand_logo_url`. New Pitfall #44 captures the 3-point chain check before reading any DB-backed API field. Three backlog items added: drop legacy column, dynamic title, color shades. Phase 6-D-3 remains the only major remaining branding-stack task.)
+
+
 
 
