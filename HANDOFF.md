@@ -1,7 +1,7 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 15, 2026 ~04:00 UTC — **Phase 6-D-1c shipped (PR #237) + Section 103 docs (PR #238) + Section 104 prod-incident retro (PR #239).**
+> Last updated: May 15, 2026 ~04:30 UTC — **Phase 6-D-1c shipped (PR #237) + Section 103 docs (PR #238) + Section 104 prod-incident retro (PR #239) + Section 105 strategic roadmap (PR #240).** Today's session also confirmed prod recovery via browser smoke (dashboard renders, login works, branding applied). **NEW strategic context: September 2026 conference is a hard deadline; Phase 9 Module/Plugin System committed for post-conference Q4 2026.**
 >
 > **⚠️ PROD INCIDENT TODAY — RECOVERED.** Production was down ~14 hours (May 14 13:41 UTC → May 15 03:50 UTC) due to a missing `cookie-parser` module after this morning's Section 100 deploy. `git pull` brought the new `require('cookie-parser')` but `npm install` was never run on the server, so PM2 spent ~14h in a `MODULE_NOT_FOUND` restart loop. Recovered via `npm ci --omit=dev --ignore-scripts` on the Droplet. Health endpoint now returns 200. End-to-end smoke (browser login) NOT YET verified — Hedar should test from incognito at session start. **New Pitfall #38 encoded — every deploy that adds an npm dep MUST run `npm ci` BEFORE `pm2 restart`.**
 
@@ -22,6 +22,29 @@
 2. **Browser smoke test:** Open `https://app.constrai.ca` in incognito → login with `hedar.hallak@gmail.com` / `hedar2026` → dashboard renders. This is the user-facing verification that was deferred at end of May 14 session.
 
 3. **Only after both above are green**, continue with the regular task list below.
+
+---
+
+## 🎯 Strategic context — September 2026 conference (hard deadline)
+
+> **~4 months runway from May 15, 2026.** Hedar has a Quebec construction industry conference in September 2026. The product MUST be demo-ready and ideally sales-ready by then — branded subdomain per company, smooth onboarding, and at least one or two reference tenants set up. This deadline reshapes priority for every session from now until then.
+
+**Roadmap to conference (Sections 105 / May 14, 2026 commit):**
+
+| Window | Focus | Phases |
+|---|---|---|
+| **May 15 — June 15** | Finish branding stack end-to-end | Hygiene batch (3 items) → Phase 6-D-2 logo swap → Phase 6-D-3 admin upload UI + DigitalOcean Spaces |
+| **June 15 — July 31** | Polish + demo readiness | Bug fixes, performance, demo data setup for 2 reference tenants, marketing site refresh, mobile build update |
+| **August** | Pre-conference dry-run | End-to-end rehearsal flow: signup → branding setup → daily use of 3 core workflows (timesheet, project, materials). External uptime monitor live. |
+| **September** | **Conference** | Demo, sales conversations, possible new tenant signups |
+| **Post-conference (Q4 2026)** | **Phase 9 — Module/Plugin System** | Architectural commitment from Section 105. Builds the runtime for per-tenant customization (paid customers can request features that live in their own module, gated at runtime). DESIGN starts post-Phase-6-D in lower-pressure window; BUILD likely starts after conference. |
+| **Q1 2027** | Phase 7 — Security maturity | 2FA + biometric + PIN→password migration |
+
+**What this implies for session priority order:**
+1. **Operational stability first** (every session opens with the URGENT FIRST CHECK above). A second 14h outage before the conference is unacceptable.
+2. **Code: branding → polish → modules.** Don't start Phase 9 build until Phase 6-D is shipped + conference demo runbook is rehearsed.
+3. **Stop adding features in August.** August is rehearsal + bug-fix only. New code freeze 2 weeks before the conference.
+4. **Plugin architecture design CAN start in July** (low-pressure, design only, no code). Build waits for Q4.
 
 ---
 
@@ -194,7 +217,11 @@ After 6-D-2: Phase 6-D-3 (admin upload UI + DigitalOcean Spaces pipeline for log
 | Section 102 — nginx wildcard config file | ✅ Merged (PR #235). Prod nginx reload pending — hygiene item #3. |
 | **Phase 6-D-2 — Logo swap on LoginPage** | ⏳ **Next code task (after hygiene batch)** |
 | Phase 6-D-3 — Admin upload UI + DigitalOcean Spaces pipeline | ⏳ After 6-D-2 |
-| Phase 7 — 2FA + biometric + PIN→password migration | ⏳ Pending |
+| **Demo polish + reference tenant setup** | ⏳ June 15 → July 31 (conference prep) |
+| **August dry-run + code freeze 2 weeks pre-conference** | ⏳ August 2026 |
+| **September 2026 conference** | 🎯 Hard deadline (demo + sales) |
+| **Phase 9 — Module/Plugin System** (architectural commitment, Section 105) | ⏳ DESIGN can start July; BUILD post-conference Q4 |
+| Phase 7 — 2FA + biometric + PIN→password migration | ⏳ Q1 2027 |
 | Phase 8 — Audit + compliance | ⏳ Pending |
 
 ---

@@ -12255,4 +12255,71 @@ Encoded in HANDOFF.md and copy-pasted here for the archive:
 
 - **Today: 73 sections.** (Section 104 NEW — post-mortem for the ~14h prod outage. New Pitfall #38 — `npm ci` before `pm2 restart` for any deploy that touches `package.json`. The incident itself was a single missing module, but the 14-hour-undetected delay points to a deeper gap: no external uptime monitor + no post-merge prod verification. Both are now on backlog as concrete next-session tasks.)
 
+---
+
+## Section 105 — Strategic roadmap commit: September 2026 conference + Phase 9 Module/Plugin System (May 15, 2026 ~04:15 UTC)
+
+> Two strategic decisions made at end of the May 14 session, captured here before the conversation ends so future sessions have explicit context:
+>
+> 1. **Hard deadline: September 2026 Quebec construction industry conference.** ~4 months runway. The product MUST be demo-ready + ideally sales-ready by then. This reshapes every session's priority order — operational stability and branding completion are now non-negotiable; speculative features wait.
+>
+> 2. **Architectural commitment: Phase 9 — Module/Plugin System.** Hedar explicitly chose Option C from the customization-options menu (versus feature flags or per-tenant forks): a proper module runtime where paid customers can request features that live in their own opt-in module, gated at runtime. Acknowledged as "more upfront work" but the right long-term shape. DESIGN can start in July; BUILD waits until post-conference Q4 2026.
+
+### 105.1 — Decision context
+
+Earlier this session, Hedar asked whether per-company customization is feasible. The options menu was:
+
+| Option | Approach | Cost | Best for |
+|---|---|---|---|
+| A. Feature flags | `companies.feature_flags` JSON column + runtime `if (req.company.features.xyz)` | ~2-4 h per feature | Show/hide buttons, extra fields, validation tweaks |
+| B. Custom permissions | Extend the existing 58-permission system with company-scoped permissions | ~1-2 h | Access-control variants |
+| C. Module/Plugin system | Dedicated module runtime: `module.json` manifest + lifecycle hooks + per-module DB migrations + per-module tests + admin UI to enable/disable per company | ~1 week scaffolding + 1-3 days per module | 5+ companies each wanting substantial different features; billing per-module |
+| D. Per-tenant forks | Each customer gets a fork of the code | Kills maintenance | Never |
+
+Hedar's reasoning for picking C even though A+B would suffice short-term: "هدا الحل الاحترافي حتى لو اخد وقت بس بفكر انه لازم ننفذه بس مو هلق بعدين" — Option C is the professional solution; the time cost is acceptable as a strategic investment.
+
+The risk Hedar wants to avoid (correctly): feature-flag sprawl. Once a codebase has 20+ flags with implicit interactions, the testing matrix explodes and refactoring becomes nearly impossible. A module runtime forces isolation: each module is a self-contained unit with explicit dependencies, its own tests, and a clear lifecycle. The cost is the runtime infra; the payoff is a codebase that scales to many customizations without rotting.
+
+### 105.2 — Phase 9 design pre-requisites (when we start the design pass in July)
+
+To capture before the conversation closes, so July's design session has a starting point:
+
+- **Stable API contracts**: by the time we start the module runtime, the main routes/services/middleware should be in a "this is the API surface" state. Otherwise modules will break on every internal refactor. Hardening contracts is part of the conference-polish phase (June 15 → July 31).
+- **Module manifest format**: a `module.json` per module declaring `name`, `version`, `requires` (Constrai version + other modules), `provides` (routes, services, UI panels), `db_migrations` (paths to numbered SQL files for the module's tables).
+- **Lifecycle hooks**: `onLoad(app)`, `onTenantActivate(company)`, `onTenantDeactivate(company)`, `onUnload(app)`. Modules register routes/middleware in `onLoad`; per-tenant state setup in `onTenantActivate`.
+- **DB migrations per module**: each module owns its tables. Migrations are versioned + reversible. The main Constrai migration system needs to either learn to discover module migrations OR each module bootstraps its own on `onLoad`.
+- **Testing**: each module ships its own Jest test suite. CI runs all module tests in parallel with main backend tests.
+- **Admin UI**: per-company toggle in the admin portal to enable/disable each module. Disabling should soft-delete (preserve data) but hide the UI + reject API calls.
+- **Billing integration (future)**: each module has a price. Stripe (or whoever) creates a separate line item per active module per tenant. Out of scope for the initial design; mention it so we don't paint ourselves into a corner.
+- **Migration story for existing features**: do we extract existing optional features (e.g., the weekly report job, the CCQ rates reminder) into modules retroactively? Or keep them in core? Recommend keeping core stable + only NEW customer-specific features go in modules.
+
+### 105.3 — Conference deadline implications (rolled into HANDOFF)
+
+The roadmap table is now in HANDOFF directly so every session opens with the deadline visible. Key implications:
+
+- **No new architectural projects between now and August.** Phase 9 design starts in July at the earliest. Phase 7 (2FA) is explicitly deferred to Q1 2027.
+- **Code freeze 2 weeks before the conference.** Late August onwards = bug-fix only.
+- **August dry-run is mandatory.** End-to-end rehearsal of the demo flow (signup → branding setup → daily workflow) on 2 reference tenants. Surface UX rough edges before they get demoed live.
+- **External uptime monitor BEFORE the conference is non-negotiable.** Backlog item 104.5 #1 graduates from "should-do" to "must-do". A 14h outage during conference week would be catastrophic.
+
+### 105.4 — Remember-me checkbox (small UX deferred)
+
+Hedar also raised the idea of a "Remember me" checkbox under the email field that persists the email (NOT the PIN) in localStorage for faster repeat logins. Small UX win, ~30 min work. Bundle into the Phase 6-D-2 PR (same `LoginPage.jsx` file as the logo swap) rather than as its own PR.
+
+### 105.5 — Final state at end of Section 105
+
+| Item | Status |
+|---|---|
+| Phase 9 — Module System committed (Section 105 + HANDOFF table) | ✅ Documented |
+| September 2026 conference deadline visible in HANDOFF | ✅ |
+| Roadmap window-by-window May → Q1 2027 | ✅ |
+| Phase 9 design pre-requisites captured (105.2) | ✅ |
+| Remember-me checkbox queued for Phase 6-D-2 PR | ⏳ Section 105.4 |
+| Phase 7 (2FA) explicitly deferred to Q1 2027 | ✅ |
+| External uptime monitor promoted to must-have before conference | ✅ |
+
+### 105.6 — Section/total update
+
+- **Today: 74 sections.** (Section 105 NEW — strategic roadmap commit. Two decisions captured: September 2026 conference as a hard deadline (~4 months runway) and Phase 9 Module/Plugin System as the post-conference architectural project. Design pre-requisites listed to give July's design session a starting point. Remember-me checkbox bundled into Phase 6-D-2's PR window.)
+
 
