@@ -1,3 +1,25 @@
+# Section 108 / Pitfall #36 mitigation (May 15, 2026): refuse direct
+# commits to main. The May 14 "committed to wrong branch" incident
+# (Section 101.2 / Pitfall #36) wasted ~10 minutes recovering from a
+# commit that accidentally landed on local main during parallel-work
+# context switching. This guard makes that class of mistake impossible
+# at the pre-commit layer — switch to a feature branch first.
+#
+# To intentionally bypass (rare — e.g., emergency hotfix), use:
+#   git commit --no-verify  (skips ALL pre-commit hooks including this)
+# Don't add a per-hook override flag here — the friction is the point.
+CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null)"
+if [ "$CURRENT_BRANCH" = "main" ]; then
+  echo ""
+  echo "ERROR: direct commits to main are forbidden (Pitfall #36)."
+  echo "  Switch to a feature branch first:"
+  echo "    git checkout -b feat/your-branch-name"
+  echo "  Or, if this is an emergency hotfix, bypass with:"
+  echo "    git commit --no-verify ..."
+  echo ""
+  exit 1
+fi
+
 echo "Running Constrai pre-commit checks..."
 node scripts/check-routes.js || exit 1
 
