@@ -91,6 +91,176 @@ async function submitLogin() {
   fireEvent.click(submit);
 }
 
+describe('LoginPage — Phase 6-D-2 tenant logo swap', () => {
+  // Phase 6-D-2 (Section 109): the LoginPage reads
+  // `window.__BRANDING__.logo_url` (populated by lib/branding.js before
+  // React mounts) and renders an <img> instead of the default Building2
+  // icon. Fallback to the default on null, missing, or 404 (onError).
+
+  afterEach(() => {
+    // Clean __BRANDING__ between tests so state doesn't leak.
+    try {
+      delete window.__BRANDING__
+    } catch {
+      window.__BRANDING__ = undefined
+    }
+  })
+
+  test('renders default Constrai icon when window.__BRANDING__ is null', () => {
+    window.__BRANDING__ = null
+    renderLogin()
+    // Default fallback path: no img with login.logoAlt rendered; instead
+    // the Building2 lucide SVG is in the DOM (it has no role but we can
+    // assert the negative case via queryBy).
+    expect(screen.queryByAltText('login.logoAlt')).not.toBeInTheDocument()
+  })
+
+  test('renders default Constrai icon when logo_url is absent from branding', () => {
+    window.__BRANDING__ = { brand_color: '#ff0000', company_code: 'acm' }
+    renderLogin()
+    expect(screen.queryByAltText('login.logoAlt')).not.toBeInTheDocument()
+  })
+
+  test('renders tenant logo <img> when window.__BRANDING__.logo_url is set', () => {
+    window.__BRANDING__ = { logo_url: 'https://cdn.example.com/acm/logo.png' }
+    renderLogin()
+    const img = screen.getByAltText('login.logoAlt')
+    expect(img).toBeInTheDocument()
+    expect(img.tagName).toBe('IMG')
+    expect(img.getAttribute('src')).toBe('https://cdn.example.com/acm/logo.png')
+  })
+
+  test('falls back to default icon when tenant logo fires onError', () => {
+    window.__BRANDING__ = { logo_url: 'https://cdn.example.com/acm/logo.png' }
+    renderLogin()
+    const img = screen.getByAltText('login.logoAlt')
+    // Simulate a load failure (404, CORS, network).
+    fireEvent.error(img)
+    expect(screen.queryByAltText('login.logoAlt')).not.toBeInTheDocument()
+  })
+
+  test('treats whitespace-only logo_url as absent', () => {
+    window.__BRANDING__ = { logo_url: '   ' }
+    renderLogin()
+    expect(screen.queryByAltText('login.logoAlt')).not.toBeInTheDocument()
+  })
+})
+
+describe('LoginPage — Phase 6-D-2 remember-me checkbox', () => {
+  // Phase 6-D-2 (Section 109): remember-me persists ONLY the email
+  // (never the PIN) in localStorage under `mep_remember_email`. On
+  // mount, the saved email pre-fills the form and the checkbox is
+  // pre-checked. On submit, the toggle is honored regardless of login
+  // success / failure.
+
+  beforeEach(() => {
+    try {
+      localStorage.clear()
+    } catch {
+      /* ignore */
+    }
+  })
+
+  afterEach(() => {
+    try {
+      localStorage.clear()
+    } catch {
+      /* ignore */
+    }
+  })
+
+  test('restores remembered email on mount and pre-checks the box', () => {
+    localStorage.setItem('mep_remember_email', 'recalled@example.com')
+    renderLogin()
+    const emailInput = screen.getByPlaceholderText('login.emailPlaceholder')
+    expect(emailInput.value).toBe('recalled@example.com')
+    const checkbox = screen.getByLabelText('login.rememberMe')
+    expect(checkbox.checked).toBe(true)
+  })
+
+  test('starts blank when nothing is stored', () => {
+    renderLogin()
+    const emailInput = screen.getByPlaceholderText('login.emailPlaceholder')
+    expect(emailInput.value).toBe('')
+    const checkbox = screen.getByLabelText('login.rememberMe')
+    expect(checkbox.checked).toBe(false)
+  })
+
+  test('saves email to localStorage when checkbox is checked on submit', async () => {
+    mockLogin.mockResolvedValue({
+      ok: true,
+      redirect_url: null,
+      user: { user_id: '1', role: 'FOREMAN' },
+    })
+
+    renderLogin()
+    fireEvent.change(screen.getByPlaceholderText('login.emailPlaceholder'), {
+      target: { value: 'jane@example.com' },
+    })
+    fireEvent.change(screen.getByPlaceholderText('login.pinPlaceholder'), {
+      target: { value: '1234' },
+    })
+    fireEvent.click(screen.getByLabelText('login.rememberMe'))
+    fireEvent.click(screen.getByRole('button', { name: 'login.submit' }))
+
+    await waitFor(() => {
+      expect(localStorage.getItem('mep_remember_email')).toBe('jane@example.com')
+    })
+  })
+
+  test('clears stored email when checkbox is left unchecked on submit', async () => {
+    localStorage.setItem('mep_remember_email', 'stale@example.com')
+    mockLogin.mockResolvedValue({
+      ok: true,
+      redirect_url: null,
+      user: { user_id: '1', role: 'FOREMAN' },
+    })
+
+    renderLogin()
+    // useEffect restored the saved email + pre-checked the box.
+    // Uncheck it deliberately, then change email + submit.
+    fireEvent.click(screen.getByLabelText('login.rememberMe'))
+    fireEvent.change(screen.getByPlaceholderText('login.emailPlaceholder'), {
+      target: { value: 'fresh@example.com' },
+    })
+    fireEvent.change(screen.getByPlaceholderText('login.pinPlaceholder'), {
+      target: { value: '1234' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'login.submit' }))
+
+    await waitFor(() => {
+      expect(localStorage.getItem('mep_remember_email')).toBeNull()
+    })
+  })
+
+  test('PIN is never written to localStorage', async () => {
+    mockLogin.mockResolvedValue({
+      ok: true,
+      redirect_url: null,
+      user: { user_id: '1', role: 'FOREMAN' },
+    })
+
+    renderLogin()
+    fireEvent.click(screen.getByLabelText('login.rememberMe'))
+    fireEvent.change(screen.getByPlaceholderText('login.emailPlaceholder'), {
+      target: { value: 'jane@example.com' },
+    })
+    fireEvent.change(screen.getByPlaceholderText('login.pinPlaceholder'), {
+      target: { value: 'TOP-SECRET-PIN-1234' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'login.submit' }))
+
+    await waitFor(() => {
+      expect(localStorage.getItem('mep_remember_email')).toBe('jane@example.com')
+    })
+    // Verify the PIN never landed in localStorage under any key.
+    const allKeys = Object.keys(localStorage)
+    for (const key of allKeys) {
+      expect(localStorage.getItem(key)).not.toContain('TOP-SECRET-PIN')
+    }
+  })
+})
+
 describe('LoginPage — Phase 6-D-1b redirect_url handling', () => {
   test('hops to tenant subdomain via window.location.assign when redirect_url is returned', async () => {
     mockLogin.mockResolvedValue({

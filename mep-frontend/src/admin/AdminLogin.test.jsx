@@ -180,6 +180,93 @@ describe('AdminLogin — submit', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(/INVALID_CREDENTIALS/i)
   })
 
+  test('remember-me: saves admin email under mep_remember_admin_email on successful login', async () => {
+    // Phase 6-D-2 (Section 109): admin remember-me uses a SEPARATE
+    // localStorage key from the tenant LoginPage so SUPER_ADMIN email
+    // doesn't pollute the tenant prefill and vice versa.
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        ok: true,
+        user: { user_id: 1, role: 'SUPER_ADMIN' },
+      }),
+    })
+
+    const user = userEvent.setup()
+    renderLogin()
+
+    await user.type(screen.getByLabelText(/email/i), 'sa@example.com')
+    await user.type(screen.getByLabelText(/pin/i), 'sa-pin-1234')
+    await user.click(screen.getByLabelText(/remember my email/i))
+    await user.click(screen.getByRole('button', { name: /sign in/i }))
+
+    await waitFor(() => {
+      expect(localStorage.getItem('mep_remember_admin_email')).toBe('sa@example.com')
+    })
+    // Tenant key untouched.
+    expect(localStorage.getItem('mep_remember_email')).toBeNull()
+  })
+
+  test('remember-me: restores stored admin email on mount and pre-checks the box', () => {
+    localStorage.setItem('mep_remember_admin_email', 'sa@example.com')
+    renderLogin()
+    const emailInput = screen.getByLabelText(/email/i)
+    expect(emailInput.value).toBe('sa@example.com')
+    const checkbox = screen.getByLabelText(/remember my email/i)
+    expect(checkbox.checked).toBe(true)
+  })
+
+  test('remember-me: clears stored email when checkbox is unchecked on submit', async () => {
+    localStorage.setItem('mep_remember_admin_email', 'old@example.com')
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        ok: true,
+        user: { user_id: 1, role: 'SUPER_ADMIN' },
+      }),
+    })
+
+    const user = userEvent.setup()
+    renderLogin()
+    // useEffect restored 'old@example.com'; uncheck to forget.
+    await user.click(screen.getByLabelText(/remember my email/i))
+    await user.clear(screen.getByLabelText(/email/i))
+    await user.type(screen.getByLabelText(/email/i), 'new@example.com')
+    await user.type(screen.getByLabelText(/pin/i), 'sa-pin-1234')
+    await user.click(screen.getByRole('button', { name: /sign in/i }))
+
+    await waitFor(() => {
+      expect(localStorage.getItem('mep_remember_admin_email')).toBeNull()
+    })
+  })
+
+  test('remember-me: PIN never written to any localStorage key', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        ok: true,
+        user: { user_id: 1, role: 'SUPER_ADMIN' },
+      }),
+    })
+
+    const user = userEvent.setup()
+    renderLogin()
+    await user.click(screen.getByLabelText(/remember my email/i))
+    await user.type(screen.getByLabelText(/email/i), 'sa@example.com')
+    await user.type(screen.getByLabelText(/pin/i), 'TOP-SECRET-ADMIN-PIN')
+    await user.click(screen.getByRole('button', { name: /sign in/i }))
+
+    await waitFor(() => {
+      expect(localStorage.getItem('mep_remember_admin_email')).toBe('sa@example.com')
+    })
+    for (const key of Object.keys(localStorage)) {
+      expect(localStorage.getItem(key)).not.toContain('TOP-SECRET-ADMIN-PIN')
+    }
+  })
+
   test('network error renders the error inline (no crash)', async () => {
     fetchMock.mockRejectedValueOnce(new Error('Connection refused'))
 

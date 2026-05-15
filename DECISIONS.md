@@ -12540,5 +12540,130 @@ Confirmed working today on `.husky/pre-commit`. Save this as the standard escape
 
 - **Today (May 14-15 marathon close): 77 sections.** (Section 108 NEW — hygiene batch closeout. Three operational items from prior sessions cleared in one PR: Better Stack uptime monitoring activated, duplicate Section 99 removed from DECISIONS.md, `.husky/pre-commit` main-branch guard installed. One new pitfall — #43 — encodes the bash-on-Linux-mount workaround for Edit tool failures on protected paths. The URGENT FIRST CHECK at the top of HANDOFF can now drop the "browser smoke test" step since prod is monitored externally + Pattern B is verified end-to-end. Phase 6-D-2 logo swap remains the next code task.)
 
+---
+
+## Section 109 — Phase 6-D-2: Logo swap on LoginPage + Remember-me checkbox (May 15, 2026 ~09:30–10:30 UTC)
+
+> Phase 6-D-2 shipped — `LoginPage.jsx` now renders the tenant logo (from `window.__BRANDING__.logo_url`) instead of the default Constrai Building2 icon when a tenant subdomain is in use. Three independent fallback paths to the Constrai default: (a) no `window.__BRANDING__` (generic `app.constrai.ca` entry); (b) `logo_url` absent or whitespace-only; (c) `<img>` `onError` fires (404, CORS, network). Both `LoginPage` and `AdminLogin` get a "Remember my email" checkbox that persists the email (NEVER the PIN) in `localStorage` under separate keys so tenant and admin sessions don't pollute each other. Mobile app unaffected (Bearer + body tokens path, no branding bootstrap).
+
+### 109.1 — Tenant logo swap
+
+The branding bootstrap from Section 99 (`mep-frontend/src/lib/branding.js`) already populates `window.__BRANDING__` before React mounts. It exposes `{ logo_url, brand_color, company_code }` for tenant subdomains and is `null` for generic / admin / reserved hosts. Phase 6-D-2 wires the LoginPage to consume `logo_url` directly.
+
+Implementation (`mep-frontend/src/pages/auth/LoginPage.jsx`):
+
+```jsx
+function readTenantLogoUrl() {
+  if (typeof window === 'undefined') return null
+  const b = window.__BRANDING__
+  if (!b || typeof b !== 'object') return null
+  const url = typeof b.logo_url === 'string' ? b.logo_url.trim() : ''
+  return url || null
+}
+
+// inside the component:
+const tenantLogoUrl = readTenantLogoUrl()
+const [logoFailed, setLogoFailed] = useState(false)
+const showTenantLogo = !!tenantLogoUrl && !logoFailed
+```
+
+JSX:
+
+```jsx
+{showTenantLogo ? (
+  <img
+    src={tenantLogoUrl}
+    alt={t('login.logoAlt')}
+    onError={() => setLogoFailed(true)}
+    className="inline-block w-14 h-14 rounded-2xl object-contain bg-white p-1.5 mb-4 shadow-md"
+  />
+) : (
+  <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary mb-4">
+    <Building2 size={28} className="text-white" />
+  </div>
+)}
+```
+
+`AdminLogin.jsx` deliberately does NOT do the swap — the SUPER_ADMIN portal at `admin.constrai.ca` has no tenant context and should always be Constrai-branded.
+
+Sizing matches the existing default icon container (`w-14 h-14 rounded-2xl`). `object-contain` preserves aspect ratio. `bg-white` + `shadow-md` ensure dark-on-light logos read well against the dark gradient background. If a tenant uploads a logo with transparent background, the white wash gives consistent legibility.
+
+### 109.2 — Remember-me checkbox
+
+Persists only the email (NEVER the PIN) in `localStorage`. Two independent keys:
+
+| Key | Used by | Why separate |
+|---|---|---|
+| `mep_remember_email` | `LoginPage.jsx` (tenant flow) | Tenant FOREMAN/WORKER/COMPANY_ADMIN sessions |
+| `mep_remember_admin_email` | `AdminLogin.jsx` (admin flow) | SUPER_ADMIN — shouldn't pre-fill the tenant login form |
+
+The split prevents cross-pollination when an operator switches between admin and tenant logins on the same browser profile. Identical mechanics in both files — `useEffect` reads on mount and pre-fills email + pre-checks the box; `handleSubmit` writes or deletes based on the checkbox state, BEFORE the login network call (so the user's "remember" intent is honored regardless of login success / failure).
+
+Why not store the PIN: PINs are sensitive credentials. The cookie-based auth (Section 100 / 6-D-1c) already handles "stay logged in" via the `Domain=.constrai.ca` HttpOnly refresh token. Remember-me here is purely a convenience feature for the email field — saving a keystroke on repeat visits.
+
+### 109.3 — Test coverage extensions
+
+`mep-frontend/src/pages/auth/LoginPage.test.jsx` — 10 new tests:
+
+| Group | Cases |
+|---|---|
+| Logo swap | (1) null branding → default icon, (2) branding without logo_url → default, (3) logo_url present → `<img>` with correct src, (4) `<img>` onError → revert to default, (5) whitespace-only logo_url treated as absent |
+| Remember-me | (1) restores stored email + pre-checks on mount, (2) starts blank when nothing stored, (3) saves email on submit when checked, (4) clears stored email on submit when unchecked, (5) PIN never persists to ANY localStorage key |
+
+`mep-frontend/src/admin/AdminLogin.test.jsx` — 4 new tests:
+
+| Cases |
+|---|
+| (1) saves admin email under separate key (verifies tenant key untouched), (2) restores stored admin email on mount, (3) clears stored email when unchecked, (4) PIN never persists to ANY localStorage key |
+
+The "PIN never persists" tests in both files iterate every localStorage key and assert the test PIN string is absent — defense-in-depth against any future change that might accidentally write the PIN.
+
+### 109.4 — i18n entries (EN + FR)
+
+```js
+// en.js
+rememberMe: 'Remember my email',
+logoAlt: 'Company logo',
+
+// fr.js
+rememberMe: 'Mémoriser mon courriel',
+logoAlt: "Logo de l'entreprise",
+```
+
+Both keys nested under `login.*` so they're co-located with the rest of the auth UI strings. AdminLogin uses a hard-coded "Remember my email" string (admin portal is English-only per Section 90-D / Phase 5).
+
+### 109.5 — What ships, what doesn't (scope clarification)
+
+In scope (this PR):
+- Logo `<img>` swap on the tenant LoginPage with 3-layer fallback
+- Remember-me checkbox on both LoginPage and AdminLogin with separate localStorage keys
+- i18n EN + FR for the new UI strings
+- 14 new tests covering logo + remember-me semantics + PIN safety
+
+Out of scope (Phase 6-D-3 + later):
+- **Admin upload UI** for tenant logos — currently SUPER_ADMIN must edit `companies.logo_url` directly via SQL or future admin form. Phase 6-D-3 builds the upload form + DigitalOcean Spaces pipeline.
+- **Color shades** from `brand_color` — only `--color-primary` and `--color-sidebar-active` track the tenant brand today; shades stay Constrai green. CSS `color-mix()` (Section 99.5) is the planned approach but parked for after 6-D-3.
+- **PWA icons per-tenant** — installing the app on mobile still shows the Constrai icon. Logo on the LoginPage / dashboard is the visible win; PWA icon swap is a future polish (post-conference).
+- **Mobile app** — no changes. React Native build doesn't go through Vite or `window.__BRANDING__`. Phase 7 candidate (if/when mobile gets tenant theming at all).
+
+### 109.6 — Final state at end of Section 109
+
+| Item | Status |
+|---|---|
+| LoginPage tenant logo swap with 3-layer fallback | ✅ |
+| AdminLogin keeps Constrai default (no swap) | ✅ |
+| Remember-me checkbox on both LoginPage + AdminLogin | ✅ |
+| Separate localStorage keys (`mep_remember_email` / `mep_remember_admin_email`) | ✅ |
+| PIN never persisted (verified by 2 dedicated tests) | ✅ |
+| i18n entries EN + FR | ✅ |
+| 14 new tests (10 LoginPage + 4 AdminLogin) | ✅ |
+| Phase 6-D-3 — admin upload UI + DigitalOcean Spaces | ⏳ Next code task |
+| Color shades from brand_color | ⏳ After 6-D-3 |
+| PWA icons per-tenant | ⏳ Post-conference polish |
+
+### 109.7 — Section/total update
+
+- **Today (May 14-15 marathon final close): 78 sections.** (Section 109 NEW — Phase 6-D-2 shipped: tenant logo swap on LoginPage with 3-layer fallback, remember-me checkbox on both LoginPage and AdminLogin with separate localStorage keys for tenant vs admin email persistence, 14 new tests + i18n EN+FR. No backend or mobile changes. Phase 6-D-3 admin upload UI + DigitalOcean Spaces pipeline remains the only remaining branding-stack task before the September conference demo.)
+
 
 
