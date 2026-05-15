@@ -12548,7 +12548,7 @@ Confirmed working today on `.husky/pre-commit`. Save this as the standard escape
 
 ### 109.1 — Tenant logo swap
 
-The branding bootstrap from Section 99 (`mep-frontend/src/lib/branding.js`) already populates `window.__BRANDING__` before React mounts. It exposes `{ logo_url, brand_color, company_code }` for tenant subdomains and is `null` for generic / admin / reserved hosts. Phase 6-D-2 wires the LoginPage to consume `logo_url` directly.
+The branding bootstrap from Section 99 (`mep-frontend/src/lib/branding.js`) already populates `window.__BRANDING__` before React mounts. It exposes `{ company_name, brand_color, brand_logo_url }` for tenant subdomains and is `null` for generic / admin / reserved hosts. Phase 6-D-2 wires the LoginPage to consume `brand_logo_url` directly.
 
 Implementation (`mep-frontend/src/pages/auth/LoginPage.jsx`):
 
@@ -12557,7 +12557,7 @@ function readTenantLogoUrl() {
   if (typeof window === 'undefined') return null
   const b = window.__BRANDING__
   if (!b || typeof b !== 'object') return null
-  const url = typeof b.logo_url === 'string' ? b.logo_url.trim() : ''
+  const url = typeof b.brand_logo_url === 'string' ? b.brand_logo_url.trim() : ''
   return url || null
 }
 

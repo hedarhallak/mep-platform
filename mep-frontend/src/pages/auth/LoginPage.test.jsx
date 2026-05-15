@@ -116,13 +116,13 @@ describe('LoginPage — Phase 6-D-2 tenant logo swap', () => {
   })
 
   test('renders default Constrai icon when logo_url is absent from branding', () => {
-    window.__BRANDING__ = { brand_color: '#ff0000', company_code: 'acm' }
+    window.__BRANDING__ = { brand_color: '#ff0000', company_name: 'ACM' }
     renderLogin()
     expect(screen.queryByAltText('login.logoAlt')).not.toBeInTheDocument()
   })
 
-  test('renders tenant logo <img> when window.__BRANDING__.logo_url is set', () => {
-    window.__BRANDING__ = { logo_url: 'https://cdn.example.com/acm/logo.png' }
+  test('renders tenant logo <img> when window.__BRANDING__.brand_logo_url is set', () => {
+    window.__BRANDING__ = { brand_logo_url: 'https://cdn.example.com/acm/logo.png' }
     renderLogin()
     const img = screen.getByAltText('login.logoAlt')
     expect(img).toBeInTheDocument()
@@ -131,7 +131,7 @@ describe('LoginPage — Phase 6-D-2 tenant logo swap', () => {
   })
 
   test('falls back to default icon when tenant logo fires onError', () => {
-    window.__BRANDING__ = { logo_url: 'https://cdn.example.com/acm/logo.png' }
+    window.__BRANDING__ = { brand_logo_url: 'https://cdn.example.com/acm/logo.png' }
     renderLogin()
     const img = screen.getByAltText('login.logoAlt')
     // Simulate a load failure (404, CORS, network).
@@ -139,8 +139,8 @@ describe('LoginPage — Phase 6-D-2 tenant logo swap', () => {
     expect(screen.queryByAltText('login.logoAlt')).not.toBeInTheDocument()
   })
 
-  test('treats whitespace-only logo_url as absent', () => {
-    window.__BRANDING__ = { logo_url: '   ' }
+  test('treats whitespace-only brand_logo_url as absent', () => {
+    window.__BRANDING__ = { brand_logo_url: '   ' }
     renderLogin()
     expect(screen.queryByAltText('login.logoAlt')).not.toBeInTheDocument()
   })
