@@ -8,15 +8,19 @@ import LanguageSwitcher from '@/components/shared/LanguageSwitcher'
 // Phase 6-D-2 (Section 109, May 15, 2026): tenant logo + remember-me.
 // `window.__BRANDING__` is populated by `lib/branding.js` (Section 99)
 // before React mounts. On generic `app.constrai.ca` it's null; on a
-// tenant subdomain (e.g., `acm.constrai.ca`) it carries `logo_url` +
-// `brand_color` + `company_code`. We render the tenant logo when
+// tenant subdomain (e.g., `acm.constrai.ca`) it carries `company_name`
+// + `brand_color` + `brand_logo_url`. We render the tenant logo when
 // present and fall back to the Constrai default Building2 icon on
 // null / load error.
+//
+// Field name nuance: the column in `companies` is `brand_logo_url`,
+// the API returns `brand_logo_url`, and `branding.js` stashes the
+// value on `window.__BRANDING__.brand_logo_url`. Use that exact name.
 function readTenantLogoUrl() {
   if (typeof window === 'undefined') return null
   const b = window.__BRANDING__
   if (!b || typeof b !== 'object') return null
-  const url = typeof b.logo_url === 'string' ? b.logo_url.trim() : ''
+  const url = typeof b.brand_logo_url === 'string' ? b.brand_logo_url.trim() : ''
   return url || null
 }
 
