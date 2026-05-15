@@ -325,7 +325,7 @@ router.get('/pdf-data', can('purchase_orders.print'), async (req, res) => {
     const {
       rows: [company],
     } = await req.db.query(
-      `SELECT name, phone, admin_email, procurement_email, address, logo_url
+      `SELECT name, phone, admin_email, procurement_email, address
        FROM public.companies WHERE company_id = $1`,
       [companyId]
     );
@@ -735,7 +735,7 @@ router.post('/send-order', can('hub.materials_merge_send'), async (req, res) => 
     const {
       rows: [company],
     } = await req.db.query(
-      `SELECT name, phone, admin_email, procurement_email, address, logo_url
+      `SELECT name, phone, admin_email, procurement_email, address
        FROM public.companies WHERE company_id = $1`,
       [companyId]
     );

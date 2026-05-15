@@ -146,6 +146,46 @@ describe('LoginPage — Phase 6-D-2 tenant logo swap', () => {
   })
 })
 
+describe('LoginPage — Section 111 dynamic page title', () => {
+  // Section 111 (May 15, 2026): the page title (H1) reads
+  // window.__BRANDING__.company_name when present, falling back to
+  // the generic Constrai default ('common.appName' i18n key). The
+  // subtitle stays the universal product tagline ('common.appTagline').
+
+  afterEach(() => {
+    try {
+      delete window.__BRANDING__
+    } catch {
+      window.__BRANDING__ = undefined
+    }
+  })
+
+  test('renders Constrai default title when window.__BRANDING__ is null', () => {
+    window.__BRANDING__ = null
+    renderLogin()
+    // The mock t() returns the key — so the H1 should contain 'common.appName'.
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('common.appName')
+  })
+
+  test('renders Constrai default title when company_name is absent from branding', () => {
+    window.__BRANDING__ = { brand_color: '#ff0000', brand_logo_url: null }
+    renderLogin()
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('common.appName')
+  })
+
+  test('renders tenant company_name as the page title when present', () => {
+    window.__BRANDING__ = { company_name: 'MEP Construction' }
+    renderLogin()
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('MEP Construction')
+  })
+
+  test('treats whitespace-only company_name as absent (fall back to Constrai)', () => {
+    window.__BRANDING__ = { company_name: '   ' }
+    renderLogin()
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('common.appName')
+  })
+})
+
 describe('LoginPage — Phase 6-D-2 remember-me checkbox', () => {
   // Phase 6-D-2 (Section 109): remember-me persists ONLY the email
   // (never the PIN) in localStorage under `mep_remember_email`. On

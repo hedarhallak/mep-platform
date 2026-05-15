@@ -149,6 +149,29 @@ describe('applyBranding', () => {
     expect(styleEl.textContent).toContain('--color-sidebar-active: #ff5722');
   });
 
+  test('Section 111: injects full shade palette via color-mix() when brand_color present', () => {
+    // Section 111 (May 15, 2026) extended the override beyond --color-primary
+    // + --color-sidebar-active to include the four shade vars. Verify each
+    // expected CSS variable + its color-mix() declaration is present so a
+    // future change to the recipe is caught by this test.
+    applyBranding({ company_name: 'ACM', brand_color: '#ff5722' });
+    const css = document.getElementById('tenant-branding-vars').textContent;
+    expect(css).toContain('--color-primary: #ff5722');
+    expect(css).toContain(
+      '--color-primary-dark: color-mix(in srgb, #ff5722 75%, black)'
+    );
+    expect(css).toContain(
+      '--color-primary-light: color-mix(in srgb, #ff5722 65%, white)'
+    );
+    expect(css).toContain(
+      '--color-primary-bright: color-mix(in srgb, #ff5722 75%, white)'
+    );
+    expect(css).toContain(
+      '--color-primary-pale: color-mix(in srgb, #ff5722 18%, white)'
+    );
+    expect(css).toContain('--color-sidebar-active: #ff5722');
+  });
+
   test('does not inject <style> when brand_color is null (no customization)', () => {
     applyBranding({ company_name: 'ACM', brand_color: null });
     expect(document.getElementById('tenant-branding-vars')).toBe(null);

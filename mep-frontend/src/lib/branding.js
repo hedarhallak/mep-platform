@@ -112,15 +112,37 @@ export function applyBranding(branding) {
 
   const styleEl = document.createElement('style');
   styleEl.id = 'tenant-branding-vars';
-  // The two vars we override are the ones most visible on the login
-  // screen + main shell: --color-primary (buttons, links, focus rings)
-  // and --color-sidebar-active (left-nav active item, only relevant
-  // post-login but harmless to set early). The other shades (-dark,
-  // -light, -bright, -pale) keep their Constrai defaults for now — a
-  // future PR can compute shades from brand_color via HSL or color-mix.
+  // Section 111 (May 15, 2026): override the FULL shade palette, not
+  // just --color-primary. CSS color-mix() (Chrome 111+, Safari 16.4+,
+  // Firefox 113+) computes each shade from the tenant brand color so
+  // hover/active/pale states track the tenant brand instead of staying
+  // Constrai green.
+  //
+  // Mixing recipe (matches the visual feel of the Constrai defaults
+  // in mep-frontend/src/index.css):
+  //   --color-primary        = brand_color
+  //   --color-primary-dark   = mix(brand_color 75%, black)
+  //   --color-primary-light  = mix(brand_color 65%, white)
+  //   --color-primary-bright = mix(brand_color 75%, white)
+  //   --color-primary-pale   = mix(brand_color 18%, white)
+  //   --color-sidebar-active = brand_color
+  //
+  // The pale tint specifically tests 18% — anything below ~12% washes
+  // out to near-white; anything above ~25% loses the "pale tag" look.
+  // Browser fallback: color-mix() with no fallback IS the value sent
+  // to older browsers — they'll ignore the line and fall back to the
+  // @theme defaults in index.css. Graceful degradation = older browsers
+  // see Constrai green for that one shade, which is acceptable.
+  const c = safe.brand_color;
   styleEl.textContent =
-    `:root { --color-primary: ${safe.brand_color}; ` +
-    `--color-sidebar-active: ${safe.brand_color}; }`;
+    `:root {` +
+    `  --color-primary: ${c};` +
+    `  --color-primary-dark: color-mix(in srgb, ${c} 75%, black);` +
+    `  --color-primary-light: color-mix(in srgb, ${c} 65%, white);` +
+    `  --color-primary-bright: color-mix(in srgb, ${c} 75%, white);` +
+    `  --color-primary-pale: color-mix(in srgb, ${c} 18%, white);` +
+    `  --color-sidebar-active: ${c};` +
+    `}`;
   document.head.appendChild(styleEl);
 }
 
