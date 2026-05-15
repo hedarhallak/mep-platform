@@ -208,7 +208,7 @@ export default function AdminLogin() {
               htmlFor="admin-remember-me"
               className="text-xs text-slate-400 cursor-pointer select-none"
             >
-              Remember my email
+              Remember me
             </label>
           </div>
 

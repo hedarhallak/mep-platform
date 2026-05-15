@@ -198,7 +198,7 @@ describe('AdminLogin — submit', () => {
 
     await user.type(screen.getByLabelText(/email/i), 'sa@example.com')
     await user.type(screen.getByLabelText(/pin/i), 'sa-pin-1234')
-    await user.click(screen.getByLabelText(/remember my email/i))
+    await user.click(screen.getByLabelText(/^remember me$/i))
     await user.click(screen.getByRole('button', { name: /sign in/i }))
 
     await waitFor(() => {
@@ -213,7 +213,7 @@ describe('AdminLogin — submit', () => {
     renderLogin()
     const emailInput = screen.getByLabelText(/email/i)
     expect(emailInput.value).toBe('sa@example.com')
-    const checkbox = screen.getByLabelText(/remember my email/i)
+    const checkbox = screen.getByLabelText(/^remember me$/i)
     expect(checkbox.checked).toBe(true)
   })
 
@@ -231,7 +231,7 @@ describe('AdminLogin — submit', () => {
     const user = userEvent.setup()
     renderLogin()
     // useEffect restored 'old@example.com'; uncheck to forget.
-    await user.click(screen.getByLabelText(/remember my email/i))
+    await user.click(screen.getByLabelText(/^remember me$/i))
     await user.clear(screen.getByLabelText(/email/i))
     await user.type(screen.getByLabelText(/email/i), 'new@example.com')
     await user.type(screen.getByLabelText(/pin/i), 'sa-pin-1234')
@@ -254,7 +254,7 @@ describe('AdminLogin — submit', () => {
 
     const user = userEvent.setup()
     renderLogin()
-    await user.click(screen.getByLabelText(/remember my email/i))
+    await user.click(screen.getByLabelText(/^remember me$/i))
     await user.type(screen.getByLabelText(/email/i), 'sa@example.com')
     await user.type(screen.getByLabelText(/pin/i), 'TOP-SECRET-ADMIN-PIN')
     await user.click(screen.getByRole('button', { name: /sign in/i }))
