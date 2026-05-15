@@ -63,6 +63,13 @@ function shouldAttemptRefresh(res, url) {
   if (res.status !== 401) return false
   if (url.includes('/auth/refresh')) return false
   if (url.includes('/auth/login')) return false
+  // Section 106 (May 15, 2026): /auth/whoami is itself the "am I logged in?"
+  // query. A 401 from it IS the answer — "no". Don't trigger refresh-then-retry
+  // because if there's no valid session at all, the refresh will also 401, the
+  // catch path will redirect to /login, and the /login page's AuthProvider
+  // will re-fire /whoami → loop. Treat /whoami 401 as a terminal state; the
+  // caller (useAuth) handles it by setting user=null + loading=false.
+  if (url.includes('/auth/whoami')) return false
   return true
 }
 
@@ -143,7 +150,18 @@ function clearAuthAndRedirect() {
   }
   // window may not exist in test envs; guard.
   if (typeof window !== 'undefined' && window.location) {
-    window.location.href = '/login'
+    // Section 106 (May 15, 2026): belt-and-suspenders safety. If the
+    // user is ALREADY on a login screen, don't redirect to /login —
+    // that would reload the page, re-fire useAuth.useEffect → /whoami
+    // → 401 → refresh → 401 → clearAuthAndRedirect → infinite loop.
+    // The /whoami exclusion in shouldAttemptRefresh already prevents
+    // this for the initial mount, but other 401s (e.g., from a
+    // protected endpoint hit by a stale button) could still trip it.
+    const path = window.location.pathname || ''
+    const onLoginScreen = path === '/login' || path.startsWith('/login/') || path === '/admin/login' || path.startsWith('/admin/login/')
+    if (!onLoginScreen) {
+      window.location.href = '/login'
+    }
   }
 }
 
