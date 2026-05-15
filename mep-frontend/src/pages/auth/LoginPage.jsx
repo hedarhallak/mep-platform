@@ -1,9 +1,26 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '@/hooks/useAuth'
 import { Building2, Lock, Mail, Eye, EyeOff } from 'lucide-react'
 import LanguageSwitcher from '@/components/shared/LanguageSwitcher'
+
+// Phase 6-D-2 (Section 109, May 15, 2026): tenant logo + remember-me.
+// `window.__BRANDING__` is populated by `lib/branding.js` (Section 99)
+// before React mounts. On generic `app.constrai.ca` it's null; on a
+// tenant subdomain (e.g., `acm.constrai.ca`) it carries `logo_url` +
+// `brand_color` + `company_code`. We render the tenant logo when
+// present and fall back to the Constrai default Building2 icon on
+// null / load error.
+function readTenantLogoUrl() {
+  if (typeof window === 'undefined') return null
+  const b = window.__BRANDING__
+  if (!b || typeof b !== 'object') return null
+  const url = typeof b.logo_url === 'string' ? b.logo_url.trim() : ''
+  return url || null
+}
+
+const REMEMBER_EMAIL_KEY = 'mep_remember_email'
 
 export default function LoginPage() {
   const { t } = useTranslation()
@@ -14,11 +31,48 @@ export default function LoginPage() {
   const [showPin, setShowPin] = useState(false)
   const [error, setError]     = useState('')
   const [loading, setLoading] = useState(false)
+  // Phase 6-D-2: remember-me checkbox. Persists ONLY the email (not the
+  // PIN — never store the PIN in localStorage; that defeats the JWT-in-
+  // cookie security model). On mount we restore the saved email and
+  // pre-check the box.
+  const [rememberMe, setRememberMe] = useState(false)
+  // Phase 6-D-2: tenant logo state. The URL comes from window.__BRANDING__
+  // at module-init time; `logoFailed` flips to true if the <img> onError
+  // fires (404, network error, CORS, etc.) so we fall back to the default
+  // Constrai icon for the rest of the page lifetime.
+  const tenantLogoUrl = readTenantLogoUrl()
+  const [logoFailed, setLogoFailed] = useState(false)
+  const showTenantLogo = !!tenantLogoUrl && !logoFailed
+
+  useEffect(() => {
+    // Restore remembered email on first mount.
+    try {
+      const saved = localStorage.getItem(REMEMBER_EMAIL_KEY)
+      if (saved) {
+        setForm((f) => ({ ...f, email: saved }))
+        setRememberMe(true)
+      }
+    } catch {
+      /* localStorage may be unavailable — silent fallback */
+    }
+  }, [])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
     setLoading(true)
+    // Persist / clear the remembered email BEFORE the network call so
+    // the toggle reflects the user's most-recent choice even if login
+    // fails. We only store the email; the PIN never touches localStorage.
+    try {
+      if (rememberMe && form.email) {
+        localStorage.setItem(REMEMBER_EMAIL_KEY, form.email)
+      } else {
+        localStorage.removeItem(REMEMBER_EMAIL_KEY)
+      }
+    } catch {
+      /* localStorage may be unavailable — silent fallback */
+    }
     try {
       const result = await login(form.email, form.pin)
       // Phase 6-D-1b: Pattern B routing. If the backend returned a
@@ -52,9 +106,18 @@ export default function LoginPage() {
         </div>
 
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary mb-4">
-            <Building2 size={28} className="text-white" />
-          </div>
+          {showTenantLogo ? (
+            <img
+              src={tenantLogoUrl}
+              alt={t('login.logoAlt')}
+              onError={() => setLogoFailed(true)}
+              className="inline-block w-14 h-14 rounded-2xl object-contain bg-white p-1.5 mb-4 shadow-md"
+            />
+          ) : (
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary mb-4">
+              <Building2 size={28} className="text-white" />
+            </div>
+          )}
           <h1 className="text-2xl font-bold text-white">{t('common.appName')}</h1>
           <p className="text-slate-400 text-sm mt-1">{t('common.appTagline')}</p>
         </div>
@@ -104,6 +167,22 @@ export default function LoginPage() {
                   {showPin ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
               </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <input
+                type="checkbox"
+                id="remember-me"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary-light cursor-pointer"
+              />
+              <label
+                htmlFor="remember-me"
+                className="text-xs text-slate-600 cursor-pointer select-none"
+              >
+                {t('login.rememberMe')}
+              </label>
             </div>
 
             {error && (

@@ -231,7 +231,7 @@ After 6-D-2: Phase 6-D-3 (admin upload UI + DigitalOcean Spaces pipeline for log
 | Section 102 — nginx wildcard config + prod symlink + reload | ✅ **CLOSED (May 15, Section 107.5)** |
 | **Section 106 — `/whoami` 401-reload-loop hotfix** | ✅ **Deployed (May 15, PR #241)** |
 | **Section 107 — Pattern B verified end-to-end in production** | ✅ **VERIFIED (May 15, browser smoke `mep.constrai.ca/dashboard`)** |
-| **Phase 6-D-2 — Logo swap on LoginPage + remember-me checkbox** | ⏳ **Next code task** |
+| **Phase 6-D-2 — Logo swap on LoginPage + remember-me checkbox** | ✅ **DEPLOYED (May 15, Section 109)** |
 | Phase 6-D-3 — Admin upload UI + DigitalOcean Spaces pipeline | ⏳ After 6-D-2 |
 | **Demo polish + reference tenant setup** | ⏳ June 15 → July 31 (conference prep) |
 | **August dry-run + code freeze 2 weeks pre-conference** | ⏳ August 2026 |

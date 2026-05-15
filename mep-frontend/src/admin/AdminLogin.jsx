@@ -19,8 +19,13 @@
 // using the same key name means the shared lib/api.js works on both
 // portals without any portal-aware key picking).
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+
+// Phase 6-D-2 (Section 109, May 15, 2026): remember-me checkbox.
+// Separate localStorage key from the tenant LoginPage so SUPER_ADMIN
+// email doesn't appear in the tenant prefill (and vice versa).
+const REMEMBER_ADMIN_EMAIL_KEY = 'mep_remember_admin_email'
 
 export default function AdminLogin() {
   const navigate = useNavigate()
@@ -28,11 +33,37 @@ export default function AdminLogin() {
   const [pin, setPin] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
+  const [rememberMe, setRememberMe] = useState(false)
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(REMEMBER_ADMIN_EMAIL_KEY)
+      if (saved) {
+        setEmail(saved)
+        setRememberMe(true)
+      }
+    } catch {
+      /* localStorage may be unavailable */
+    }
+  }, [])
 
   async function handleSubmit(e) {
     e.preventDefault()
     setError(null)
     setSubmitting(true)
+
+    // Persist / clear the admin remember-me selection BEFORE the network
+    // call (so the toggle reflects the user's most-recent choice even if
+    // login fails). Email only — never persist the PIN.
+    try {
+      if (rememberMe && email) {
+        localStorage.setItem(REMEMBER_ADMIN_EMAIL_KEY, email.trim())
+      } else {
+        localStorage.removeItem(REMEMBER_ADMIN_EMAIL_KEY)
+      }
+    } catch {
+      /* localStorage may be unavailable */
+    }
 
     try {
       // Phase 6-D-1c (Section 102): identify as the web channel so the
@@ -160,6 +191,25 @@ export default function AdminLogin() {
               className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-slate-500 disabled:opacity-50"
               placeholder="••••••••"
             />
+          </div>
+
+          {/* Phase 6-D-2: remember-me. Admin-only key isolates from
+              tenant LoginPage so different emails don't cross-pollute. */}
+          <div className="flex items-center gap-2 pt-1">
+            <input
+              type="checkbox"
+              id="admin-remember-me"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              disabled={submitting}
+              className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-indigo-500 focus:ring-indigo-400 cursor-pointer disabled:opacity-50"
+            />
+            <label
+              htmlFor="admin-remember-me"
+              className="text-xs text-slate-400 cursor-pointer select-none"
+            >
+              Remember me
+            </label>
           </div>
 
           {error && (

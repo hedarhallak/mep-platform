@@ -86,6 +86,8 @@ export default {
     submitLoading: 'Connexion…',
     showPin: 'Afficher le NIP',
     hidePin: 'Masquer le NIP',
+    rememberMe: 'Se souvenir de moi',
+    logoAlt: "Logo de l'entreprise",
     errors: {
       INVALID_CREDENTIALS: 'Courriel ou NIP invalide',
       ACCOUNT_SUSPENDED: 'Compte suspendu',

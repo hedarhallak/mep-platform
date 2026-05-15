@@ -86,6 +86,8 @@ export default {
     submitLoading: 'Signing in…',
     showPin: 'Show PIN',
     hidePin: 'Hide PIN',
+    rememberMe: 'Remember me',
+    logoAlt: 'Company logo',
     errors: {
       INVALID_CREDENTIALS: 'Invalid email or PIN',
       ACCOUNT_SUSPENDED: 'Account suspended',
