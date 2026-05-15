@@ -1,13 +1,13 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 15, 2026 ~04:30 UTC — **Phase 6-D-1c shipped (PR #237) + Section 103 docs (PR #238) + Section 104 prod-incident retro (PR #239) + Section 105 strategic roadmap (PR #240).** Today's session also confirmed prod recovery via browser smoke (dashboard renders, login works, branding applied). **NEW strategic context: September 2026 conference is a hard deadline; Phase 9 Module/Plugin System committed for post-conference Q4 2026.**
+> Last updated: May 15, 2026 ~08:00 UTC — **🎉 Phase 6-D Pattern B verified end-to-end in production.** Today's PRs: #237 (Phase 6-D-1c drop body tokens), #238 (Section 103 docs), #239 (Section 104 prod-incident retro), #240 (Section 105 strategic roadmap), #241 (Section 106 loop hotfix), #242 (Section 106+107 docs — this commit). nginx wildcard activated on prod Droplet (Section 102 closeout). FOREMAN user successfully logged in on `app.constrai.ca` → cross-subdomain redirect to `mep.constrai.ca/dashboard` → cookie auth → branded tenant dashboard rendered. **The full multi-tenant Pattern B is now production-tested.**
 >
-> **⚠️ PROD INCIDENT TODAY — RECOVERED.** Production was down ~14 hours (May 14 13:41 UTC → May 15 03:50 UTC) due to a missing `cookie-parser` module after this morning's Section 100 deploy. `git pull` brought the new `require('cookie-parser')` but `npm install` was never run on the server, so PM2 spent ~14h in a `MODULE_NOT_FOUND` restart loop. Recovered via `npm ci --omit=dev --ignore-scripts` on the Droplet. Health endpoint now returns 200. End-to-end smoke (browser login) NOT YET verified — Hedar should test from incognito at session start. **New Pitfall #38 encoded — every deploy that adds an npm dep MUST run `npm ci` BEFORE `pm2 restart`.**
+> **3 new pitfalls captured today** — #40 (DNS negative caching survives the record fix), #41 (`git pull` does NOT rebuild the frontend), #42 (don't use `lib/auth_utils` for ad-hoc shell hashing). All encoded in Pitfalls list below.
 
 ---
 
-## 🚨 URGENT FIRST CHECK (next session — do this BEFORE any other work)
+## ✅ URGENT FIRST CHECK (next session — do this BEFORE any other work)
 
 1. **Verify prod is still healthy:**
    ```
@@ -17,9 +17,9 @@
    pm2 status mep-backend
    curl -sS -o /dev/null -w "Health: %{http_code}\n" https://app.constrai.ca/api/health
    ```
-   Expected: PM2 status `online`, memory >50mb (not crash-loop tiny), Health `200`. If anything off, see Section 104 in DECISIONS.md for the recovery runbook.
+   Expected: PM2 status `online`, memory >50mb, Health `200`. If anything off, see Section 104 in DECISIONS.md for the recovery runbook.
 
-2. **Browser smoke test:** Open `https://app.constrai.ca` in incognito → login with `hedar.hallak@gmail.com` / `hedar2026` → dashboard renders. This is the user-facing verification that was deferred at end of May 14 session.
+2. **Browser smoke test (Pattern B end-to-end):** Open `https://app.constrai.ca` in incognito → login with `seed.worker6@meptest.com` / `1234` (FOREMAN test user) → should cross-origin-hop to `mep.constrai.ca/dashboard`. If browser shows DNS NXDOMAIN for `mep.constrai.ca`, this is the local-resolver cache from Section 107.2 — wait an hour for it to expire OR set Chrome DoH to Google Public DNS as a workaround. Cloudflare wildcard is correctly configured; new tenants will not hit this.
 
 3. **Only after both above are green**, continue with the regular task list below.
 
@@ -78,6 +78,8 @@ When you receive the one-line command above:
 
 These three items hit tool-level friction during the May 14 marathon and are now stale by one session. They are independent and can ship as **one combined hygiene PR** or three tiny ones — Hedar's call.
 
+**Note (May 15 update):** Hygiene item #3 (nginx wildcard reload on prod) is now ✅ DONE — completed this session. Items #1 (duplicate Section 99) and #2 (.husky pre-commit guard) remain.
+
 ### 1. Clean up duplicate Section 99 in DECISIONS.md
 
 **Problem:** `DECISIONS.md` contains TWO `## Section 99` headers. The canonical one is at line ~11574 (`## Section 99 — Phase 6-C: Frontend Branding Bootstrap`). The duplicate is at line ~11767 (`## Section 99 — Phase 6-C Frontend Branding Bootstrap + Pitfall #36`) — a leftover from an aborted draft earlier in the May 14 session. The duplicate's "Pitfall #36" is about user-flow confirmation and conflicts with the canonical Pitfall #36 (verify-branch-before-commit) added later in Section 101.
@@ -125,7 +127,11 @@ npx lint-staged
 
 **Verification:** `cat .husky/pre-commit` shows the guard at the top. Then on a feature branch, `git commit -m "test" --allow-empty` succeeds. From `main`, the same command fails with the error message.
 
-### 3. Activate the nginx wildcard vhost on the production Droplet
+### 3. ✅ Activate the nginx wildcard vhost on the production Droplet — DONE (May 15)
+
+Completed this session at ~06:50 UTC. Symlinked + reloaded + smoke-verified. `acm.constrai.ca` (and any tenant subdomain) now serves the tenant Vite shell. Section 107.1 confirms Pattern B end-to-end works through this vhost.
+
+Original runbook preserved below for reference / disaster recovery.
 
 **Status:** PR #235 (Section 102) merged the config file into the repo at `infra/nginx/wildcard-constrai.conf`. **The file is NOT YET symlinked + reloaded on prod.** Until that happens, `acm.constrai.ca` (and any other tenant subdomain) reaches Cloudflare DNS but lands on nginx's default vhost — Phase 6-D's end-to-end Pattern B is gated on this.
 
@@ -213,9 +219,11 @@ After 6-D-2: Phase 6-D-3 (admin upload UI + DigitalOcean Spaces pipeline for log
 | Phase 6-C — Frontend bootstrap reads branding + applies CSS vars | ✅ Deployed (Section 99) |
 | Phase 6-D-1a — Backend cookie auth + login redirect_url | ✅ Deployed (Section 100) |
 | Phase 6-D-1b — Frontend cookie consumption + /whoami cookie fallback | ✅ Deployed (Section 101) |
-| Phase 6-D-1c — Drop tokens-in-body for web auth responses | ✅ **Deployed (May 14, Section 103)** |
-| Section 102 — nginx wildcard config file | ✅ Merged (PR #235). Prod nginx reload pending — hygiene item #3. |
-| **Phase 6-D-2 — Logo swap on LoginPage** | ⏳ **Next code task (after hygiene batch)** |
+| Phase 6-D-1c — Drop tokens-in-body for web auth responses | ✅ Deployed (May 14, Section 103) |
+| Section 102 — nginx wildcard config + prod symlink + reload | ✅ **CLOSED (May 15, Section 107.5)** |
+| **Section 106 — `/whoami` 401-reload-loop hotfix** | ✅ **Deployed (May 15, PR #241)** |
+| **Section 107 — Pattern B verified end-to-end in production** | ✅ **VERIFIED (May 15, browser smoke `mep.constrai.ca/dashboard`)** |
+| **Phase 6-D-2 — Logo swap on LoginPage + remember-me checkbox** | ⏳ **Next code task** |
 | Phase 6-D-3 — Admin upload UI + DigitalOcean Spaces pipeline | ⏳ After 6-D-2 |
 | **Demo polish + reference tenant setup** | ⏳ June 15 → July 31 (conference prep) |
 | **August dry-run + code freeze 2 weeks pre-conference** | ⏳ August 2026 |
@@ -319,18 +327,34 @@ Cost inventory + DigitalOcean Spaces + Apple Developer keys: see `RECOVERY.md`.
 35. **Provider migration completeness audit before env-var decommission** (Section 98.6) — grep direct SDK references AND legacy env-var references before declaring scope.
 36. **Verify current branch before commit/push during parallel work** (Section 101.3) — `git branch --show-current` before EVERY commit. Mitigation hook is hygiene item #2 above.
 37. **Compare pg `bigint` columns via `String()` on both sides in assertions** (Section 103.2). pg returns `bigint` columns as strings; helpers like `seedUser` may coerce to `Number`. The asymmetry passes silently in shape tests, then surfaces the first time a new test asserts an `id`. Universal form: `expect(String(res.body.<x>)).toBe(String(seed.<id>))`.
-38. **Every deploy that touches `package.json` MUST run `npm ci` on the server BEFORE `pm2 restart`** (Section 104, May 14 incident). On May 14, PR #231 added `cookie-parser` as a dep. Someone (or the deploy script) ran `git pull` + `pm2 restart` without `npm install` → `MODULE_NOT_FOUND` → PM2 restart loop → **~14 hours of production downtime** before discovery via Sentry alert. The same crash later corrupted `node_modules/@sentry/node` (partial state from interrupted installs), making the recovery require a full `npm ci`, not just an `npm install <newdep>`. **Mandatory deploy block — paste verbatim, never break it up:**
+38. **Every deploy that touches `package.json` MUST run `npm ci` on the server BEFORE `pm2 restart`** (Section 104, May 14 incident; updated Section 107.3 with frontend rebuild). On May 14, PR #231 added `cookie-parser` as a dep. Someone (or the deploy script) ran `git pull` + `pm2 restart` without `npm install` → `MODULE_NOT_FOUND` → PM2 restart loop → **~14 hours of production downtime** before discovery via Sentry alert. The same crash later corrupted `node_modules/@sentry/node` (partial state from interrupted installs), making the recovery require a full `npm ci`, not just an `npm install <newdep>`. **Mandatory FULL deploy block (backend AND frontend) — paste verbatim:**
     ```bash
     cd /var/www/mep
     git pull origin main
+    # Backend deps + restart
     npm ci --omit=dev --ignore-scripts
     pm2 restart mep-backend
     sleep 3
+    # Frontend rebuild (Pitfall #41 — git pull alone does NOT rebuild the Vite bundle)
+    cd mep-frontend
+    npm ci --ignore-scripts
+    npm run build 2>&1 | tail -10
+    cd /var/www/mep
+    # Verify
     pm2 status mep-backend
     curl -sS -o /dev/null -w "Health: %{http_code}\n" https://app.constrai.ca/api/health
+    grep -oE 'main-[A-Za-z0-9_-]+\.js' /var/www/mep/mep-frontend/dist/index.html | head -1
     pm2 logs mep-backend --lines 15 --nostream
     ```
     `--ignore-scripts` is needed because of Pitfall #6 (husky postinstall fails on prod). Sub-Pitfall: PM2's `↺ N` restart counter does NOT reset on a manual `pm2 restart`; a high `↺` value is historical and not a sign of a current loop. Use `cpu > 0%` + `memory > 50mb` + `Health: 200` as the real "alive" signal.
+39. **Every `/api.js` auth-related state machine needs a "we're already there" guard** (Section 106.4, May 15 incident). `clearAuthAndRedirect()` set `window.location.href = '/login'` unconditionally. When the loop trigger happened on `/login` itself (unauthenticated /whoami → refresh chain → redirect → reload), it caused an infinite-reload self-DDoS. **Universal form:** before any `window.location.href = TARGET`, check `if (window.location.pathname !== TARGET) { ... }`. Apply this to every redirect-on-error path. Section 106 hotfix landed both this guard AND a `/auth/whoami` exclusion in `shouldAttemptRefresh` (a 401 from /whoami IS the answer "no", not a refreshable state).
+40. **DNS negative caching survives the record fix and is per-resolver** (Section 107.2, May 15). Pre-querying a subdomain BEFORE adding the DNS record creates a cached NXDOMAIN at every resolver in the path. Once the record exists, resolvers that previously cached NXDOMAIN keep serving it until the SOA negative-cache TTL expires (typically 1 hour for Cloudflare). Mitigation: (a) don't pre-query a subdomain before its DNS record exists; (b) for a stuck cache, use a different resolver (Google `8.8.8.8`, Quad9 `9.9.9.9`, or Chrome DoH set to Google Public DNS) OR wait the TTL. End customers won't hit this because they've never queried their subdomain before. Verification command: `nslookup <subdomain>.constrai.ca 8.8.8.8` — if Google has the IP, the record is fine and you're just waiting on local caches.
+41. **`git pull` does NOT rebuild the Vite frontend** (Section 107.3, May 15). `mep-frontend/dist/` is a STATIC artifact served by nginx; source changes in `mep-frontend/src/` don't propagate until `npm run build` runs and rewrites the bundle. Frontend was 2 days stale on prod for the entire morning of May 15 — Phase 6-D-1b's `redirect_url` handling was in the source code but not in the served JS, so Pattern B failed silently in the browser even though backend returned the right response. **Fix is encoded in the Pitfall #38 deploy block above:** always include `cd mep-frontend && npm ci --ignore-scripts && npm run build` after every `git pull` that touches frontend source. Verification: `grep -oE 'main-[A-Za-z0-9_-]+\.js' dist/index.html` should change hash after each rebuild.
+42. **Don't use `lib/auth_utils` for ad-hoc shell hashing** (Section 107.4, May 15). `lib/auth_utils.js` has init-time guards (JWT_SECRET length check) that fail when called outside the running app process (e.g., from `node -e ...` without `.env` loaded). Bash captured the empty stderr into a variable, then UPDATEd a `pin_hash` column with empty string, breaking login for that user. **Use `bcrypt` directly** for one-off hashing in shell + guard with `[ -n "$HASH" ]` before any UPDATE:
+    ```bash
+    NEW_PIN_HASH=$(node -e "console.log(require('bcrypt').hashSync('THE_PIN', 10))")
+    [ -n "$NEW_PIN_HASH" ] && sudo -u postgres psql mepdb -c "UPDATE app_users SET pin_hash = '$NEW_PIN_HASH', must_change_pin = false WHERE email = '<EMAIL>';"
+    ```
 
 ---
 

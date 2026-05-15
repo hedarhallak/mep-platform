@@ -12322,4 +12322,230 @@ Hedar also raised the idea of a "Remember me" checkbox under the email field tha
 
 - **Today: 74 sections.** (Section 105 NEW — strategic roadmap commit. Two decisions captured: September 2026 conference as a hard deadline (~4 months runway) and Phase 9 Module/Plugin System as the post-conference architectural project. Design pre-requisites listed to give July's design session a starting point. Remember-me checkbox bundled into Phase 6-D-2's PR window.)
 
+---
+
+## Section 106 — Production hotfix: infinite reload loop when /whoami 401s on a login screen (May 15, 2026 ~07:30 UTC)
+
+> Production-affecting bug discovered during Pattern B end-to-end testing: every page load of `/login` from an unauthenticated state triggered a refresh-then-retry chain that ended in `window.location.href = '/login'`, which re-fired the same chain → ~3000 requests in 2.5 minutes per browser tab, login form unfillable, Sentry quota burning. Root cause was structural: Phase 6-D-1b removed the localStorage short-circuit from `useAuth.useEffect`, which made `/whoami` fire unconditionally on every mount. Combined with `api.js`'s default behavior of refresh-then-redirect on 401, the unauthenticated state became a tight loop. Hotfix shipped as PR #241 in ~10 minutes from detection to merge.
+
+### 106.1 — Loop mechanics
+
+The pre-fix sequence on every fresh `/login` page load:
+
+```
+[Browser arrives at /login]
+        │
+        │ ① AuthProvider mounts, useEffect fires
+        ▼
+[api.get('/auth/whoami')]
+        │
+        │ ② No session → backend returns 401
+        ▼
+[api.js: shouldAttemptRefresh(401, '/auth/whoami') → true]
+        │
+        │ ③ refreshTokenOnce() fires
+        ▼
+[POST /auth/refresh]
+        │
+        │ ④ No valid refresh cookie either → backend returns 401
+        ▼
+[api.js: catch (refreshErr) → clearAuthAndRedirect()]
+        │
+        │ ⑤ window.location.href = '/login' → FULL PAGE RELOAD
+        ▼
+[Browser arrives at /login]  ──► back to ①  ── INFINITE LOOP
+```
+
+Why this didn't bite before Phase 6-D-1b: the old `useAuth.useEffect` had a short-circuit:
+
+```js
+const token = localStorage.getItem('mep_token')
+if (token) {
+  api.get('/auth/whoami')...
+} else {
+  setLoading(false)
+}
+```
+
+No token in localStorage = skip /whoami entirely. The loop never fired because no API call was made.
+
+Phase 6-D-1b removed that short-circuit (Section 101) because cookie auth means localStorage being empty doesn't mean unauthenticated — the cookie might still carry valid auth (e.g., right after a cross-subdomain redirect where localStorage is per-origin but Domain=.constrai.ca cookies travel). So /whoami should always fire. That decision was correct architecturally; the loop is the failure mode of the api.js refresh-and-redirect default colliding with a now-always-fired /whoami.
+
+### 106.2 — The fix (PR #241, two layers in `mep-frontend/src/lib/api.js`)
+
+**Layer 1 — `shouldAttemptRefresh` excludes `/auth/whoami`:**
+
+```js
+function shouldAttemptRefresh(res, url) {
+  if (res.status !== 401) return false
+  if (url.includes('/auth/refresh')) return false
+  if (url.includes('/auth/login')) return false
+  if (url.includes('/auth/whoami')) return false  // ← NEW
+  return true
+}
+```
+
+Rationale: `/whoami` is itself the "am I logged in?" query. A 401 from it IS the answer — "no". There's no point triggering a refresh-then-retry because if there's no valid session at all, the refresh will also 401. The caller (`useAuth.useEffect`) handles the 401 by setting `user = null` + `loading = false`, which renders the login form. Clean terminal state, no further requests.
+
+**Layer 2 — `clearAuthAndRedirect` no-ops when already on a login screen:**
+
+```js
+function clearAuthAndRedirect() {
+  try {
+    localStorage.removeItem('mep_token')
+    localStorage.removeItem('mep_refresh_token')
+  } catch {}
+  if (typeof window !== 'undefined' && window.location) {
+    const path = window.location.pathname || ''
+    const onLoginScreen =
+      path === '/login' || path.startsWith('/login/') ||
+      path === '/admin/login' || path.startsWith('/admin/login/')
+    if (!onLoginScreen) {
+      window.location.href = '/login'
+    }
+  }
+}
+```
+
+Rationale: Layer 1 stops the most common entry to the loop (/whoami → refresh chain). Layer 2 is belt-and-suspenders for any FUTURE 401 path that doesn't go through /whoami (e.g., a stale button on the login page somehow firing a protected API call). If we're already at /login, don't reload — just clear storage and let the caller handle the 401.
+
+### 106.3 — Production impact
+
+- **Detection**: discovered when Hedar opened `/login` in incognito with DevTools open. Network tab showed 3228 requests in 2.5 minutes. Login form unfillable (page kept reloading mid-keystroke).
+- **Severity**: high. Self-inflicted DDoS on prod backend. Sentry quota burning (every 401 from `/auth/login` and `/auth/refresh` reported as an event).
+- **Time to fix**: ~10 minutes from chat observation to merged PR. ~3 minutes to identify root cause from the symptoms (loop pattern + the recent /whoami-always-fires change). ~4 minutes to write the 2-layer fix + commit + push. ~3 minutes for CI + auto-merge.
+- **User impact**: minimal in practice — only Hedar was hitting prod at this hour. But a real user would have been locked out of login entirely.
+
+### 106.4 — Pitfall #39 (NEW) — every /api.js auth-related state machine needs a "we're already there" guard
+
+The loop existed because `clearAuthAndRedirect`'s "redirect to /login" assumed the caller was NOT at /login. Any state machine that involves `window.location.href = X` MUST guard against being already at X — otherwise reloads cascade.
+
+**Universal form:** any code path that issues `window.location.href = '/login'` (or any path) must wrap:
+
+```js
+if (window.location.pathname !== TARGET_PATH) {
+  window.location.href = TARGET_PATH
+}
+```
+
+This is a one-line discipline. Apply it everywhere we redirect-on-error.
+
+### 106.5 — Final state at end of Section 106
+
+| Item | Status |
+|---|---|
+| PR #241 (loop hotfix) | ✅ Merged (`03aaa92` on main, CI green) |
+| Frontend rebuild on prod after merge | ✅ New main hash `main-uUtvqhA6.js` |
+| Loop reproduced after fix | ✅ Cannot reproduce — login form fillable, no reload loop |
+| Pitfall #39 added | ✅ |
+
+---
+
+## Section 107 — Pattern B verified end-to-end + DNS negative-caching nuance (May 15, 2026 ~07:30–08:00 UTC)
+
+> Right after the Section 106 hotfix landed, the full Phase 6-D Pattern B flow was verified end-to-end in a production browser session. A FOREMAN user logged in on `https://app.constrai.ca/login` with `seed.worker6@meptest.com` / `1234`, the backend returned `redirect_url: "https://mep.constrai.ca/dashboard"`, the frontend cross-origin-hopped via `window.location.assign`, the `Domain=.constrai.ca` HttpOnly access cookie travelled, the nginx wildcard vhost served the tenant Vite shell, `/api/auth/whoami` authenticated via the cookie, and the dashboard rendered on the tenant subdomain. Every architectural component shipped over Sections 85, 91, 97–106 was confirmed working together. The only friction left is local DNS negative caching for `mep.constrai.ca` on Hedar's specific resolver path — a one-time issue that won't affect new tenants.
+
+### 107.1 — End-to-end smoke that PASSED
+
+| Step | Component | Verified |
+|---|---|---|
+| 1 | Browser fetches `app.constrai.ca/login` | nginx existing vhost (Section 90-B) → Vite shell, login form ✅ |
+| 2 | User submits email + PIN | Frontend `useAuth.login()` → POST `/api/auth/login` with `X-Auth-Channel: cookie` (Section 102 / Phase 6-D-1c) ✅ |
+| 3 | Backend identifies tenant via `company_code`, computes `redirect_url` | Section 100 / Phase 6-D-1a logic. Body returns `redirect_url: https://<code>.constrai.ca/dashboard`, no `token` field (cookie-only response) ✅ |
+| 4 | Backend sets `Set-Cookie: access_token=...; Domain=.constrai.ca; HttpOnly; Secure; SameSite=Lax` | `lib/cookie_options.js` (Section 100) ✅ |
+| 5 | Frontend LoginPage detects `redirect_url`, calls `window.location.assign` | PR #233 / Section 101 ✅ |
+| 6 | Browser DNS-resolves `mep.constrai.ca` | Cloudflare wildcard A record `* → 143.110.218.84 Proxied`. Resolves via Google DoH (or any non-NXDOMAIN-cached resolver). ✅ |
+| 7 | Cloudflare proxy forwards to origin Droplet | Section 1 (Phase 1 Cloudflare setup) + nginx wildcard server_name matches ✅ |
+| 8 | nginx wildcard vhost serves tenant Vite shell from `/var/www/mep/mep-frontend/dist` | Section 102 wildcard config + symlinked + reloaded today ✅ |
+| 9 | Vite shell bootstraps, fires `branding.js` → GET `/api/companies/mep/branding` | Section 99 (Phase 6-C) ✅ |
+| 10 | Frontend `useAuth.useEffect` calls GET `/api/auth/whoami` | Section 101 (Phase 6-D-1b) — no localStorage short-circuit, always queries ✅ |
+| 11 | Browser sends `access_token` cookie with the cross-subdomain request | `Domain=.constrai.ca` cookie scoping ✅ |
+| 12 | Backend `/whoami` reads cookie via `extractToken(req)` | Section 101 (Phase 6-D-1b backend cookie fallback) ✅ |
+| 13 | `/whoami` returns user payload | Section 87 / 88 / 90-G (RLS strict + authPool) ✅ |
+| 14 | React Router renders dashboard on `mep.constrai.ca` with logged-in user | ✅ Screenshot confirms FOREMAN dashboard live at `https://mep.constrai.ca/dashboard` |
+
+Net effect: every line in the Phase 6-D-1 trilogy plus Section 102 plus Section 106 was needed, and every one of them works together in production.
+
+### 107.2 — DNS negative caching nuance (Pitfall #40)
+
+After adding the Cloudflare wildcard A record this session, `mep.constrai.ca` returned NXDOMAIN from:
+- Videotron's resolver (`dns2.videotron.ca` — Hedar's ISP)
+- Cloudflare's public resolver `1.1.1.1`
+
+…but resolved correctly from:
+- Google's `8.8.8.8`
+- Quad9's `9.9.9.9`
+
+The likely cause: Hedar made many `nslookup mep.constrai.ca` queries earlier in the session **before** the wildcard record was added. Each query returned NXDOMAIN; each NXDOMAIN was cached (per-resolver, typically at the SOA negative-cache TTL which defaults to ~3600s). After adding the record, the resolvers that had cached the NXDOMAIN kept serving the stale answer until the TTL expired. Resolvers that had NOT previously queried the name (Google, Quad9, and the actual Cloudflare authoritative servers) returned the correct answer immediately.
+
+**Pitfall #40 (NEW) — DNS negative caching is per-resolver and survives the record fix.** Pre-emptive queries against a non-existent subdomain create cached NXDOMAIN responses at every resolver in the path. When the record is later created, the resolvers that cached NXDOMAIN keep serving it for the negative-cache TTL. Mitigation:
+- **Don't pre-query a subdomain until the DNS record exists.** Adding the record then querying is fine; the cache gets the GOOD answer first.
+- **For an existing stuck cache:** wait the TTL (1 hour default), OR use a different resolver, OR use Chrome's DNS-over-HTTPS pointed at a clean resolver (Settings → Privacy and security → Security → Use secure DNS → With → Google Public DNS). The DoH workaround was used today to confirm Pattern B works.
+- **For end customers**: this is a non-issue. They've never queried their subdomain before, so no NXDOMAIN is cached. The first query gets the correct answer.
+
+### 107.3 — Frontend rebuild gap surfaced (Pitfall #41)
+
+Production was running with `dist/` last built on **May 13** while the source code had been updated through **May 14** (Phase 6-D-1b + 1c). Result: the deployed JS didn't include the `redirect_url` handling, so even though the backend returned `redirect_url`, the frontend ignored it and went to `/dashboard` on the WRONG host.
+
+The deploy block in Pitfall #38 covers `npm ci --omit=dev && pm2 restart` — for the **backend**. It does NOT cover the **frontend** Vite build, which is a separate `cd mep-frontend && npm ci && npm run build` step.
+
+**Pitfall #41 (NEW) — `git pull` does NOT rebuild the frontend.** Vite outputs to `mep-frontend/dist/` which is served STATICALLY by nginx. Source changes don't propagate until `npm run build` runs. The full prod deploy sequence after a PR merge:
+
+```bash
+cd /var/www/mep
+git pull origin main
+# Backend deps + restart
+npm ci --omit=dev --ignore-scripts
+pm2 restart mep-backend
+# Frontend rebuild (if any mep-frontend/ files changed)
+cd mep-frontend
+npm ci --ignore-scripts
+npm run build
+# Verify
+cd /var/www/mep
+curl -sS -o /dev/null -w "Backend health: %{http_code}\n" https://app.constrai.ca/api/health
+grep -oE 'main-[A-Za-z0-9_-]+\.js' /var/www/mep/mep-frontend/dist/index.html | head -1  # confirm new bundle hash
+```
+
+This MUST be encoded in the HANDOFF deploy block. Skipping the rebuild was the actual root cause of "Pattern B doesn't work in the browser" today — backend was fine, but the frontend running in the browser was 2 days stale.
+
+### 107.4 — Seed user PIN reset for testing — minor cleanup note (Pitfall #42)
+
+To test Pattern B, the `seed.worker6@meptest.com` user's `pin_hash` was reset to bcrypt of `'1234'` via:
+
+```bash
+NEW_PIN_HASH=$(node -e "console.log(require('bcrypt').hashSync('1234', 10))")
+sudo -u postgres psql mepdb -c "UPDATE app_users SET pin_hash = '$NEW_PIN_HASH', must_change_pin = false WHERE email = 'seed.worker6@meptest.com';"
+```
+
+Initial attempt used `lib/auth_utils` instead of `bcrypt` directly, which failed with "JWT_SECRET is missing" because `node -e` doesn't auto-load `.env`. The bash variable captured the empty stderr, and the UPDATE then wrote an empty string to `pin_hash`, breaking login for that user.
+
+**Pitfall #42 (NEW) — Don't go through `lib/auth_utils` for ad-hoc hash generation outside the app process.** It has init-time guards (JWT_SECRET length check, etc.) that fail when run outside a properly-loaded env. For ad-hoc hashing in shell, use `bcrypt` directly:
+
+```bash
+node -e "console.log(require('bcrypt').hashSync('THE_PIN', 10))"
+```
+
+Pair with `[ -n "$HASH" ]` check before any UPDATE so an empty result doesn't silently corrupt the row.
+
+The fix in this session: re-ran with direct bcrypt + the guard, login succeeded. `seed.worker6@meptest.com / 1234` works as a known test credential going forward (until the next seed run resets it).
+
+### 107.5 — Final state at end of Section 107
+
+| Item | Status |
+|---|---|
+| Pattern B verified end-to-end in production | ✅ Confirmed by browser smoke (FOREMAN dashboard at `mep.constrai.ca/dashboard`) |
+| All Phase 6-D-1 components integrated and working | ✅ |
+| Cloudflare wildcard A record active | ✅ Resolves on Google + Quad9 + Cloudflare authoritative |
+| Local cache on Videotron + 1.1.1.1 still serving stale NXDOMAIN for `mep` | ⏳ Self-clears in 1 hour (negative-cache TTL) — affects only Hedar's specific resolver path |
+| Pitfall #40 (DNS negative caching) | ✅ Documented |
+| Pitfall #41 (frontend rebuild gap in deploy block) | ✅ Documented; HANDOFF deploy block needs update |
+| Pitfall #42 (auth_utils outside app process) | ✅ Documented |
+| Section 102 hygiene item — nginx wildcard reload | ✅ CLOSED (done this session at ~06:50 UTC) |
+| Section 102 hygiene items — duplicate Section 99 + .husky guard | ⏳ Still pending for a future session |
+
+### 107.6 — Section/total update
+
+- **Today (May 14-15 spanning midnight UTC): 76 sections.** (Section 106 NEW — production hotfix for the unauthenticated /whoami refresh-redirect-reload loop. Section 107 NEW — Pattern B verified end-to-end + 3 new pitfalls (#40 DNS negative caching, #41 frontend rebuild not part of git pull, #42 don't use lib/auth_utils in ad-hoc node -e). Phase 6-D-1 trilogy and Section 102 nginx wildcard are now production-tested as a single integrated flow. Phase 6-D-2 logo swap and 6-D-3 admin upload UI remain.)
+
 
