@@ -12749,6 +12749,105 @@ Three concrete items added to the backlog for a future hygiene session:
 
 - **Today (May 14-15 absolute close): 79 sections.** (Section 110 NEW — Phase 6-D-2 verified end-to-end in production via browser smoke on `mep.constrai.ca/login`. Verification surfaced two small bugs across PRs #244-#246 — label substring "email" colliding with test regex, and a DB column duplication confusion between legacy `logo_url` and canonical `brand_logo_url`. New Pitfall #44 captures the 3-point chain check before reading any DB-backed API field. Three backlog items added: drop legacy column, dynamic title, color shades. Phase 6-D-3 remains the only major remaining branding-stack task.)
 
+---
+
+## Section 111 — Polish batch: drop legacy logo_url + dynamic LoginPage title + tenant color shades (May 15, 2026 ~12:00–13:00 UTC)
+
+> The three backlog items surfaced in Section 110.3 closed in one PR (#TBD). Migration 016 drops the long-unused `companies.logo_url` column (source of the May 15 confusion that cost 3 PRs to recover from). LoginPage now reads `window.__BRANDING__.company_name` as the H1 title with the Constrai default as fallback. `branding.js applyBranding()` extends the CSS variable override from just `--color-primary` + `--color-sidebar-active` to the FULL 6-variable shade palette via CSS `color-mix()` — so hover/active/pale states now track the tenant brand instead of staying Constrai green. Total: 6 files changed (1 backend route + 2 migration files + 1 LoginPage + 1 branding lib + 2 test files), ~120 lines of diff, 5 new tests.
+
+### 111.1 — Item 1: drop the legacy `companies.logo_url` column
+
+Migration `016_drop_legacy_logo_url.sql` + rollback. The column was added pre-Section-85 and never read by any code path. The only references found by `grep -rn "logo_url[^_]"` were two SELECT statements in `routes/material_requests.js`:
+
+```js
+`SELECT name, phone, admin_email, procurement_email, address, logo_url
+ FROM public.companies WHERE company_id = $1`
+```
+
+Both pulled the column into a local `company` object but never accessed `company.logo_url` — dead-but-fetched data. This PR removes both `, logo_url` from the SELECT lists so the column is unreferenced before the migration drops it.
+
+Why drop instead of keep: the duplicate column caused a real production-test confusion on May 15 (Pitfall #44). An operator running `UPDATE companies SET logo_url=...` got `UPDATE 1` and assumed success, but the API kept returning `brand_logo_url: null`. Removing the legacy column eliminates that class of mistake.
+
+Migration safety: it's destructive (`DROP COLUMN`), but rollback exists, and the column was empty for all but one row (the May 15 placeholder on the `mep` company). Backup recommended before deploy:
+
+```bash
+pg_dump -U mepuser -h localhost -d mepdb -t public.companies \
+  -f /tmp/companies_pre_016_$(date +%Y%m%d).sql
+```
+
+### 111.2 — Item 2: dynamic LoginPage title from `company_name`
+
+Before: `<h1>{t('common.appName')}</h1>` — always "Constrai" regardless of tenant.
+
+After: `<h1>{pageTitle}</h1>` where `pageTitle = readTenantCompanyName() || t('common.appName')`.
+
+`readTenantCompanyName()` reads `window.__BRANDING__.company_name` with the same whitespace/null safety as `readTenantLogoUrl()` (Section 109.1 pattern).
+
+Subtitle stays as `{t('common.appTagline')}` ("Construction ERP") — that's the product description, not a tenant attribute. Tenants are construction companies (so the product tagline applies universally) and changing the subtitle per-tenant would dilute the Constrai product identity in a way the logo + title already adequately handle.
+
+Result: on `mep.constrai.ca/login`, the H1 now reads "MEP Construction" instead of "Constrai". On `app.constrai.ca/login` (generic entry, no tenant), the H1 stays "Constrai".
+
+### 111.3 — Item 3: tenant color shades via CSS `color-mix()`
+
+Before: `applyBranding()` injected just two CSS variables:
+
+```css
+:root {
+  --color-primary: #ff5722;
+  --color-sidebar-active: #ff5722;
+}
+```
+
+The other shade variables (`-dark`, `-light`, `-bright`, `-pale`) kept their Constrai-green `@theme` defaults from `index.css`. Hover/active states + the pale tag chips therefore showed Constrai green even on tenant subdomains — a visible inconsistency.
+
+After: full 6-variable override via CSS `color-mix()`:
+
+```css
+:root {
+  --color-primary: #ff5722;
+  --color-primary-dark: color-mix(in srgb, #ff5722 75%, black);
+  --color-primary-light: color-mix(in srgb, #ff5722 65%, white);
+  --color-primary-bright: color-mix(in srgb, #ff5722 75%, white);
+  --color-primary-pale: color-mix(in srgb, #ff5722 18%, white);
+  --color-sidebar-active: #ff5722;
+}
+```
+
+The mixing recipe was tuned to match the visual feel of the Constrai green palette in `index.css`. Specifically the pale tint: 18% is the sweet spot — anything below ~12% washes out, anything above ~25% loses the "pale tag" look.
+
+**Browser support:** CSS `color-mix()` is in Chrome 111+, Safari 16.4+, Firefox 113+ (April–May 2023). All current evergreen browsers. Older browsers see the line as invalid CSS and ignore it; the `@theme` defaults in `index.css` then apply, so old-browser users see Constrai green for that one shade — graceful degradation, not breakage.
+
+### 111.4 — Test coverage extensions
+
+`mep-frontend/src/pages/auth/LoginPage.test.jsx` — 4 new tests for dynamic title:
+
+| Case | Expected H1 |
+|---|---|
+| `window.__BRANDING__` is null | `common.appName` (i18n key, Constrai default) |
+| `__BRANDING__` present but `company_name` absent | `common.appName` |
+| `__BRANDING__.company_name = 'MEP Construction'` | `'MEP Construction'` |
+| `__BRANDING__.company_name = '   '` (whitespace-only) | `common.appName` (treated as absent) |
+
+`mep-frontend/src/lib/branding.test.js` — 1 new test for the shade palette, asserting all 6 CSS variables + the exact `color-mix()` declarations are present in the injected `<style>` content. The test pins the recipe; a future change to the mixing percentages will surface here and prompt an intentional review.
+
+### 111.5 — Final state at end of Section 111
+
+| Item | Status |
+|---|---|
+| Migration 016 + rollback for dropping `companies.logo_url` | ✅ |
+| `routes/material_requests.js` SELECT lines no longer reference `logo_url` | ✅ |
+| LoginPage `<h1>` reads `company_name` with Constrai fallback | ✅ |
+| `branding.js applyBranding()` extends to full shade palette via color-mix() | ✅ |
+| 5 new tests (4 title + 1 shade palette) | ✅ |
+| All 3 Section 110.3 backlog items closed | ✅ |
+| Migration 016 deploy on prod | ⏳ Run after PR merges (with backup) |
+| Phase 6-D-3 — Admin upload UI + DigitalOcean Spaces | ⏳ Next major code task |
+
+### 111.6 — Section/total update
+
+- **Today (May 14-15 marathon — definitely the last close this time): 80 sections.** (Section 111 NEW — three Section 110.3 backlog items closed in one PR: legacy `logo_url` column dropped via migration 016 + dead SELECT references removed from `routes/material_requests.js`; LoginPage H1 now reads tenant `company_name` with Constrai fallback; `branding.js` extends from 2-variable override to full 6-variable shade palette via CSS color-mix(). All polish-week items now done; the only remaining branding-stack work before the September conference demo is Phase 6-D-3 admin upload UI + DigitalOcean Spaces pipeline.)
+
+
 
 
 

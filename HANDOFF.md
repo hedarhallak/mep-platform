@@ -244,9 +244,9 @@ After 6-D-2: Phase 6-D-3 (admin upload UI + DigitalOcean Spaces pipeline for log
 
 ## Backlog items still open (lower priority)
 
-- **Drop legacy `companies.logo_url` column** (Section 110.3, May 15). Caused real production-test confusion today. Verify no code reads it (`grep -rn "logo_url[^_]" --include="*.js" --include="*.jsx"` excluding `brand_logo_url` matches), then `ALTER TABLE companies DROP COLUMN logo_url;` in a migration with a backup taken first.
-- **Dynamic title from `company_name` on LoginPage** (Section 110.3). Title still hardcodes "Constrai" + "Construction ERP" even on tenant subdomains. `window.__BRANDING__.company_name` is already populated; small PR swaps to `branding?.company_name || 'Constrai'`.
-- **Color shades from `brand_color` via CSS color-mix() or HSL** (Section 99.5 / 110.3). Today's verification confirmed only `--color-primary` overrides. Hover/active states keep Constrai green. Not blocking conference but a polish-week item.
+- ✅ **Drop legacy `companies.logo_url` column** — DONE in Section 111 (migration 016). Run on prod after PR merge with `pg_dump` backup first.
+- ✅ **Dynamic title from `company_name` on LoginPage** — DONE in Section 111.
+- ✅ **Color shades from `brand_color` via CSS color-mix()** — DONE in Section 111. Full 6-variable palette now overrides per tenant.
 - `routes/project_trades.js` redundant top-level `router.use(auth)`. Low.
 - pg DeprecationWarning ("client.query() when the client is already executing a query"). Hygiene PR opportunity.
 - Coverage threshold ratchet — current measured: Lines 63.66%, Branches 54.41%, Functions 62.18%, Statements 62.61%. Ratchet candidate when stable across 3 consecutive CI runs.
