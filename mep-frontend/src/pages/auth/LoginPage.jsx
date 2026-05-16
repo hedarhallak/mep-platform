@@ -24,6 +24,20 @@ function readTenantLogoUrl() {
   return url || null
 }
 
+// Section 111 (May 15, 2026): dynamic page title from the tenant's
+// company_name when available. Generic entry (app.constrai.ca) +
+// admin portal + any case where __BRANDING__ is null fall back to
+// the Constrai default. Subtitle stays as the universal Constrai
+// product tagline ("Construction ERP") because it's the product
+// description, not a tenant attribute.
+function readTenantCompanyName() {
+  if (typeof window === 'undefined') return null
+  const b = window.__BRANDING__
+  if (!b || typeof b !== 'object') return null
+  const name = typeof b.company_name === 'string' ? b.company_name.trim() : ''
+  return name || null
+}
+
 const REMEMBER_EMAIL_KEY = 'mep_remember_email'
 
 export default function LoginPage() {
@@ -47,6 +61,10 @@ export default function LoginPage() {
   const tenantLogoUrl = readTenantLogoUrl()
   const [logoFailed, setLogoFailed] = useState(false)
   const showTenantLogo = !!tenantLogoUrl && !logoFailed
+  // Section 111: prefer tenant company_name over Constrai default for the
+  // page title. Read once at render time; doesn't change after mount.
+  const tenantCompanyName = readTenantCompanyName()
+  const pageTitle = tenantCompanyName || t('common.appName')
 
   useEffect(() => {
     // Restore remembered email on first mount.
@@ -122,7 +140,7 @@ export default function LoginPage() {
               <Building2 size={28} className="text-white" />
             </div>
           )}
-          <h1 className="text-2xl font-bold text-white">{t('common.appName')}</h1>
+          <h1 className="text-2xl font-bold text-white">{pageTitle}</h1>
           <p className="text-slate-400 text-sm mt-1">{t('common.appTagline')}</p>
         </div>
 
