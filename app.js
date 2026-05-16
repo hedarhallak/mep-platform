@@ -245,6 +245,11 @@ function mountPublicRoutes(app) {
 function mountAdminRoutes(app) {
   app.use('/api/super', auth, superAdmin, tenantDb, loadRouter('./routes/super_admin'));
   app.use('/api/super/ccq-rates', auth, superAdmin, tenantDb, require('./routes/ccq_rates'));
+  // Section 112 / Phase 6-D-3: tenant logo + brand_color upload endpoint.
+  // Multer + sharp + DO Spaces. SUPER_ADMIN-only by the auth+superAdmin
+  // chain. Same `/api/super` prefix; the router exposes its own
+  // `/companies/:id/branding` path.
+  app.use('/api/super', auth, superAdmin, tenantDb, require('./routes/super_admin_branding'));
 }
 
 // =============================================================================
