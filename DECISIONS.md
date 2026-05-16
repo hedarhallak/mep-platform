@@ -12900,6 +12900,315 @@ The polish items don't block anything urgent (legacy `logo_url` is dormant; the 
 
 - **Today (May 14-15 marathon — actual final close): 80 sections.** (Section 112 NEW — Phase 6-D-3 backend code shipped via PR #249. DO Spaces bucket activation deliberately deferred until a real tenant requires it; full 4-step runbook preserved for future execution. Section 111 number reserved for the orphan PR #248 polish batch; recovery is a backlog item. The Phase 6-D branding stack now has all code complete; only the frontend admin upload form + the operational bucket activation remain before the September conference demo.)
 
+---
+
+## 113. Section 113 — May 16, 2026 — Subscription / Billing Strategy: Static Limits Now, Full Stripe Post-Conference (Decision D3)
+
+> **Status:** Strategic decision recorded. No code changes in this section; the static-limits piece (D1) is folded into the next Phase 6-D-3 frontend PR. The full Stripe integration (D2) is reserved as Phase 9-B, executed in parallel with Phase 9-A (Module System) after the September 2026 conference. Section 111 (polish batch) and Section 112 (Phase 6-D-3 backend + Spaces deferral) already merged before this section opened.
+
+### 113.1 — Context: the strategic question that triggered this section
+
+While closing out Section 112 (Phase 6-D-3 backend tenant logo upload) on May 16, Hedar asked a question that exposed a category of strategic risk we had not yet committed to writing:
+
+> "هل صلاحية ال subdomain او حتى ال company admin مفتوحة ام رح تكون مرتبطة بالاشتراك؟ لأن المفترض نحنا ماننسى انه اذا شركة ما وقفت اشتراكها معنا انه يوقف دخول استخدامهم, وشي تاني لازم نفكر فيه انه كيف نحنا بدنا نضبط اعداد المستخدمين المضافين لكل شركة لان نحنا المفترض ناخد اشتراكات حسب عدد المستخدمين صح؟ خلينا نفكير شو الاحتراف بهيك حالات"
+
+Two distinct concerns surfaced in that single message:
+
+1. **Subscription gating** — when a tenant stops paying, their subdomain login and their admin console MUST stop working. Right now, every tenant we onboard is effectively granted indefinite, free access. A real customer who churns or fails to pay would still hold a working `<tenant>.constrai.ca` portal and a working `app.constrai.ca` admin login until we manually disabled them.
+2. **Per-user billing enforcement** — the eventual pricing model is per-user (BASIC / PRO / ENTERPRISE tiers, each with a seat cap). Today there is NO column on `companies` enforcing a maximum user count. A tenant could be on the cheapest plan and onboard 200 users and we'd see zero protest from the system.
+
+Both concerns are correct, both are commonly fumbled at exactly this stage of SaaS company growth (post-MVP, pre-paying customers), and both have well-established industry-standard answers. Hedar's framing ("شو الاحتراف بهيك حالات") asked specifically for the professional approach, not a hand-built ad-hoc one.
+
+This section captures the decision we landed on, the state machine we're committing to, the enforcement strategy, the tech stack, and the explicit split between what ships before the September conference and what is reserved for after it.
+
+### 113.2 — Decision D3 framing
+
+Three approaches were laid out:
+
+- **D1** — Add a static `max_users` column and a single invite-time enforcement check. No billing automation, no Stripe, no state machine. Effort: ~1–2 hours, folded into the next Phase 6-D-3 frontend PR.
+- **D2** — Build full Stripe integration end-to-end: subscriptions, webhooks, automated state transitions, suspension/restoration flows, customer portal, dunning emails. Effort: 2–3 weeks. Replaces D1.
+- **D3** — Ship D1 NOW (so we are not negligent about overage during the conference demo window), and reserve D2 as a dedicated post-conference project (**Phase 9-B**). The two are not mutually exclusive — D1 is a strict subset of D2.
+
+**Hedar chose D3.** The reasoning:
+
+| Factor | D1 alone | D2 alone | D3 (D1 → D2) |
+|---|---|---|---|
+| Conference demo readiness | ✅ (no embarrassment) | ❌ (won't be done in time) | ✅ |
+| Engineering risk pre-conference | Low | High (long integration, broad surface) | Low |
+| Real billing automation for first paying customer | ❌ | ✅ | ✅ (post-conference) |
+| Carries technical debt | Yes (manual suspend) | No | Acceptable (debt window: ~3 months) |
+| Wasted effort | None | None | None (D1 is a building block of D2) |
+
+D3 reflects the principle already encoded in Section 4 ("always suggest better tools, but the cheapest one that solves the immediate problem"). The conference is a demo, not a paid commercial launch. Real billing automation has no consumer until paying customers exist. The shape of the work matches the shape of the need.
+
+### 113.3 — Target subscription state machine (full version, executed in Phase 9-B)
+
+The state machine that Phase 9-B will implement. Documenting it here so the column shapes added in D1 are compatible with the eventual full version. Every state has a clear entry condition and a clear effect on login + on the API.
+
+```
+                 ┌────────────────────────────────────────────────────┐
+                 │                                                    │
+   (signup)      ▼                                                    │
+   ──────────► [TRIAL]                                                │
+                 │                                                    │
+                 │ ① first successful payment via Stripe              │
+                 ▼                                                    │
+              [ACTIVE] ◄──────── ⑥ payment recovered ───────┐         │
+                 │                                          │         │
+                 │ ② Stripe webhook: invoice.payment_failed │         │
+                 ▼                                          │         │
+            [PAST_DUE]  (still has full access; dunning)    │         │
+                 │                                          │         │
+                 │ ③ 7-day grace ends, still unpaid         │         │
+                 ▼                                          │         │
+            [SUSPENDED] (read-only for 7 days, then blocked)│         │
+                 │                                          │         │
+       ──────────┼──────────                                │         │
+       │         │         │                                │         │
+       │ ④ user │ ⑤ admin │ ⑦ user                         │         │
+       │ pays   │ cancels │ stays unpaid                    │         │
+       │        │         │ 30 more days                    │         │
+       ▼        ▼         ▼                                 │         │
+    [ACTIVE]  [CANCELLED]  [DELETED] (soft-delete           │         │
+                 │          + scheduled hard purge)         │         │
+                 │                                          │         │
+                 └─── ⑧ admin reactivates within 90 days ──┘         │
+                                                                      │
+   (any state above) ─── ⑨ admin upgrades plan ──────────────────────┘
+```
+
+Per-state effects:
+
+| State | Login allowed? | API allowed? | Read-only? | Visible banner? |
+|---|---|---|---|---|
+| TRIAL | ✅ | ✅ | No | "X days left in trial" |
+| ACTIVE | ✅ | ✅ | No | None |
+| PAST_DUE | ✅ | ✅ | No | "Payment failed — please update billing" |
+| SUSPENDED (days 0–7) | ✅ | ✅ for GET, ❌ for POST/PUT/DELETE | Yes | "Account suspended — read-only — pay to restore" |
+| SUSPENDED (days 8+) | ❌ | ❌ (returns 402) | n/a | n/a — login screen shows "contact billing" |
+| CANCELLED | ❌ | ❌ (returns 402) | n/a | n/a |
+| DELETED | ❌ | ❌ (returns 410) | n/a | data purged after 90 days |
+
+Transitions ①–⑨ are all Stripe-webhook driven in Phase 9-B except ⑤ (admin self-cancel) and ⑨ (admin self-upgrade), which are user-initiated in the customer portal.
+
+### 113.4 — Per-user billing enforcement: HARD block at invite, no overage
+
+Two industry-standard patterns exist:
+
+- **Hard block** — invite endpoint returns an error if `current_users >= max_users`. User MUST upgrade before adding more seats.
+- **Soft overage** — invite succeeds, system silently records overage, customer is billed extra at end of cycle.
+
+**Hedar chose HARD block.** Reasons:
+
+1. Construction-industry SMBs deeply distrust "surprise bills." Soft overage burns the trust we're working to build.
+2. Manual upgrade is a known-good upsell trigger. The forced "please upgrade" moment is exactly when sales would be made.
+3. Hard block lets us run without any usage-based metering infrastructure (we never have to count seats post-fact).
+4. Stripe makes plan-change frictionless via the Customer Portal — going PRO from BASIC is a 3-click flow.
+
+Implementation form (Phase 6-D-3 frontend PR, D1 piece):
+
+```js
+// in routes/invite_employee.js, BEFORE creating the invite row:
+const { rows: seatRows } = await db.query(
+  'SELECT max_users, (SELECT COUNT(*) FROM app_users WHERE company_id = $1 AND status != \'DELETED\') AS current_users FROM companies WHERE company_id = $1',
+  [companyId],
+);
+if (!seatRows.length) {
+  return res.status(404).json({ error: 'COMPANY_NOT_FOUND' });
+}
+const { max_users, current_users } = seatRows[0];
+if (Number(current_users) >= Number(max_users)) {
+  return res.status(402).json({
+    error: 'USER_LIMIT_REACHED',
+    max_users: Number(max_users),
+    current_users: Number(current_users),
+    message_fr: `Limite atteinte (${current_users}/${max_users}). Veuillez mettre à niveau votre plan.`,
+    message_en: `Seat limit reached (${current_users}/${max_users}). Please upgrade your plan.`,
+  });
+}
+```
+
+402 is the correct HTTP code for "Payment Required" — chosen here deliberately for the future Stripe integration to use uniformly across both seat-cap and plan-overdue rejections.
+
+Status `DELETED` is excluded from the count so soft-deleted users don't permanently consume seats. SUSPENDED users (the company itself, not individuals) are NOT a concern here — if the company is suspended, the route is blocked at a higher middleware level (Phase 9-B middleware).
+
+### 113.5 — Suspension behavior: hybrid read-only-then-block
+
+When `payment_status = PAST_DUE` for 7 calendar days and Stripe still cannot collect, the company transitions to `SUSPENDED`. Three industry patterns exist:
+
+| Pattern | Pros | Cons | Used by |
+|---|---|---|---|
+| Instant hard block | Maximum payment pressure | Customer loses data access during dispute resolution | Some legacy ERPs |
+| Permanent read-only | Customer can always view their data | Removes payment urgency | Most CRM tools |
+| **Hybrid: read-only first 7 days, then block** | Balances pressure + grace | Slightly more complex | Stripe-recommended, Shopify, QuickBooks Online |
+
+**Hedar chose the hybrid.** It is the most-defensible position in a B2B Quebec context — the customer always gets a 7-day read-only window to download their data or pay, then loses access. This is communicated explicitly at signup (in the Terms of Service) and via email at each grace-period boundary.
+
+Email cadence during PAST_DUE → SUSPENDED → CANCELLED (all sent from `billing@constrai.ca` via Resend):
+
+- Day 0 (entered PAST_DUE): "Payment failed — please update payment method"
+- Day 3: gentle reminder
+- Day 6: final warning + "tomorrow we move to read-only"
+- Day 7 (entered SUSPENDED read-only): "Account is now read-only"
+- Day 10: "5 days left to restore"
+- Day 14 (entered SUSPENDED blocked): "Account access blocked — contact billing"
+- Day 30: "Account will be cancelled in 30 days unless reactivated"
+- Day 60: final reactivation reminder
+- Day 90 (CANCELLED → DELETED): data hard-deleted, all PII purged
+
+This cadence and threshold list is the spec for the Phase 9-B email job. None of this email infrastructure is built today; only the column shapes need to be compatible.
+
+### 113.6 — Plan → max_users mapping
+
+The initial plan tiers, with conservative seat caps that the conference demo can showcase comfortably and that a real first customer can outgrow within ~6 months (creating natural upgrade pressure):
+
+| Plan code | Display name (FR) | Display name (EN) | max_users | Target customer | Monthly price (CAD, planned) |
+|---|---|---|---|---|---|
+| BASIC | De base | Basic | 5 | 1–4 person shop | $49 |
+| PRO | Pro | Pro | 25 | 5–20 person crew | $149 |
+| ENTERPRISE | Entreprise | Enterprise | 100 | 20+ person company | $399 |
+| TRIAL | Essai gratuit | Free trial | 5 | new signups | $0 (14 days) |
+
+Pricing is planned, not committed — exact dollar figures are a Phase 9-B decision made closer to actual launch. The seat caps ARE committed: they go into migration 017 as the default mapping. Future plans (CUSTOM, NON-PROFIT) can be added without schema changes.
+
+### 113.7 — Migration 017 candidate spec
+
+```sql
+-- migrations/017_companies_max_users.sql
+-- Adds seat-cap column to companies. Default 5 (BASIC tier).
+-- All existing rows are backfilled based on their current `plan` value.
+
+ALTER TABLE companies
+  ADD COLUMN max_users integer NOT NULL DEFAULT 5;
+
+UPDATE companies SET max_users = CASE
+  WHEN plan = 'ENTERPRISE' THEN 100
+  WHEN plan = 'PRO'        THEN 25
+  WHEN plan = 'TRIAL'      THEN 5
+  ELSE 5  -- BASIC and any unrecognized
+END;
+
+CREATE INDEX IF NOT EXISTS idx_companies_max_users ON companies(max_users);
+
+COMMENT ON COLUMN companies.max_users IS
+  'Seat cap enforced at invite time. Updated by Phase 9-B Stripe webhook when plan changes. See DECISIONS.md Section 113.';
+```
+
+```sql
+-- migrations/017_companies_max_users.rollback.sql
+ALTER TABLE companies DROP COLUMN max_users;
+```
+
+The index is added because we expect a `SELECT max_users FROM companies WHERE ...` call on every employee-invite request, and we don't want to keep the cost in the route handler's join planner.
+
+This migration is **not** shipped in this docs PR. It ships in the next code PR (Phase 6-D-3 frontend half), bundled with:
+
+- The 5-line invite enforcement block from Section 113.4
+- A seat-counter display widget on the admin Company Branding page (`current_users / max_users`)
+- A "Upgrade your plan" link (today: a `mailto:billing@constrai.ca`; in Phase 9-B: a Stripe Customer Portal deep-link)
+- A test in `tests/integration/invite_employee.test.js` that asserts a 402 USER_LIMIT_REACHED is returned when at-cap
+
+### 113.8 — Phase 9 split: 9-A Module System + 9-B Billing/Subscriptions
+
+Section 105 originally defined Phase 9 as a single deliverable: the per-company Module/Plugin System (admin-toggleable feature flags driving menu visibility, route gating, and per-tenant capability sets). With this section, **Phase 9 splits into two independent post-conference projects**:
+
+| Phase | Title | Window | Dependencies | Goal |
+|---|---|---|---|---|
+| **9-A** | Module / Plugin System | Q4 2026 (Oct–Dec) | None | Per-company feature flags; e.g., "Trade A buys CCQ Rates module, Trade B doesn't" |
+| **9-B** | Billing / Subscriptions | Q4 2026 (Oct–Dec) | Stripe account in CAD | Full state machine + Stripe + dunning + customer portal |
+
+The two are deliberately scheduled in the same quarter because they are **complementary, not sequential**: 9-A defines WHAT a tenant has access to, 9-B defines WHETHER they can access anything at all. Both feed into the same `companies` table. Both need an admin UI. There's natural sharing of UI infrastructure between the two pages.
+
+9-A and 9-B can be executed by the same engineer (Hedar + Claude) sequentially or by two parallel branches. Decision deferred to project kickoff.
+
+Pre-conference scope (Section 105 / Section 113) is now strictly:
+
+- ✅ Phase 6-D-3 frontend half (admin upload UI, seat counter) — **next code PR**
+- ✅ Migration 017 (max_users column) — bundled in same PR
+- ✅ Invite enforcement (5-line route block) — bundled in same PR
+- ❌ Phase 9-A — deferred to Q4 2026
+- ❌ Phase 9-B — deferred to Q4 2026
+
+### 113.9 — Tech stack for Phase 9-B
+
+Locked-in choices, so Phase 9-B can start immediately without re-research:
+
+| Layer | Choice | Reasoning |
+|---|---|---|
+| Payment processor | **Stripe** | Industry standard, CAD-native, has Customer Portal, has Tax automation for Quebec QST/GST |
+| Subscription engine | **Stripe Billing** (subscriptions + invoices) | First-party, no third-party dependencies |
+| Webhook handler | **Express endpoint** at `POST /api/stripe/webhook` with `stripe.webhooks.constructEvent` signature verification | Standard pattern, no extra infra |
+| Customer self-service | **Stripe Customer Portal** (hosted) | Zero-build for plan changes, invoice history, payment-method updates |
+| Dunning emails | **Resend** (already integrated, Pitfall #N-TBD) | No new vendor; templates use Section 75 React-Email pattern |
+| Tax compliance | **Stripe Tax** + Quebec QST registration | Required for any Quebec-domiciled customer over the QST threshold |
+| Idempotency | **`stripe_event_id` table** for received webhook events | Standard pattern, Stripe sends duplicates ~1% of the time |
+
+What we are **NOT** using (and why):
+
+- ❌ Paddle / LemonSqueezy — strong as merchants-of-record but more expensive (5–8% fee) and lower customer trust in Canada
+- ❌ Chargebee / Recurly — overkill for our scale; another vendor to manage
+- ❌ Self-built billing — well-documented industry trap; never worth it for an ERP-shaped product
+
+### 113.10 — What lands now vs what defers (canonical scope split)
+
+This is the single source of truth for the conference-deadline-vs-post-conference cut. Other planning sections defer to this table.
+
+| Capability | Lands pre-conference? | Section / Phase | Notes |
+|---|---|---|---|
+| `companies.max_users` column | ✅ | Phase 6-D-3, migration 017 | Section 113.7 |
+| Static seat cap enforcement at invite | ✅ | Phase 6-D-3 | Section 113.4 |
+| Admin seat-counter display | ✅ | Phase 6-D-3 frontend | Section 113.7 |
+| `companies.plan` column | ✅ Already exists | Pre-S113 | Currently varchar; no schema change |
+| Admin "upgrade plan" link | ⚠️ Placeholder | Phase 6-D-3 | `mailto:billing@constrai.ca` for now |
+| Stripe account + product catalog | ❌ | Phase 9-B | Q4 2026 |
+| Subscription state machine | ❌ | Phase 9-B | Section 113.3 |
+| Webhook handler | ❌ | Phase 9-B | Section 113.9 |
+| Customer Portal | ❌ | Phase 9-B | Section 113.9 |
+| Dunning emails | ❌ | Phase 9-B | Section 113.5 |
+| `companies.subscription_id`, `payment_status`, `billing_anchor` columns | ❌ | Phase 9-B | Schema design at 9-B kickoff |
+| Module / Plugin system | ❌ | Phase 9-A | Q4 2026, Section 105 |
+| Tax (QST/GST) automation | ❌ | Phase 9-B | Requires QST registration first |
+
+### 113.11 — Why this approach is professional, not a hack
+
+Hedar's request was specifically for "الاحتراف بهيك حالات" (the professional approach for such cases). The risk in any "static now, real later" plan is that the static piece becomes load-bearing technical debt nobody removes. We defend against that:
+
+1. **The column shape we add now is the same column the real system will read.** `max_users` is the same integer field whether it's set by a manual UPDATE or by a Stripe webhook. Nothing throwaway.
+2. **The HTTP code we return (402) is the same code the real billing system will use** for both seat-cap and plan-overdue rejections. Frontend error-handling code written today will work unchanged when 9-B ships.
+3. **The plan-tier names (BASIC / PRO / ENTERPRISE) are committed** — they become Stripe product IDs in 9-B without renaming.
+4. **The state machine in 113.3 is documented before any code is written**, so 9-B starts with a target diagram, not a discovery exercise.
+5. **The seat-cap default mapping in 113.6 is recorded** so when Phase 9-B builds the Stripe product catalog, the seat caps don't drift.
+6. **The conference demo will not show a "fake" billing UI** — the admin page will honestly show "Current users: X / Y. To upgrade, contact billing." This is the same UX a real customer would see during the cutover from D1 to D2.
+
+This is the same pattern professional SaaS companies use during the pre-revenue → first-customer transition: ship the column shape, ship the HTTP errors, ship the manual UI, defer the automation. Examples: Linear shipped manual billing for 6 months before Stripe; Figma operated on manual invoices for the first year of paid customers; Vercel had hand-set plan limits for the first ~50 enterprise accounts.
+
+### 113.12 — Open questions deferred to Phase 9-B kickoff
+
+These are NOT decided in this section. They are recorded so the Phase 9-B kickoff has a real checklist.
+
+- ✋ **Annual vs monthly billing** — both? annual discount %?
+- ✋ **Per-trade pricing** — same price for plumber vs electrician?
+- ✋ **Free trial length** — currently planned at 14 days; might be 21 or 30
+- ✋ **Card-required-for-trial vs not** — friction vs conversion trade-off
+- ✋ **Refund policy** — pro-rated? hard "no refunds"? written into ToS
+- ✋ **Multi-currency** — start CAD-only, add USD later? bilingual customers expect USD as fallback
+- ✋ **Tax registration timing** — when do we cross the QST threshold and need to register?
+- ✋ **Sales-assisted onboarding for ENTERPRISE** — self-serve or always touched by Hedar?
+- ✋ **Discounts / coupons** — promotional codes via Stripe? employee referrals?
+
+### 113.13 — Backlog implications for HANDOFF.md
+
+The following backlog items are added to HANDOFF.md by the same PR that records this section:
+
+1. **Phase 6-D-3 frontend half** — bundle `max_users` migration + invite enforcement + admin seat counter. (Already a planned task; this section adds the seat-cap pieces to the same PR.)
+2. **Phase 9-A — Module/Plugin System** — promoted from Section 105 single-Phase-9. Q4 2026.
+3. **Phase 9-B — Billing/Subscriptions** — new entry. Q4 2026, parallel with 9-A.
+4. The strategic roadmap table in HANDOFF.md updates to reflect the split.
+
+### 113.14 — Section/total update
+
+- **Today (May 16, 2026): 81 sections.** (Section 113 NEW — strategic subscription/billing decision. D3 chosen: ship `max_users` static seat-cap column + 5-line invite enforcement in the next code PR; defer full Stripe integration to Phase 9-B in Q4 2026. Full state machine, plan-tier mapping, suspension behavior, tech stack, and migration 017 spec all documented here so Phase 9-B can start without re-research. Phase 9 formally splits into 9-A (Module System, from Section 105) + 9-B (Billing, new). Conference-deadline scope (September 2026) is now strictly Phase 6-D-3 frontend half + the seat-cap addition — no Stripe before the conference. No code changes in this section; this is a docs-only PR.)
+
 
 
 
