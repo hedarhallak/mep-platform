@@ -12749,6 +12749,158 @@ Three concrete items added to the backlog for a future hygiene session:
 
 - **Today (May 14-15 absolute close): 79 sections.** (Section 110 NEW — Phase 6-D-2 verified end-to-end in production via browser smoke on `mep.constrai.ca/login`. Verification surfaced two small bugs across PRs #244-#246 — label substring "email" colliding with test regex, and a DB column duplication confusion between legacy `logo_url` and canonical `brand_logo_url`. New Pitfall #44 captures the 3-point chain check before reading any DB-backed API field. Three backlog items added: drop legacy column, dynamic title, color shades. Phase 6-D-3 remains the only major remaining branding-stack task.)
 
+---
+
+## Section 112 — Phase 6-D-3 backend shipped + DO Spaces bucket activation DEFERRED + Section 111 orphan note (May 15, 2026 ~14:00–15:30 UTC)
+
+> Phase 6-D-3 backend half shipped (PR #249, merged as `c6143e1` on main): a SUPER_ADMIN-only multipart upload endpoint that accepts a logo file, runs it through sharp (validate + 256×256 PNG resize), uploads to DO Spaces via @aws-sdk/client-s3, and writes the public URL back to `companies.brand_logo_url`. Code is complete and CI-green; **the actual DO Spaces bucket has NOT been created yet** — that's deliberately deferred to the moment a real tenant starts paying for branded onboarding so the $5/month Spaces base fee isn't burned on dormant infrastructure. The endpoint short-circuits to 500 SPACES_NOT_CONFIGURED when the 6 env vars are unset, so a stray call before activation fails loudly without falling back to a silent no-op.
+>
+> **Section 111 numbering note:** the chore branch `chore/s111-polish-batch-drop-legacy-dynamic-title-shades` (PR #248) opened during the marathon contains 3 polish items (drop legacy `companies.logo_url`, dynamic LoginPage title from `company_name`, full color-shade palette via `color-mix()`) but is **still OPEN on GitHub — never merged**. Auto-merge was claimed enabled but the PR did not land on `main` (git log shows commit `088f33e` is orphaned). Recovering or closing #248 is a backlog item; Section 111's number is reserved against that PR so the next docs section is 112, not 111.
+
+### 112.1 — What shipped in PR #249
+
+Files (all live on main):
+
+| File | Purpose |
+|---|---|
+| `lib/spaces_client.js` (NEW) | Lazy-init S3-compatible client for DO Spaces; reads `DO_SPACES_*` env vars; throws `SPACES_NOT_CONFIGURED` if missing. |
+| `lib/image_upload.js` (NEW) | `validateFileShape` + `probeMetadata` + `resizeToTarget` + `processLogoUpload` pipeline. PNG/JPEG/WEBP only (no SVG → XSS); 64–2048 px dims; 2 MB max; resize to 256×256 transparent-padded PNG. |
+| `routes/super_admin_branding.js` (NEW) | `POST /api/super/companies/:id/branding`. SUPER_ADMIN-only via existing `auth + superAdmin + tenantDb` chain. Accepts `logo` (file) + `brand_color` (hex) + `remove_logo` (bool). Audit log emits `COMPANY_BRANDING_UPDATED`. |
+| `lib/audit.js` (MODIFIED) | Added `COMPANY_BRANDING_UPDATED` action constant. |
+| `app.js` (MODIFIED) | Mounted new router on adminApp under `/api/super`. |
+| `.env.example` (MODIFIED) | Documented the 6 `DO_SPACES_*` env vars + bucket-creation pointers. |
+| `tests/smoke/image_upload.test.js` (NEW) | 13 pure-function tests; uses sharp to generate real test images; covers all error codes + boundary dims. |
+| `tests/admin/branding_upload.test.js` (NEW) | 15 route integration tests with mocked `lib/spaces_client.putPublicObject`; covers RBAC (401/403), validation errors, happy paths (upload only, color only, both, remove_logo), conflict (upload+remove). |
+| `package.json` + `package-lock.json` | Added `@aws-sdk/client-s3@^3.696.0` + `sharp@^0.34.4`. |
+
+CI #608/#615 failed once each on lint/format (whitespace and `Remember-me` label collision with existing tests); both fixed inline (PR-side commit). Final CI #616 green; squash-merged as `c6143e1`.
+
+### 112.2 — DO Spaces bucket activation — DEFERRED until first paying tenant
+
+The 4-step activation runbook is preserved here so any future operator (Hedar or otherwise) can execute it in ~15 minutes when the trigger fires. **Trigger to execute:** a real tenant has signed an onboarding contract that includes branded login (custom logo + brand color), OR the conference demo (September 2026) is <4 weeks out and a dry-run requires the upload UI to work end-to-end. Until then: skip. Spaces base fee is $5/month; no value in burning it on idle infrastructure.
+
+**Step 1 — Create the bucket (DO dashboard, ~5 min):**
+
+1. Login to `https://cloud.digitalocean.com`.
+2. Cloud → Spaces Object Storage → **Create a Space**.
+3. Configuration:
+   - **Datacenter region**: `TOR1` (Toronto — matches the Droplet region for low latency)
+   - **Enable CDN**: ✅ Yes (free; adds Cloudflare CDN in front; faster logo loads worldwide)
+   - **Restrict File Listing**: ✅ Yes (prevents `GET /` from listing all objects; individual object reads still work via public-read ACL)
+   - **Choose a unique name**: `constrai-tenant-assets` (exactly this name — matches `DO_SPACES_BUCKET` default in `.env.example`)
+4. Create.
+5. Once the bucket exists: **Settings → CORS Configurations → Add CORS Configuration**:
+   - **Allowed Origins**: `https://*.constrai.ca` (matches all tenant subdomains + app/admin)
+   - **Allowed Methods**: GET, HEAD
+   - **Allowed Headers**: leave default
+   - **Access Control Max Age**: 3600
+   - Save.
+
+**Step 2 — Generate Spaces access keys (DO dashboard, ~2 min):**
+
+1. Cloud → API → Tokens/Keys → **Spaces Keys** tab → **Generate New Key**.
+2. **Name**: `constrai-tenant-assets-prod`
+3. **Scope**: if DO offers per-bucket scoping at the time of execution, restrict to `constrai-tenant-assets`. Otherwise note that this key has account-wide Spaces access — handle accordingly.
+4. Click Generate; **copy both the access key and the secret IMMEDIATELY** — the secret is shown ONCE.
+5. Save to `OneDrive\Constrai Keys\DO Spaces tenant-assets <date>.txt`. Mirror the format used by other rotated credentials there.
+
+**Step 3 — Add 6 env vars to prod (SSH, ~3 min):**
+
+```
+ssh root@143.110.218.84
+```
+
+```bash
+cd /var/www/mep
+# Append the new vars. Use `read -rsp` to keep the secret out of bash history;
+# the key is shorter and less sensitive but use read for both for consistency.
+read -rp  'DO_SPACES_KEY: '       SP_KEY
+read -rsp 'DO_SPACES_SECRET: '    SP_SECRET; echo
+cat >> .env <<ENV_EOF
+
+# -----------------------------------------------------------------------------
+# DigitalOcean Spaces — tenant assets bucket (Section 112 / Phase 6-D-3)
+# Activated YYYY-MM-DD by Hedar. Bucket: constrai-tenant-assets in TOR1.
+# -----------------------------------------------------------------------------
+DO_SPACES_KEY=$SP_KEY
+DO_SPACES_SECRET=$SP_SECRET
+DO_SPACES_BUCKET=constrai-tenant-assets
+DO_SPACES_REGION=tor1
+DO_SPACES_ENDPOINT=https://tor1.digitaloceanspaces.com
+DO_SPACES_PUBLIC_URL_BASE=https://constrai-tenant-assets.tor1.cdn.digitaloceanspaces.com
+ENV_EOF
+unset SP_KEY SP_SECRET
+
+# Mask the lines for sanity-eyeball before continuing
+sed -nE '/^DO_SPACES_/p' .env | sed -E 's/=[A-Za-z0-9_.+\/-]+$/=***/'
+```
+
+If `DO_SPACES_PUBLIC_URL_BASE` ends up different (e.g., CDN not enabled), set it to the non-CDN form: `https://constrai-tenant-assets.tor1.digitaloceanspaces.com`.
+
+**Step 4 — Restart backend + smoke (~3 min):**
+
+```bash
+pm2 restart mep-backend
+sleep 3
+pm2 status mep-backend
+curl -sS -o /dev/null -w "Health: %{http_code}\n" https://app.constrai.ca/api/health
+pm2 logs mep-backend --lines 15 --nostream
+```
+
+Expected: Health 200, no `[sentry]` errors, no `SPACES_NOT_CONFIGURED` mentions in logs. Then verify the upload endpoint accepts a real call (after Phase 6-D-3 frontend half ships and an admin UI exists, OR via `curl -F logo=@some.png ...` if testing pre-UI).
+
+**Step 5 — Optional: tighten Spaces ACL after first real upload:**
+
+After the first tenant uploads a logo, run a quick spot-check that the URL returned by the endpoint loads in an incognito browser (proves public-read is working) AND that `https://constrai-tenant-assets.tor1.digitaloceanspaces.com/` (no path) returns a 403 or empty list (proves listing restriction is honored).
+
+### 112.3 — Cost notes (the reason for deferral)
+
+| Component | Cost | Triggers |
+|---|---|---|
+| DO Spaces base | $5/month | Created upon bucket creation (even with zero storage) |
+| Storage overage | $0.02/GB/month above 250 GB | Hit at ~5 million tenant logos. Effectively impossible at our scale. |
+| Bandwidth overage | $0.01/GB above 1 TB/month | Hit at ~20 million logo views/month. Also impossible at our scale. |
+| Spaces CDN | included free | No incremental fee |
+
+**Cumulative deferral savings (Section 105 conference deadline = September):**
+- Activating today = ~4 months × $5 = **$20**.
+- Activating only when needed = $0–$20 depending on first-tenant signing date.
+
+Not enormous, but the principle matters: avoid burning recurring fees on infrastructure that has no current consumer. Same logic applied to Sentry (free Developer plan; Section 1 of May 14 discussion) and Better Stack (free 10-monitor tier; Section 108).
+
+### 112.4 — Section 111 orphan recovery (backlog item)
+
+PR #248 (`chore/s111-polish-batch-drop-legacy-dynamic-title-shades`) was opened during the May 14-15 marathon to ship three Section 110.3 backlog items:
+- Migration 016 dropping the unused `companies.logo_url` column
+- Dynamic `<h1>` from `window.__BRANDING__.company_name` on LoginPage
+- Full 6-variable shade palette via `color-mix()` in `branding.js`
+
+Per `gh pr view 248`, the PR is `OPEN` (`mergedAt: null`). Likely cause: auto-merge was queued but a dependent CI never completed, OR a `BEHIND main` state stalled the queue. Recovery options for a future session:
+
+1. **Easiest path**: `gh pr update-branch 248` (Pitfall #9 / #18) + re-enable auto-merge. If CI passes, done.
+2. **If conflicts arose**: rebase onto current main + force-push. The 4 files touched (migration, route, LoginPage, branding.js) are unlikely to conflict with the Phase 6-D-3 backend code that landed in PR #249.
+3. **If PR is broken beyond repair**: close #248, cherry-pick commit `088f33e` onto a fresh branch off current main, open PR #250.
+
+The polish items don't block anything urgent (legacy `logo_url` is dormant; the hardcoded title and missing shades are visual nits, not bugs), but they should land before the conference demo to keep the codebase tidy. Estimated effort to recover: 5-15 minutes.
+
+### 112.5 — Final state at end of Section 112
+
+| Item | Status |
+|---|---|
+| PR #249 merged (Phase 6-D-3 backend) | ✅ `c6143e1` on main, CI #616 green |
+| `lib/spaces_client.js` + `lib/image_upload.js` + route + tests live on main | ✅ |
+| 28 new tests passing in CI | ✅ |
+| DO Spaces bucket `constrai-tenant-assets` | ⏳ **DEFERRED — execute 112.2 runbook when first paying tenant signs OR August dry-run requires it** |
+| 6 env vars on prod | ⏳ Part of bucket activation |
+| Phase 6-D-3 frontend half (admin upload form) | ⏳ Next major code task |
+| PR #248 polish batch (Section 111 work) | ⏳ Orphan — recover per 112.4 next session |
+| Section 111 number reserved | ✅ Documented above |
+
+### 112.6 — Section/total update
+
+- **Today (May 14-15 marathon — actual final close): 80 sections.** (Section 112 NEW — Phase 6-D-3 backend code shipped via PR #249. DO Spaces bucket activation deliberately deferred until a real tenant requires it; full 4-step runbook preserved for future execution. Section 111 number reserved for the orphan PR #248 polish batch; recovery is a backlog item. The Phase 6-D branding stack now has all code complete; only the frontend admin upload form + the operational bucket activation remain before the September conference demo.)
+
+
 
 
 

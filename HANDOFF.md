@@ -1,7 +1,7 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 15, 2026 ~11:30 UTC — **🎉 Phase 6-D Pattern B + 6-D-2 logo swap both verified end-to-end in production.** Today's PRs: #237 → #247 (10 merged across May 14-15 marathon). On `mep.constrai.ca/login` the tenant placeholder logo renders + "Remember me" checkbox works + cookie auth flows through to the dashboard. **Better Stack monitoring 4 endpoints (Section 108). All 3 pending hygiene items closed (Section 108). Phase 6-D-3 admin upload UI is the only remaining branding-stack task.**
+> Last updated: May 15, 2026 ~15:30 UTC — **🎉 Phase 6-D-3 backend shipped — upload route + sharp + DO Spaces client all live on main (PR #249).** Today's marathon: 11 PRs merged (#237-#249 minus #245/#248). **DO Spaces bucket activation deliberately deferred** to save the $5/mo base fee until a real tenant requires branded onboarding (full runbook in Section 112.2). **PR #248 polish batch (Section 111 work — drop legacy column, dynamic title, color shades) is OPEN-but-orphaned**; recover per Section 112.4 in next session. Frontend admin form (Phase 6-D-3 frontend half) is the next major code task.
 >
 > **5 new pitfalls captured this marathon** — #40 (DNS negative caching survives the record fix), #41 (`git pull` does NOT rebuild the frontend), #42 (don't use `lib/auth_utils` for ad-hoc shell hashing), #43 (Edit tool fallback to bash on Linux mount), #44 (DB column duplication + 3-point chain verification before reading any API field). All encoded in Pitfalls list below.
 
@@ -232,7 +232,9 @@ After 6-D-2: Phase 6-D-3 (admin upload UI + DigitalOcean Spaces pipeline for log
 | **Section 106 — `/whoami` 401-reload-loop hotfix** | ✅ **Deployed (May 15, PR #241)** |
 | **Section 107 — Pattern B verified end-to-end in production** | ✅ **VERIFIED (May 15, browser smoke `mep.constrai.ca/dashboard`)** |
 | **Phase 6-D-2 — Logo swap on LoginPage + remember-me checkbox** | ✅ **DEPLOYED + VERIFIED on prod (May 15, Sections 109 + 110)** |
-| Phase 6-D-3 — Admin upload UI + DigitalOcean Spaces pipeline | ⏳ After 6-D-2 |
+| Phase 6-D-3 backend (multer + sharp + Spaces client + route) | ✅ DEPLOYED (May 15, Section 112, PR #249) |
+| Phase 6-D-3 — DO Spaces bucket activation (operational) | ⏳ DEFERRED — execute Section 112.2 runbook when first paying tenant signs OR August dry-run requires it |
+| Phase 6-D-3 — Admin upload UI (frontend half) | ⏳ Next major code task |
 | **Demo polish + reference tenant setup** | ⏳ June 15 → July 31 (conference prep) |
 | **August dry-run + code freeze 2 weeks pre-conference** | ⏳ August 2026 |
 | **September 2026 conference** | 🎯 Hard deadline (demo + sales) |
@@ -244,9 +246,8 @@ After 6-D-2: Phase 6-D-3 (admin upload UI + DigitalOcean Spaces pipeline for log
 
 ## Backlog items still open (lower priority)
 
-- **Drop legacy `companies.logo_url` column** (Section 110.3, May 15). Caused real production-test confusion today. Verify no code reads it (`grep -rn "logo_url[^_]" --include="*.js" --include="*.jsx"` excluding `brand_logo_url` matches), then `ALTER TABLE companies DROP COLUMN logo_url;` in a migration with a backup taken first.
-- **Dynamic title from `company_name` on LoginPage** (Section 110.3). Title still hardcodes "Constrai" + "Construction ERP" even on tenant subdomains. `window.__BRANDING__.company_name` is already populated; small PR swaps to `branding?.company_name || 'Constrai'`.
-- **Color shades from `brand_color` via CSS color-mix() or HSL** (Section 99.5 / 110.3). Today's verification confirmed only `--color-primary` overrides. Hover/active states keep Constrai green. Not blocking conference but a polish-week item.
+- **⏳ RECOVER PR #248 — Section 111 polish batch** (Section 112.4, May 15). Three items are already coded on orphan branch `chore/s111-polish-batch-drop-legacy-dynamic-title-shades` (commit `088f33e`): migration 016 dropping legacy `companies.logo_url`, dynamic `<h1>` from `window.__BRANDING__.company_name`, full 6-variable shade palette via `color-mix()`. PR #248 is OPEN but never merged (auto-merge stall). Recovery: `gh pr update-branch 248` + re-enable auto-merge → CI green → squash-merge. Falls back to rebase + force-push if conflicts. ~5-15 min effort. Not blocking; should land before conference demo.
+- **⏳ DO Spaces bucket `constrai-tenant-assets` activation** (Section 112.2, May 15). Phase 6-D-3 backend code is live but the bucket isn't created yet — deliberate deferral to skip the $5/month base fee until a real tenant requires branded onboarding. Full 4-step runbook in Section 112.2: (1) bucket + CORS in DO dashboard, (2) Spaces access keys, (3) 6 env vars on prod, (4) pm2 restart + smoke. Trigger to execute: first paying tenant signs OR August dry-run needs the upload UI working end-to-end. Until then: backend returns `500 SPACES_NOT_CONFIGURED` if called.
 - `routes/project_trades.js` redundant top-level `router.use(auth)`. Low.
 - pg DeprecationWarning ("client.query() when the client is already executing a query"). Hygiene PR opportunity.
 - Coverage threshold ratchet — current measured: Lines 63.66%, Branches 54.41%, Functions 62.18%, Statements 62.61%. Ratchet candidate when stable across 3 consecutive CI runs.
