@@ -1,9 +1,9 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 15, 2026 ~15:30 UTC — **🎉 Phase 6-D-3 backend shipped — upload route + sharp + DO Spaces client all live on main (PR #249).** Today's marathon: 11 PRs merged (#237-#249 minus #245/#248). **DO Spaces bucket activation deliberately deferred** to save the $5/mo base fee until a real tenant requires branded onboarding (full runbook in Section 112.2). **PR #248 polish batch (Section 111 work — drop legacy column, dynamic title, color shades) is OPEN-but-orphaned**; recover per Section 112.4 in next session. Frontend admin form (Phase 6-D-3 frontend half) is the next major code task.
+> Last updated: May 16, 2026 ~14:00 UTC — **📋 Section 113 — Subscription/Billing strategy decision (D3) recorded.** Static `max_users` seat-cap enforcement bundles into the next Phase 6-D-3 frontend PR; full Stripe + state machine deferred to **Phase 9-B** in Q4 2026 (parallel with Phase 9-A Module System). PR #251 also merged earlier today, closing the Section 111 polish-batch orphan via cherry-pick (migration 016 drop-legacy-logo_url + dynamic `<h1>` + 6-variable color-mix shade palette all on main, `c083b16`).
 >
-> **5 new pitfalls captured this marathon** — #40 (DNS negative caching survives the record fix), #41 (`git pull` does NOT rebuild the frontend), #42 (don't use `lib/auth_utils` for ad-hoc shell hashing), #43 (Edit tool fallback to bash on Linux mount), #44 (DB column duplication + 3-point chain verification before reading any API field). All encoded in Pitfalls list below.
+> **5 pitfalls captured during May 14-15 marathon** — #40 (DNS negative caching survives the record fix), #41 (`git pull` does NOT rebuild the frontend), #42 (don't use `lib/auth_utils` for ad-hoc shell hashing), #43 (Edit tool fallback to bash on Linux mount), #44 (DB column duplication + 3-point chain verification before reading any API field). All encoded in Pitfalls list below. No new pitfalls in Section 113 — it's a strategic docs-only update.
 
 ---
 
@@ -33,11 +33,12 @@
 
 | Window | Focus | Phases |
 |---|---|---|
-| **May 15 — June 15** | Finish branding stack end-to-end | ✅ Hygiene batch (3/3 closed, Section 108) → Phase 6-D-2 logo swap → Phase 6-D-3 admin upload UI + DigitalOcean Spaces |
+| **May 15 — June 15** | Finish branding stack end-to-end | ✅ Hygiene batch (3/3 closed, Section 108) → ✅ Phase 6-D-2 logo swap → ✅ Phase 6-D-3 backend (Section 112) → Phase 6-D-3 frontend admin upload UI **bundled with `max_users` seat-cap migration 017 + invite enforcement (Section 113)** |
 | **June 15 — July 31** | Polish + demo readiness | Bug fixes, performance, demo data setup for 2 reference tenants, marketing site refresh, mobile build update |
 | **August** | Pre-conference dry-run | End-to-end rehearsal flow: signup → branding setup → daily use of 3 core workflows (timesheet, project, materials). ✅ External uptime monitor live (Better Stack, Section 108). |
-| **September** | **Conference** | Demo, sales conversations, possible new tenant signups |
-| **Post-conference (Q4 2026)** | **Phase 9 — Module/Plugin System** | Architectural commitment from Section 105. Builds the runtime for per-tenant customization (paid customers can request features that live in their own module, gated at runtime). DESIGN starts post-Phase-6-D in lower-pressure window; BUILD likely starts after conference. |
+| **September** | **Conference** | Demo, sales conversations, possible new tenant signups. **No Stripe billing live; admin page honestly shows `current_users / max_users` + `mailto:billing@constrai.ca` for upgrades.** |
+| **Post-conference (Q4 2026)** | **Phase 9-A — Module/Plugin System** | Architectural commitment from Section 105. Per-tenant customization runtime (admin-toggleable feature flags driving menu visibility + route gating + per-tenant capability sets). DESIGN can start July; BUILD starts post-conference. |
+| **Post-conference (Q4 2026)** | **Phase 9-B — Billing / Subscriptions** | NEW: Section 113 split. Full Stripe Billing + webhook handler + subscription state machine (TRIAL → ACTIVE → PAST_DUE → SUSPENDED → CANCELLED → DELETED) + Customer Portal + dunning emails + QST/GST tax. Parallel with 9-A, same `companies` table. |
 | **Q1 2027** | Phase 7 — Security maturity | 2FA + biometric + PIN→password migration |
 
 **What this implies for session priority order:**
@@ -64,13 +65,13 @@ When you receive the one-line command above:
 2. **Read these 4 files** (use the Read tool, NOT bash):
    - `HANDOFF.md` (this file)
    - `CLAUDE.md` (working rules)
-   - `DECISIONS.md` — read ONLY the latest 2-3 sections (the file is now 12,200+ lines). Latest section is **103** (Phase 6-D-1c drop-body-tokens-for-web). Also relevant: 102 (nginx wildcard vhost — config in repo, prod activation still pending), 101 (Phase 6-D-1b frontend cookies + Pitfall #36). **NB:** DECISIONS.md still has a duplicate Section 99 around line 11767 (leftover from May 14 morning — hygiene item #1 below). The canonical Section 99 is at line ~11574. **IMPORTANT:** Read DECISIONS.md via the Read tool ONLY (never `bash tail` / `grep`) — Cowork bash mount can lag and miss recently merged sections.
+   - `DECISIONS.md` — read ONLY the latest 2-3 sections (the file is now 13,000+ lines). Latest section is **113** (Subscription/Billing strategy — D3 chosen: ship static `max_users` now, defer full Stripe to Phase 9-B). Also relevant: 112 (Phase 6-D-3 backend shipped + DO Spaces bucket deferred), 111 (polish batch — drop legacy `logo_url` + dynamic title + 6-variable shade palette, recovered via PR #251). **IMPORTANT:** Read DECISIONS.md via the Read tool ONLY (never `bash tail` / `grep`) — Cowork bash mount can lag and miss recently merged sections.
    - `RECOVERY.md` Section 2.4 only if relevant
 3. **Echo this exact line** as the first line of your reply:
    ```
-   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 103, Phase 6-D-1c shipped, three hygiene items + Phase 6-D-2 logo swap pending)
+   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 113, Phase 6-D-3 backend + Section 111 polish merged, Phase 6-D-3 frontend bundled with max_users seat-cap is next)
    ```
-4. **Open with the three hygiene items as the recommended first batch** — they are small, independent, and unblock Phase 6-D-2 cleanly. Confirm the task list in 1-2 lines, then ask Hedar which order he prefers.
+4. **Open with the Phase 6-D-3 frontend half as the next major code task.** It now bundles: (a) the admin Branding upload form, (b) migration 017 adding `companies.max_users` with plan-based backfill, (c) the 5-line invite-enforcement block returning HTTP 402 USER_LIMIT_REACHED, (d) the admin seat-counter display + `mailto:billing@constrai.ca` upgrade link. Full spec in Section 113.4–113.7. Estimated effort: half-day. Confirm scope in 2-3 lines, then ask Hedar if he wants the migration shipped as a separate PR ahead of the frontend or bundled in one.
 
 ---
 
@@ -233,12 +234,15 @@ After 6-D-2: Phase 6-D-3 (admin upload UI + DigitalOcean Spaces pipeline for log
 | **Section 107 — Pattern B verified end-to-end in production** | ✅ **VERIFIED (May 15, browser smoke `mep.constrai.ca/dashboard`)** |
 | **Phase 6-D-2 — Logo swap on LoginPage + remember-me checkbox** | ✅ **DEPLOYED + VERIFIED on prod (May 15, Sections 109 + 110)** |
 | Phase 6-D-3 backend (multer + sharp + Spaces client + route) | ✅ DEPLOYED (May 15, Section 112, PR #249) |
+| Section 111 polish batch (drop legacy `logo_url` + dynamic `<h1>` + 6-variable color-mix shades) | ✅ MERGED (May 16, PR #251 via cherry-pick of orphan `088f33e`, `c083b16` on main) |
+| **Section 113 — Subscription/billing strategy decided** | ✅ Recorded (May 16) — see DECISIONS.md Section 113 |
 | Phase 6-D-3 — DO Spaces bucket activation (operational) | ⏳ DEFERRED — execute Section 112.2 runbook when first paying tenant signs OR August dry-run requires it |
-| Phase 6-D-3 — Admin upload UI (frontend half) | ⏳ Next major code task |
+| Phase 6-D-3 — Admin upload UI (frontend half) **+ max_users seat-cap bundle (Section 113 D1)** | ⏳ **Next major code task.** Bundles: admin Branding page upload form, migration 017 `companies.max_users` column with plan-based backfill, 5-line invite enforcement returning HTTP 402, admin seat-counter display, `mailto:billing@constrai.ca` placeholder upgrade link. Spec in Section 113.4–113.7. |
 | **Demo polish + reference tenant setup** | ⏳ June 15 → July 31 (conference prep) |
 | **August dry-run + code freeze 2 weeks pre-conference** | ⏳ August 2026 |
-| **September 2026 conference** | 🎯 Hard deadline (demo + sales) |
-| **Phase 9 — Module/Plugin System** (architectural commitment, Section 105) | ⏳ DESIGN can start July; BUILD post-conference Q4 |
+| **September 2026 conference** | 🎯 Hard deadline (demo + sales). Note: no live Stripe billing during demo; admin shows `current_users / max_users` + manual upgrade link. Honest "professional-feel" UX per Section 113.11. |
+| **Phase 9-A — Module/Plugin System** (Section 105, split in 113.8) | ⏳ DESIGN can start July; BUILD post-conference Q4 2026 |
+| **Phase 9-B — Billing / Subscriptions** (NEW from Section 113) | ⏳ Post-conference Q4 2026, parallel with 9-A. Full Stripe Billing + webhook + state machine + Customer Portal + dunning + QST/GST tax. State machine + tech stack + email cadence locked in Section 113.3 / 113.5 / 113.9. |
 | Phase 7 — 2FA + biometric + PIN→password migration | ⏳ Q1 2027 |
 | Phase 8 — Audit + compliance | ⏳ Pending |
 
@@ -246,12 +250,14 @@ After 6-D-2: Phase 6-D-3 (admin upload UI + DigitalOcean Spaces pipeline for log
 
 ## Backlog items still open (lower priority)
 
-- **⏳ RECOVER PR #248 — Section 111 polish batch** (Section 112.4, May 15). Three items are already coded on orphan branch `chore/s111-polish-batch-drop-legacy-dynamic-title-shades` (commit `088f33e`): migration 016 dropping legacy `companies.logo_url`, dynamic `<h1>` from `window.__BRANDING__.company_name`, full 6-variable shade palette via `color-mix()`. PR #248 is OPEN but never merged (auto-merge stall). Recovery: `gh pr update-branch 248` + re-enable auto-merge → CI green → squash-merge. Falls back to rebase + force-push if conflicts. ~5-15 min effort. Not blocking; should land before conference demo.
+- **⏳ Section 111 polish batch** — ✅ CLOSED (May 16, PR #251). Migration 016 dropping legacy `companies.logo_url`, dynamic `<h1>` from `window.__BRANDING__.company_name`, and the full 6-variable shade palette via `color-mix()` all on main as `c083b16`. PR #248 itself never merged; was closed as superseded.
+- **⏳ Phase 6-D-3 frontend half bundles seat-cap enforcement** (Section 113, May 16). The next code PR must NOT ship the admin upload form alone — it bundles migration 017 (`companies.max_users` column with plan-based backfill: BASIC=5 / PRO=25 / ENTERPRISE=100 / TRIAL=5), the 5-line invite-enforcement check returning HTTP 402 USER_LIMIT_REACHED, the admin seat-counter display, and the `mailto:billing@constrai.ca` placeholder upgrade link. Spec in Section 113.4 / 113.6 / 113.7. Estimated effort: half-day for the frontend + ~15 min for the migration + ~15 min for the route block + tests.
+- **⏳ Phase 9-B — Billing / Subscriptions** (Section 113, May 16). Post-conference Q4 2026. Full Stripe Billing integration: subscription state machine (TRIAL → ACTIVE → PAST_DUE → SUSPENDED → CANCELLED → DELETED) per 113.3, webhook handler at `POST /api/stripe/webhook` per 113.9, hybrid read-only-then-block suspension per 113.5, dunning email cadence per 113.5, Stripe Customer Portal for plan changes, QST/GST tax compliance, idempotency table for webhook events. Plan→price catalog from 113.6. Open questions for 9-B kickoff in 113.12.
+- **⏳ Phase 9-A — Module / Plugin System** (Section 105, formalized in 113.8). Per-tenant feature-flag runtime. Post-conference Q4 2026, parallel with 9-B. Design can start in July if conference-prep bandwidth allows.
 - **⏳ DO Spaces bucket `constrai-tenant-assets` activation** (Section 112.2, May 15). Phase 6-D-3 backend code is live but the bucket isn't created yet — deliberate deferral to skip the $5/month base fee until a real tenant requires branded onboarding. Full 4-step runbook in Section 112.2: (1) bucket + CORS in DO dashboard, (2) Spaces access keys, (3) 6 env vars on prod, (4) pm2 restart + smoke. Trigger to execute: first paying tenant signs OR August dry-run needs the upload UI working end-to-end. Until then: backend returns `500 SPACES_NOT_CONFIGURED` if called.
 - `routes/project_trades.js` redundant top-level `router.use(auth)`. Low.
 - pg DeprecationWarning ("client.query() when the client is already executing a query"). Hygiene PR opportunity.
 - Coverage threshold ratchet — current measured: Lines 63.66%, Branches 54.41%, Functions 62.18%, Statements 62.61%. Ratchet candidate when stable across 3 consecutive CI runs.
-- Color shades from `brand_color` (Section 99.5) — currently only `--color-primary` and `--color-sidebar-active` track the tenant brand; shades stay Constrai green. Visual polish.
 - **PIN → password migration** — Phase 7 candidate alongside 2FA + biometric. (Hedar reminder, Section 100 session.)
 - **Mobile path migration off body refresh_token** — Phase 7 candidate alongside PIN→password (so mobile finally drops body tokens too).
 - CSRF protection — currently `SameSite=Lax` covers the common threat surface. Layer a CSRF-token middleware if state-changing GET endpoints get added.
