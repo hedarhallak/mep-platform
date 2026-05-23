@@ -13209,7 +13209,172 @@ The following backlog items are added to HANDOFF.md by the same PR that records 
 
 - **Today (May 16, 2026): 81 sections.** (Section 113 NEW — strategic subscription/billing decision. D3 chosen: ship `max_users` static seat-cap column + 5-line invite enforcement in the next code PR; defer full Stripe integration to Phase 9-B in Q4 2026. Full state machine, plan-tier mapping, suspension behavior, tech stack, and migration 017 spec all documented here so Phase 9-B can start without re-research. Phase 9 formally splits into 9-A (Module System, from Section 105) + 9-B (Billing, new). Conference-deadline scope (September 2026) is now strictly Phase 6-D-3 frontend half + the seat-cap addition — no Stripe before the conference. No code changes in this section; this is a docs-only PR.)
 
+---
 
+## 114. Section 114 — May 23, 2026 — Phase 6-D-3 frontend + max_users seat-cap bundle SHIPPED to production (PR #257)
 
+> **Status:** ✅ Merged and deployed. PR #257 squash-merged to main; migration 017 applied; backend restarted; frontend rebuilt; production-verified end-to-end. Hedar logged into `admin.constrai.ca`, opened the Branding page for the existing `MEP Construction` tenant, and confirmed the seat counter renders correctly (50 of 5 — the company is genuinely over-cap on BASIC; the new amber "At capacity" warning fires correctly). Three new pitfalls captured (#45, #46, #47). Section 113 D1 scope is now complete; the only remaining Phase 6-D-3 work is the DO Spaces bucket activation (Section 112.2 runbook, still deferred per cost rationale).
 
+### 114.1 — What shipped in PR #257
+
+| File | Change |
+|---|---|
+| `migrations/017_companies_max_users.sql` (NEW) | `ALTER TABLE companies ADD COLUMN max_users integer NOT NULL DEFAULT 5` + plan-based `UPDATE` backfill (BASIC/TRIAL=5, PRO=25, ENTERPRISE=100) + `CREATE INDEX idx_companies_max_users` + pre/post sanity `DO` blocks + `COMMENT ON COLUMN`. |
+| `migrations/017_companies_max_users.rollback.sql` (NEW) | Drops the index and column. |
+| `routes/invite_employee.js` (+47 lines) | Seat-cap enforcement block inserted after the `EMAIL_ALREADY_REGISTERED` check and before the trade-name lookup. Returns HTTP 402 `USER_LIMIT_REACHED` with `max_users`, `current_users`, and bilingual `message_en`/`message_fr` fields. Counts `public.employees` (not `app_users` — see 114.4). |
+| `routes/super_admin.js` (+14 lines) | `GET /api/super/companies/:id` now returns `company.current_users` (count of `public.employees` for the company). Enables the admin Branding page seat counter without a second round-trip. |
+| `mep-frontend/src/admin/CompanyBranding.jsx` (NEW, 472 lines) | Per-tenant Branding page: logo file picker (PNG/JPEG/WEBP, 2 MB max, client-side preview via `URL.createObjectURL`) + brand_color hex picker with live swatch + seat-usage panel (current/max + amber "at capacity" warning + `mailto:billing@constrai.ca` "Upgrade plan" button with pre-filled subject/body) + bilingual EN-primary/FR-secondary labels (web `i18next` still TODO per CLAUDE.md §3.6). Multipart upload via native `fetch()` (lib/api.js JSON-serializes, doesn't support FormData). Error handling prefers backend's `message_en`/`message_fr` over the static dict so live counts surface in the UI. |
+| `mep-frontend/src/admin/CompanyBranding.test.jsx` (NEW, 9 vitest cases) | Render lifecycle (loading → form, GET error, at-cap warning), form interactions (invalid hex, auto-`#` prefix, multipart submit asserting FormData + headers + URL + success message, 402 USER_LIMIT_REACHED bilingual render, SPACES_NOT_CONFIGURED render), and the mailto upgrade-link contents. |
+| `mep-frontend/src/AdminApp.jsx` (+2 lines) | Registered new route `/companies/:id/branding` → `<CompanyBranding />`. |
+| `mep-frontend/src/admin/CompaniesList.jsx` (+14 lines) | Added per-row `Branding →` link as a new trailing column. |
+| `tests/integration/invite_employee.test.js` (+77 lines) | Two new tests: (a) at-cap company (max_users squeezed to 1 via UPDATE + 1 manually inserted employee) returns 402 with full `error`/`max_users`/`current_users`/`message_en`/`message_fr` shape; (b) regression guard — below-cap company still returns 201. |
+
+**Commit on main:** PR #257 squash-merged as `16c02e4` (initial commit; final squash hash differs after the 2 fix commits — see 114.2). CI runs #629 / #630 / #631 captured the iteration; #631 finally green, auto-merge fired, post-merge CI #632 ran on main (informational only).
+
+### 114.2 — CI iteration: 2 fix commits required before #631 went green
+
+The first push (CI #629) failed in the `Frontend (Node 20)` vitest job with two `CompanyBranding.test.jsx` failures. The second push (CI #630) fixed one, then the third push (CI #631) fixed the other. Both root causes were testing-library semantics gotchas worth recording so future test authors skip them.
+
+**Failure A — `getByText('7')` doesn't match a number inside a multi-child element.**
+
+The seat counter JSX is `<p>{current_users} <span>/</span> {max_users}</p>`. The visual text is "7 / 25" but testing-library's default `getByText('7')` returns nothing because RTL's matcher inspects each element's _direct_ text children only — for the `<p>`, that's `"7   25"` (with the `<span>` child stripped), not `"7"`. The `<span>` itself contains only `"/"`. Neither matches `'7'`.
+
+First attempted fix (CI #630) — regex `/^7\s*\/\s*25$/` — failed for the same reason. The regex still has to match a single element's direct text, and no element's direct text content equals "7 / 25".
+
+Working fix (CI #631) — function matcher that walks textContent (descendants included):
+
+```js
+screen.getByText((_content, element) => {
+  if (!element || element.tagName !== 'P') return false
+  const normalized = (element.textContent || '').replace(/\s+/g, ' ').trim()
+  return normalized === '7 / 25'
+})
+```
+
+**Failure B — `getByText(/seat limit reached/i)` didn't match the static dict text "has reached its seat limit".**
+
+My initial static `ERROR_MESSAGES.USER_LIMIT_REACHED.en` said "This company has reached its seat limit. Upgrade the plan…" but the test fixture and the backend's actual `message_en` say "Seat limit reached (5/5). Please upgrade your plan." The test was asserting the backend phrasing; the UI was rendering the static phrasing. Two ways to reconcile.
+
+Working fix (CI #631) — change `errorMessageFor` to prefer the backend's bilingual pair when present, falling back to the static dict only when the backend returns just `error` (no `message_en`/`message_fr`). This is the better long-term behavior anyway: backend messages contain live counts (5/5), static messages don't. Test fixture also updated to include the real backend shape (with `message_en`/`message_fr`).
+
+Both failures are encoded as Pitfall #47 below — they're general testing-library traps, not Section 113 specific.
+
+### 114.3 — Production deploy
+
+Deploy ran on the prod droplet after PR merge. Critical observation: **the `mep-webhook` process auto-pulled main as soon as the merge committed**, so `git pull origin main` reported `Already up to date.` when Hedar SSH'd in seconds later. The webhook does NOT run migrations or restart pm2 — those still required the manual deploy block per Pitfall #38. Sequence that actually ran:
+
+```bash
+ssh root@143.110.218.84
+cd /var/www/mep
+git pull origin main                              # Already up to date (mep-webhook beat us)
+psql mepdb -f migrations/017_companies_max_users.sql   # FAILED — see Pitfall #45
+npm ci --omit=dev --ignore-scripts                # OK
+pm2 restart mep-backend                           # ✗ DANGEROUS — backend now needs max_users column that doesn't exist
+cd mep-frontend && npm ci --ignore-scripts && npm run build   # OK, new bundle main-B6ojUQ5z.js
+```
+
+After the failure was diagnosed, the corrective sequence was:
+
+```bash
+sudo -u postgres psql mepdb -f /var/www/mep/migrations/017_companies_max_users.sql
+# BEGIN / DO / ALTER TABLE / UPDATE 1 / CREATE INDEX / COMMENT / DO / COMMIT (all green)
+sudo -u postgres psql mepdb -c "\d companies" | grep -E "max_users|brand_"
+#  brand_color    | character varying(7)  |  |          |
+#  brand_logo_url | text                  |  |          |
+#  max_users      | integer               |  | not null | 5
+sudo -u postgres psql mepdb -c "SELECT plan, MIN(max_users), MAX(max_users), COUNT(*) FROM companies GROUP BY plan ORDER BY plan;"
+#  plan  | min | max | count
+#  BASIC |   5 |   5 |     1
+pm2 restart mep-backend
+# Health: 200, bundle hash main-B6ojUQ5z.js, no live errors in pm2 logs
+```
+
+**Window of broken state on prod:** approximately 90 seconds between the first failed `psql` and the corrective `sudo -u postgres psql`. Any invite endpoint hit in that window would have returned 500 (SQL error: column `max_users` does not exist). No real traffic in that window; the only tenant on the platform is the seed `MEP Construction` company which doesn't actively use the invite flow. Risk was hypothetical, not realized.
+
+### 114.4 — Why we count `employees`, not `app_users`
+
+Section 113.4 spec literally said:
+
+```js
+'SELECT max_users, (SELECT COUNT(*) FROM app_users WHERE company_id = $1 AND status != \'DELETED\') AS current_users FROM companies WHERE company_id = $1'
+```
+
+Two corrections were required:
+
+1. **`app_users` has no `status` column** — confirmed against `db/schema_baseline_2026-05-04.sql`. The table has `is_active boolean` and `profile_status text` (with CHECK constraint values `NEW` / `INCOMPLETE` / `COMPLETED` — no `DELETED`). The Section 113.4 spec was written assuming a future schema that doesn't exist yet.
+2. **`invite_employee.js` creates an `employees` row, NOT an `app_users` row** — the `app_users` row is created later when the invitee completes onboarding (clicks the invite link, sets a PIN). Counting `app_users` would miss every in-flight invite. Counting `employees` includes both completed and pending users — the true "seats this company is paying for" number.
+
+The corrected enforcement query is in `routes/invite_employee.js`:
+
+```js
+SELECT c.max_users,
+       (SELECT COUNT(*)::int FROM public.employees e
+          WHERE e.company_id = c.company_id) AS current_users
+  FROM public.companies c
+ WHERE c.company_id = $1
+ LIMIT 1
+```
+
+The `GET /super/companies/:id` route uses the same definition for `current_users` so the admin Branding page's counter matches what the invite endpoint enforces — single source of truth.
+
+Soft-deletion: not yet modelled. When Phase 9-B introduces a real soft-delete flow (e.g., `employees.is_archived` or a status column with a `DELETED` value), the WHERE clause will need to exclude soft-deleted rows. For now every employee row counts. Documented in both routes via inline comment.
+
+### 114.5 — Production verification: MEP Construction is over-cap
+
+The single real tenant on the platform, `MEP Construction` (BASIC plan), now displays **50 / 5** in the seat counter with the amber "At capacity — new invites will be rejected with HTTP 402" warning. This isn't a bug — it's an honest reflection of the data: the seed data created 50 employees in this BASIC-plan company long before the seat cap existed. The new enforcement will reject any 51st invite with 402. The pre-existing 50 employees are grandfathered (we never retroactively remove); only NEW invites trip the cap.
+
+This is, in fact, exactly the kind of "professional UX" Section 113.11 argued for: the admin sees the truth (you are 45 seats over your BASIC limit), and the Upgrade plan button is one click away. No silent overage billing, no fake counters. When a real customer signs up at BASIC and tries to invite their 6th user, they'll see the same UI and either upgrade or stay at 5.
+
+For the September conference demo, we should either (a) cap MEP Construction's seed employees at 5 (matching BASIC) so the at-capacity state isn't always-on for the demo tenant, OR (b) upgrade MEP Construction's `plan` to ENTERPRISE (and `max_users` to 100) so the demo shows a healthy "50 / 100" green state. Backlog item recorded in HANDOFF.
+
+### 114.6 — Pitfalls captured
+
+**Pitfall #45 — `psql <db>` as Linux root needs `sudo -u postgres psql <db>` for peer auth.**
+
+`psql mepdb -f migration.sql` run as Linux root fails with `FATAL: role "root" does not exist`. Postgres on prod is configured for `peer` authentication on Unix socket connections, which means the PG role attempted equals the Linux UID. The Linux user is `root`; no PG role named `root` exists. The fix: `sudo -u postgres psql mepdb -f migration.sql` (peer auth as `postgres` superuser, which DOES exist). Alternatively `psql -U mepuser -d mepdb -f ...` over TCP with password.
+
+CLAUDE.md §7 already mentions this in passing for backup restoration ("Restore requires `sudo -u postgres psql` (peer auth) because PostGIS extension creation needs superuser"). Now elevated to a numbered Pitfall because the same trap fires for any migration run as root — not just backups. Every future deploy block needs `sudo -u postgres psql ...` for migration commands, never bare `psql`.
+
+**Pitfall #46 — `mep-webhook` auto-pulls main but does NOT run migrations or restart pm2.**
+
+The droplet runs `mep-webhook` (pm2 process 0) which fires on push to main and runs `git pull origin main`. This is why `git pull origin main` in a fresh SSH session typically reports `Already up to date.` immediately after a merge — the webhook beat the operator to it. **The webhook does NOT run migrations and does NOT restart pm2 or rebuild the frontend.** Operators MUST still run the full deploy block (Pitfall #38) — the webhook only handles the "fetch latest source" step, not the "make the new source actually take effect" steps.
+
+This is dangerous when a PR contains schema changes: the source code references new columns/tables, the webhook auto-pulls, but the next `pm2 restart mep-backend` (which could happen for an unrelated reason — log rotation, OOM kill, manual restart) would activate the new code without the schema being migrated → instant 500s on any route that touches the new column. Mitigation: the manual deploy block is non-negotiable for any PR that touches `migrations/`. If a PR is code-only (no `migrations/` changes), the webhook + a manual `pm2 restart` is enough; if `migrations/` changed, run the full block including the `sudo -u postgres psql ...` migration step.
+
+Optional future hardening: extend `mep-webhook` to detect new files in `migrations/` since the previous HEAD and refuse to pull (or alert) until the operator runs them. Not built today; the cost-benefit isn't there for a 1-tenant deployment, but worth revisiting before the September conference.
+
+**Pitfall #47 — testing-library `getByText` only matches direct text children, not descendants.**
+
+When a visual string is built from multiple child elements (e.g., `<p>{a} <span>/</span> {b}</p>`), `screen.getByText('a / b')` fails — RTL's default matcher inspects each element's direct text content separately. For the `<p>`, that's `"a   b"` (the `<span>` stripped). For the `<span>`, it's `"/"`. Neither matches the full visual string.
+
+Fixes (in order of preference):
+1. **Function matcher walking `textContent` (descendants included):**
+   ```js
+   screen.getByText((_content, element) => {
+     if (!element || element.tagName !== 'P') return false
+     return (element.textContent || '').replace(/\s+/g, ' ').trim() === 'a / b'
+   })
+   ```
+2. **`data-testid` on the wrapper:** add `data-testid="seat-counter"` to the `<p>` and use `getByTestId`. Cleanest if the component is yours.
+3. **Restructure to a single text node:** ``<p>{`${a} / ${b}`}</p>`` — loses the ability to style the separator differently.
+
+Regex matchers (`getByText(/^a\s*\/\s*b$/)`) DO NOT help — they hit the same per-element-direct-text limitation. The regex still has to match within a single element's stripped text content; the actual textContent never reaches the matcher.
+
+A related sub-trap: error messages whose live data is interpolated by the backend (e.g., `Seat limit reached (5/5). ...`) should be passed through from `data.message_en`/`data.message_fr` rather than statically templated client-side. Frontend's job is to render what the backend says; trying to keep a parallel static translation in sync (and asserting against it in tests) creates the exact mismatch this PR hit.
+
+### 114.7 — Updates to HANDOFF.md
+
+The HANDOFF replacement (same docs PR as this section) moves:
+
+- **From:** "Pending tasks at session start" = Phase 6-D-3 frontend + max_users bundle
+- **To:** Phase 6-D-3 frontend + max_users bundle = ✅ MERGED + DEPLOYED, only DO Spaces bucket activation remains for Phase 6-D-3 completion (still deferred per Section 112.2). Next major code task is now: marketing site refresh + reference-tenant data setup for the conference demo polish window (June 15 → July 31).
+- Latest deployed: PR #257 (squash on main, May 23)
+- Pitfall list grows from 44 to 47 (adds #45 / #46 / #47).
+- Migration table marks Phase 6-D-3 frontend + max_users as ✅ DEPLOYED.
+
+A small backlog item is added: "Decide MEP Construction demo posture" (drop seed employees to ≤5 OR upgrade the company to ENTERPRISE/100), so the conference demo tenant doesn't always render the amber at-capacity warning.
+
+### 114.8 — Section/total update
+
+- **Today (May 23, 2026): 82 sections.** (Section 114 NEW — Phase 6-D-3 frontend + max_users seat-cap shipped via PR #257 and deployed to prod. Two fix commits to land vitest assertions (function matcher + bilingual passthrough). Migration 017 applied via `sudo -u postgres psql` after a `psql` peer-auth failure on first attempt — captured as Pitfall #45. `mep-webhook` auto-pull observed and captured as Pitfall #46. Section 113.4 spec corrected to count `public.employees` instead of `public.app_users` (which has no `status` column and isn't populated until onboarding completes). Production verified by SUPER_ADMIN browser smoke against MEP Construction tenant — seat counter renders 50/5 with amber "At capacity" warning, exactly as designed. Section 113 D1 scope complete; Phase 6-D-3 has only the DO Spaces bucket activation remaining (still deferred per Section 112.2 cost rationale).)
 
