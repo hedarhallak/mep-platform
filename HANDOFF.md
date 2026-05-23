@@ -75,124 +75,76 @@ When you receive the one-line command above:
 
 ---
 
-## Pending tasks at session start (ordered, smallest-first)
+## Pending tasks at session start (NEXT MAJOR CODE TASK)
 
-These three items hit tool-level friction during the May 14 marathon and are now stale by one session. They are independent and can ship as **one combined hygiene PR** or three tiny ones — Hedar's call.
+### 🎯 Phase 6-D-3 frontend half + `max_users` seat-cap bundle (Section 113 D1)
 
-**Note (May 15 closeout — Section 108):** ✅ ALL THREE HYGIENE ITEMS CLOSED this session. Section 108 documents the closeout. Original runbooks preserved below for reference / disaster recovery.
+This is **one PR**, not two. The frontend admin upload form ships together with the seat-cap migration and the invite enforcement check. Why bundle: the admin Branding page is also where the seat counter displays, so the migration + the UI are physically adjacent.
 
-### 1. ✅ Clean up duplicate Section 99 in DECISIONS.md — DONE (May 15)
+**Estimated effort:** half-day total (~4 hours).
 
-Removed lines 11767–11871 via the Edit tool. `grep -c "^## Section 99" DECISIONS.md` returns `1`. The aborted-draft duplicate from May 14 morning is gone.
+**Branch name suggestion:** `feat/s113-phase6d3-frontend-and-maxusers`.
 
-### 1. (original instructions — preserved for reference) Clean up duplicate Section 99 in DECISIONS.md
+**Scope — exactly five pieces:**
 
-**Problem:** `DECISIONS.md` contains TWO `## Section 99` headers. The canonical one is at line ~11574 (`## Section 99 — Phase 6-C: Frontend Branding Bootstrap`). The duplicate is at line ~11767 (`## Section 99 — Phase 6-C Frontend Branding Bootstrap + Pitfall #36`) — a leftover from an aborted draft earlier in the May 14 session. The duplicate's "Pitfall #36" is about user-flow confirmation and conflicts with the canonical Pitfall #36 (verify-branch-before-commit) added later in Section 101.
+#### 1. Migration 017 — `companies.max_users` column (~15 min)
 
-**Action:** Remove the duplicate (~107 lines starting at line 11767, through to just before `## Section 100`). The canonical Section 99 stays. No content from the duplicate is worth saving — its user-flow lesson is already captured in the Phase 6-C ground-truth flow described in Sections 99 + 100.
+Files:
+- `migrations/017_companies_max_users.sql` — `ALTER TABLE companies ADD COLUMN max_users integer NOT NULL DEFAULT 5;` + `UPDATE` backfill based on `plan` (BASIC=5 / PRO=25 / ENTERPRISE=100 / TRIAL=5) + `CREATE INDEX idx_companies_max_users`.
+- `migrations/017_companies_max_users.rollback.sql` — `ALTER TABLE companies DROP COLUMN max_users;`
 
-**Why PowerShell silently failed last session:** The session-state lag in the Cowork bash sandbox toward end-of-session was producing odd file-write behavior. A fresh session with a clean mount + Edit tool on the new state should work.
+Full spec: DECISIONS.md Section 113.7.
 
-**Verification:** `grep -c "^## Section 99" DECISIONS.md` should return `1`.
+#### 2. Invite enforcement in `routes/invite_employee.js` (~15 min)
 
-### 2. ✅ Add main-branch guard to `.husky/pre-commit` (Pitfall #36) — DONE (May 15)
+5-line block BEFORE creating the invite row: `SELECT max_users, COUNT(*) FROM ...` → if `current_users >= max_users` return `res.status(402).json({ error: 'USER_LIMIT_REACHED', max_users, current_users, message_fr, message_en })`.
 
-Installed via `mcp__workspace__bash` on the Linux mount path (Edit tool refused the Windows path as "protected"). Pre-commit hook now refuses commits when `git rev-parse --abbrev-ref HEAD = main`. Bypass requires `git commit --no-verify` — friction is intentional. See Section 108.3 for the exact snippet and Pitfall #43 for the bash-on-Linux-mount workaround.
+Full code in DECISIONS.md Section 113.4. Status `DELETED` excluded from count.
 
-### 2. (original instructions — preserved for reference) Add main-branch guard to `.husky/pre-commit` (Pitfall #36)
+#### 3. Admin upload form `mep-frontend/src/admin/CompanyBranding.jsx` (~2 hours)
 
-**Problem:** On May 14, a Phase 6-D-1b commit accidentally landed on local `main` instead of the intended feature branch. Recovered cleanly (no prod impact, because `gh pr create` failed silently before any push to origin) but encoded as Pitfall #36 in Section 101.3. The agreed mitigation is a pre-commit hook that refuses direct commits to `main`.
+NEW page. Route: `/admin/companies/:id/branding`. Touch points:
 
-**Current `.husky/pre-commit`:**
+- Logo file picker (PNG/JPEG/WEBP, 2MB max, with client-side preview)
+- `brand_color` hex picker with live preview swatch
+- Form POSTs `multipart/form-data` to `/api/super/companies/:id/branding` (route already exists from Section 112)
+- Live "current_users / max_users" display + `mailto:billing@constrai.ca?subject=Upgrade%20plan...` link
+- Success/error toast handling — show specific message for HTTP 402 USER_LIMIT_REACHED
+- Bilingual labels (EN/FR via i18next)
 
-```sh
-echo "Running Constrai pre-commit checks..."
-node scripts/check-routes.js || exit 1
+#### 4. Modify `mep-frontend/src/admin/CompaniesList.jsx` (~30 min)
 
-echo ""
-echo "Running lint-staged (Prettier + ESLint on staged files)..."
-npx lint-staged
-```
+Add a "Branding" link in each company row pointing to `/admin/companies/:id/branding`. Add the new route to the admin router.
 
-**Target `.husky/pre-commit`:**
+#### 5. Tests (~30 min)
 
-```sh
-# Refuse direct commits to main (Pitfall #36)
-if [ "$(git rev-parse --abbrev-ref HEAD)" = "main" ]; then
-  echo "ERROR: direct commits to main are forbidden. Switch to a feature branch."
-  echo "  git checkout -b feat/your-branch-name"
-  exit 1
-fi
+- `tests/integration/invite_employee.test.js` — add test asserting HTTP 402 with `error: 'USER_LIMIT_REACHED'` when company is at-cap.
+- `mep-frontend/src/admin/CompanyBranding.test.jsx` — NEW. Smoke: renders form, file input accepts, color picker updates, submit calls fetch with multipart body.
 
-echo "Running Constrai pre-commit checks..."
-node scripts/check-routes.js || exit 1
+**Why not split into multiple PRs:** the migration + route block are 30 min combined. The frontend form needs both to exist to display the seat counter honestly. Bundling avoids 3 round-trips and a coordination gap where the migration is live but the UI doesn't know about it.
 
-echo ""
-echo "Running lint-staged (Prettier + ESLint on staged files)..."
-npx lint-staged
-```
+**Migration deploy order on prod (AFTER PR merges):**
 
-**Why Edit tool refused last session:** The tool returned "resolves to a protected location" for `.husky/pre-commit`. In a fresh session, try the Edit tool first; if it still refuses, fall back to `mcp__workspace__bash` writing through `/sessions/.../mnt/mep-fixed/.husky/pre-commit` (the Linux mount path bypasses whatever Windows-side path constraint blocked the original attempt).
-
-**Verification:** `cat .husky/pre-commit` shows the guard at the top. Then on a feature branch, `git commit -m "test" --allow-empty` succeeds. From `main`, the same command fails with the error message.
-
-### 3. ✅ Activate the nginx wildcard vhost on the production Droplet — DONE (May 15)
-
-Completed this session at ~06:50 UTC. Symlinked + reloaded + smoke-verified. `acm.constrai.ca` (and any tenant subdomain) now serves the tenant Vite shell. Section 107.1 confirms Pattern B end-to-end works through this vhost.
-
-Original runbook preserved below for reference / disaster recovery.
-
-**Status:** PR #235 (Section 102) merged the config file into the repo at `infra/nginx/wildcard-constrai.conf`. **The file is NOT YET symlinked + reloaded on prod.** Until that happens, `acm.constrai.ca` (and any other tenant subdomain) reaches Cloudflare DNS but lands on nginx's default vhost — Phase 6-D's end-to-end Pattern B is gated on this.
-
-**Runbook (also captured in `DECISIONS.md` Section 102.3):**
-
-```
+```bash
 ssh root@143.110.218.84
 ```
 
 ```bash
 cd /var/www/mep
 git pull origin main
-cp infra/nginx/wildcard-constrai.conf /etc/nginx/sites-available/wildcard-constrai
-ln -sf /etc/nginx/sites-available/wildcard-constrai /etc/nginx/sites-enabled/wildcard-constrai
-openssl x509 -in /etc/nginx/ssl/cloudflare-origin.pem -text -noout \
-  | grep -A2 "Subject Alternative Name"
-# Expected output: DNS:constrai.ca, DNS:*.constrai.ca
-nginx -t
-systemctl reload nginx
+psql mepdb -f migrations/017_companies_max_users.sql
+# Full deploy block per Pitfall #38:
+npm ci --omit=dev --ignore-scripts
+pm2 restart mep-backend
+cd mep-frontend && npm ci --ignore-scripts && npm run build && cd ..
+# Verify
+psql mepdb -c "\d companies" | grep max_users
+curl -sS -o /dev/null -w "Health: %{http_code}\n" https://app.constrai.ca/api/health
 ```
 
-**Smoke test from a browser after reload:**
-- `https://acm.constrai.ca/` → tenant Vite shell renders, branding bootstrap fires (CSS vars override applies)
-- `https://acm.constrai.ca/admin.html` → 404 (admin shell leak guard)
-- `http://acm.constrai.ca/anything` → 301 → `https://acm.constrai.ca/anything`
+### 🎯 After Phase 6-D-3 frontend ships: demo polish window opens (June 15 → July 31)
 
-**Critical end-to-end test:** open an incognito window, go to `https://app.constrai.ca/login`, enter an `acm`-company email + PIN. Backend's redirect_url logic (Section 100.5) returns `https://acm.constrai.ca/dashboard`. Frontend `LoginPage.jsx` calls `window.location.assign()` to it. After the hop, `/whoami` at `acm.constrai.ca` authenticates via the cookie (set by `app.constrai.ca`'s login response, scoped `Domain=.constrai.ca`) and renders the dashboard with `acm`'s branding applied. **As of Section 103, this whole flow works end-to-end in code** — the only missing piece is this nginx reload.
-
-**Rollback plan if anything goes wrong:**
-
-```bash
-rm /etc/nginx/sites-enabled/wildcard-constrai
-nginx -t && systemctl reload nginx
-```
-
----
-
-## After the three hygiene items: Phase 6-D-2 (logo swap on LoginPage)
-
-Swap the static Constrai logo on `LoginPage.jsx` for a tenant-aware logo URL pulled from `window.__BRANDING__.logo_url` (populated by `lib/branding.js` in Section 99). Fall back to the Constrai logo when:
-- `window.__BRANDING__` is null (generic `app.constrai.ca` entry — Pattern B starts here)
-- `logo_url` is absent or returns 404
-- The fetch / decode fails (defensive)
-
-**Touch points:**
-- `mep-frontend/src/pages/auth/LoginPage.jsx` — read `window.__BRANDING__?.logo_url`, render `<img>` with `onError` fallback to Constrai default.
-- `mep-frontend/src/admin/AdminLogin.jsx` — keep Constrai logo (SUPER_ADMIN portal has no tenant context).
-- Tests: extend `LoginPage.test.jsx` with tenant-logo render + 404-fallback cases.
-
-**Estimated effort:** ~1.5 hours. Branch name suggestion: `feat/s104-phase6d2-logo-swap`.
-
-After 6-D-2: Phase 6-D-3 (admin upload UI + DigitalOcean Spaces pipeline for logos).
+See Section 105 / Section 113.8 roadmap. Key deliverables: 2 reference tenants seeded with realistic data, marketing site refresh, mobile build refresh. No new features after June 15 unless they unblock a demo conversation.
 
 ---
 
@@ -202,15 +154,15 @@ After 6-D-2: Phase 6-D-3 (admin upload UI + DigitalOcean Spaces pipeline for log
 |---|---|
 | Production URL | `https://app.constrai.ca` |
 | Admin portal | `https://admin.constrai.ca` (SUPER_ADMIN only) |
-| Tenant subdomain example | `https://acm.constrai.ca` (DNS live; nginx activation pending — hygiene item #3) |
+| Tenant subdomain example | `https://mep.constrai.ca` (DNS live, nginx wildcard active, Pattern B verified end-to-end — Section 107) |
 | Login (test) | Email: `hedar.hallak@gmail.com` / PIN: `hedar2026` (SUPER_ADMIN) |
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04) |
-| Backend | Node.js + Express + Postgres 16, pm2-managed at `/var/www/mep`. `/login` + `/refresh` return cookie-only response body when `X-Auth-Channel: cookie` is set (Section 103); legacy body-tokens shape preserved for mobile. |
-| Frontend | React + Vite + Tailwind v4. Every fetch sends `credentials: 'include'` + `X-Auth-Channel: cookie`. `window.__BRANDING__` populated by `lib/branding.js` (Section 99). |
-| Latest deployed to prod | **Phase 6-D-1c** (`e8f07c7` on main). The Droplet will fast-forward on the next `git pull` on the server. |
-| Last merged to main | **PR #237** (Section 103 — Phase 6-D-1c). Section 103 docs PR follows (this commit). |
-| Active program | **Multi-Tenant Migration — Phase 6-D-1 trilogy fully closed.** Next code: Phase 6-D-2 logo swap. Next operational: nginx wildcard reload (hygiene #3). |
-| Mobile app | Still on Bearer-token + PIN. Backend's mobile path (no `X-Auth-Channel` header → keeps body tokens) is unchanged. |
+| Backend | Node.js + Express + Postgres 16, pm2-managed at `/var/www/mep`. `/login` + `/refresh` return cookie-only response body when `X-Auth-Channel: cookie` is set (Section 103); legacy body-tokens shape preserved for mobile. Tenant logo upload route at `POST /api/super/companies/:id/branding` (Section 112). |
+| Frontend | React + Vite + Tailwind v4. Every fetch sends `credentials: 'include'` + `X-Auth-Channel: cookie`. `window.__BRANDING__` populated by `lib/branding.js` (Section 99). LoginPage `<h1>` reads `window.__BRANDING__.company_name` (Section 111). Full 6-variable shade palette via `color-mix()` (Section 111). |
+| Latest deployed to prod | **Phase 6-D-3 backend + Section 111 polish + Section 113 docs** (`e5a0907` on main, May 16). Droplet `git pull` is required (with full deploy block per Pitfall #38 — `npm ci --ignore-scripts && pm2 restart` + `cd mep-frontend && npm ci --ignore-scripts && npm run build`). |
+| Last merged to main | **PR #252** (Section 113 — Subscription/billing strategy docs, May 16). Earlier today: PR #251 (Section 111 polish recovery via cherry-pick). |
+| Active program | **Multi-Tenant Migration — Phase 6-D-3 backend complete + Section 113 strategy locked.** Next code: **Phase 6-D-3 frontend half BUNDLED with `max_users` seat-cap (migration 017 + invite enforcement + admin counter)**. Next operational: DO Spaces bucket activation (deferred, Section 112.2). |
+| Mobile app | Still on Bearer-token + PIN. Backend's mobile path (no `X-Auth-Channel` header → keeps body tokens) is unchanged. Phase 7 will migrate. |
 
 ### Multi-tenant migration progress
 
