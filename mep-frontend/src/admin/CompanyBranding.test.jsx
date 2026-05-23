@@ -93,10 +93,18 @@ describe('CompanyBranding — render lifecycle', () => {
     })
 
     // Seat counter rendered from current_users / max_users. The visual
-    // layout is `7 / 25` split into 3 text children of a <p> (number,
-    // separator span, number), so we match the normalized text content
-    // of the wrapping <p> via regex rather than looking for "7" alone.
-    expect(screen.getByText(/^7\s*\/\s*25$/)).toBeInTheDocument()
+    // layout is `7 / 25` where the separator is a styled <span>, so the
+    // <p>'s direct text content is "7   25" — testing-library's
+    // default text matcher won't match the joined string via a plain
+    // regex (text broken up by an element). Use a function matcher that
+    // looks at the full textContent (descendants included) of the <p>.
+    expect(
+      screen.getByText((_content, element) => {
+        if (!element || element.tagName !== 'P') return false
+        const normalized = (element.textContent || '').replace(/\s+/g, ' ').trim()
+        return normalized === '7 / 25'
+      })
+    ).toBeInTheDocument()
     // Plan visible
     expect(screen.getByText('PRO')).toBeInTheDocument()
   })
