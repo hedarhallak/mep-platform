@@ -92,9 +92,11 @@ describe('CompanyBranding — render lifecycle', () => {
       expect(screen.getByText(/Branding · Acme Mechanical/i)).toBeInTheDocument()
     })
 
-    // Seat counter rendered from current_users / max_users
-    expect(screen.getByText('7')).toBeInTheDocument()
-    expect(screen.getByText('25')).toBeInTheDocument()
+    // Seat counter rendered from current_users / max_users. The visual
+    // layout is `7 / 25` split into 3 text children of a <p> (number,
+    // separator span, number), so we match the normalized text content
+    // of the wrapping <p> via regex rather than looking for "7" alone.
+    expect(screen.getByText(/^7\s*\/\s*25$/)).toBeInTheDocument()
     // Plan visible
     expect(screen.getByText('PRO')).toBeInTheDocument()
   })
@@ -209,6 +211,9 @@ describe('CompanyBranding — form interactions', () => {
     nextApiResponse = { ok: true, company: BELOW_CAP_COMPANY, admins: [] }
     const user = userEvent.setup()
 
+    // Backend shape per routes/invite_employee.js Section 113 enforcement
+    // — message_en + message_fr are populated with live counts, and the
+    // CompanyBranding code is expected to prefer them over the static dict.
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -216,6 +221,8 @@ describe('CompanyBranding — form interactions', () => {
           error: 'USER_LIMIT_REACHED',
           max_users: 5,
           current_users: 5,
+          message_en: 'Seat limit reached (5/5). Please upgrade your plan.',
+          message_fr: 'Limite atteinte (5/5). Veuillez mettre à niveau votre plan.',
         }),
         { status: 402, headers: { 'Content-Type': 'application/json' } }
       )
@@ -237,7 +244,7 @@ describe('CompanyBranding — form interactions', () => {
     await waitFor(() => {
       expect(screen.getByText(/seat limit reached/i)).toBeInTheDocument()
     })
-    expect(screen.getByText(/atteint sa limite de sièges/i)).toBeInTheDocument()
+    expect(screen.getByText(/Limite atteinte/i)).toBeInTheDocument()
   })
 
   test('SPACES_NOT_CONFIGURED renders the bucket-not-activated message', async () => {

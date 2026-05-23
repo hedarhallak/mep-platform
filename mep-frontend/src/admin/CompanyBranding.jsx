@@ -84,7 +84,24 @@ const ERROR_MESSAGES = {
   },
 }
 
-function errorMessageFor(code, fallbackMessage) {
+// Build a friendly bilingual error message for a backend error code.
+//
+// Precedence (highest → lowest):
+//   1. Backend's own bilingual pair (data.message_en + data.message_fr) —
+//      used for codes like USER_LIMIT_REACHED where the backend already
+//      bakes the live counts (e.g. "Seat limit reached (5/5)..."). Always
+//      prefer the live-data version when available so the user sees the
+//      actual numbers, not a static template.
+//   2. The static ERROR_MESSAGES dict — used for codes where the backend
+//      returns only `error` (no message_*) and we have a canned bilingual
+//      translation.
+//   3. Backend's plain `message` field — last-resort fallback for codes
+//      we haven't translated.
+//   4. Generic "Server error (CODE)".
+function errorMessageFor(code, fallbackMessage, data) {
+  if (data && data.message_en && data.message_fr) {
+    return `${data.message_en} (${data.message_fr})`
+  }
   const m = ERROR_MESSAGES[code]
   if (m) return `${m.en} (${m.fr})`
   if (fallbackMessage) return fallbackMessage
@@ -289,7 +306,7 @@ export default function CompanyBranding() {
       if (!res.ok || !data || data.ok === false) {
         const code = (data && data.error) || `HTTP_${res.status}`
         const msg = (data && data.message) || null
-        setServerError(errorMessageFor(code, msg))
+        setServerError(errorMessageFor(code, msg, data))
         return
       }
 
