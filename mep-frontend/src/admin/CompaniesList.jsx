@@ -26,6 +26,11 @@ const COLUMNS = [
   { key: 'project_count', label: 'Projects', sortable: true, numeric: true },
   { key: 'created_at', label: 'Created', sortable: true, dateField: true },
   { key: 'last_activity_at', label: 'Last activity', sortable: true, dateField: true },
+  // Section 113 (May 16, 2026): per-row "Branding" link to the new
+  // CompanyBranding page. Not a data column — sortable:false + custom
+  // render in the body — kept here so the header layout stays in sync
+  // with the body via the COLUMNS.map() in <thead>.
+  { key: 'actions', label: '', sortable: false },
 ]
 
 function formatDate(value) {
@@ -236,6 +241,15 @@ export default function CompaniesList() {
                   </td>
                   <td className="px-4 py-2 text-slate-400">{formatDate(c.created_at)}</td>
                   <td className="px-4 py-2 text-slate-400">{formatDate(c.last_activity_at)}</td>
+                  <td className="px-4 py-2 text-right">
+                    {/* Section 113 — admin Branding page per tenant. */}
+                    <Link
+                      to={`/companies/${c.company_id}/branding`}
+                      className="text-indigo-300 hover:text-indigo-200 text-xs font-medium"
+                    >
+                      Branding →
+                    </Link>
+                  </td>
                 </tr>
               ))}
             </tbody>
