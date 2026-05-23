@@ -20,6 +20,7 @@
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom'
 import CompaniesList from './admin/CompaniesList.jsx'
 import CreateCompany from './admin/CreateCompany.jsx'
+import CompanyBranding from './admin/CompanyBranding.jsx'
 import AdminLogin from './admin/AdminLogin.jsx'
 
 function NotFound() {
@@ -45,6 +46,8 @@ export default function AdminApp() {
       <Routes>
         <Route path="/" element={<CompaniesList />} />
         <Route path="/companies/new" element={<CreateCompany />} />
+        {/* Section 113 / Phase 6-D-3 frontend — per-tenant branding + seat usage page. */}
+        <Route path="/companies/:id/branding" element={<CompanyBranding />} />
         <Route path="/login" element={<AdminLogin />} />
         <Route path="*" element={<NotFound />} />
       </Routes>

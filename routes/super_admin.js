@@ -176,7 +176,23 @@ router.get('/companies/:id', async (req, res) => {
       [companyId]
     );
 
-    return res.json({ ok: true, company: rows[0], admins: admins.rows });
+    // Section 113 (May 16, 2026): include current seat-count alongside
+    // max_users so the admin Branding page can display "5 of 25 seats used"
+    // without a second round-trip. Counts employees (same definition the
+    // invite enforcement in routes/invite_employee.js uses — see Section
+    // 113.4 comment block for the rationale on counting employees vs
+    // app_users).
+    const seatCount = await req.db.query(
+      'SELECT COUNT(*)::int AS current_users FROM public.employees WHERE company_id = $1',
+      [companyId]
+    );
+    const currentUsers = Number(seatCount.rows[0]?.current_users || 0);
+
+    return res.json({
+      ok: true,
+      company: { ...rows[0], current_users: currentUsers },
+      admins: admins.rows,
+    });
   } catch (err) {
     console.error('GET /super/companies/:id error:', err);
     return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
