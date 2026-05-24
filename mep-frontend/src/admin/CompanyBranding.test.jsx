@@ -43,6 +43,11 @@ afterEach(() => {
 })
 
 // --- Fixtures -------------------------------------------------------------
+// Section 116 (May 24, 2026) — fixtures include both `subscribed_seats` (new
+// canonical, from subscriptions table via super_admin.js LEFT JOIN refactor)
+// and `max_users` (legacy alias from Section 114, kept for backward-compat
+// during transition window). The component prefers subscribed_seats and falls
+// back to max_users when only the legacy field is present.
 const BELOW_CAP_COMPANY = {
   company_id: 42,
   company_code: 'acme',
@@ -51,15 +56,23 @@ const BELOW_CAP_COMPANY = {
   status: 'ACTIVE',
   brand_color: '#16a34a',
   brand_logo_url: null,
+  subscribed_seats: 25,
   max_users: 25,
   current_users: 7,
+  current_bracket_label: '21-35',
+  current_unit_price_cents: 2300,
+  subscription_status: 'ACTIVE',
+  subscription_plan_type: 'MONTHLY',
 }
 
 const AT_CAP_COMPANY = {
   ...BELOW_CAP_COMPANY,
+  subscribed_seats: 5,
   max_users: 5,
   current_users: 5,
   plan: 'BASIC',
+  current_bracket_label: '1-5',
+  current_unit_price_cents: 2700,
 }
 
 // --- Render helper --------------------------------------------------------
@@ -219,14 +232,17 @@ describe('CompanyBranding — form interactions', () => {
     nextApiResponse = { ok: true, company: BELOW_CAP_COMPANY, admins: [] }
     const user = userEvent.setup()
 
-    // Backend shape per routes/invite_employee.js Section 113 enforcement
-    // — message_en + message_fr are populated with live counts, and the
-    // CompanyBranding code is expected to prefer them over the static dict.
+    // Backend shape per routes/invite_employee.js Section 116 enforcement
+    // (Phase 6-D-4 PR 2 refactor) — message_en + message_fr are populated
+    // with live counts, and the CompanyBranding code prefers them over the
+    // static dict. Response includes BOTH subscribed_seats (canonical) and
+    // max_users (legacy alias from Section 114) for backward-compat.
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
           ok: false,
           error: 'USER_LIMIT_REACHED',
+          subscribed_seats: 5,
           max_users: 5,
           current_users: 5,
           message_en: 'Seat limit reached (5/5). Please upgrade your plan.',

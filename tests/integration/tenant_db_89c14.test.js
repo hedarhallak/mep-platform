@@ -31,6 +31,7 @@ const {
   closePool,
   getPool,
   seedCompany,
+  seedSubscription,
   seedUser,
   cleanupTestRows,
 } = require('../helpers/db');
@@ -55,6 +56,11 @@ describeIfDb('tenantDb middleware — Section 89-C/14 batch (invite-employee + a
   beforeAll(async () => {
     companyA = await seedCompany();
     companyB = await seedCompany();
+    // Section 116 (May 24, 2026) — Phase 6-D-4 PR 2 refactor: invite-employee
+    // now reads from subscriptions table. Seed subscriptions with enough seats
+    // so the at-cap enforcement doesn't trip the tenant-isolation tests below.
+    await seedSubscription({ company_id: companyA.company_id, subscribed_seats: 25 });
+    await seedSubscription({ company_id: companyB.company_id, subscribed_seats: 25 });
     adminA = await seedUser({ company_id: companyA.company_id, role: 'COMPANY_ADMIN' });
     adminB = await seedUser({ company_id: companyB.company_id, role: 'COMPANY_ADMIN' });
   });

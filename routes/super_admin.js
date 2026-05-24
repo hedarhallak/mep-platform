@@ -162,8 +162,41 @@ router.get('/companies/:id', async (req, res) => {
     const companyId = Number(req.params.id);
     if (!companyId) return res.status(400).json({ ok: false, error: 'INVALID_ID' });
 
+    // Section 116 (May 24, 2026) — Phase 6-D-4 PR 2 refactor:
+    // LEFT JOIN subscriptions so the admin Branding page sees the canonical
+    // subscribed_seats + bracket + pricing snapshot in a single round-trip.
+    // LEFT JOIN (not INNER) so pre-migration-019 companies or future
+    // unusual cases without a subscription still return the company row
+    // with NULL subscription fields rather than a misleading 404.
+    //
+    // Response shape (backward-compatible):
+    //   - company.* — all original company columns (including legacy max_users)
+    //   - company.subscription_id, subscribed_seats, minimum_seats_billed,
+    //     current_unit_price_cents, current_bracket_label, subscription_status,
+    //     subscription_plan_type, next_billing_at, trial_ends_at — NEW from
+    //     subscriptions table (NULL if no subscription)
+    //   - company.current_users — count of public.employees for the company
+    //
+    // Frontend (CompanyBranding.jsx) prefers subscribed_seats but falls back
+    // to max_users for backward-compat during the transition window.
     const { rows } = await req.db.query(
-      'SELECT * FROM public.companies WHERE company_id = $1 LIMIT 1',
+      `SELECT
+         c.*,
+         s.id                       AS subscription_id,
+         s.status                   AS subscription_status,
+         s.plan_type                AS subscription_plan_type,
+         s.subscribed_seats,
+         s.minimum_seats_billed,
+         s.current_unit_price_cents,
+         s.current_bracket_label,
+         s.next_billing_at,
+         s.trial_ends_at,
+         s.cancel_at_period_end,
+         s.payment_method
+       FROM public.companies c
+       LEFT JOIN public.subscriptions s ON s.company_id = c.company_id
+       WHERE c.company_id = $1
+       LIMIT 1`,
       [companyId]
     );
     if (!rows.length) return res.status(404).json({ ok: false, error: 'COMPANY_NOT_FOUND' });
@@ -176,12 +209,8 @@ router.get('/companies/:id', async (req, res) => {
       [companyId]
     );
 
-    // Section 113 (May 16, 2026): include current seat-count alongside
-    // max_users so the admin Branding page can display "5 of 25 seats used"
-    // without a second round-trip. Counts employees (same definition the
-    // invite enforcement in routes/invite_employee.js uses — see Section
-    // 113.4 comment block for the rationale on counting employees vs
-    // app_users).
+    // Count current employees (same definition the invite enforcement in
+    // routes/invite_employee.js uses — see Section 113.4 comment block).
     const seatCount = await req.db.query(
       'SELECT COUNT(*)::int AS current_users FROM public.employees WHERE company_id = $1',
       [companyId]
