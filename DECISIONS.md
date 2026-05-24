@@ -14230,3 +14230,237 @@ After all references migrate (Phase 6-D-4 done), migration 020 in a follow-up se
 
 - **Today (May 24, 2026): 84 sections.** (Section 116 NEW — subscription + billing schema design. 5 new tables: subscriptions, subscription_seat_changes, invoices (with invoice_type ENUM), payments, tax_rates. Subscription state machine carried forward from Section 113.3; invoice state machine new with 8 states covering draft-to-paid flow. JSONB details fields per invoice type allow flexibility without separate sub-tables. Migration plan from Section 114 max_users documented as 4-step additive→backfill→cutover→drop pattern. 20+ API endpoints mapped across customer + SUPER_ADMIN portals. 16 UI pages enumerated (6 customer-facing + 10 SUPER_ADMIN). Currency locked as integer cents per industry standard; Quebec QST/GST stored as basis points integers in tax_rates table with effective dates. 10 open decisions deferred to Phase 6-D-4 kickoff. No code in this section; this is the architectural blueprint Phase 6-D-4 implements over the next 2-3 weeks. Strict separation: business model decisions in Section 115, schema decisions in Section 116, build phases in HANDOFF.md.)
 
+---
+
+## 117. Section 117 — May 24, 2026 — Phase 6-D-4 PR 1+2 SHIPPED + Subscription workflow revisions (training decoupling, hybrid seat-change audit, Pitfall #49 grants)
+
+> **Status:** Code shipped + strategic refinements recorded. Phase 6-D-4 PR 1 (migrations 018+019) and PR 2 (application refactor to read from subscriptions table) merged to main and deployed to prod (PRs #260 + #261). Browser-verified end-to-end on `admin.constrai.ca/companies/5/branding`: bracket label + per-seat price now appears in the seat usage panel. During the PR 1 deploy a hot-fix was required because new tables created via `sudo -u postgres psql` were owned by `postgres` and the application role `mepuser` had zero privileges on them — captured as Pitfall #49 with permanent fix planned as migration 020 in PR 3. This section also documents three strategic revisions to Section 115 that emerged from the post-deploy conversation: (1) bracket price update from $24/$22/$20/$19/$18 to $27/$25/$24/$23/$22 (already in PR 1 commit), (2) training-mandatory clarification (initial signup only, additional employees later are optional), (3) seat-change workflow shifts from pure self-serve to hybrid DB-audit + email — closing a denial-of-request risk Hedar identified.
+
+### 117.1 — Phase 6-D-4 PR 1+2 deployed and verified
+
+**PR #260 (Phase 6-D-4 PR 1 — billing schema):** merged May 24, migrations 018 + 019 deployed via `sudo -u postgres psql`. Verified all 5 tables exist + tax_rates seeded (FEDERAL/GST/500 + QC/QST/9975) + backfill produced one subscription per company (MEP Construction → `1-5` bracket at `$27.00/seat/mo` because companies.max_users was 5 from Section 114).
+
+**PR #261 (Phase 6-D-4 PR 2 — application refactor):** merged May 24, code-only deploy (no migrations). Backend bundle restart + frontend rebuild ran cleanly. New frontend bundle hash: `main-DvMeFYgC.js` (was `main-B6ojUQ5z.js` post-PR-1). Verified end-to-end:
+- `routes/invite_employee.js` now reads from `subscriptions.subscribed_seats` (keeps `max_users` alias in 402 response for backward-compat).
+- `routes/super_admin.js` GET `/companies/:id` joins subscriptions, exposes `subscribed_seats` + `current_unit_price_cents` + `current_bracket_label` + `subscription_status` + `subscription_plan_type` + `next_billing_at`.
+- `mep-frontend/src/admin/CompanyBranding.jsx` reads `subscribed_seats` (fallback `max_users`) and displays the new `Bracket 1-5 ($27.00/seat/mo)` line alongside the existing plan + at-capacity warning.
+
+Browser verification on prod: opened `admin.constrai.ca/companies/5/branding`, confirmed:
+- Seat counter renders `50 / 5` (MEP Construction is still over-cap because it has 50 employees on a `subscribed_seats=5` subscription — exactly the honest UX Section 115.11 designed for).
+- Plan line shows `Plan: BASIC · Bracket 1-5 ($27.00/seat/mo) · At capacity — new invites will be rejected with HTTP 402.`
+- Upgrade plan button still opens mailto correctly (Windows email-app picker dialog appeared — that's OS behavior, not a bug).
+
+### 117.2 — Section 115.3 bracket prices revised mid-PR-1
+
+The bracket ladder was updated from the originally-locked Section 115.3 values to a more premium-positioned ladder, per Hedar's May 24 mid-PR-1 instruction. Already deployed (was bundled in PR #260's commit). New ladder is now the source of truth across DECISIONS.md Section 115.3, migration 019, `tests/helpers/db.js` seedSubscription helper, and `tests/integration/billing_schema_018_019.test.js`:
+
+| Bracket | Previous | Revised (locked) |
+|---|---|---|
+| 1-5 | $24/seat/mo | **$27/seat/mo** |
+| 6-10 | $22 | **$25** |
+| 11-20 | $20 | **$24** |
+| 21-35 | $19 | **$23** |
+| 36-50 | $18 | **$22** |
+| 50+ | Custom (floor $18) | **Custom (floor $22)** |
+
+Step pattern shifted from "$2-$2-$1-$1" to "$2-$1-$1-$1" (only the first transition is $2; subsequent transitions are $1). Floor moved from $18 to $22. Revenue at 50 seats = $1,100/mo (was $900/mo) = ~22% revenue lift across the ladder. Hedar's reasoning: premium positioning, "high features + low price" signals lack of value; bracket prices should signal a serious B2B tool not a consumer toy.
+
+A revision note has been added inline to Section 115.3 quoting the original values + revision date so audit history is preserved without losing the new canonical values.
+
+### 117.3 — Training mandatory clarification (initial only)
+
+Section 115 originally said "mandatory on-site training" without qualifying WHEN it's mandatory. Hedar clarified May 24 the actual intent:
+
+| Trigger | Training requirement |
+|---|---|
+| **Initial company signup** | ✅ MANDATORY (on-site, Section 115.4 pricing applies) |
+| **Adding a few employees later** | ❌ NOT mandatory — customer may train them internally OR request additional training |
+| **Customer-requested additional training later** | ✅ Available as a Custom Demand quote OR a follow-up training session (manual quote workflow per Section 115.8) |
+
+Reasoning: a 5-person construction company adding their 6th employee isn't going to fly Hedar out for a half-day training. The new hire learns from the existing crew. But the COMPANY's initial onboarding (first time using Constrai) genuinely needs Hedar's hands-on training to ensure quality + ToS compliance + early-stage relationship building.
+
+**Impact on workflow:** Self-serve seat additions don't trigger mandatory training workflow. The seat-change request flow (117.4 below) just updates the subscription and sends a confirmation email — no training quote auto-generated. If Hedar identifies a customer who'd benefit from additional training (large growth spike, new role types added, etc.), he can proactively reach out and create a training Custom Demand quote.
+
+### 117.4 — Seat-change workflow revision: hybrid DB-audit + email (REVISES Section 115.3 "self-service")
+
+Section 115.3 originally locked **"Self-service seat management: Admin of tenant can add/reduce seats via admin UI ... No SUPER_ADMIN intervention required"**. Hedar identified a denial-of-request risk: a customer could click "+5 seats" in the UI, get billed, then dispute with "this happened by mistake / I didn't authorize this". Pure self-serve has weaker legal defense vs an email + DB audit trail.
+
+**Revised workflow (THIS supersedes Section 115.3 self-serve):**
+
+```
+1. Customer admin opens Subscription page
+2. Sees inline form: "Request seat change"
+   ├─ New seat count: [___]
+   └─ Reason (optional): [___]
+
+3. Clicks Submit → atomic dual action:
+   ├──→ POST /api/admin/subscription/seat-request
+   │         │
+   │         ▼
+   │     audit_logs row #1 (immutable per Pitfall #22)
+   │     ├─ action: 'CUSTOMER_REQUESTED_SUBSCRIPTION_CHANGE'
+   │     ├─ actor_user_id: <admin's app_user.id>
+   │     ├─ entity_type: 'subscription'
+   │     ├─ entity_id: <subscription.id>
+   │     └─ details: {
+   │           current_seats, requested_seats, reason,
+   │           source: 'web_app_button',
+   │           ip_address, user_agent, request_timestamp
+   │         }
+   │
+   └──→ JS opens mailto:billing@constrai.ca?subject=...&body=...
+         │
+         ▼
+        Customer sends email from their email client
+        (their Sent folder is their personal copy of the request)
+
+4. UI shows: "✅ Request recorded. Please complete by sending the email."
+
+5. Hedar reads the email in his inbox
+6. Hedar opens SUPER_ADMIN portal → Subscription Detail page for the company
+7. Hedar applies the change via "Edit seats" form:
+   ├──→ UPDATE subscriptions SET subscribed_seats = N WHERE id = X
+   ├──→ INSERT subscription_seat_changes (change_type='ADD'/'REDUCE', proration_cents, ...)
+   ├──→ audit_logs row #2
+   │     ├─ action: 'SUPER_ADMIN_APPLIED_SUBSCRIPTION_CHANGE'
+   │     ├─ details: { request_audit_id (FK to row #1), applied_seats, new_unit_price, ... }
+   │
+   └──→ Resend auto-email to customer admin's address (looked up from app_users)
+         Subject: "Re: Seat change confirmed for {Company Name}"
+         Body: new count + effective date + next invoice estimate (bilingual EN/FR)
+```
+
+**Five-source bulletproof audit trail** (no single point of denial):
+
+| Evidence | What it proves |
+|---|---|
+| `audit_logs` row #1 (immutable) | When button was clicked, by which user, from which IP, with which browser/OS |
+| `audit_logs` row #2 (immutable) | When Hedar applied the change, links back to row #1 via details.request_audit_id |
+| `subscription_seat_changes` row | The actual data change (5 → 8 seats) with proration |
+| Resend outbound log (cloud) | The confirmation email was delivered to the customer admin's address |
+| Customer's Sent folder | Their personal copy of the original request email |
+
+If a customer disputes "I didn't request this", evidence is overwhelming and distributed across 5 systems including 2 outside Constrai's control (Resend cloud, customer's own email).
+
+**Same hybrid pattern applies to:**
+- Cancellation requests (`/api/admin/subscription/cancel-request`)
+- Plan upgrade requests (Monthly → Annual or Enterprise)
+- Future: discount requests, custom-pricing requests
+
+All use the same shape: client form → POST API logs to audit_logs → mailto opens → Hedar processes → Hedar applies + audit_logs row #2 + Resend confirmation. Single mental model, single code pattern.
+
+**Why no new tables:**
+- `audit_logs` is already append-only (Pitfall #22 trigger)
+- Already linked to companies + users
+- `details` JSONB column accepts arbitrary request shapes
+- No additional schema complexity
+
+**Why "Re:" subject pattern (not Message-ID threading):**
+- Real email threading requires inbound email ingestion (Resend Inbound / Mailgun Routes — paid features)
+- "Re: ..." subject + same recipient threads correctly in Gmail, Outlook, Apple Mail ~90% of the time
+- Good enough for early stage; revisit if customer complaints emerge
+
+### 117.5 — Pitfall #49 captured: postgres-owned tables need explicit grants
+
+**The trap:** During PR 1 deploy, migration 018 was run via `sudo -u postgres psql mepdb -f migrations/018_billing_schema.sql` (per Pitfall #45). This worked — the 5 tables were created. But the tables were owned by the `postgres` superuser, NOT by the application role `mepuser`. Postgres doesn't grant ANY privileges automatically; new tables are accessible only to their owner (and superusers) unless explicit GRANTs are issued.
+
+Result: when the PR 2 refactor deployed and `routes/super_admin.js` tried to LEFT JOIN subscriptions, it errored with `permission denied for table subscriptions` (Postgres code 42501). The admin Branding page broke (500 error). Browser smoke caught it immediately.
+
+**The hot-fix** (applied to prod, ~5 minute outage on the GET /companies/:id endpoint):
+
+```bash
+sudo -u postgres psql mepdb <<'EOF'
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.subscriptions TO mepuser;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.subscription_seat_changes TO mepuser;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.invoices TO mepuser;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.payments TO mepuser;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.tax_rates TO mepuser;
+GRANT USAGE, SELECT ON SEQUENCE public.subscriptions_id_seq TO mepuser;
+-- ... and same for the other 4 sequences + same for mepuser_super role
+EOF
+```
+
+Verified via `information_schema.role_table_grants`: 40 rows (5 tables × 4 privileges × 2 roles) confirmed. Refresh of admin Branding page → 200 OK.
+
+**The permanent fix** is migration 020 (planned for Phase 6-D-4 PR 3): the migration explicitly issues GRANT statements as part of the SQL, so any future restore from backup OR clean deploy starts with correct privileges.
+
+**Why this matters for all future tables:** Any migration that creates new tables run via `sudo -u postgres psql` will have the same problem. Two prevention strategies, both should be applied:
+
+1. **In-migration GRANTs** (per-migration responsibility):
+   ```sql
+   CREATE TABLE public.new_table (...);
+   GRANT SELECT, INSERT, UPDATE, DELETE ON public.new_table TO mepuser;
+   GRANT SELECT, INSERT, UPDATE, DELETE ON public.new_table TO mepuser_super;
+   GRANT USAGE, SELECT ON SEQUENCE public.new_table_id_seq TO mepuser;
+   GRANT USAGE, SELECT ON SEQUENCE public.new_table_id_seq TO mepuser_super;
+   ```
+
+2. **ALTER DEFAULT PRIVILEGES** (cluster-wide, one-time setup; not yet applied):
+   ```sql
+   ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+     GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO mepuser, mepuser_super;
+   ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+     GRANT USAGE, SELECT ON SEQUENCES TO mepuser, mepuser_super;
+   ```
+
+   Approach #2 is cleaner long-term but doesn't retro-apply to existing tables (only new ones after the ALTER). For comprehensive coverage we apply #2 once + #1 in every migration as belt-and-suspenders.
+
+Pitfall #49 added to HANDOFF.md pitfalls list.
+
+### 117.6 — Training materials evolution consideration (Hedar's foresight)
+
+Hedar raised an important forward-looking concern May 24: "البرنامج عم يكبر بسرعة كبيرة لهيك لازم ناخد بعين الاعتبار هالشي وقت منعمل العروض التقديمية تبعت التدريب" — "the product is growing fast; we need to take this into account when designing training presentations".
+
+The risk: training materials (slides, recorded videos, hands-on exercises) created today around specific UI screens will become outdated within weeks as Phase 6-D-5 / 6-D-6 / 6-D-7 land. A customer trained in July seeing UI from May ships them confused.
+
+**Strategy for training material design (Phase 6-D-8 + ongoing):**
+
+| Layer | Content stability | Reusability |
+|---|---|---|
+| **CORE concepts** (multi-tenant, RBAC, workflows, daily dispatch flow) | ✅ Stable across product iterations | High — same materials work for any product version |
+| **WORKFLOW examples** (how a foreman submits time, how an admin invites an employee) | ⚠️ Some stability, occasional updates | Medium — UI screenshots need refresh, workflow logic stable |
+| **UI screenshots / videos** | ❌ Outdated within weeks | Low — needs versioned re-recording |
+
+**Recommendation for Phase 6-D-8 training materials:**
+
+1. **Build modular materials by topic**, not by screen
+2. **Concepts deck**: stable 60-80%, refresh once per quarter
+3. **Workflow deck**: medium-stability 60-80%, refresh every major release
+4. **UI walkthrough**: short videos (5-10 min each), re-record per release; archive old versions
+5. **Hands-on exercises**: use the customer's actual data — works regardless of UI version
+6. **Versioning convention**: training materials tagged with product version they cover (`Training v1.0 — covers Constrai July 2026 release`)
+7. **Customer gets training for the version they're on** at signup. Major releases get supplemental materials.
+
+This is forward-looking — Phase 6-D-8 (training material creation) isn't until July/August. But anchoring training design around CONCEPTS + WORKFLOWS rather than specific UI screens means the materials survive product iterations gracefully. Add as a backlog item to HANDOFF.md.
+
+### 117.7 — Updated PR 3 scope (incorporating today's decisions)
+
+Original PR 3 plan: SUPER_ADMIN endpoints + invoice numbering + tax lookup.
+
+**Revised PR 3 scope** (adds the 117.4 + 117.5 work):
+
+| Component | New / Original |
+|---|---|
+| **Migration 020 — GRANTs on billing schema** | NEW (Pitfall #49 fix) |
+| **Migration 020 — ALTER DEFAULT PRIVILEGES on public schema** | NEW (preventive) |
+| POST /api/admin/subscription/seat-request (audit_logs insert) | NEW (117.4 hybrid model) |
+| POST /api/admin/subscription/cancel-request | NEW (same pattern) |
+| POST /api/admin/subscription/plan-upgrade-request | NEW (same pattern) |
+| POST /api/super/subscriptions/:id/apply-change | NEW (Hedar processes request) |
+| Resend auto-email on apply (confirmation to customer admin) | NEW |
+| POST /api/super/training/quote (manual training quote creation) | Original |
+| POST /api/super/training/:id/send (send quote as email) | Original |
+| POST /api/super/custom-demands/quote | Original |
+| POST /api/super/payments/record (manual payment recording) | Original |
+| POST /api/super/subscriptions/:id/extend-trial | Original |
+| Sequential invoice numbering function (`generateInvoiceNumber`) | Original |
+| Tax rate lookup helper (`getActiveTaxRates`) | Original |
+| Integration tests for all new endpoints | Original |
+
+**Estimated effort updated:** ~6-8 hours (was 4-5). The hybrid seat-change endpoints + grants migration add ~2-3 hours.
+
+### 117.8 — Section/total update
+
+- **Today (May 24, 2026, late evening): 85 sections.** (Section 117 NEW — Phase 6-D-4 PR 1+2 shipped + 3 strategic revisions to Section 115. Bracket prices revised mid-PR-1 from $24/$22/$20/$19/$18 to $27/$25/$24/$23/$22 ($2-then-$1 step pattern, $22 floor); already in PR #260 commit. Training mandatory clarified: initial signup only, additional employees optional. Seat-change workflow revised from pure self-serve (115.3 original) to hybrid DB-audit + email pattern — closes denial-of-request legal risk with 5-source distributed evidence chain. Pitfall #49 captured: tables created via `sudo -u postgres psql` are owned by postgres and need explicit GRANTs for mepuser + mepuser_super; hot-fixed on prod, permanent fix in migration 020 (PR 3 scope). Training materials design forward-looking guidance added: anchor on CORE concepts + WORKFLOWS, not specific UI, since product evolves fast. PR 3 scope expanded from 4-5h to 6-8h to include grants migration + seat-request audit endpoints. Audit log integration uses existing audit_logs table (no new tables needed) leveraging Pitfall #22 immutability trigger.)
+
+
