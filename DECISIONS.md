@@ -13433,14 +13433,16 @@ The research validated two strategic positions for Constrai:
 
 | Bracket | $/user/mo | Monthly total max | Annual equiv (with 17% discount, future) |
 |---|---|---|---|
-| **1-5** | **$24** | $120 | $1,196/yr |
-| **6-10** | **$22** | $220 | $2,192/yr |
-| **11-20** | **$20** | $400 | $3,984/yr |
-| **21-35** | **$19** | $665 | $6,625/yr |
-| **36-50** | **$18** | $900 | $8,964/yr |
-| **50+** | **Custom (floor $18)** | — | Negotiated with sales |
+| **1-5** | **$27** | $135 | $1,345/yr |
+| **6-10** | **$25** | $250 | $2,490/yr |
+| **11-20** | **$24** | $480 | $4,781/yr |
+| **21-35** | **$23** | $805 | $8,020/yr |
+| **36-50** | **$22** | $1,100 | $10,956/yr |
+| **50+** | **Custom (floor $22)** | — | Negotiated with sales |
 
-The cliff arithmetic means: a 6-seat company pays 6 × $22 = $132/mo (not 5×$22 + 1×$21 marginal). Going from 5 → 6 seats raises the bill by $12 (not $22), creating a visible discount that customers grasp intuitively.
+*Bracket prices revised May 24, 2026 (from original Section 115 values of $24/$22/$20/$19/$18) to better reflect premium positioning while keeping the $2 first-step + $1/$1/$1 subsequent steps. New floor: $22.*
+
+The cliff arithmetic means: a 6-seat company pays 6 × $25 = $150/mo (not 5×$27 + 1×$25 = $160 marginal). Going from 5 → 6 seats raises the bill by $15 (= $150 − $135), not by $25, creating a visible discount that customers grasp intuitively.
 
 #### Service-level tiers (NO feature gating)
 
@@ -13525,7 +13527,7 @@ Future customer requests for custom work (custom integrations, custom reports, w
 | Plan tiers | BASIC=5, PRO=25, ENTERPRISE=100 (hard caps) | Monthly/Annual/Enterprise (service levels, all features) |
 | Feature access | Implicitly tier-locked | Flat — all features included |
 | At-cap behavior | HTTP 402 → "upgrade plan" mailto | HTTP 402 backstop only; primary UX is "add seats" inline button |
-| Pricing | Placeholder ($49/$149/$399, "not committed") | Locked: $24/$22/$20/$19/$18 cliff brackets in CAD |
+| Pricing | Placeholder ($49/$149/$399, "not committed") | Locked: $27/$25/$24/$23/$22 cliff brackets in CAD (revised May 24) |
 | Training | Mentioned as future Q4 | Mandatory at signup, on-site only, full pricing structure locked |
 | Stripe | Phase 9-B Q4 2026 | Same (no change — still deferred) |
 | Schema | `companies.max_users` as hard cap | `subscriptions` table (Section 116) with `subscribed_seats` — `max_users` deprecated |
@@ -13545,7 +13547,7 @@ Per-seat costs analyzed before pricing was locked. At current scale (1 droplet, 
 | Sentry Developer | Free | ~$0 |
 | **Total per-user marginal** | — | **~$0.35-0.45 CAD/month** |
 
-At our pricing brackets ($24 → $18), gross margin per user is 97.8-98.3% on infrastructure alone. Real costs are Hedar's time + future hires + Stripe fees (~3% of revenue when Phase 9-B lands). Mature SaaS net margin estimate: 30-50%. Conclusion: pricing is well above marginal cost; the lever for affordability is volume, not unit economics. Hedar could absorb a 10-20% price reduction without margin pressure if competitive pressure required it.
+At our pricing brackets ($27 → $22, revised May 24), gross margin per user is 98.3-98.5% on infrastructure alone. Real costs are Hedar's time + future hires + Stripe fees (~3% of revenue when Phase 9-B lands). Mature SaaS net margin estimate: 30-50%. Conclusion: pricing is well above marginal cost; the lever for affordability is volume, not unit economics. Hedar could absorb a 10-20% price reduction without margin pressure if competitive pressure required it.
 
 ### 115.6 — Why flat features (not tiered)
 
@@ -13555,7 +13557,7 @@ The original temptation was to follow the 6/6 competitor pattern and tier featur
 2. **SMB market psychology** — 5-person plumbing shop in Laval wants the full product, not a Basic version
 3. **Permissions matrix already exists** — Constrai has 13 roles × 58 permissions for in-tenant access control; tier-gating is redundant
 4. **Customer reviews** — every Reddit thread about construction SaaS complains about feature gates ("I need feature X but it's behind Premier")
-5. **Sales simplicity** — "$24/user, all features" is a stronger pitch than "Basic at $19, Pro at $32, see comparison chart"
+5. **Sales simplicity** — "$27/user, all features" is a stronger pitch than "Basic at $22, Pro at $35, see comparison chart"
 6. **Build simplicity** — feature gating throughout the codebase is expensive to add and maintain
 
 Hedar separately raised concern about price anchoring ("one price = signals cheap product"). Resolved by the 3 service-level tiers (Monthly / Annual / Enterprise) which provide price anchoring **without** breaking flat features. The Enterprise tier's existence makes Monthly feel like good value; the Annual tier creates a "commit and save" upsell motion. All three include the same features.
@@ -13709,7 +13711,7 @@ CREATE TABLE public.subscriptions (
   -- Seats & pricing (live snapshot — see seat_changes table for history)
   subscribed_seats            INTEGER NOT NULL DEFAULT 3,
   minimum_seats_billed        INTEGER NOT NULL DEFAULT 3,         -- floor per Section 115.3
-  current_unit_price_cents    INTEGER NOT NULL,                   -- e.g., 2400 = $24.00 CAD
+  current_unit_price_cents    INTEGER NOT NULL,                   -- e.g., 2700 = $27.00 CAD
   current_bracket_label       TEXT NOT NULL,                       -- '1-5', '6-10', '11-20', etc.
 
   -- Billing cycle (anchor = 1st of month per Section 115.3)
@@ -13847,7 +13849,7 @@ CREATE INDEX idx_invoices_subscription ON public.invoices(subscription_id) WHERE
 {
   "subscribed_seats": 12,
   "billed_seats": 12,
-  "unit_price_cents": 2000,
+  "unit_price_cents": 2400,
   "bracket": "11-20",
   "billing_period_start": "2026-07-01",
   "billing_period_end": "2026-07-31",
@@ -14071,12 +14073,12 @@ Step 2 (migration 019): Backfill subscriptions for existing companies
      COALESCE(max_users, 5),
      GREATEST(3, COALESCE(max_users, 5)),
      CASE
-       WHEN max_users <= 5 THEN 2400
-       WHEN max_users <= 10 THEN 2200
-       WHEN max_users <= 20 THEN 2000
-       WHEN max_users <= 35 THEN 1900
-       WHEN max_users <= 50 THEN 1800
-       ELSE 1800
+       WHEN max_users <= 5 THEN 2700
+       WHEN max_users <= 10 THEN 2500
+       WHEN max_users <= 20 THEN 2400
+       WHEN max_users <= 35 THEN 2300
+       WHEN max_users <= 50 THEN 2200
+       ELSE 2200
      END,
      CASE
        WHEN max_users <= 5 THEN '1-5'

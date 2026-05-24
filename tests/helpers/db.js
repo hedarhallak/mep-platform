@@ -181,6 +181,133 @@ async function seedCompany(overrides = {}) {
   return { company_id: Number(rows[0].company_id), name, status };
 }
 
+// Phase 6-D-4 / Section 116 — seed a subscription for an existing company.
+//
+// Tests that exercise the new billing flow (Section 115 per-seat metered)
+// call this explicitly after seedCompany(). Older tests that don't touch
+// billing don't need it — companies without a subscription continue to
+// work for non-billing code paths.
+//
+// Bracket derivation matches migration 019 backfill logic — keep these
+// two in sync if the bracket ladder changes (Section 115.3).
+async function seedSubscription(overrides = {}) {
+  await ensureSeedData();
+  const pool = getPool();
+  const companyId = overrides.company_id;
+  if (!companyId) throw new Error('seedSubscription requires { company_id }');
+
+  const subscribedSeats = overrides.subscribed_seats ?? 5;
+  const status = overrides.status || 'ACTIVE';
+  const planType = overrides.plan_type || 'MONTHLY';
+  const billingCycle = overrides.billing_cycle || 'MONTHLY';
+  const minimumSeatsBilled = overrides.minimum_seats_billed ?? 3;
+  const paymentMethod = overrides.payment_method ?? 'MANUAL_INVOICE';
+
+  // Derive bracket + unit price from subscribed_seats unless overridden.
+  // Matches migration 019 backfill arithmetic (Section 115.3 ladder).
+  let unitPriceCents = overrides.current_unit_price_cents;
+  let bracketLabel = overrides.current_bracket_label;
+  if (unitPriceCents === undefined || bracketLabel === undefined) {
+    if (subscribedSeats <= 5) {
+      unitPriceCents = unitPriceCents ?? 2700;
+      bracketLabel = bracketLabel ?? '1-5';
+    } else if (subscribedSeats <= 10) {
+      unitPriceCents = unitPriceCents ?? 2500;
+      bracketLabel = bracketLabel ?? '6-10';
+    } else if (subscribedSeats <= 20) {
+      unitPriceCents = unitPriceCents ?? 2400;
+      bracketLabel = bracketLabel ?? '11-20';
+    } else if (subscribedSeats <= 35) {
+      unitPriceCents = unitPriceCents ?? 2300;
+      bracketLabel = bracketLabel ?? '21-35';
+    } else if (subscribedSeats <= 50) {
+      unitPriceCents = unitPriceCents ?? 2200;
+      bracketLabel = bracketLabel ?? '36-50';
+    } else {
+      unitPriceCents = unitPriceCents ?? 2200;
+      bracketLabel = bracketLabel ?? '50+';
+    }
+  }
+
+  // next_billing_at defaults to first of next month at 00:00 UTC.
+  const now = new Date();
+  const defaultNextBilling = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0)
+  );
+  const nextBillingAt = overrides.next_billing_at ?? defaultNextBilling;
+
+  // Trial fields default to NULL for ACTIVE; override for TRIAL tests.
+  const trialStartedAt = overrides.trial_started_at ?? null;
+  const trialEndsAt = overrides.trial_ends_at ?? null;
+
+  const { rows } = await pool.query(
+    `INSERT INTO public.subscriptions (
+       company_id, status, plan_type,
+       trial_started_at, trial_ends_at,
+       subscribed_seats, minimum_seats_billed,
+       current_unit_price_cents, current_bracket_label,
+       billing_cycle, billing_anchor_day, next_billing_at,
+       payment_method,
+       created_by_user_id
+     ) VALUES (
+       $1, $2, $3,
+       $4, $5,
+       $6, $7,
+       $8, $9,
+       $10, 1, $11,
+       $12,
+       NULL
+     )
+     RETURNING id, created_at`,
+    [
+      companyId,
+      status,
+      planType,
+      trialStartedAt,
+      trialEndsAt,
+      subscribedSeats,
+      minimumSeatsBilled,
+      unitPriceCents,
+      bracketLabel,
+      billingCycle,
+      nextBillingAt,
+      paymentMethod,
+    ]
+  );
+
+  const subscriptionId = Number(rows[0].id);
+  const createdAt = rows[0].created_at;
+
+  // Seed the INITIAL seat_change row to match migration 019 pattern —
+  // tests inspecting the audit log expect every subscription to start
+  // with one INITIAL row.
+  await pool.query(
+    `INSERT INTO public.subscription_seat_changes
+       (subscription_id, change_type, seats_before, seats_after, delta,
+        effective_at, proration_cents, reason, created_at)
+     VALUES ($1, 'INITIAL', 0, $2, $2, $3, 0, 'INITIAL via seedSubscription helper', $3)`,
+    [subscriptionId, subscribedSeats, createdAt]
+  );
+
+  return {
+    id: subscriptionId,
+    company_id: Number(companyId),
+    status,
+    plan_type: planType,
+    subscribed_seats: subscribedSeats,
+    minimum_seats_billed: minimumSeatsBilled,
+    current_unit_price_cents: unitPriceCents,
+    current_bracket_label: bracketLabel,
+    billing_cycle: billingCycle,
+    billing_anchor_day: 1,
+    next_billing_at: nextBillingAt,
+    payment_method: paymentMethod,
+    trial_started_at: trialStartedAt,
+    trial_ends_at: trialEndsAt,
+    created_at: createdAt,
+  };
+}
+
 async function seedUser(overrides = {}) {
   await ensureSeedData();
   const pool = getPool();
@@ -532,6 +659,37 @@ async function cleanupTestRows() {
      WHERE company_id IN (SELECT company_id FROM public.companies WHERE name LIKE $1)`,
     [`${TEST_PREFIX}%`]
   );
+  // Phase 6-D-4 / Section 116 (May 2026) — clean up billing rows for test
+  // companies in FK dependency order. payments → invoices → seat_changes →
+  // subscriptions. The subscriptions table CASCADEs to seat_changes on its
+  // FK, but invoices has no ON DELETE clause back from companies, so we
+  // must DELETE invoices + payments explicitly before deleting companies.
+  await pool.query(
+    `DELETE FROM public.payments
+     WHERE invoice_id IN (
+       SELECT id FROM public.invoices
+       WHERE company_id IN (SELECT company_id FROM public.companies WHERE name LIKE $1)
+     )`,
+    [`${TEST_PREFIX}%`]
+  );
+  await pool.query(
+    `DELETE FROM public.invoices
+     WHERE company_id IN (SELECT company_id FROM public.companies WHERE name LIKE $1)`,
+    [`${TEST_PREFIX}%`]
+  );
+  await pool.query(
+    `DELETE FROM public.subscription_seat_changes
+     WHERE subscription_id IN (
+       SELECT id FROM public.subscriptions
+       WHERE company_id IN (SELECT company_id FROM public.companies WHERE name LIKE $1)
+     )`,
+    [`${TEST_PREFIX}%`]
+  );
+  await pool.query(
+    `DELETE FROM public.subscriptions
+     WHERE company_id IN (SELECT company_id FROM public.companies WHERE name LIKE $1)`,
+    [`${TEST_PREFIX}%`]
+  );
   await pool.query(`DELETE FROM public.app_users WHERE username LIKE $1`, [`${TEST_PREFIX}%`]);
   await pool.query(`DELETE FROM public.employees WHERE employee_code LIKE $1`, [`${TEST_PREFIX}%`]);
   await pool.query(`DELETE FROM public.projects WHERE project_code LIKE $1`, [`${TEST_PREFIX}%`]);
@@ -554,6 +712,7 @@ module.exports = {
   closePool,
   describeIfDb,
   seedCompany,
+  seedSubscription,
   seedUser,
   seedEmployee,
   seedEmployeeProfile,
