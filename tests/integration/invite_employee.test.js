@@ -26,6 +26,7 @@ const {
   describeIfDb,
   closePool,
   seedCompany,
+  seedSubscription,
   seedUser,
   cleanupTestRows,
   getPool,
@@ -42,6 +43,21 @@ async function loginUser(user, pin) {
   return res.body;
 }
 
+// Section 116 (May 24, 2026) — Phase 6-D-4 PR 2 refactor makes
+// routes/invite_employee.js read from subscriptions.subscribed_seats.
+// Every test that hits POST /api/invite-employee now needs a subscription
+// seeded for the company (otherwise the route returns 404
+// SUBSCRIPTION_NOT_FOUND). This helper wraps the standard seedCompany +
+// seedSubscription pattern so test bodies stay readable.
+async function seedCompanyWithSubscription(subscribedSeats = 5) {
+  const company = await seedCompany();
+  await seedSubscription({
+    company_id: company.company_id,
+    subscribed_seats: subscribedSeats,
+  });
+  return company;
+}
+
 describeIfDb('Invite employee — POST /api/invite-employee', () => {
   afterAll(async () => {
     await cleanupTestRows();
@@ -49,7 +65,7 @@ describeIfDb('Invite employee — POST /api/invite-employee', () => {
   });
 
   test('happy path: COMPANY_ADMIN creates employee + ACTIVE user_invite (201)', async () => {
-    const company = await seedCompany();
+    const company = await seedCompanyWithSubscription();
     const admin = await seedUser({ company_id: company.company_id, role: 'COMPANY_ADMIN' });
     const { token } = await loginUser(admin);
 
@@ -96,7 +112,7 @@ describeIfDb('Invite employee — POST /api/invite-employee', () => {
   });
 
   test('without employees.invite permission returns 403', async () => {
-    const company = await seedCompany();
+    const company = await seedCompanyWithSubscription();
     const worker = await seedUser({ company_id: company.company_id, role: 'WORKER' });
     const { token } = await loginUser(worker);
 
@@ -115,7 +131,7 @@ describeIfDb('Invite employee — POST /api/invite-employee', () => {
   });
 
   test('missing first_name returns 400 FIRST_NAME_REQUIRED', async () => {
-    const company = await seedCompany();
+    const company = await seedCompanyWithSubscription();
     const admin = await seedUser({ company_id: company.company_id, role: 'COMPANY_ADMIN' });
     const { token } = await loginUser(admin);
 
@@ -129,7 +145,7 @@ describeIfDb('Invite employee — POST /api/invite-employee', () => {
   });
 
   test('invalid email format returns 400 INVALID_EMAIL', async () => {
-    const company = await seedCompany();
+    const company = await seedCompanyWithSubscription();
     const admin = await seedUser({ company_id: company.company_id, role: 'COMPANY_ADMIN' });
     const { token } = await loginUser(admin);
 
@@ -148,7 +164,7 @@ describeIfDb('Invite employee — POST /api/invite-employee', () => {
   });
 
   test('duplicate email in same company returns 409 EMAIL_ALREADY_REGISTERED', async () => {
-    const company = await seedCompany();
+    const company = await seedCompanyWithSubscription();
     const admin = await seedUser({ company_id: company.company_id, role: 'COMPANY_ADMIN' });
     const { token } = await loginUser(admin);
 
@@ -169,22 +185,17 @@ describeIfDb('Invite employee — POST /api/invite-employee', () => {
     expect(second.body).toMatchObject({ ok: false, error: 'EMAIL_ALREADY_REGISTERED' });
   });
 
-  // Section 113 (May 16, 2026) — per-tenant seat-cap enforcement.
-  // The invite route reads companies.max_users + counts public.employees
-  // and rejects with 402 USER_LIMIT_REACHED when current_users >= max_users.
-  // We force the cap to 1 via a direct UPDATE (the column lands with
-  // a default of 5 from migration 017 — too high to comfortably hit in
-  // a test without seeding 5 employees). Then we insert ONE employee
-  // manually so current_users == max_users == 1, and assert the next
-  // invite is rejected.
+  // Section 113 + Section 116 (May 24, 2026, Phase 6-D-4 PR 2 refactor) —
+  // per-tenant seat-cap enforcement now reads from subscriptions.subscribed_seats
+  // (was companies.max_users in Section 114). We seed the subscription directly
+  // with subscribed_seats=1 so a single existing employee fills the cap; the
+  // older pattern of UPDATEing companies.max_users no longer affects the route.
+  // The 402 response keeps `max_users` as a legacy alias for backward-compat
+  // (alongside the new `subscribed_seats` field).
   test('at-cap company returns 402 USER_LIMIT_REACHED on invite', async () => {
     const pool = getPool();
-    const company = await seedCompany();
-
-    // Squeeze the cap to 1 so a single employee fills it.
-    await pool.query('UPDATE public.companies SET max_users = 1 WHERE company_id = $1', [
-      company.company_id,
-    ]);
+    // Seed with subscribed_seats=1 so the very first existing employee fills the cap.
+    const company = await seedCompanyWithSubscription(1);
 
     // Seed one existing employee to occupy the only seat.
     await pool.query(
@@ -215,19 +226,20 @@ describeIfDb('Invite employee — POST /api/invite-employee', () => {
     expect(res.body).toMatchObject({
       ok: false,
       error: 'USER_LIMIT_REACHED',
-      max_users: 1,
+      subscribed_seats: 1,
+      max_users: 1, // legacy alias kept for backward-compat (Section 116 refactor)
       current_users: 1,
     });
     expect(res.body.message_fr).toMatch(/Limite atteinte/);
     expect(res.body.message_en).toMatch(/Seat limit reached/);
   });
 
-  // Section 113 sanity check — verify the happy path is NOT broken when
-  // the company has plenty of headroom. Companies seeded via seedCompany
-  // get the BASIC default (max_users = 5 from migration 017 backfill),
-  // so a single invite with 0 existing employees should still 201.
-  test('below-cap company still allows invite (regression guard for Section 113)', async () => {
-    const company = await seedCompany();
+  // Section 113 + Section 116 sanity check — verify the happy path is NOT
+  // broken when the company has plenty of headroom. Companies seeded via
+  // seedCompanyWithSubscription default to subscribed_seats=5, so a single
+  // invite with 0 existing employees should still 201.
+  test('below-cap company still allows invite (regression guard for Section 113/116)', async () => {
+    const company = await seedCompanyWithSubscription();
     const admin = await seedUser({ company_id: company.company_id, role: 'COMPANY_ADMIN' });
     const { token } = await loginUser(admin);
 

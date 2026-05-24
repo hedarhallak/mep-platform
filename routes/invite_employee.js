@@ -170,11 +170,19 @@ router.post('/', can('employees.invite'), async (req, res) => {
     if (emailExists.rows.length)
       return res.status(409).json({ ok: false, error: 'EMAIL_ALREADY_REGISTERED' });
 
-    // ── Section 113.4 (May 16, 2026): per-tenant seat-cap enforcement ─
+    // ── Section 113.4 + Section 116 (May 24, 2026): per-tenant seat-cap enforcement ─
     // Block the invite when the company is at-cap. HTTP 402 (Payment
     // Required) is the canonical code for "you must upgrade your plan to
     // proceed"; Phase 9-B will reuse the same code for subscription-level
     // rejections so the frontend has a single error-shape to handle.
+    //
+    // Refactor history (Phase 6-D-4 PR 2):
+    //   Section 114 (PR #257) read from companies.max_users. Phase 6-D-4 PR 1
+    //   (migration 018 + 019, PR #260) moved the source-of-truth to
+    //   subscriptions.subscribed_seats. This route now reads from there.
+    //   companies.max_users is still populated (kept for one phase as a
+    //   safety net) but no longer authoritative; migration 020 in a later
+    //   session will DROP it once all consumers are confirmed migrated.
     //
     // What counts as a "seat":
     //   Each row in public.employees belonging to this company. We
@@ -182,38 +190,46 @@ router.post('/', can('employees.invite'), async (req, res) => {
     //   the invite flow creates an employees row immediately and the
     //   app_users row is only created later when the invitee completes
     //   onboarding. Counting employees gives the most-honest "seats this
-    //   company is paying for" number, including in-flight invites. The
-    //   Section 113.4 spec referenced app_users.status but that column
-    //   doesn't exist in the current schema; this is the corrected form.
+    //   company is paying for" number, including in-flight invites.
     //
     // Soft-deletion: not yet modelled. When Phase 9-B introduces a real
     // soft-delete flow (e.g., employees.is_archived or a status column),
     // the WHERE clause should add the exclusion. For now every row counts.
     //
+    // Response shape (backward-compatible):
+    //   The 402 response returns BOTH `subscribed_seats` (new, canonical) and
+    //   `max_users` (legacy alias from Section 114) so older frontend code
+    //   keeps working during the transition. The `max_users` alias will be
+    //   removed in Phase 9-B once all consumers migrate.
+    //
     // RLS: req.db is the per-request tenantDb pool, which already filters
-    // companies + employees by company_id; explicit `WHERE company_id = $1`
-    // is belt-and-suspenders in case middleware ordering ever changes.
+    // by company_id; explicit `WHERE company_id = $1` is belt-and-suspenders.
     const seatRowsResult = await req.db.query(
-      `SELECT c.max_users,
+      `SELECT s.subscribed_seats,
               (SELECT COUNT(*)::int FROM public.employees e
-                 WHERE e.company_id = c.company_id) AS current_users
-         FROM public.companies c
-        WHERE c.company_id = $1
+                 WHERE e.company_id = s.company_id) AS current_users
+         FROM public.subscriptions s
+        WHERE s.company_id = $1
         LIMIT 1`,
       [companyId]
     );
     if (seatRowsResult.rows.length === 0) {
-      return res.status(404).json({ ok: false, error: 'COMPANY_NOT_FOUND' });
+      // Pre-migration-019 companies (or future companies created without
+      // a subscription) — bail with a clear error. In prod, every company
+      // has a subscription post-migration-019; this branch is defensive.
+      return res.status(404).json({ ok: false, error: 'SUBSCRIPTION_NOT_FOUND' });
     }
-    const { max_users: maxUsers, current_users: currentUsers } = seatRowsResult.rows[0];
-    if (Number(currentUsers) >= Number(maxUsers)) {
+    const { subscribed_seats: subscribedSeats, current_users: currentUsers } =
+      seatRowsResult.rows[0];
+    if (Number(currentUsers) >= Number(subscribedSeats)) {
       return res.status(402).json({
         ok: false,
         error: 'USER_LIMIT_REACHED',
-        max_users: Number(maxUsers),
+        subscribed_seats: Number(subscribedSeats),
+        max_users: Number(subscribedSeats), // legacy alias from Section 114 — remove in Phase 9-B
         current_users: Number(currentUsers),
-        message_fr: `Limite atteinte (${currentUsers}/${maxUsers}). Veuillez mettre à niveau votre plan.`,
-        message_en: `Seat limit reached (${currentUsers}/${maxUsers}). Please upgrade your plan.`,
+        message_fr: `Limite atteinte (${currentUsers}/${subscribedSeats}). Veuillez mettre à niveau votre plan.`,
+        message_en: `Seat limit reached (${currentUsers}/${subscribedSeats}). Please upgrade your plan.`,
       });
     }
 

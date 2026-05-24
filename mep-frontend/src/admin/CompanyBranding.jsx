@@ -125,7 +125,8 @@ function buildMailto(company) {
     `  Company name : ${company?.name || '—'}`,
     `  Company code : ${company?.company_code || '—'}`,
     `  Current plan : ${company?.plan || '—'}`,
-    `  Current seats: ${company?.current_users ?? '—'} of ${company?.max_users ?? '—'}`,
+    `  Current seats: ${company?.current_users ?? '—'} of ${company?.subscribed_seats ?? company?.max_users ?? '—'}`,
+    `  Current bracket: ${company?.current_bracket_label ?? '—'} (${typeof company?.current_unit_price_cents === 'number' ? '$' + (company.current_unit_price_cents / 100).toFixed(2) : '—'}/seat/mo)`,
     ``,
     `Requested action: upgrade to ___ (BASIC / PRO / ENTERPRISE).`,
     ``,
@@ -368,11 +369,15 @@ export default function CompanyBranding() {
   }
 
   const currentLogoUrl = company?.brand_logo_url || null
+  // Section 116 (May 24, 2026) — prefer the canonical `subscribed_seats` from
+  // the new subscriptions table; fall back to `max_users` (legacy from Section
+  // 114) for older API responses during the transition window.
+  const seatLimit = company?.subscribed_seats ?? company?.max_users
   const atCap =
     company &&
     Number.isFinite(Number(company.current_users)) &&
-    Number.isFinite(Number(company.max_users)) &&
-    Number(company.current_users) >= Number(company.max_users)
+    Number.isFinite(Number(seatLimit)) &&
+    Number(company.current_users) >= Number(seatLimit)
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-200 px-6 py-12">
@@ -413,10 +418,22 @@ export default function CompanyBranding() {
               </h2>
               <p className="text-3xl font-bold text-slate-100 tabular-nums">
                 {company.current_users ?? '—'} <span className="text-slate-500">/</span>{' '}
-                {company.max_users ?? '—'}
+                {seatLimit ?? '—'}
               </p>
               <p className="text-xs text-slate-400 mt-1">
                 Plan: <span className="font-mono text-slate-300">{company.plan || 'BASIC'}</span>
+                {company.current_bracket_label && (
+                  <>
+                    {' '}
+                    <span className="text-slate-500">·</span>{' '}
+                    <span className="text-slate-300">
+                      Bracket {company.current_bracket_label}
+                      {typeof company.current_unit_price_cents === 'number'
+                        ? ` ($${(company.current_unit_price_cents / 100).toFixed(2)}/seat/mo)`
+                        : ''}
+                    </span>
+                  </>
+                )}
                 {atCap && (
                   <>
                     {' '}
