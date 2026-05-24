@@ -1,11 +1,13 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 24, 2026 ~23:00 UTC — **📋 PRICING MODEL LOCKED + SCHEMA DESIGNED.** Sections 115 (per-seat metered + cliff brackets + flat features + mandatory on-site training) and 116 (5-table schema: subscriptions + subscription_seat_changes + invoices + payments + tax_rates) recorded. Section 115 supersedes Section 113 D3 (which was based on a tier-cap model that didn't match Hedar's actual intended billing). No code changes this session — strategy + design only. The Section 114 max_users infrastructure stays live and gets re-semanticated to "subscribed seats" during Phase 6-D-4.
+> Last updated: May 25, 2026 ~02:30 UTC — **✅ Phase 6-D-4 PR 1+2 SHIPPED + 3 strategic revisions to Section 115.** PR #260 (migrations 018+019 — billing schema + backfill) and PR #261 (application refactor to read from subscriptions table) merged and deployed. Browser-verified end-to-end on `admin.constrai.ca/companies/5/branding` — bracket label + per-seat price now appears alongside the seat counter. Hot-fix applied during PR 1 deploy (Pitfall #49 — postgres-owned tables need explicit GRANTs); permanent fix migration 020 planned for PR 3.
 >
-> **Next code task: Phase 6-D-4** — implement Section 116 schema (migrations 018-019), refactor Section 114 code to read from subscriptions, ship backend stubs. 2-3 weeks of build work. Customer UI (Phase 6-D-5) and SUPER_ADMIN UI (Phase 6-D-6) follow.
+> **3 Section 115 revisions documented in Section 117:** (1) bracket prices revised mid-PR-1 from $24/$22/$20/$19/$18 to **$27/$25/$24/$23/$22** ($22 floor); (2) training "mandatory" clarified — initial signup only, additional employees optional; (3) seat-change workflow shifted from pure self-serve to **hybrid DB-audit + email** for legal denial-of-request defense (5-source audit chain via audit_logs immutability).
 >
-> **1 new pitfall captured this session** — #48 (when restating prior decisions, quote specific values verbatim from source messages; never summarize numerical commitments — caught twice in the Section 115 strategic discussion).
+> **Next code task: Phase 6-D-4 PR 3** — Migration 020 (GRANTs + ALTER DEFAULT PRIVILEGES) + seat-request audit endpoints + SUPER_ADMIN training quote + invoice numbering + tax lookup. Scope expanded from 4-5h to 6-8h.
+>
+> **1 new pitfall this session — #49** (tables created via `sudo -u postgres psql` are owned by postgres; mepuser + mepuser_super need explicit GRANTs).
 
 ---
 
@@ -19,42 +21,49 @@
    pm2 status mep-backend
    curl -sS -o /dev/null -w "Health: %{http_code}\n" https://app.constrai.ca/api/health
    ```
-   Expected: PM2 status `online`, memory >50mb, Health `200`. If anything off, see Section 104 in DECISIONS.md for the recovery runbook.
+   Expected: PM2 status `online`, memory >50mb, Health `200`.
 
-2. **Browser smoke test (Pattern B end-to-end):** Open `https://app.constrai.ca` in incognito → login with `seed.worker6@meptest.com` / `1234` (FOREMAN test user) → should cross-origin-hop to `mep.constrai.ca/dashboard`. If browser shows DNS NXDOMAIN for `mep.constrai.ca`, this is the local-resolver cache from Section 107.2 — wait an hour for it to expire OR set Chrome DoH to Google Public DNS as a workaround. Cloudflare wildcard is correctly configured; new tenants will not hit this.
+2. **Browser smoke test (Pattern B end-to-end):** Open `https://app.constrai.ca` in incognito → login with `seed.worker6@meptest.com` / `1234` → should cross-origin-hop to `mep.constrai.ca/dashboard`. If browser shows DNS NXDOMAIN — see Pitfall #40.
 
-3. **(Section 114) Admin Branding page smoke:** Open `https://admin.constrai.ca/login` in incognito → login `hedar.hallak@gmail.com` / PIN `hedar2026` → CompaniesList renders with `Branding →` link in the last column → click it → CompanyBranding page shows seat counter (50/5 for MEP — still over-cap until Phase 6-D-8), logo preview, brand color picker, Upgrade plan button. Confirms the Section 114 deploy is still alive.
+3. **(Section 114 + Section 117) Admin Branding page smoke:** `admin.constrai.ca/login` → login `hedar.hallak@gmail.com` / PIN `hedar2026` → CompaniesList → click `Branding →` on MEP Construction. Should see:
+   - Seat counter `50 / 5` amber
+   - **Plan line:** `Plan: BASIC · Bracket 1-5 ($27.00/seat/mo) · At capacity — new invites will be rejected with HTTP 402.`
+   - The bracket label + per-seat price prove the PR #261 subscription LEFT JOIN refactor is live.
 
-4. **Only after all three are green**, continue with the regular task list below.
+4. **(Section 117 NEW) Verify GRANTs survive any DB restore:** if a backup was restored OR the DB was rebuilt since this session, the 5 billing tables (subscriptions/seat_changes/invoices/payments/tax_rates) need to be regranted to mepuser + mepuser_super. Quick check:
+   ```bash
+   sudo -u postgres psql mepdb -c "SELECT grantee, table_name, privilege_type FROM information_schema.role_table_grants WHERE table_schema = 'public' AND table_name IN ('subscriptions','subscription_seat_changes','invoices','payments','tax_rates') AND grantee LIKE 'mep%' ORDER BY table_name, grantee, privilege_type;"
+   ```
+   Expected: 40 rows (5 tables × 4 privileges × 2 roles). If <40, re-run the hot-fix block from Section 117.5.
+
+5. **Only after all four are green**, continue with the regular task list below.
 
 ---
 
 ## 🎯 Strategic context — September 2026 conference (hard deadline)
 
-> **~4 months runway from May 24, 2026.** Hedar has a Quebec construction industry conference in September 2026. The product MUST be demo-ready and ideally sales-ready by then — branded subdomain per company, smooth onboarding, transparent pricing, working seat management, manual billing acceptable. This deadline reshapes priority for every session from now until then.
+> **~4 months runway from May 25, 2026.** Conference demo + sales readiness by September. ~3.5 months of build + 2 weeks of code freeze before conference.
 
-**Roadmap to conference (Sections 105 / 114 / 115 / 116):**
+**Roadmap to conference (Sections 105 / 114 / 115 / 116 / 117):**
 
 | Window | Focus | Phases |
 |---|---|---|
-| **May 15 — June 15** | Finish branding stack + lock pricing model | ✅ Phase 6-D-2 logo swap → ✅ Phase 6-D-3 backend → ✅ Phase 6-D-3 frontend + max_users (Section 114) → ✅ Section 115 pricing lock → ✅ Section 116 schema design |
-| **June 2026** | Build subscription schema + backend | ⏳ **Phase 6-D-4** — migrations 018-019, refactor Section 114 code, API endpoints (~2-3 weeks) |
-| **June-July 2026** | Customer-facing billing UI | ⏳ **Phase 6-D-5** — Subscription page, Seats Management, Billing/Invoices, Invoice Detail (~2 weeks) |
-| **July 2026** | SUPER_ADMIN training/quotes UI | ⏳ **Phase 6-D-6** — Training Quotes, Custom Demands, Payments Log, Overdue dashboard (~1-2 weeks) |
-| **July 2026** | Invoice PDF + email automation | ⏳ **Phase 6-D-7** — Quebec-compliant PDF, monthly cron, trial expiry warnings (~1-2 weeks) |
-| **July-August 2026** | Marketing + reference tenants | ⏳ **Phase 6-D-8** — Marketing site refresh, ToS legal review, 2 reference tenants, MEP demo posture, mobile build refresh (~2 weeks, parallel) |
-| **August** | Pre-conference dry-run + code freeze | End-to-end rehearsal, bug fix only, 2-week freeze before conference |
-| **September** | **Conference** | Demo + sales. Manual Stripe-less billing — Hedar invoices manually if a sale happens; customer pays via bank transfer/cheque; recorded in payments table |
-| **Post-conference (Q4 2026)** | **Phase 9-A** — Module/Plugin System | Per-tenant feature flags + modular add-on billing (advanced analytics, equipment mgmt, etc. as separate SKUs) |
-| **Post-conference (Q4 2026)** | **Phase 9-B** — Stripe integration | Webhook handler + real card payments + automated state transitions + dunning + Customer Portal |
-| **Q1 2027** | Phase 7 — Security maturity | 2FA + biometric + PIN→password migration |
+| **May 15 — June 15** | Branding stack + pricing model lock + schema build | ✅ Phase 6-D-3 (Section 114) → ✅ Section 115 pricing → ✅ Section 116 schema → ✅ Phase 6-D-4 PR 1+2 → ⏳ **Phase 6-D-4 PR 3** (this session next) |
+| **June 2026** | Customer-facing billing UI | ⏳ **Phase 6-D-5** — Subscription page with seat-change request form, Billing/Invoices list (~2 weeks) |
+| **June-July 2026** | SUPER_ADMIN training/quotes UI | ⏳ **Phase 6-D-6** — Subscription detail with Apply Change form, Training Quotes, Custom Demands, Payments Log (~1-2 weeks) |
+| **July 2026** | Invoice email automation + cron | ⏳ **Phase 6-D-7** — Monthly invoice cron, trial expiry emails, HTML email invoices (PDF deferred per scope-cut option) (~1-2 weeks) |
+| **July-August 2026** | Marketing + reference tenant + training materials | ⏳ **Phase 6-D-8** — Marketing site refresh, ToS legal review, reference tenant data, **modular training materials** (per Section 117.6 design guidance) (~2 weeks parallel) |
+| **August** | Pre-conference dry-run + code freeze | E2E rehearsal, bug fix only, 2-week freeze |
+| **September** | **Conference** | Demo + sales. Manual billing (Hedar invoices manually, bank transfer/cheque) |
+| **Post-conference (Q4 2026)** | Phase 9-A Module System + Phase 9-B Stripe + dunning | Real card payments, auto state transitions, customer portal |
+| **Q1 2027** | Phase 7 — Security maturity | 2FA + biometric + PIN→password |
 
 **What this implies for session priority order:**
-1. **Operational stability first** (every session opens with the URGENT FIRST CHECK above).
-2. **Phase 6-D-4 next** — implement the Section 116 schema before any other work.
-3. **Phase 6-D-5/6/7 in sequence** — customer UI, then SUPER_ADMIN UI, then PDF/email automation.
-4. **No new features in August.** August is rehearsal + bug-fix only. New code freeze 2 weeks before conference.
-5. **Plugin architecture design CAN start in July** (low-pressure, design only, no code). Build waits for Q4.
+1. **Operational stability first** (URGENT FIRST CHECK every session).
+2. **Phase 6-D-4 PR 3 next** — closes the schema implementation phase.
+3. **Phase 6-D-5/6/7 in sequence** — customer UI, then SUPER_ADMIN UI, then email automation.
+4. **No new features in August** — rehearsal + bug-fix only.
+5. **Training materials anchored on CONCEPTS + WORKFLOWS, not specific UI** (per Section 117.6 — product evolves fast, screen-based materials go stale).
 
 ---
 
@@ -68,65 +77,61 @@
 
 ## Bootstrap protocol (Claude — follow this exactly)
 
-When you receive the one-line command above:
-
 1. **Request folder access** via `request_cowork_directory` for `C:\Users\Lenovo\Desktop\mep-site-backend-fixed\mep-fixed`.
 2. **Read these 4 files** (use the Read tool, NOT bash):
    - `HANDOFF.md` (this file)
    - `CLAUDE.md` (working rules)
-   - `DECISIONS.md` — read ONLY the latest 2-3 sections (the file is now 13,800+ lines). Latest section is **116** (Subscription + Billing Schema Design). Also relevant: 115 (pricing model lock that supersedes 113 D3), 114 (Phase 6-D-3 frontend + max_users shipped). **IMPORTANT:** Read DECISIONS.md via the Read tool ONLY (never `bash tail` / `grep`) — Cowork bash mount can lag.
+   - `DECISIONS.md` — read ONLY the latest 2-3 sections (the file is now 14,400+ lines). Latest section is **117** (Phase 6-D-4 PR 1+2 shipped + 3 revisions to Section 115). Also relevant: 116 (schema design), 115 (pricing model lock — note 115.3 brackets + 115.7 training mandatory + 115.3 self-serve all REVISED in 117).
    - `RECOVERY.md` Section 2.4 only if relevant
 3. **Echo this exact line** as the first line of your reply:
    ```
-   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Sections 115 + 116, pricing model locked + schema designed, next code task is Phase 6-D-4 implementation)
+   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 117, Phase 6-D-4 PR 1+2 deployed with Pitfall #49 hot-fixed, next code task is PR 3 with expanded scope)
    ```
-4. **Open with Phase 6-D-4 as the active priority.** Confirm scope in 2-3 lines:
-   - Migration 018: create 5 new tables (subscriptions, subscription_seat_changes, invoices, payments, tax_rates)
-   - Migration 019: backfill subscriptions for existing companies from `companies.max_users` (Section 116.8)
-   - Refactor `routes/invite_employee.js` + `routes/super_admin.js` + `CompanyBranding.jsx` to read from new tables
-   - New API endpoints (customer + SUPER_ADMIN per Section 116.9)
-   - Mock payment integration only (no Stripe pre-Phase 9-B)
-   
+4. **Open with Phase 6-D-4 PR 3 as the active priority.** Updated scope (see Section 117.7):
+   - **Migration 020** — GRANTs on billing schema + ALTER DEFAULT PRIVILEGES (Pitfall #49 permanent fix)
+   - **Customer-facing endpoints** — POST seat-request, cancel-request, plan-upgrade-request (hybrid audit pattern)
+   - **SUPER_ADMIN endpoints** — POST apply-change, training quote, custom-demands quote, manual payments record, extend-trial
+   - **Helpers** — sequential invoice numbering, tax rate lookup
+   - **Resend integration** — auto-email confirmation on subscription change apply
+   - Estimated: ~6-8 hours
+
    Then ask Hedar one of:
-   - "Start with migration 018 (the schema)?" — most natural first step
-   - "Or do you want to revisit any Section 116 decision first?"
-   
-   **Don't dump 20 questions.** Pick the obvious first step and propose it.
+   - "Start with migration 020 (Pitfall #49 fix)?" — recommended first step
+   - "Or do you want to revisit any Section 117 decision first?"
 
 ---
 
 ## Pending tasks at session start (NEXT MAJOR CODE TASK)
 
-### 🎯 Phase 6-D-4 — Subscription + Billing Schema Implementation
+### 🎯 Phase 6-D-4 PR 3 — Migration 020 + seat-request endpoints + SUPER_ADMIN training/payments + numbering/tax helpers
 
-**Scope:** Section 116 schema → live in DB + Section 114 code refactored to use it. No customer-facing UI in this phase; backend only.
+**Scope:** see Section 117.7 for full table. Combines the PR 3 original scope (training quotes, payments, numbering, tax) with the new seat-change request endpoints (Section 117.4 hybrid model) + Pitfall #49 grants migration.
 
-**Estimated effort:** 2-3 weeks total, split into ~5-7 PRs.
+**Estimated effort:** 6-8 hours total, suggest split into ~3-4 commits within one PR.
 
-**PR plan (proposed):**
+**Suggested commit order:**
+1. Migration 020 — billing schema GRANTs + ALTER DEFAULT PRIVILEGES (`sudo -u postgres psql`)
+2. Customer-facing seat-change request endpoints (POST seat-request, cancel-request, plan-upgrade-request) — all use audit_logs for request side
+3. SUPER_ADMIN apply-change endpoint + Resend confirmation email helper + integration tests
+4. SUPER_ADMIN training quote / custom demands / payments / extend-trial endpoints
+5. Invoice numbering function + tax rate lookup helper + unit tests
 
-| PR # | Scope | Estimated effort |
-|---|---|---|
-| 1 | `migration 018` — Create 5 tables + enums + indexes | 4-6 hours |
-| 2 | `migration 019` — Backfill subscriptions from companies.max_users | 2-3 hours |
-| 3 | Backend refactor — `invite_employee.js`, `super_admin.js`, tests | 4-6 hours |
-| 4 | New customer-facing API endpoints — subscription, invoices | 1-2 days |
-| 5 | New SUPER_ADMIN API endpoints — training quotes, payments | 1-2 days |
-| 6 | Sequential invoice numbering function + tax rate lookup | 4-6 hours |
-| 7 | Monthly subscription invoice generation cron job | 1 day |
+**Critical references during implementation:**
+- Section 115.3 (revised bracket prices, revised self-serve → hybrid)
+- Section 115.4 (training fees structure — unchanged)
+- Section 115.7 (training mandatory — initial only per Section 117.3)
+- Section 116.4-116.6 (invoice + payment + tax schema shapes)
+- Section 117.4 (hybrid audit chain design)
+- Section 117.5 (Pitfall #49 GRANT pattern)
 
-**Key references during implementation:**
-- Section 115 → all pricing decisions (brackets, training fees, geography, etc.)
-- Section 116 → all schema columns, state machines, JSONB shapes
-- Section 116.8 → exact migration scripts for backfill
-- Section 116.13 → 10 open decisions to address as encountered
+**Critical pitfalls to avoid:**
+- Pitfall #38 — package.json changes require npm ci on prod
+- Pitfall #45 — migration 020 needs `sudo -u postgres psql`
+- Pitfall #46 — mep-webhook auto-pulls but doesn't migrate/restart
+- Pitfall #48 — quote numerical commitments verbatim from source
+- Pitfall #49 (NEW) — every new table created via sudo -u postgres needs explicit GRANTs
 
-**Critical pitfalls to avoid (from Section 114 experience):**
-- Pitfall #45 — every migration on prod via `sudo -u postgres psql`
-- Pitfall #46 — `mep-webhook` auto-pulls but doesn't migrate; FULL deploy block mandatory
-- Pitfall #48 — when documenting decisions, quote source values verbatim
-
-### After Phase 6-D-4: continues per roadmap above (6-D-5 → 6-D-8)
+### After Phase 6-D-4 PR 3: continues per roadmap (Phase 6-D-5/6/7/8)
 
 ---
 
@@ -136,94 +141,68 @@ When you receive the one-line command above:
 |---|---|
 | Production URL | `https://app.constrai.ca` |
 | Admin portal | `https://admin.constrai.ca` (SUPER_ADMIN only) |
-| Tenant subdomain example | `https://mep.constrai.ca` (DNS live, nginx wildcard active, Pattern B verified — Section 107) |
-| Login (test) | Email: `hedar.hallak@gmail.com` / PIN: `hedar2026` (SUPER_ADMIN) |
+| Tenant subdomain | `https://mep.constrai.ca` (DNS live, nginx wildcard) |
+| Login (test) | `hedar.hallak@gmail.com` / PIN `hedar2026` (SUPER_ADMIN) |
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04) |
-| Backend | Node.js + Express + Postgres 16, pm2-managed at `/var/www/mep`. Branding upload route at `POST /api/super/companies/:id/branding` (Section 112). Invite enforcement HTTP 402 USER_LIMIT_REACHED with bilingual messages (Section 114). |
-| Frontend | React + Vite + Tailwind v4. `window.__BRANDING__` populated by `lib/branding.js` (Section 99). Admin route `/companies/:id/branding` (Section 114). |
-| Latest deployed to prod | **Phase 6-D-3 frontend + max_users seat-cap bundle (Section 114)** — PR #257, May 23 (`16c02e4` + post-merge fixes). Migration 017 applied. Frontend bundle `main-B6ojUQ5z.js`. |
-| Last merged to main | **PR #258** (Section 114 docs PR — HANDOFF + DECISIONS Section 114, May 23). |
-| Active program | **Multi-Tenant Migration — Phase 6-D-3 CODE-COMPLETE.** Section 115 + 116 strategy/design done (this session). Next code: Phase 6-D-4 schema implementation. |
-| Mobile app | Still on Bearer-token + PIN. Phase 7 migration is Q1 2027. |
+| Backend | Node.js + Express + Postgres 16, pm2 at `/var/www/mep`. invite-employee reads from `subscriptions.subscribed_seats` (Section 117 refactor). GET /super/companies/:id LEFT JOINs subscriptions. |
+| Frontend | React + Vite + Tailwind v4. CompanyBranding.jsx shows bracket + per-seat price (Section 117 refactor). |
+| Latest deployed to prod | **Phase 6-D-4 PR 2 — application refactor (Section 117)** — PR #261, May 24. Frontend bundle `main-DvMeFYgC.js`. Migrations 018+019 from PR #260 also live. Hot-fix GRANTs applied per Pitfall #49. |
+| Last merged to main | **PR #261** (Phase 6-D-4 PR 2 refactor, May 24). |
+| Active program | **Phase 6-D-4 PR 1+2 SHIPPED.** PR 3 next (Section 117.7 scope). |
+| Mobile app | Still on Bearer-token + PIN. Phase 7 (Q1 2027). |
 
 ### Multi-tenant migration progress
 
 | Phase | Status |
 |---|---|
-| Section 85 — Architecture | ✅ Done |
-| Phase 1 — Cloudflare + Origin SSL | ✅ Deployed |
-| Phase 2 — Tenant Resolver | ✅ No-op (Model C) |
-| Phase 3 — DB schema 011 + email login | ✅ Deployed |
-| Phase 4a–c — RLS Stage 1–3 | ✅ Deployed |
-| Phase 5 — SUPER_ADMIN portal split | ✅ Closed |
-| Email migration SendGrid → Resend | ✅ Fully decommissioned (Section 98) |
-| Phase 6-A — companies branding columns (migration 014) | ✅ Deployed |
-| Phase 6-B — public `GET /api/companies/:code/branding` | ✅ Deployed |
-| Phase 6-C — Frontend bootstrap reads branding + applies CSS vars | ✅ Deployed (Section 99) |
-| Phase 6-D-1a/b/c — Cookie auth + redirect_url + drop body tokens | ✅ Deployed |
-| Section 102 — nginx wildcard config | ✅ Deployed (May 15) |
-| Section 106 — `/whoami` 401-reload-loop hotfix | ✅ Deployed (May 15) |
-| Section 107 — Pattern B verified end-to-end | ✅ Verified (May 15) |
-| Phase 6-D-2 — Logo swap + remember-me | ✅ Deployed + verified (May 15) |
-| Phase 6-D-3 backend (multer + sharp + Spaces client + route) | ✅ Deployed (May 15, PR #249) |
-| Section 111 polish batch | ✅ Merged (May 16, PR #251) |
-| Section 113 — Subscription/billing strategy V1 | ✅ Recorded (May 16) — **SUPERSEDED by Section 115** |
-| Phase 6-D-3 frontend + `max_users` seat-cap bundle (Section 114) | ✅ Deployed + verified on prod (May 23, PR #257, migration 017) |
-| **Section 115 — Pricing model lock (per-seat metered)** | ✅ **Recorded (May 24)** |
-| **Section 116 — Subscription + billing schema design** | ✅ **Recorded (May 24)** |
-| **Phase 6-D-4 — Subscription schema implementation** | ⏳ **NEXT — June 2026 (~2-3 weeks)** |
-| Phase 6-D-5 — Customer-facing billing UI | ⏳ June-July 2026 |
-| Phase 6-D-6 — SUPER_ADMIN training/quotes UI | ⏳ July 2026 |
-| Phase 6-D-7 — Invoice PDF + monthly cron + trial emails | ⏳ July 2026 |
-| Phase 6-D-8 — Marketing site + reference tenants + MEP demo posture + mobile build | ⏳ July-August 2026 |
-| Phase 6-D-3 — DO Spaces bucket activation (operational) | ⏳ DEFERRED — execute Section 112.2 runbook when first paying tenant signs OR August dry-run requires |
-| August dry-run + code freeze 2 weeks pre-conference | ⏳ August 2026 |
-| **September 2026 conference** | 🎯 Hard deadline. Manual billing acceptable (Hedar invoices manually). |
-| Phase 9-A — Module/Plugin System (modular add-ons) | ⏳ Q4 2026 |
-| Phase 9-B — Stripe integration | ⏳ Q4 2026 |
-| Phase 7 — 2FA + biometric + PIN→password | ⏳ Q1 2027 |
-| Phase 8 — Audit + compliance | ⏳ Pending |
+| Sections 85-107 (architecture through Pattern B verification) | ✅ Done |
+| Phase 6-D-3 backend + frontend (Sections 112 + 114) | ✅ Deployed |
+| Section 113 — Original tier-cap strategy | ⚠️ SUPERSEDED by Section 115 |
+| Section 115 — Per-seat metered + flat features + on-site training | ✅ Recorded |
+| Section 116 — Subscription + billing schema design | ✅ Recorded |
+| **Phase 6-D-4 PR 1 — Migrations 018+019 (billing schema + backfill)** | ✅ **Deployed (PR #260, May 24)** |
+| **Phase 6-D-4 PR 2 — Application refactor to read from subscriptions** | ✅ **Deployed (PR #261, May 24)** |
+| **Section 117 — Phase 6-D-4 PR 1+2 closeout + 3 revisions to S115 + Pitfall #49** | ✅ **Recorded (this session)** |
+| **Phase 6-D-4 PR 3 — Migration 020 GRANTs + seat-request audit endpoints + SUPER_ADMIN endpoints + numbering/tax helpers** | ⏳ **NEXT (this session continues OR next session)** |
+| Phase 6-D-5 — Customer-facing billing UI (Subscription page with request form) | ⏳ June 2026 |
+| Phase 6-D-6 — SUPER_ADMIN UI (Subscription detail with Apply Change, Training Quotes, etc.) | ⏳ June-July 2026 |
+| Phase 6-D-7 — Invoice email automation + monthly cron + trial expiry warnings | ⏳ July 2026 |
+| Phase 6-D-8 — Marketing site refresh + ToS legal review + reference tenant + training materials | ⏳ July-Aug 2026 |
+| DO Spaces bucket activation (Section 112.2 deferred) | ⏳ Trigger: first paying tenant OR August dry-run |
+| August dry-run + 2-week code freeze | ⏳ August 2026 |
+| **September 2026 conference** | 🎯 Hard deadline |
+| Phase 9-A Module System + Phase 9-B Stripe | ⏳ Q4 2026 (parallel) |
+| Phase 7 — Security maturity | ⏳ Q1 2027 |
 
 ---
 
 ## Backlog items still open (lower priority)
 
-- **⏳ MEP Construction demo posture** — DEFERRED until after Phase 6-D-4 + Phase 6-D-8. Will be addressed when the new subscription schema is live; MEP will be created as an ENTERPRISE-plan subscription with `subscribed_seats=100` to show 50/100 green during demo. Section 115/116 schema makes this cleaner than the old Option A/B/C decision.
-- **⏳ DO Spaces bucket activation** (Section 112.2). Trigger to execute: first paying tenant signs OR August dry-run needs upload UI end-to-end. Until then: backend returns `500 SPACES_NOT_CONFIGURED`.
-- **⏳ Phase 9-B — Stripe integration** (Section 113.9). Post-conference Q4 2026. Full Stripe Billing + webhook + state machine + Customer Portal + dunning + QST/GST tax automation.
-- **⏳ Phase 9-A — Module/Plugin System** (Section 105 / 113.8 / 115.6). Post-conference Q4 2026, parallel with 9-B. Per-tenant feature flags + modular add-on billing for advanced features. Design CAN start in July.
-- **⏳ Annual billing logic** — Schema ready in Section 116; implementation deferred to Phase 6-D-7 or Phase 9-B.
-- **⏳ `mep-webhook` hardening** (Pitfall #46). Optional: extend `mep-webhook` to detect new `migrations/` files since previous HEAD and refuse to pull until operator runs them.
-- **⏳ Soft-delete column on `employees` table** — Section 114.4. When a UI flow exists to "remove" an employee, the WHERE clause should exclude soft-deleted rows.
-- **⏳ Custom discount UI** — Deferred per Section 115.10. Build only if real demand emerges from a customer ask.
-- **⏳ Tax registration timing** — Plan when Constrai crosses Revenu Québec's $30K threshold (estimated by first paying customer in Q3 2026).
-- **⏳ ToS legal review** (Phase 6-D-8) — Required before any real paying customer; mandatory training + Quebec consumer protection clauses.
-- `routes/project_trades.js` redundant top-level `router.use(auth)`. Low.
-- pg DeprecationWarning. Hygiene PR opportunity.
-- Coverage threshold ratchet — current measured: Lines 63.66%, Branches 54.41%, Functions 62.18%, Statements 62.61%.
-- **PIN → password migration** — Phase 7 candidate.
-- **Mobile path migration off body refresh_token** — Phase 7 candidate.
-- CSRF protection — currently `SameSite=Lax` covers common threat. Layer CSRF middleware if state-changing GET endpoints get added.
-- `SENDGRID_FROM_EMAIL` env var name — optional rename to `EMAIL_FROM`.
-- Stale GitHub blob `0512476` — remains until GC; no action.
+- **⏳ Phase 6-D-4 PR 3** (next code task) — see "Pending tasks" above. Migration 020 + seat-request endpoints + SUPER_ADMIN endpoints + helpers. 6-8h.
+- **⏳ Modular training materials** (Section 117.6) — design materials by topic (concepts, workflows, UI walkthroughs) with versioning. Concepts deck = stable 80%, refresh quarterly. UI deck = re-record per release. Tag materials with product version. Anchor training on CORE workflows not specific screens (product evolves fast).
+- **⏳ MEP Construction demo posture** — Now achievable via SUPER_ADMIN Apply Change endpoint when PR 3 ships. Recommended: bump MEP to ENTERPRISE plan with subscribed_seats=100, removes the over-cap amber warning.
+- **⏳ DO Spaces bucket activation** (Section 112.2). Trigger: first paying tenant OR August dry-run needs upload UI end-to-end.
+- **⏳ Phase 9-B — Stripe integration** (Q4 2026). Full Stripe Billing + webhook + state machine + Customer Portal + dunning + QST/GST tax automation.
+- **⏳ Phase 9-A — Module/Plugin System** (Q4 2026, parallel with 9-B). Per-tenant feature toggles + modular add-on billing.
+- **⏳ Annual billing logic** — Schema ready (Section 116); cron logic deferred to Phase 6-D-7 or 9-B.
+- **⏳ Inbound email ingestion for true Message-ID threading** (Section 117.4 Interpretation 1) — if "Re:" subject pattern (Interpretation 2) generates customer complaints, upgrade. Resend Inbound or Mailgun Routes (paid). Defer until problem proven.
+- **⏳ `mep-webhook` hardening** (Pitfall #46) — extend to detect new `migrations/` files and refuse pull / alert until operator runs them.
+- **⏳ Soft-delete column on `employees` table** — needed when "remove employee" UI flow lands.
+- **⏳ Custom discount UI** — deferred per Section 115.10.
+- **⏳ Tax registration timing** — plan when crosses Revenu Québec $30K threshold.
+- **⏳ ToS legal review** (Phase 6-D-8) — mandatory training + Quebec consumer protection + audit-trail evidence policy.
+- `routes/project_trades.js` redundant `router.use(auth)`. Low.
+- pg DeprecationWarning. Hygiene opportunity.
+- Coverage threshold ratchet — Lines 63.66%, Branches 54.41%, Functions 62.18%, Statements 62.61%.
+- **PIN → password migration** — Phase 7.
+- **Mobile path migration off body refresh_token** — Phase 7.
+- CSRF middleware if state-changing GET endpoints get added.
 
 ---
 
 ## Pending items from leak remediation (Section 91)
 
 **ALL items COMPLETE.** No leak-remediation work remains.
-
-| Secret | Status |
-|---|---|
-| Cloudflare Origin Cert + Key | ✅ Rotated + deployed (Section 91) |
-| Resend API key (`v2`) | ✅ Rotated (Section 92.5) |
-| `mepuser_super` DB pw | ✅ Rotated (Section 91) |
-| `mepuser` DB pw | ✅ Rotated (Section 92.2) |
-| `MAPBOX_ACCESS_TOKEN` | ✅ Rotated (Section 92.2) |
-| `JWT_SECRET` | ✅ Rotated (Section 93.1) |
-| `ADMIN_API_KEY` + `AUTH_SECRET` | ✅ Deleted (dead env vars) |
-| `SENDGRID_API_KEY` | ✅ Decommissioned (Section 98) |
-| `SENTRY_DSN` | Optional — DSN is semi-public, skip unless misuse appears |
 
 ---
 
@@ -238,16 +217,14 @@ All credentials live in **OneDrive `Constrai Keys` folder** (`C:\Users\Lenovo\On
 | Resend API key (`Constrai Prod 2026-05-11-v2`) | `Resend API key 2026-05-11.txt` | 2026-05-11 |
 | `mepuser_super` DB pw | (saved in OneDrive) | 2026-05-11 |
 | `mepuser` DB pw | (saved in OneDrive) | 2026-05-11 |
-| `MAPBOX_ACCESS_TOKEN` (`Constrai Prod 2026-05-11`) | `Mapbox token 2026-05-11.txt` | 2026-05-11 |
+| `MAPBOX_ACCESS_TOKEN` | `Mapbox token 2026-05-11.txt` | 2026-05-11 |
 | `JWT_SECRET` | `JWT_SECRET 2026-05-11.txt` | 2026-05-11 |
 
-Prod `/var/www/mep/.env` is in sync. `SENDGRID_API_KEY` no longer present. `DO_SPACES_*` env vars not yet set (deferred).
-
-Cost inventory + DigitalOcean Spaces + Apple Developer keys: see `RECOVERY.md`.
+Prod `/var/www/mep/.env` is in sync. `DO_SPACES_*` env vars not yet set (deferred).
 
 ---
 
-## Critical pitfalls (encoded from Sections 86–116)
+## Critical pitfalls (encoded from Sections 86–117)
 
 1. **Bash sandbox file sync lag** — use Read tool to verify file state.
 2. **Edit tool can silently lose changes** — Read each file immediately after Edit.
@@ -270,7 +247,7 @@ Cost inventory + DigitalOcean Spaces + Apple Developer keys: see `RECOVERY.md`.
 19. **`openssl rand -hex N` over `-base64 N`** — hex is URL-safe.
 20. **Read untracked WIP files before writing fresh code** — `git status` + Read first.
 21. **`middleware/permissions.js can()` uses `pool.query` directly** ✅ CLOSED by 89-D.
-22. **Per-request transaction middleware MUST commit BEFORE the response is flushed** — override `res.end`.
+22. **Per-request transaction middleware MUST commit BEFORE the response is flushed** — override `res.end`. **AND** `audit_logs` is append-only via DB trigger — never DELETE / UPDATE it.
 23. **`try { INSERT } catch { handle dup }` patterns DO NOT survive inside a tenantDb transaction** — use `ON CONFLICT DO NOTHING RETURNING *`.
 24. **Orphan-account 401 from tenantDb is the cross-route contract** — update tests accordingly.
 25. **SUPER_ADMIN seedUser needs an explicit 8+ char PIN** — `seedUser({ role: 'SUPER_ADMIN', pin: 'sa-pin-1234' })`.
@@ -283,7 +260,7 @@ Cost inventory + DigitalOcean Spaces + Apple Developer keys: see `RECOVERY.md`.
 32. **Verify `pm2-root.service` is enabled BEFORE any planned reboot**.
 33. **Adding router primitives to a tested component requires updating its test wrapper**.
 34. **Never assume case homogeneity across legacy + generated text keys** — prefer `LOWER(col) = LOWER($1)`.
-35. **Provider migration completeness audit before env-var decommission** — grep direct SDK references AND legacy env-var references.
+35. **Provider migration completeness audit before env-var decommission**.
 36. **Verify current branch before commit/push during parallel work** — `git branch --show-current` before EVERY commit.
 37. **Compare pg `bigint` columns via `String()` on both sides** — `expect(String(res.body.<x>)).toBe(String(seed.<id>))`.
 38. **Every deploy that touches `package.json` MUST run `npm ci` on server BEFORE `pm2 restart`** + frontend rebuild. Mandatory FULL deploy block:
@@ -303,41 +280,57 @@ Cost inventory + DigitalOcean Spaces + Apple Developer keys: see `RECOVERY.md`.
     pm2 logs mep-backend --lines 15 --nostream
     ```
 39. **Every `/api.js` auth-related state machine needs a "we're already there" guard** — before `window.location.href = TARGET`, check `if (window.location.pathname !== TARGET)`.
-40. **DNS negative caching survives the record fix and is per-resolver** — don't pre-query a subdomain before its DNS record exists. For stuck cache: use Google `8.8.8.8` or wait the TTL.
-41. **`git pull` does NOT rebuild the Vite frontend** — always include `cd mep-frontend && npm ci --ignore-scripts && npm run build` after any frontend-touching pull.
+40. **DNS negative caching survives the record fix and is per-resolver** — don't pre-query a subdomain before its DNS record exists.
+41. **`git pull` does NOT rebuild the Vite frontend** — always include `cd mep-frontend && npm ci --ignore-scripts && npm run build`.
 42. **Don't use `lib/auth_utils` for ad-hoc shell hashing** — use `bcrypt` directly + guard with `[ -n "$HASH" ]`.
 43. **Edit tool can fail on certain repo paths; fall back to `mcp__workspace__bash` on the Linux mount**.
-44. **DB column duplication + verify field-name chain end-to-end** — psql `\d <table>` → curl endpoint → grep frontend lib. All three must match.
-45. **`psql <db>` as Linux root needs `sudo -u postgres psql <db>` for peer auth** — bare `psql` fails with `FATAL: role "root" does not exist`. Every migration command on prod MUST be prefixed:
+44. **DB column duplication + verify field-name chain end-to-end** — psql `\d <table>` → curl endpoint → grep frontend lib.
+45. **`psql <db>` as Linux root needs `sudo -u postgres psql <db>` for peer auth**:
     ```bash
     sudo -u postgres psql mepdb -f /var/www/mep/migrations/NNN_name.sql
     ```
-46. **`mep-webhook` auto-pulls main but does NOT run migrations or restart pm2** — fresh SSH session after a merge typically reports `Already up to date.` because the webhook beat you. **Dangerous when PR has schema changes:** source code references new columns, webhook auto-pulls, next `pm2 restart` activates new code without schema migrated → instant 500s. Manual deploy block (Pitfall #38) is non-negotiable for any PR touching `migrations/`.
-47. **testing-library `getByText` only matches direct text children, not descendants** — for `<p>{a} <span>/</span> {b}</p>`, `getByText('a / b')` fails. Fix: function matcher walking `textContent`:
-    ```js
-    screen.getByText((_, el) => el?.tagName === 'P' &&
-      el.textContent.replace(/\s+/g, ' ').trim() === 'a / b')
+46. **`mep-webhook` auto-pulls main but does NOT run migrations or restart pm2** — fresh SSH session after a merge typically reports `Already up to date.` because the webhook beat you. Manual deploy block (Pitfall #38) is non-negotiable for any PR touching `migrations/`.
+47. **testing-library `getByText` only matches direct text children, not descendants** — for `<p>{a} <span>/</span> {b}</p>`, use a function matcher walking `textContent`.
+48. **When restating decisions from prior messages, quote source verbatim — never summarize numerical commitments.** Forces correct copy-paste of dollar amounts, exact configuration values, payment terms, etc. Avoids "I think it was around $20" drift.
+49. **(NEW — Section 117) Tables created via `sudo -u postgres psql` are owned by postgres; mepuser + mepuser_super get ZERO privileges automatically.** This is the standard Postgres behavior — new tables grant nothing to non-owners unless explicit GRANT statements are issued. The failure mode is `permission denied for table X` (Postgres code 42501) at runtime. Two prevention strategies, apply both:
+    1. **In-migration GRANTs** (per-migration responsibility — bundle in same migration SQL):
+       ```sql
+       CREATE TABLE public.new_table (...);
+       GRANT SELECT, INSERT, UPDATE, DELETE ON public.new_table TO mepuser;
+       GRANT SELECT, INSERT, UPDATE, DELETE ON public.new_table TO mepuser_super;
+       GRANT USAGE, SELECT ON SEQUENCE public.new_table_id_seq TO mepuser;
+       GRANT USAGE, SELECT ON SEQUENCE public.new_table_id_seq TO mepuser_super;
+       ```
+    2. **`ALTER DEFAULT PRIVILEGES`** (cluster-wide, one-time setup — applied in migration 020):
+       ```sql
+       ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+         GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO mepuser, mepuser_super;
+       ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+         GRANT USAGE, SELECT ON SEQUENCES TO mepuser, mepuser_super;
+       ```
+    Strategy #2 is cleaner long-term but doesn't retro-apply (only new tables after the ALTER). Use both as belt-and-suspenders. Verification command after any migration that creates tables:
+    ```bash
+    sudo -u postgres psql mepdb -c "SELECT grantee, table_name, privilege_type FROM information_schema.role_table_grants WHERE table_schema = 'public' AND table_name IN ('<NEW_TABLES>') AND grantee LIKE 'mep%' ORDER BY table_name, grantee, privilege_type;"
     ```
-48. **(NEW — Section 115) When restating decisions from prior messages, quote specific values verbatim from source; never summarize numerical commitments.** During the Section 115 strategic conversation, twice I dropped specific details when recapping (the mandatory-training cost line and the flight-cost-pass-through clause for >200km training). Hedar caught both. Pattern to avoid: paraphrasing previously locked numbers/policies in a "summary" — even unintentionally — erodes trust in documentation and forces the user to double-check every recap. Correct pattern: when re-presenting prior decisions, copy the source values verbatim from the original message, paste into the current document, and verify nothing is missing before sending. This applies to: marketing copy that recaps pricing, schema designs that recap business rules, summaries in HANDOFF replacements, and any "table of what we decided" view.
 
 ---
 
 ## Workflow rules (CLAUDE.md highlights)
 
-- **One command at a time** in chat — one PowerShell or bash block per turn.
+- **One command at a time** in chat.
 - **Flow diagrams only for substantive architectural discussions** — not routine ops.
-- **Levantine Arabic in chat** — `شو`, `هلق`, `بدك`, `لازم`, `منيح`, `بسيط`. `شغّل` (not `ركض`). `يفتل` for CI/auto-merge churn. Masculine address.
-- **GitHub CLI + auto-merge** — `gh pr create --fill --base main ; gh pr merge --auto --squash --delete-branch`. If `BEHIND` mid-CI: `gh pr update-branch <num>` (Pitfalls #9 / #18).
-- **ALWAYS delete the local branch after merge** — `--delete-branch` only removes the remote.
+- **Levantine Arabic in chat** — `شو`, `هلق`, `بدك`, `لازم`, `منيح`, `بسيط`. `شغّل` (not `ركض`). Masculine address.
+- **GitHub CLI + auto-merge** — `gh pr create --fill --base main ; gh pr merge --auto --squash --delete-branch`.
+- **ALWAYS delete local branch after merge** — `--delete-branch` only removes the remote.
 - **Don't put `"تم"` inside PowerShell blocks** — Hedar types it manually.
-- **File-based log convention for large output** — `Out-File -Encoding utf8` (NEVER bare `>`).
+- **File-based log convention for large output** — `Out-File -Encoding utf8`.
 - **DECISIONS.md is the archive**, not the entry point.
-- **Verify current branch before commit/push during parallel work** — `git branch --show-current` before every commit (Pitfall #36).
+- **Verify current branch before commit/push** during parallel work (Pitfall #36).
 - **bigint vs Number in test assertions** — compare via `String()` on both sides (Pitfall #37).
 - **Migrations on prod ALWAYS via `sudo -u postgres psql`**, never bare `psql` (Pitfall #45).
-- **`mep-webhook` auto-pulls main but doesn't migrate/restart** — manual deploy block mandatory for any PR touching `migrations/` (Pitfall #46).
-- **(NEW from Section 115) When presenting decisions back to the user, quote source verbatim — never summarize numerical commitments** (Pitfall #48).
-- **(NEW from Section 115) For irreversible architectural decisions, ask one focused question at a time** — explicitly reinforced this session via Hedar's feedback "بفضل لما بدك تعطيني خيارات تشرح عنها قبل ما تسألني". Give context in prose BEFORE invoking AskUserQuestion; the tool's option-label fields are too short to convey trade-offs.
+- **`mep-webhook` auto-pulls but doesn't migrate/restart** — manual deploy block mandatory (Pitfall #46).
+- **When presenting decisions back to the user, quote source verbatim** — never summarize numerical commitments (Pitfall #48).
+- **Every new migration that creates tables MUST include GRANTs to mepuser + mepuser_super** (Pitfall #49). Also apply `ALTER DEFAULT PRIVILEGES` once in migration 020 for belt-and-suspenders future protection.
 
 ---
 
@@ -354,12 +347,12 @@ Cost inventory + DigitalOcean Spaces + Apple Developer keys: see `RECOVERY.md`.
 ## Out-of-band notes (read on demand)
 
 - `CLAUDE.md` — full working rules.
-- `DECISIONS.md` — full decision history (13,800+ lines after Section 116). Search by Section number.
+- `DECISIONS.md` — full decision history (14,400+ lines after Section 117). Search by Section number.
 - `RECOVERY.md` — credentials inventory, cost summary.
 - `SCHEMA.md` — DB schema reference.
 - `API.md` — backend endpoint reference.
 - `.env.example` — required env variables.
-- `migrations/*.sql` — DB migration files (latest is 017; 018-020 designed in Section 116, implementation in Phase 6-D-4).
+- `migrations/*.sql` — DB migration files (latest is 019; 020 planned in PR 3 for grants).
 - `.github/workflows/ci.yml` — CI pipeline definition.
 
 ---
