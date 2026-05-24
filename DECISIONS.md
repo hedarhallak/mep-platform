@@ -13378,3 +13378,853 @@ A small backlog item is added: "Decide MEP Construction demo posture" (drop seed
 
 - **Today (May 23, 2026): 82 sections.** (Section 114 NEW — Phase 6-D-3 frontend + max_users seat-cap shipped via PR #257 and deployed to prod. Two fix commits to land vitest assertions (function matcher + bilingual passthrough). Migration 017 applied via `sudo -u postgres psql` after a `psql` peer-auth failure on first attempt — captured as Pitfall #45. `mep-webhook` auto-pull observed and captured as Pitfall #46. Section 113.4 spec corrected to count `public.employees` instead of `public.app_users` (which has no `status` column and isn't populated until onboarding completes). Production verified by SUPER_ADMIN browser smoke against MEP Construction tenant — seat counter renders 50/5 with amber "At capacity" warning, exactly as designed. Section 113 D1 scope complete; Phase 6-D-3 has only the DO Spaces bucket activation remaining (still deferred per Section 112.2 cost rationale).)
 
+---
+
+## 115. Section 115 — May 24, 2026 — Pricing Model Lock (Per-Seat Metered + Cliff Brackets + Flat Features + Mandatory On-Site Training)
+
+> **Status:** Strategic decision recorded. This section **supersedes Section 113 D3** (the original tier-cap model) after a long re-examination triggered by Hedar pointing out that the actual intended business model is per-seat metered (not tiered with hard caps). The shipped Section 114 infrastructure (`companies.max_users` column + HTTP 402 enforcement) is **kept** with semantic remapped from "hard cap" to "subscribed seats", and surfaced through a new `subscriptions` table designed in Section 116. No code changes in this section; it locks the business model. Schema design lives in Section 116; build phases live in HANDOFF.md.
+
+### 115.1 — Why Section 113 was revisited
+
+While preparing to execute the MEP Construction demo posture decision (Section 114.5 backlog), Hedar surfaced a fundamental concern that Section 113 had skipped: the actual billing model intended for the product is **per-seat usage-based**, not the tiered hard-cap model Section 113 D3 designed.
+
+His exact framing (translated): "A company subscribes with a package, say 10-15 seats. They're billed for actual usage. If they use 10 → invoice for 10. Next month they add 4 more → those 4 seats added to invoice, prorated from the day they joined. What does the industry do for professional growth handling?"
+
+This is per-seat metered billing with self-service seat management — Pattern #2 from the industry survey (Slack, GitHub Teams, Linear, Notion). Section 113 D3 had committed to Pattern #1 (tier with hard cap + manual upgrade), which is the wrong pattern for Constrai's actual model.
+
+Section 115 captures the corrected model, lays out the full set of locked decisions, and explicitly notes what changes vs Section 113.
+
+### 115.2 — Industry research (market intelligence)
+
+A general-purpose research agent surveyed 6 construction SaaS competitors in May 2026:
+
+| Competitor | Pricing model | Tiers | Features tied to tier? | Public pricing? |
+|---|---|---|---|---|
+| Procore | Flat by annual construction volume | 3 | Yes — modules sold separately | No, quote-only |
+| BuilderTrend | Flat per-company | 3 | Yes — Estimating/Selections gated | Partial |
+| Knowify | Hybrid (base + per-user) | 3 | Yes — Basic excludes AIA billing | Yes |
+| JobNimbus | Base + per-user | 2+ | Yes — automations gated to Established | Partial |
+| **Connecteam** | **Per-user metered, brackets** ⭐ | 3 | Yes — geofencing/scheduling gated | Yes |
+| ServiceTitan | Per-technician seat | 3 | Yes — Marketing/Dispatch as add-ons | No, quote-only |
+
+Key findings:
+- **6/6 competitors tier features** (industry norm) — but user reviews complain about feature gates constantly
+- **Connecteam is structurally closest** to Constrai's intended model (per-user metered + brackets + self-serve)
+- **Public pricing is a competitive advantage** — Procore/ServiceTitan/Buildertrend all hide pricing; SMB buyers strongly dislike this
+- Quebec construction SMBs (5-50 employees) want predictability + human relationship + no surprise bills
+- Annual discounts (15-20%) are universal expectation
+
+The research validated two strategic positions for Constrai:
+1. **Flat features + permissions** as a differentiator vs the 6/6 tier-everything market (with an Enterprise SKU reserved for future)
+2. **Per-seat metered with self-service** as a UX win over the hard-cap upgrade-friction model
+
+### 115.3 — Locked decisions (the complete model)
+
+#### Billing arithmetic
+
+- **Unit:** Per seat (not active users) — seats are inventory the customer commits to; users are who fills them
+- **Pricing model:** Cliff bracket pricing (all seats billed at the rate of the current bracket they fall into)
+- **Currency:** CAD only initially; USD reserved for future
+- **Minimum seats billed:** 3 (floor — even if subscribed less)
+- **Tax:** QST (9.975%) + GST (5%) on top of subtotal, shown separately on invoices, ~14.975% combined
+- **Annual discount:** 17% off monthly rates (deferred — implement within 6 months of launch)
+
+#### Bracket ladder (CAD per seat per month)
+
+| Bracket | $/user/mo | Monthly total max | Annual equiv (with 17% discount, future) |
+|---|---|---|---|
+| **1-5** | **$24** | $120 | $1,196/yr |
+| **6-10** | **$22** | $220 | $2,192/yr |
+| **11-20** | **$20** | $400 | $3,984/yr |
+| **21-35** | **$19** | $665 | $6,625/yr |
+| **36-50** | **$18** | $900 | $8,964/yr |
+| **50+** | **Custom (floor $18)** | — | Negotiated with sales |
+
+The cliff arithmetic means: a 6-seat company pays 6 × $22 = $132/mo (not 5×$22 + 1×$21 marginal). Going from 5 → 6 seats raises the bill by $12 (not $22), creating a visible discount that customers grasp intuitively.
+
+#### Service-level tiers (NO feature gating)
+
+Three tiers exist for commitment + service level, NOT for feature access. All three include the full product:
+
+| Plan | Price | Audience | Differentiator |
+|---|---|---|---|
+| **Constrai Monthly** | Bracket pricing | Most SMB | Self-serve, email support, monthly billing |
+| **Constrai Annual** | Bracket × 0.83 (~17% off) | SMB committing to a year | Self-serve, email support, annual paid upfront |
+| **Constrai Enterprise** | Custom quote (25+ seats min) | Mid-market/larger | All features + Dedicated CSM + Priority phone + Quarterly business reviews + Premium training + SSO + Custom roles |
+
+The Enterprise tier is the "Phase 9-A Module/Plugin System" venue: as we add modular add-ons in Q4 2026 (Section 113.8), Enterprise becomes the natural buyer for advanced modules. Pre-conference: Enterprise is a manual sales conversation; no self-serve signup.
+
+#### Trial
+
+- **Duration:** 7 days from signup
+- **Seat limit:** 3 seats (1 ADMIN + 1 FOREMAN + 1 JOURNEYMAN test users)
+- **Card required:** Not at trial signup (lowers friction)
+- **End behavior:** Auto-CANCELLED if no payment method provided by day 7
+- **Extension:** SUPER_ADMIN can manually extend trial via subscription detail page
+
+#### Mandatory training (separate one-time charge)
+
+Training is **mandatory by ToS** — every paying tenant must complete on-site training. Pricing:
+
+| Component | Price CAD |
+|---|---|
+| **Base package** (1 Admin + 1 PM + 2 Foremen + 2 Workers, max 6 trainees) | $800 |
+| Extra Admin trainee | +$200 each |
+| Extra PM trainee | +$150 each |
+| Extra Foreman trainee | +$100 each |
+| Extra Worker trainee | +$50 each |
+
+**Delivery:** On-site only at customer location (NOT remote video/self-serve)
+
+**Geography pricing** (from Montreal Centre-Ville as anchor point):
+
+| Distance | Per-diem |
+|---|---|
+| ≤50km | Included in base (no extra) |
+| 50-120km | +$350/day |
+| 120-200km | +$500/day |
+| 200km+ | Custom: $800-$1,500/day per-diem (based on distance) **+ actual flight cost when needed (pass-through, no markup)** |
+
+**Payment terms:** 50% before training starts, 50% on last day of training
+
+**Tooling:** SUPER_ADMIN portal (Option A) — Hedar manually creates quote in the admin UI, sends to customer as PDF, marks as paid manually when payments arrive. NOT automatic at signup; bigger automation deferred until volume justifies the build.
+
+#### Customized Demands (separate one-time invoice type)
+
+Future customer requests for custom work (custom integrations, custom reports, white-label deep branding, custom workflows, data migration) flow through the same manual quote-then-invoice workflow as training. Pricing is per-quote (no fixed catalog). Payment schedule is configurable per quote (default 50/50, can be milestone-based for large projects).
+
+#### Self-service seat management
+
+- Admin of tenant can **add seats** via admin UI — takes effect immediately, prorated from add-date to next billing cycle
+- Admin of tenant can **reduce seats** via admin UI — takes effect at end of current billing cycle (no mid-cycle refund per industry norm)
+- No SUPER_ADMIN intervention required for either operation
+- HTTP 402 enforcement (from Section 114) is **kept as backstop** — if a tenant somehow exceeds their subscribed seat count, invite is rejected until they explicitly add seats
+
+#### Billing cycle
+
+- **Anchor:** 1st of every month for all tenants (unified billing date, easier accounting reconciliation)
+- **Mid-month signup proration:** prorated by remaining days (e.g., signup June 15 of 30-day month → first invoice covers 15/30 × bracket_price for June 15-30, then July 1 = full month billing begins)
+- **Mid-month seat add proration:** delta charged immediately, prorated from add-date to month-end
+- **Mid-month seat reduction:** takes effect at next cycle, no refund for unused portion
+
+#### Quebec compliance
+
+- **QST:** 9.975% (Revenu Québec rate as of 2013)
+- **GST:** 5% (Federal CRA rate as of 2008)
+- **Combined effective rate:** ~14.975%
+- **Display:** subtotal + QST line + GST line + total (4 separate amounts on every invoice)
+- **Sequential invoice numbering:** CONS-YYYY-NNNN format (Quebec requires sequential per legal entity)
+- **Records retention:** 6 years minimum (no auto-purge of invoices/payments)
+- **Customer approval:** quotes must be explicitly approved by customer before becoming invoices (Quebec consumer protection)
+
+### 115.4 — What changes vs Section 113
+
+| Aspect | Section 113 D3 (original) | Section 115 (this section) |
+|---|---|---|
+| Billing model | Tier with hard cap | Per-seat metered with self-service |
+| Plan tiers | BASIC=5, PRO=25, ENTERPRISE=100 (hard caps) | Monthly/Annual/Enterprise (service levels, all features) |
+| Feature access | Implicitly tier-locked | Flat — all features included |
+| At-cap behavior | HTTP 402 → "upgrade plan" mailto | HTTP 402 backstop only; primary UX is "add seats" inline button |
+| Pricing | Placeholder ($49/$149/$399, "not committed") | Locked: $24/$22/$20/$19/$18 cliff brackets in CAD |
+| Training | Mentioned as future Q4 | Mandatory at signup, on-site only, full pricing structure locked |
+| Stripe | Phase 9-B Q4 2026 | Same (no change — still deferred) |
+| Schema | `companies.max_users` as hard cap | `subscriptions` table (Section 116) with `subscribed_seats` — `max_users` deprecated |
+
+Section 114 code remains functional during the transition. Migration plan in Section 116.
+
+### 115.5 — Infrastructure economics check
+
+Per-seat costs analyzed before pricing was locked. At current scale (1 droplet, free tiers for Sentry/Mapbox/Resend, deferred Spaces):
+
+| Cost layer | Monthly | Per-user marginal |
+|---|---|---|
+| DigitalOcean Droplet | ~$32 CAD | ~$0.30-0.40 (compute share) |
+| Resend (Free → Pro at $27/mo for 100K) | $0-$27 | ~$0.01-0.02 (email volume) |
+| Mapbox (Free → $0.50/1K geocodes) | $0 currently | ~$0.003-0.007 (geocoding) |
+| DO Spaces (deferred) | $7 base when activated | ~$0.001-0.005 (storage) |
+| Sentry Developer | Free | ~$0 |
+| **Total per-user marginal** | — | **~$0.35-0.45 CAD/month** |
+
+At our pricing brackets ($24 → $18), gross margin per user is 97.8-98.3% on infrastructure alone. Real costs are Hedar's time + future hires + Stripe fees (~3% of revenue when Phase 9-B lands). Mature SaaS net margin estimate: 30-50%. Conclusion: pricing is well above marginal cost; the lever for affordability is volume, not unit economics. Hedar could absorb a 10-20% price reduction without margin pressure if competitive pressure required it.
+
+### 115.6 — Why flat features (not tiered)
+
+The original temptation was to follow the 6/6 competitor pattern and tier features (Basic / Pro / Premium with progressively more features). Hedar argued for flat features because:
+
+1. **Differentiator** vs every other construction SaaS — "all features at one price" is rare and memorable
+2. **SMB market psychology** — 5-person plumbing shop in Laval wants the full product, not a Basic version
+3. **Permissions matrix already exists** — Constrai has 13 roles × 58 permissions for in-tenant access control; tier-gating is redundant
+4. **Customer reviews** — every Reddit thread about construction SaaS complains about feature gates ("I need feature X but it's behind Premier")
+5. **Sales simplicity** — "$24/user, all features" is a stronger pitch than "Basic at $19, Pro at $32, see comparison chart"
+6. **Build simplicity** — feature gating throughout the codebase is expensive to add and maintain
+
+Hedar separately raised concern about price anchoring ("one price = signals cheap product"). Resolved by the 3 service-level tiers (Monthly / Annual / Enterprise) which provide price anchoring **without** breaking flat features. The Enterprise tier's existence makes Monthly feel like good value; the Annual tier creates a "commit and save" upsell motion. All three include the same features.
+
+Modular add-ons (Phase 9-A in Q4 2026) provide a future ARPU growth path without retroactively tiering existing customers. Add-on examples reserved: Advanced Analytics, Equipment Management module, AI Suggestions, Custom Report Builder. Each would be a separately-priced optional module.
+
+### 115.7 — Why mandatory on-site training (not remote/optional)
+
+Three patterns were considered:
+
+| Pattern | Industry use | Trade-off |
+|---|---|---|
+| **Self-serve video library** | Cheapest (Notion, Linear) | Feels low-value, more support tickets, churn risk |
+| **Live remote sessions** | Mid-tier (Asana, Connecteam) | Engaging but doesn't scale past ~10 customers/month |
+| **Hybrid (videos + live office hours)** | Common compromise | Balanced but loses 1-on-1 attention |
+| **On-site mandatory** | Premium (ServiceTitan, Procore Enterprise) | Best customer experience, premium positioning, doesn't scale without trainers |
+
+Hedar chose **mandatory on-site** because:
+
+1. **Quebec construction is a relationship business** — face-to-face onboarding builds trust crucial for ERP adoption
+2. **Quebec geography makes it feasible** — most target customers are within 200km of Montreal; flights only required for far-Quebec / out-of-province
+3. **Premium positioning** — on-site training justifies the per-seat pricing (not the cheapest construction SaaS)
+4. **Differentiator vs US competitors** — Procore/ServiceTitan can't realistically on-site Quebec accounts
+5. **Reduces churn** — trained users actually use the product, lowering early-stage cancellation
+6. **CAC offset** — one-time training fee provides upfront cash that offsets sales/marketing investment
+
+Capacity constraint acknowledged: Hedar alone can do max ~5 trainings/month. By Year 2, hiring a trainer (~$60-80K CAD/yr) becomes necessary. This was deemed acceptable; the operational plan is "ramp slowly and hire trainers as customer count grows".
+
+### 115.8 — Why manual quote flow for training (Option A)
+
+Hedar explicitly chose **NOT** to auto-charge training fees through the subscription system. Instead:
+
+1. Customer signs up for subscription (auto-flow via Stripe in Phase 9-B)
+2. SUPER_ADMIN (Hedar) creates a separate training quote in admin UI
+3. Quote is emailed to customer as PDF
+4. Customer approves quote (in-app or via email reply)
+5. Quote becomes an invoice with 50/50 payment terms
+6. Hedar manually records payments as they arrive (bank transfer, cheque, future: Stripe)
+
+Reasons:
+- **Training has too many variables** (distance, multi-day, trainee mix, flight needs) for clean auto-calculation
+- **Quality control** on early customers — Hedar wants to be involved in onboarding decisions
+- **Per-Quebec accounting norm** — B2B services often quote-then-invoice with 50/50 payment terms
+- **Reduces complexity** in the SaaS platform itself
+- **Allows negotiation** for special cases (multi-site companies, repeat customers)
+
+"When my company grows much later" — Hedar's framing — at that point, a fully automated training-fee flow becomes a Phase 10+ feature (post-Phase 9-B). For now, manual is right-sized.
+
+### 115.9 — Decision triggers + risk flags from research
+
+Captured here so Phase 9-B planning starts with them in mind:
+
+| Risk | Mitigation |
+|---|---|
+| **Per-seat churn on shrink** — foreman quits → admin reduces seats → MRR drops mid-month | Minimum 3 seats always billed (floor protects against zero-revenue customers); end-of-cycle reduction (gives time to backfill) |
+| **Annual discount expectation** — 15-20% off annual is universal in the industry | Build annual billing capability in Phase 6-D-4 schema; flip the switch within 6 months of launch |
+| **Hidden onboarding fees as competitor margin** — Buildertrend $400-1500, ServiceTitan $5K-50K | Our mandatory on-site training ($800-3000) fills this margin role; competitive but transparent |
+| **Public pricing is a competitive advantage** — most competitors hide pricing, SMB buyers hate it | Marketing site MUST publish the bracket ladder explicitly with competitor comparison |
+| **Quebec consumer law on auto-billing** | All seat additions require explicit admin UI click (consent); ToS explicitly states billing terms |
+| **Founder capacity at scale** — Hedar alone can do ~5 trainings/month | Year 2 plan: hire trainer; price training to support trainer salary economics |
+
+### 115.10 — Pre-conference vs post-conference scope (canonical)
+
+This table is the authoritative answer to "what ships before September 2026 conference":
+
+| Capability | Pre-conference? | Phase | Notes |
+|---|---|---|---|
+| `subscriptions` table | ✅ | 6-D-4 | Schema lock from Section 116 |
+| `invoices` + `payments` + `tax_rates` tables | ✅ | 6-D-4 | Schema lock from Section 116 |
+| Customer-facing Subscription page | ✅ | 6-D-5 | Self-serve seat management |
+| Customer-facing Billing/Invoices page | ✅ | 6-D-5 | View invoices, see status |
+| SUPER_ADMIN Training Quotes page | ✅ | 6-D-6 | Option A manual flow |
+| SUPER_ADMIN Custom Demands page | ✅ | 6-D-6 | Same UI pattern as training |
+| Invoice PDF generation | ✅ | 6-D-7 | Quebec-compliant format |
+| Monthly subscription invoice auto-generation (cron) | ✅ | 6-D-7 | Mock payments only |
+| Trial expiry warnings (email) | ✅ | 6-D-7 | Day 5 + day 7 reminders |
+| Marketing site refresh with pricing | ✅ | 6-D-8 | Public bracket ladder |
+| ToS legal review (Quebec) | ✅ | 6-D-8 | Required before live billing |
+| 2 reference tenants seeded | ✅ | 6-D-8 | Conference demo data |
+| MEP Construction demo posture fix | ✅ | 6-D-8 | Tied to schema migration |
+| Actual Stripe integration | ❌ | 9-B Q4 2026 | Manual payments at conference |
+| Real card processing | ❌ | 9-B Q4 2026 | Bank transfer / cheque at conference |
+| Webhook handler for failed payments | ❌ | 9-B Q4 2026 | n/a until Stripe live |
+| Dunning email automation | ❌ | 9-B Q4 2026 | Cadence from Section 113.5 |
+| Customer Portal (Stripe hosted) | ❌ | 9-B Q4 2026 | Self-serve plan changes |
+| Module / Plugin System (per-tenant feature flags) | ❌ | 9-A Q4 2026 | Per Section 105 |
+| Annual billing | ⏳ Maybe | 6-D-4 schema; 6-D-7 logic | Schema ready, logic flip later |
+| Custom discount UI | ❌ Deferred | After 9-B | Only build if real demand emerges |
+
+### 115.11 — Section/total update
+
+- **Today (May 24, 2026): 83 sections.** (Section 115 NEW — strategic pricing model lock that supersedes Section 113 D3. Per-seat metered + cliff brackets + flat features + 3 service-level tiers + 7-day 3-seat trial + mandatory on-site training with full geographic pricing tiers including 200km+ flight pass-through + 50/50 payment terms + Quebec QST/GST compliance + sequential invoice numbering CONS-YYYY-NNNN + currency in cents. Industry research validated against 6 construction SaaS competitors. Infrastructure economics confirmed: gross margin 97-98% per user means pricing is well above marginal cost. Service-level tiers (Monthly/Annual/Enterprise) provide price anchoring without breaking flat-features differentiator. Mandatory on-site training builds the relationship + training-fee margin role that competitors fill with hidden onboarding fees. Manual quote-then-invoice training flow chosen over automation for early-stage quality control. All decisions documented at exhaustive detail to ensure Phase 9-B has zero re-research at kickoff. Schema design in Section 116; build phases in HANDOFF.md.)
+
+---
+
+## 116. Section 116 — May 24, 2026 — Subscription + Billing Schema Design (Phases 6-D-4 through 6-D-8)
+
+> **Status:** Schema design locked. No code in this section; this is the architectural blueprint that Phase 6-D-4 will implement. 5 new tables, 2 new state machines, 20+ API endpoints, 12+ UI pages mapped out. This section answers: how do we represent Section 115's business model in PostgreSQL + Express + React? Migration plan from Section 114's `companies.max_users` to the new `subscriptions.subscribed_seats` documented. Open decisions deferrable to Phase 6-D-4 kickoff captured at the end.
+
+### 116.1 — Table architecture overview
+
+```
+┌─────────────────┐
+│   companies     │ ← existing table (Section 114), unchanged here
+└─────────────────┘
+        │ 1
+        │
+        │ 1
+        ▼
+┌─────────────────┐         ┌──────────────────────────────┐
+│  subscriptions  │────────▶│ subscription_seat_changes    │ (audit log + proration source)
+└─────────────────┘   1:N   └──────────────────────────────┘
+        │ 1
+        │
+        │ N
+        ▼
+┌─────────────────┐         ┌──────────────────────────────┐
+│    invoices     │────────▶│         payments             │
+│ (3 types)       │   1:N   └──────────────────────────────┘
+└─────────────────┘
+
+┌─────────────────┐
+│   tax_rates     │ ← reference table (QST/GST rate history with effective dates)
+└─────────────────┘
+```
+
+5 new tables. The `companies` table is unchanged by Section 116 directly; `companies.max_users` becomes DEPRECATED via a separate migration (see 116.8) after the code refactor lands.
+
+### 116.2 — `subscriptions` table
+
+```sql
+CREATE TABLE public.subscriptions (
+  -- Identity
+  id                          BIGSERIAL PRIMARY KEY,
+  company_id                  BIGINT NOT NULL REFERENCES public.companies(company_id) ON DELETE CASCADE,
+
+  -- State machine (Section 113.3 carried forward)
+  status                      TEXT NOT NULL DEFAULT 'TRIAL',
+  CONSTRAINT chk_subscription_status CHECK (status IN (
+    'TRIAL', 'ACTIVE', 'PAST_DUE', 'SUSPENDED', 'CANCELLED', 'DELETED'
+  )),
+
+  -- Service-level plan (NOT feature gating — per Section 115.6)
+  plan_type                   TEXT NOT NULL DEFAULT 'MONTHLY',
+  CONSTRAINT chk_plan_type CHECK (plan_type IN ('MONTHLY', 'ANNUAL', 'ENTERPRISE')),
+
+  -- Trial tracking
+  trial_started_at            TIMESTAMPTZ,
+  trial_ends_at               TIMESTAMPTZ,
+
+  -- Seats & pricing (live snapshot — see seat_changes table for history)
+  subscribed_seats            INTEGER NOT NULL DEFAULT 3,
+  minimum_seats_billed        INTEGER NOT NULL DEFAULT 3,         -- floor per Section 115.3
+  current_unit_price_cents    INTEGER NOT NULL,                   -- e.g., 2400 = $24.00 CAD
+  current_bracket_label       TEXT NOT NULL,                       -- '1-5', '6-10', '11-20', etc.
+
+  -- Billing cycle (anchor = 1st of month per Section 115.3)
+  billing_cycle               TEXT NOT NULL DEFAULT 'MONTHLY',
+  CONSTRAINT chk_billing_cycle CHECK (billing_cycle IN ('MONTHLY', 'ANNUAL')),
+  billing_anchor_day          INTEGER NOT NULL DEFAULT 1,
+  last_billed_at              TIMESTAMPTZ,
+  next_billing_at             TIMESTAMPTZ,
+
+  -- Cancellation
+  cancelled_at                TIMESTAMPTZ,
+  cancellation_reason         TEXT,
+  cancel_at_period_end        BOOLEAN NOT NULL DEFAULT false,
+
+  -- Payment method (placeholder for Phase 9-B Stripe)
+  payment_method              TEXT,                                -- NULL | 'MANUAL_INVOICE' | 'STRIPE_CARD' | 'BANK_TRANSFER'
+  stripe_subscription_id      TEXT,                                -- NULL until Phase 9-B
+  stripe_customer_id          TEXT,                                -- NULL until Phase 9-B
+
+  -- Audit
+  notes                       TEXT,                                -- SUPER_ADMIN free-text
+  created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by_user_id          BIGINT REFERENCES public.app_users(id) ON DELETE SET NULL,
+
+  UNIQUE(company_id)                                                -- one subscription per company (initial constraint)
+);
+
+CREATE INDEX idx_subscriptions_status ON public.subscriptions(status);
+CREATE INDEX idx_subscriptions_next_billing ON public.subscriptions(next_billing_at) WHERE status = 'ACTIVE';
+CREATE INDEX idx_subscriptions_company ON public.subscriptions(company_id);
+```
+
+Comment on each column purpose in 116.5 below the schema. State machine diagram in 116.7.
+
+### 116.3 — `subscription_seat_changes` table (audit log + proration source)
+
+```sql
+CREATE TABLE public.subscription_seat_changes (
+  id                  BIGSERIAL PRIMARY KEY,
+  subscription_id     BIGINT NOT NULL REFERENCES public.subscriptions(id) ON DELETE CASCADE,
+
+  change_type         TEXT NOT NULL,
+  CONSTRAINT chk_change_type CHECK (change_type IN ('INITIAL', 'ADD', 'REDUCE')),
+  seats_before        INTEGER NOT NULL,
+  seats_after         INTEGER NOT NULL,
+  delta               INTEGER NOT NULL,                            -- positive for ADD, negative for REDUCE
+
+  effective_at        TIMESTAMPTZ NOT NULL,
+  -- For ADD: immediate (NOW())
+  -- For REDUCE: end of current billing period
+
+  proration_cents     INTEGER,                                     -- charge (ADD) or credit (REDUCE) for partial period
+
+  reason              TEXT,
+  invoice_id          BIGINT REFERENCES public.invoices(id),       -- FK to the invoice that captured this change (NULL until next monthly invoice)
+
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by_user_id  BIGINT REFERENCES public.app_users(id)
+);
+
+CREATE INDEX idx_seat_changes_subscription_effective ON public.subscription_seat_changes(subscription_id, effective_at);
+```
+
+This table is the source of truth for "what happened to seats over time". Monthly invoice generation reads it to compute prorated charges for mid-cycle seat changes.
+
+### 116.4 — `invoices` table (one table, type discriminator)
+
+```sql
+CREATE TYPE invoice_type AS ENUM (
+  'SUBSCRIPTION_RECURRING',   -- monthly seat charges
+  'TRAINING',                  -- one-time mandatory training
+  'CUSTOM_DEMAND',             -- one-time customizations (Section 115.3)
+  'OTHER'                      -- catch-all for future invoice types
+);
+
+CREATE TABLE public.invoices (
+  -- Identity + relationships
+  id                  BIGSERIAL PRIMARY KEY,
+  company_id          BIGINT NOT NULL REFERENCES public.companies(company_id),
+  subscription_id     BIGINT REFERENCES public.subscriptions(id),  -- NULL for one-time invoices (TRAINING, CUSTOM_DEMAND)
+
+  -- Type + numbering (Quebec sequential)
+  type                invoice_type NOT NULL,
+  invoice_number      TEXT NOT NULL,                              -- 'CONS-2026-0042'
+
+  -- Status flow (see 116.7)
+  status              TEXT NOT NULL DEFAULT 'DRAFT',
+  CONSTRAINT chk_invoice_status CHECK (status IN (
+    'DRAFT', 'QUOTE_SENT', 'APPROVED', 'PARTIAL_PAID', 'PAID', 'OVERDUE', 'VOID', 'REFUNDED'
+  )),
+
+  -- Amounts in cents (per Section 115.3 + locked in 116.10)
+  subtotal_cents      INTEGER NOT NULL,
+  qst_cents           INTEGER NOT NULL DEFAULT 0,                 -- 9.975%
+  gst_cents           INTEGER NOT NULL DEFAULT 0,                 -- 5%
+  total_cents         INTEGER NOT NULL,
+  amount_paid_cents   INTEGER NOT NULL DEFAULT 0,
+  currency            TEXT NOT NULL DEFAULT 'CAD',
+
+  -- Dates
+  issue_date          DATE NOT NULL,
+  due_date            DATE,
+  paid_date           DATE,
+  quote_expires_at    DATE,                                       -- For DRAFT / QUOTE_SENT status
+
+  -- Type-specific details (JSONB for flexibility across all invoice types)
+  details             JSONB NOT NULL DEFAULT '{}'::jsonb,
+
+  -- Customer-facing fields
+  pdf_url             TEXT,                                       -- generated invoice PDF (Spaces or Resend attachment)
+  customer_notes      TEXT,                                       -- visible on PDF
+  internal_notes      TEXT,                                       -- SUPER_ADMIN only, not on PDF
+
+  -- Audit
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by_user_id  BIGINT REFERENCES public.app_users(id) ON DELETE SET NULL,
+  approved_at         TIMESTAMPTZ,
+  approved_by         TEXT,                                       -- email of approver, or 'system' for auto
+
+  UNIQUE(invoice_number)
+);
+
+CREATE INDEX idx_invoices_company_status ON public.invoices(company_id, status);
+CREATE INDEX idx_invoices_type ON public.invoices(type);
+CREATE INDEX idx_invoices_due_date ON public.invoices(due_date) WHERE status IN ('APPROVED', 'PARTIAL_PAID', 'OVERDUE');
+CREATE INDEX idx_invoices_subscription ON public.invoices(subscription_id) WHERE subscription_id IS NOT NULL;
+```
+
+#### `details` JSONB schema by `type`
+
+**SUBSCRIPTION_RECURRING:**
+```json
+{
+  "subscribed_seats": 12,
+  "billed_seats": 12,
+  "unit_price_cents": 2000,
+  "bracket": "11-20",
+  "billing_period_start": "2026-07-01",
+  "billing_period_end": "2026-07-31",
+  "proration_lines": [
+    {"description": "Added 3 seats on 2026-07-15", "cents": 3300, "type": "ADD_PRORATION"},
+    {"description": "Removed 1 seat effective end of period", "cents": -0, "type": "REDUCE_NOTICE"}
+  ]
+}
+```
+
+**TRAINING:**
+```json
+{
+  "trainees": [
+    {"role": "ADMIN", "count": 2, "unit_price_cents": 20000, "subtotal_cents": 40000},
+    {"role": "PROJECT_MANAGER", "count": 5, "unit_price_cents": 15000, "subtotal_cents": 75000},
+    {"role": "FOREMAN", "count": 3, "unit_price_cents": 10000, "subtotal_cents": 30000}
+  ],
+  "base_package_cents": 80000,
+  "trainees_total_cents": 145000,
+  "location": {
+    "address": "1234 Rue Principale, Saguenay, QC",
+    "distance_km": 470,
+    "tier": "200km+"
+  },
+  "training_days": 2,
+  "per_diem": {
+    "rate_cents_per_day": 110000,
+    "days": 2,
+    "subtotal_cents": 220000,
+    "notes": "Custom rate for 470km — includes 2 hotel nights"
+  },
+  "flight": {
+    "required": true,
+    "actual_cost_cents": 65000,
+    "carrier_notes": "Air Canada YUL→YBG round trip"
+  },
+  "payment_schedule": {
+    "first_payment_pct": 50,
+    "first_payment_due": "2026-07-10",
+    "second_payment_pct": 50,
+    "second_payment_due": "2026-07-25"
+  }
+}
+```
+
+**CUSTOM_DEMAND:**
+```json
+{
+  "title": "QuickBooks Online integration",
+  "description": "Two-way sync of customers + invoices between Constrai and QBO",
+  "scope_of_work": "...detailed SOW text...",
+  "milestones": [
+    {"name": "Discovery + design", "amount_cents": 100000, "due_after_days": 14},
+    {"name": "Development", "amount_cents": 200000, "due_after_days": 45},
+    {"name": "Testing + deployment", "amount_cents": 100000, "due_after_days": 60}
+  ],
+  "estimated_completion_date": "2026-09-15"
+}
+```
+
+**OTHER:** open-ended — used for refunds, credits, adjustments, etc.
+
+### 116.5 — `payments` table
+
+```sql
+CREATE TABLE public.payments (
+  id                  BIGSERIAL PRIMARY KEY,
+  invoice_id          BIGINT NOT NULL REFERENCES public.invoices(id),
+
+  amount_cents        INTEGER NOT NULL,
+  currency            TEXT NOT NULL DEFAULT 'CAD',
+
+  method              TEXT NOT NULL,
+  CONSTRAINT chk_payment_method CHECK (method IN (
+    'STRIPE_CARD', 'BANK_TRANSFER', 'CHEQUE', 'CASH', 'OTHER'
+  )),
+
+  status              TEXT NOT NULL DEFAULT 'PENDING',
+  CONSTRAINT chk_payment_status CHECK (status IN (
+    'PENDING', 'SUCCEEDED', 'FAILED', 'REFUNDED'
+  )),
+
+  paid_at             TIMESTAMPTZ,
+
+  external_ref        TEXT,                                       -- Stripe payment_intent_id, bank reference, cheque #, etc.
+
+  is_partial          BOOLEAN NOT NULL DEFAULT false,             -- true for 50/50 first payment
+
+  notes               TEXT,
+
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  recorded_by_user_id BIGINT REFERENCES public.app_users(id)
+);
+
+CREATE INDEX idx_payments_invoice ON public.payments(invoice_id);
+CREATE INDEX idx_payments_status ON public.payments(status);
+CREATE INDEX idx_payments_method ON public.payments(method);
+```
+
+When a payment is recorded with status=SUCCEEDED, application logic updates the parent invoice's `amount_paid_cents` and re-evaluates `status` (PAID if fully paid, PARTIAL_PAID if not).
+
+### 116.6 — `tax_rates` table (Quebec compliance — rate history)
+
+```sql
+CREATE TABLE public.tax_rates (
+  id                  BIGSERIAL PRIMARY KEY,
+  jurisdiction        TEXT NOT NULL,                              -- 'QC' | 'FEDERAL'
+  tax_name            TEXT NOT NULL,                              -- 'QST' | 'GST'
+  rate_basis_points   INTEGER NOT NULL,                           -- 9975 = 9.975%, 500 = 5%
+  effective_from      DATE NOT NULL,
+  effective_until     DATE,                                       -- NULL = currently active
+  notes               TEXT,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Initial seed data
+INSERT INTO public.tax_rates (jurisdiction, tax_name, rate_basis_points, effective_from, notes) VALUES
+  ('QC', 'QST', 9975, '2013-01-01', 'Quebec Sales Tax — 9.975% since 2013'),
+  ('FEDERAL', 'GST', 500, '2008-01-01', 'Federal Goods and Services Tax — 5% since 2008');
+```
+
+Tax rates are stored in basis points (1/100 of 1%) as integers to avoid floating-point arithmetic. Lookup for any invoice date queries the rate row where `effective_from <= invoice_date AND (effective_until IS NULL OR invoice_date < effective_until)`.
+
+### 116.7 — State machines (text diagrams)
+
+#### Subscription state machine
+
+```
+                                 ┌────────────────────────────────────────┐
+                                 │                                        │
+   (signup)                      ▼                                        │
+   ──────────────────────────► [TRIAL]                                    │
+                                  │ 7 days                                │
+                                  │                                       │
+              ┌───────────────────┼───────────────────┐                   │
+              │                   │                   │                   │
+       payment provided   trial expires,         admin cancels            │
+              │           no payment              during trial            │
+              ▼                   ▼                   ▼                   │
+          [ACTIVE]           [CANCELLED]          [CANCELLED]             │
+              │                                                           │
+              │ payment fails (Stripe webhook, Phase 9-B)                 │
+              ▼                                                           │
+          [PAST_DUE] ──────────────────────────────────────────┐          │
+              │                                                │          │
+              │ 7-day grace period elapsed without payment     │ payment  │
+              ▼                                                │ recovered│
+          [SUSPENDED]                                          │          │
+          (read-only access)                                   │          │
+              │                                                │          │
+              │ another 7 days pass                            │          │
+              ▼                                                │          │
+          [SUSPENDED]                                          │          │
+          (no access — login blocked)                          │          │
+              │                                                │          │
+              │ 30 days more, no payment                       │          │
+              ▼                                                │          │
+          [CANCELLED] ─────── admin reactivates within 90 days ┘          │
+              │                                                           │
+              │ 90 days past cancellation                                 │
+              ▼                                                           │
+          [DELETED]                                                       │
+          (soft-deleted, hard-purged after Quebec 6-year retention)       │
+                                                                          │
+   (any state above) ─── admin upgrades plan or changes seats ───────────┘
+```
+
+This is unchanged from Section 113.3. The Stripe webhook transitions are deferred to Phase 9-B; until then, transitions happen via SUPER_ADMIN manual action or trial-expiry cron.
+
+#### Invoice status flow
+
+```
+[DRAFT] ──(SUPER_ADMIN sends quote)──► [QUOTE_SENT]
+                                            │
+                                            │ customer approves (in-app button or email reply)
+                                            ▼
+                                       [APPROVED]
+                                            │
+                              ┌─────────────┴─────────────┐
+                              │                           │
+                  partial payment              full payment
+                              │                           │
+                              ▼                           ▼
+                       [PARTIAL_PAID] ───(remaining)→ [PAID]
+                              │
+                       due date passed
+                              │
+                              ▼
+                         [OVERDUE]
+                              │
+                       (escalation by SUPER_ADMIN)
+                              │
+                              ▼
+                           [VOID] or [REFUNDED]
+```
+
+For `SUBSCRIPTION_RECURRING` invoices, the flow is shortened: cron generates DRAFT → auto-marks APPROVED (the customer pre-approved by signing up) → awaits payment. No QUOTE_SENT step for recurring.
+
+For `TRAINING` and `CUSTOM_DEMAND` invoices, the full flow applies — explicit customer approval required.
+
+### 116.8 — Migration plan from Section 114 `companies.max_users`
+
+```
+Step 1 (migration 018): Create new tables
+   - subscriptions
+   - subscription_seat_changes
+   - invoices (with invoice_type ENUM)
+   - payments
+   - tax_rates (with seed data)
+
+Step 2 (migration 019): Backfill subscriptions for existing companies
+   INSERT INTO subscriptions (company_id, status, plan_type, subscribed_seats,
+                              minimum_seats_billed, current_unit_price_cents,
+                              current_bracket_label, billing_cycle, billing_anchor_day,
+                              created_at, created_by_user_id)
+   SELECT
+     company_id,
+     'ACTIVE',
+     'MONTHLY',
+     COALESCE(max_users, 5),
+     GREATEST(3, COALESCE(max_users, 5)),
+     CASE
+       WHEN max_users <= 5 THEN 2400
+       WHEN max_users <= 10 THEN 2200
+       WHEN max_users <= 20 THEN 2000
+       WHEN max_users <= 35 THEN 1900
+       WHEN max_users <= 50 THEN 1800
+       ELSE 1800
+     END,
+     CASE
+       WHEN max_users <= 5 THEN '1-5'
+       WHEN max_users <= 10 THEN '6-10'
+       WHEN max_users <= 20 THEN '11-20'
+       WHEN max_users <= 35 THEN '21-35'
+       WHEN max_users <= 50 THEN '36-50'
+       ELSE '50+'
+     END,
+     'MONTHLY',
+     1,
+     NOW(),
+     (SELECT id FROM app_users WHERE role = 'SUPER_ADMIN' LIMIT 1)
+   FROM companies;
+
+   -- Also seed INITIAL seat_changes row for each
+   INSERT INTO subscription_seat_changes (subscription_id, change_type, seats_before,
+                                          seats_after, delta, effective_at, reason, created_at)
+   SELECT id, 'INITIAL', 0, subscribed_seats, subscribed_seats, created_at,
+          'Backfilled from Section 114 companies.max_users via migration 019', created_at
+   FROM subscriptions;
+
+Step 3 (code change): Refactor Section 114 code
+   - routes/invite_employee.js → read from subscriptions.subscribed_seats (was companies.max_users)
+   - routes/super_admin.js GET /companies/:id → join subscriptions, return current_users + subscribed_seats
+   - mep-frontend/src/admin/CompanyBranding.jsx → consume new shape
+
+Step 4 (migration 020 — LATER, separate session):
+   - Verify zero remaining references to companies.max_users via grep + CI
+   - DROP COLUMN companies.max_users
+   - DROP INDEX idx_companies_max_users
+```
+
+The 4-step pattern matches the standard "additive migration → dual-write → cutover → drop" deprecation. Steps 1-3 ship together in Phase 6-D-4; step 4 happens in a later session after confidence is built.
+
+### 116.9 — API endpoints (new)
+
+#### Customer-facing (admin of tenant)
+
+```
+GET    /api/admin/subscription                  → current subscription state + next invoice estimate
+PATCH  /api/admin/subscription/seats            → add or reduce seats (creates seat_change row + prorates)
+GET    /api/admin/invoices                      → list invoices for this company (paginated)
+GET    /api/admin/invoices/:id                  → single invoice detail + PDF link
+POST   /api/admin/invoices/:id/approve-quote    → customer approves CUSTOM_DEMAND quote
+POST   /api/admin/invoices/:id/pay              → trigger payment flow (mock pre-Phase 9-B)
+GET    /api/admin/payments                      → payment history for this company
+PATCH  /api/admin/subscription/cancel           → request cancellation (sets cancel_at_period_end=true)
+PATCH  /api/admin/subscription/uncancel         → reverse pending cancellation
+GET    /api/admin/billing/upcoming              → preview of next month's invoice (sum of subscription + active quotes)
+```
+
+#### SUPER_ADMIN
+
+```
+GET    /api/super/subscriptions                                → all subscriptions across tenants
+GET    /api/super/subscriptions/:id                            → subscription detail with full history
+POST   /api/super/training/quote                               → create training quote (Hedar manual)
+POST   /api/super/training/:invoice_id/send                    → mark as QUOTE_SENT + email customer
+POST   /api/super/training/:invoice_id/approve                 → manual approval (if customer can't self-approve)
+POST   /api/super/custom-demands/quote                         → create custom demand quote
+POST   /api/super/payments/record                              → manually record a payment (cheque, bank transfer)
+POST   /api/super/subscriptions/:id/extend-trial               → extend trial by N days
+POST   /api/super/subscriptions/:id/apply-custom-discount      → reserved for future (Section 115.10)
+GET    /api/super/invoices/overdue                             → list overdue invoices for follow-up
+GET    /api/super/subscriptions/:id/seat-changes               → audit log of seat changes
+POST   /api/super/subscriptions/:id/manual-bill                → force-generate invoice for this subscription
+```
+
+All routes mounted on the SUPER_ADMIN portal use `auth + superAdmin + tenantDb` middleware (same pattern as `routes/super_admin.js` from Section 89-C). All customer-facing routes use `auth + tenantDb`.
+
+### 116.10 — UI pages (Phase 6-D-5 + 6-D-6)
+
+#### Customer-facing (admin of company at app.constrai.ca)
+
+| Page | Path | Purpose |
+|---|---|---|
+| **Subscription** | `/admin/subscription` | View current plan + seats + next invoice estimate + trial countdown |
+| **Seats Management** | `/admin/subscription/seats` | Add/reduce seats with live cost preview (shows current bracket + new bracket if crossing) |
+| **Billing & Invoices** | `/admin/billing` | List all invoices with filters by type + status |
+| **Invoice Detail** | `/admin/billing/:id` | View single invoice, PDF link, payment status, "Pay now" button |
+| **Payment Methods** | `/admin/billing/payment-methods` | Add/remove cards (Phase 9-B; placeholder pre-conference) |
+| **Cancel/Reactivate** | `/admin/subscription/cancel` | Self-serve cancellation flow with confirmation + reason field |
+
+#### SUPER_ADMIN (Hedar's portal at admin.constrai.ca)
+
+| Page | Path | Purpose |
+|---|---|---|
+| **All Subscriptions** | `/subscriptions` | List of all tenant subscriptions, filterable by status |
+| **Subscription Detail** | `/subscriptions/:id` | Detail view, manual operations (extend trial, manual bill, notes) |
+| **Training Quotes** | `/training-quotes` | List of all training quotes/invoices, filterable by status |
+| **Create Training Quote** | `/training-quotes/new?company_id=:id` | Manual form: trainees by role, distance lookup (Mapbox), days, flight |
+| **Training Quote Detail** | `/training-quotes/:id` | View/edit, send to customer, mark as paid |
+| **Custom Demands** | `/custom-demands` | List of all custom demand quotes |
+| **Create Custom Demand** | `/custom-demands/new?company_id=:id` | Manual quote builder for customization work |
+| **Payments Log** | `/payments` | All payments across all tenants; manual record of cheques/bank transfers |
+| **Overdue Invoices** | `/invoices/overdue` | Action queue for invoices needing follow-up |
+| **Tax Rates** | `/tax-rates` | Manage QST/GST rates (rarely touched) |
+
+### 116.11 — Quebec compliance considerations baked into schema
+
+- **Sequential invoice numbering** — `invoice_number` UNIQUE constraint + generation function increments per year (CONS-2026-0001, CONS-2026-0002, ...)
+- **Tax separation** — `qst_cents` and `gst_cents` as separate INTEGER columns (not derived) so historical invoices remain accurate even if tax rates change later
+- **Records retention** — no auto-purge on `invoices` or `payments`; retention is 6 years from `paid_date` per Revenu Québec rules
+- **Currency clearly CAD** — column default + UI display always shows "CAD" prefix
+- **Explicit customer approval** — `invoices.approved_at` + `approved_by` required before status can advance past QUOTE_SENT
+- **Audit trail** — `created_by_user_id` + timestamps on every table; the `subscription_seat_changes` and `payments` tables are append-only (never updated, only inserted)
+
+### 116.12 — Currency representation
+
+**Decision:** all money amounts stored as `INTEGER` cents (e.g., $24.50 CAD = 2450).
+
+**Reasons:**
+- No floating-point arithmetic bugs (industry-wide standard for billing)
+- Direct match with Stripe API conventions (Stripe uses cents)
+- Cleaner SQL aggregation (`SUM(amount_cents) / 100.0` for display only)
+- Currency unit clear in code review (`amount_cents` is unambiguous)
+
+**Display conversion:** application layer divides by 100 for display, formats with locale-appropriate separators (`24.50` for English, `24,50` for French Quebec).
+
+### 116.13 — Open decisions deferrable to Phase 6-D-4 kickoff
+
+These are NOT decided in this section. They're recorded so the implementing session has a real checklist:
+
+1. **Annual billing logic** — schema is ready (billing_cycle column accepts 'ANNUAL'); decide if Phase 6-D-7 implements the cron logic or defers to Phase 9-B
+2. **PDF generation library** — puppeteer (Chromium), wkhtmltopdf, or React-PDF? Choose at 6-D-7 kickoff
+3. **Email template engine for invoices** — Resend's React Email vs raw HTML templates
+4. **Trial+SUSPENDED corner case** — can an admin add seats during trial? During SUSPENDED-read-only? Decide at 6-D-5
+5. **"Pause subscription" feature** — Stripe supports it; decide if pre-conference scope includes it
+6. **Invoice numbering reset behavior** — does CONS-2026-9999 → CONS-2027-0001, or strictly sequential (CONS-2026-0001 → CONS-2026-N forever)? Per Revenu Québec, restart per year is fine; recommended for visual clarity
+7. **What email address are quotes/invoices sent FROM?** — `billing@constrai.ca` (suggest creating in 6-D-7)
+8. **Audit log table** — separate generic `audit_log` table OR rely on per-table audit columns? Currently the schema uses per-table; revisit if patterns emerge
+9. **Customer-facing "Manage Payment Method" UI** — placeholder pre-Phase-9B or skip entirely until 9-B
+10. **Tax registration timing** — when do we cross Revenu Québec's $30,000 threshold and need to register? Plan ahead; estimated by first paying customer signing in Q3 2026
+
+### 116.14 — What changes in Section 114 shipped code
+
+| File | Change required in Phase 6-D-4 |
+|---|---|
+| `routes/invite_employee.js` | Replace `companies.max_users` query with subscription query reading `subscriptions.subscribed_seats` for the company |
+| `routes/super_admin.js` (GET /companies/:id) | Join `subscriptions` table; return subscription data alongside company data |
+| `mep-frontend/src/admin/CompanyBranding.jsx` | Consume new endpoint shape; seat counter reads from subscription, not `company.max_users` |
+| `tests/integration/invite_employee.test.js` | Update existing 402 test to seed via `subscriptions` table instead of `companies.max_users` |
+| `tests/admin/branding_upload.test.js` | Same — seed subscription rows for test setup |
+
+After all references migrate (Phase 6-D-4 done), migration 020 in a follow-up session drops `companies.max_users` and `idx_companies_max_users`.
+
+### 116.15 — Section/total update
+
+- **Today (May 24, 2026): 84 sections.** (Section 116 NEW — subscription + billing schema design. 5 new tables: subscriptions, subscription_seat_changes, invoices (with invoice_type ENUM), payments, tax_rates. Subscription state machine carried forward from Section 113.3; invoice state machine new with 8 states covering draft-to-paid flow. JSONB details fields per invoice type allow flexibility without separate sub-tables. Migration plan from Section 114 max_users documented as 4-step additive→backfill→cutover→drop pattern. 20+ API endpoints mapped across customer + SUPER_ADMIN portals. 16 UI pages enumerated (6 customer-facing + 10 SUPER_ADMIN). Currency locked as integer cents per industry standard; Quebec QST/GST stored as basis points integers in tax_rates table with effective dates. 10 open decisions deferred to Phase 6-D-4 kickoff. No code in this section; this is the architectural blueprint Phase 6-D-4 implements over the next 2-3 weeks. Strict separation: business model decisions in Section 115, schema decisions in Section 116, build phases in HANDOFF.md.)
+
