@@ -31,3 +31,5 @@ UPDATE public.tax_rates
 -- they MUST follow the same convention (rate * 1000 = percent).
 
 COMMIT;
+
+-- bump: re-trigger CI
