@@ -14463,4 +14463,175 @@ Original PR 3 plan: SUPER_ADMIN endpoints + invoice numbering + tax lookup.
 
 - **Today (May 24, 2026, late evening): 85 sections.** (Section 117 NEW — Phase 6-D-4 PR 1+2 shipped + 3 strategic revisions to Section 115. Bracket prices revised mid-PR-1 from $24/$22/$20/$19/$18 to $27/$25/$24/$23/$22 ($2-then-$1 step pattern, $22 floor); already in PR #260 commit. Training mandatory clarified: initial signup only, additional employees optional. Seat-change workflow revised from pure self-serve (115.3 original) to hybrid DB-audit + email pattern — closes denial-of-request legal risk with 5-source distributed evidence chain. Pitfall #49 captured: tables created via `sudo -u postgres psql` are owned by postgres and need explicit GRANTs for mepuser + mepuser_super; hot-fixed on prod, permanent fix in migration 020 (PR 3 scope). Training materials design forward-looking guidance added: anchor on CORE concepts + WORKFLOWS, not specific UI, since product evolves fast. PR 3 scope expanded from 4-5h to 6-8h to include grants migration + seat-request audit endpoints. Audit log integration uses existing audit_logs table (no new tables needed) leveraging Pitfall #22 immutability trigger.)
 
+---
+
+## 118. Section 118 — May 26, 2026 — Phase 6-D-4 PR 3/4/5 ALL SHIPPED — billing schema implementation complete + Pitfalls #50/#51 + ci.yml workflow_dispatch
+
+> **Status:** ✅ **Phase 6-D-4 COMPLETE.** All 5 PRs of the billing schema implementation phase are merged, deployed, and verified in production. PR 266 (migration 020 — GRANTs + ALTER DEFAULT PRIVILEGES), PR 267 (seat-change request endpoints + apply-change + Resend confirmation), and PR 268 (SUPER_ADMIN training/custom-demands/payments/extend-trial + invoice numbering + tax helpers + migration 021 GST scale normalization) all shipped during this session. The original Section 117.7 scope split into PR 3 ended up running as 3 PRs (PR 3/4/5) rather than one, which kept each PR's blast radius manageable and made the inevitable CI debug loops smaller. Two new pitfalls captured (#50 — GitHub Actions silently reset `default_workflow_permissions` to read causing 403 on git clone; #51 — don't propose pause/break between agreed work items). ci.yml gained a `workflow_dispatch` trigger for future emergency manual runs.
+
+### 118.1 — Phase 6-D-4 PR 3 (migration 020) shipped (PR #266)
+
+Migration 020 was the cleanest of the three remaining PRs because the design was settled in Section 117.5. The migration combines belt-and-suspenders protection:
+
+1. **Explicit per-table GRANTs** on all 5 billing tables (subscriptions, subscription_seat_changes, invoices, payments, tax_rates) — covers tables that already existed before the ALTER DEFAULT PRIVILEGES statement was put in place.
+2. **ALTER DEFAULT PRIVILEGES** for role `postgres` in schema `public` — every NEW table created by postgres from this point onward automatically grants SELECT, INSERT, UPDATE, DELETE to mepuser + mepuser_super, plus USAGE/SELECT on sequences. This is the permanent Pitfall #49 fix.
+
+Deployed via `sudo -u postgres psql mepdb -f migrations/020_billing_schema_grants.sql` per Pitfall #45. Verified post-deploy with the `information_schema.role_table_grants` query from Section 117.5 — expected 40 rows (5 tables × 4 privileges × 2 roles), observed 40 rows.
+
+### 118.2 — Phase 6-D-4 PR 4 (seat-change request endpoints + apply-change + Resend confirmation) shipped (PR #267)
+
+PR 4 implemented the hybrid DB-audit + email workflow designed in Section 117.4. Three customer-facing endpoints under `COMPANY_ADMIN_UP` middleware:
+
+- `POST /api/admin/subscription/seat-request` — inserts audit row #1 (`CUSTOMER_REQUESTED_SUBSCRIPTION_CHANGE`) and returns a `mailto:` URL with prefilled subject/body for the customer to send to billing@constrai.ca.
+- `POST /api/admin/subscription/cancel-request` — same pattern, action `CUSTOMER_REQUESTED_CANCELLATION`.
+- `POST /api/admin/subscription/plan-upgrade-request` — same pattern, action `CUSTOMER_REQUESTED_PLAN_UPGRADE`.
+
+One SUPER_ADMIN endpoint:
+
+- `POST /api/super/subscriptions/:id/apply-change` with three branches via `change_type` body field: `SEAT_CHANGE`, `CANCEL`, `PLAN_CHANGE`. Each branch updates `subscriptions` + inserts an audit row #2 (`SUPER_ADMIN_APPLIED_SUBSCRIPTION_CHANGE`) referencing the original request audit row via `details.request_audit_id` (FK in JSONB, not enforced — by design, since audit chain may include external evidence).
+
+Resend email helper extracted into `lib/email_subscription_change.js` per the same pattern as `lib/email_subscription_change.js` would later be reused for training quotes. Bilingual EN/FR HTML + text body; subject pattern `Re: Subscription change confirmed for {Company Name}` per Section 117.4 Interpretation 2 (no Message-ID ingestion; the "Re:" prefix is the threading signal).
+
+Two CI iterations on this PR — first failed on a frontend test that used `getByText('7')` against text split by `<span>` (Pitfall #47, applied via function matcher), second failed because a static error-message dictionary said "has reached its seat limit" but the test expected "seat limit reached" (fixed by making `errorMessageFor` prefer backend's `message_en`/`message_fr` over static dict).
+
+### 118.3 — Phase 6-D-4 PR 5 (training/custom-demands/payments + helpers + migration 021) shipped (PR #268)
+
+PR 5 was the largest of the three. New files:
+
+- `lib/invoice_numbering.js` — `generateInvoiceNumber(db, issueDate)` returns sequential `CONS-YYYY-NNNN` using `pg_advisory_xact_lock(4242420001)` for serialization. `getActiveTaxRates(db, asOfDate)` returns `{qst_basis_points, gst_basis_points}` from the latest effective row. `calculateTaxes(subtotalCents, rates)` does the math.
+- `lib/training_quote.js` — pure pricing function: 4 geographic tiers (WITHIN_50_KM / KM_50_120 / KM_120_200 / KM_OVER_200), base $800 package, per-role add-ons (Admin +$200, PM +$150, Foreman +$100, Worker +$50), flight pass-through, SUPER_ADMIN per-diem override.
+- `lib/email_training_quote.js` — extracted from the route file to satisfy Semgrep's static XSS rule (5DO3). Pre-computes escaped strings as single-token variables before template interpolation, so Semgrep can prove the escape unambiguously.
+- `routes/super_training_quotes.js` — `POST /api/super/training/quotes` (creates DRAFT invoice of type='TRAINING' with breakdown JSONB) + `POST /api/super/training/quotes/:id/send` (transitions to QUOTE_SENT, sends email, idempotent on re-send).
+- `routes/super_custom_demands.js` — `POST /api/super/custom-demands/quotes` for milestone-based custom work invoices.
+- `routes/super_payments.js` — `POST /api/super/payments/record` with full/partial payment support, OVERPAYMENT block, INVOICE_NOT_PAYABLE on VOID invoices.
+- `routes/super_subscription_lifecycle.js` — `POST /api/super/subscriptions/:id/extend-trial`.
+- `migrations/021_fix_gst_rate_scale.sql` — `UPDATE tax_rates SET rate_basis_points = 5000 WHERE jurisdiction = 'FEDERAL' AND tax_name = 'GST' AND rate_basis_points = 500;` idempotent. Normalizes GST to the thousandths-of-percent scale (1 unit = 0.001%) that QST already uses (9975 = 9.975%).
+
+The migration 021 scale fix surfaced because migration 018 seeded the two rates with inconsistent units: QST=9975 in thousandths-of-percent, GST=500 in basis points. `calculateTaxes` had to pick one divisor — choosing 100000 (thousandths-of-percent) keeps Quebec's 9.975% QST as an exact integer (9975) instead of the non-integer 997.5 that basis points would require. Migration 021 brings the GST row in line with that convention.
+
+CI took 5+ iterations on this PR — initial Prettier + Semgrep XSS failures (fixed by extracting the email module), then the tax math test failures (fixed by the divisor change + test fixture update + migration 021), then a `billing_schema_018_019.test.js` assertion that expected GST=500 (the pre-migration-021 value, fixed by updating to 5000), and along the way one round where GitHub Actions silently stopped triggering CI runs on this branch (Pitfall #50 — see 118.5 below).
+
+### 118.4 — Production deployment summary
+
+All three migrations live on prod:
+
+| Migration | Applied | Notes |
+|---|---|---|
+| 018 — billing schema (5 tables) | May 24, 2026 | Tables owned by postgres; mepuser had zero privileges (Pitfall #49 surfaced) |
+| 019 — backfill subscriptions | May 24, 2026 | One row per company; MEP Construction → bracket 1-5 at $27.00/seat/mo |
+| 020 — GRANTs + ALTER DEFAULT PRIVILEGES | May 25, 2026 | Permanent Pitfall #49 fix; 40 GRANT rows verified |
+| 021 — GST rate scale normalization | May 26, 2026 | UPDATE 1; both QST=9975 and GST=5000 in thousandths-of-percent |
+
+Verified post-deploy:
+- `pm2 status mep-backend` → online, healthy memory profile
+- `curl https://app.constrai.ca/api/health` → 200 OK
+- `SELECT jurisdiction, tax_name, rate_basis_points FROM public.tax_rates WHERE effective_until IS NULL ORDER BY tax_name;` → FEDERAL/GST=5000, QC/QST=9975
+- `admin.constrai.ca/companies/5/branding` → Seat usage 50/5 amber + bracket label + per-seat price rendered correctly
+
+### 118.5 — Pitfall #50: GitHub Actions silently reset `default_workflow_permissions` to `read`
+
+During the PR 5 debug loop, after pushing the tax-math fix commit (and an empty-commit re-trigger after that), GitHub Actions stopped triggering new workflow runs on the branch. Symptoms:
+- `gh run list --branch <branch>` showed no new runs after each push.
+- `gh pr view 268 --json statusCheckRollup` returned `[]` (no checks running).
+- `gh pr close && gh pr reopen` did NOT trigger a new run either.
+- The GitHub Actions web tab confirmed: the latest run shown was the pre-fix failed CI #652; nothing newer.
+
+After adding a `workflow_dispatch:` trigger to `.github/workflows/ci.yml` and running `gh workflow run CI --ref <branch>`, CI did run — but every job (Backend, E2E, Mobile, Schema, Security) failed at the `Checkout` step with:
+
+```
+fatal: unable to access 'https://github.com/hedarhallak/mep-platform/':
+The requested URL returned error: 403
+```
+
+Root cause: `gh api /repos/hedarhallak/mep-platform/actions/permissions/workflow` returned `{"default_workflow_permissions":"read","can_approve_pull_request_reviews":false}` — at some point during the day (not by Hedar's action), GitHub had silently reset this setting from `write` to `read`. With `read`, the ephemeral `GITHUB_TOKEN` issued to workflows lacks the permission to clone the repo, even on a public repo, because `actions/checkout@v4` always uses the token. **This is the same root-cause class as Pitfall #44 (dual logo columns) — a default that drifted unobserved and broke a feature.**
+
+**Fix** (via gh CLI; UI equivalent is Settings → Actions → General → Workflow permissions → "Read and write permissions"):
+
+```bash
+gh api -X PUT /repos/hedarhallak/mep-platform/actions/permissions/workflow \
+  -f default_workflow_permissions=write \
+  -F can_approve_pull_request_reviews=true
+```
+
+After applying the fix, both `workflow_dispatch` runs AND the previously-stalled `pull_request: synchronize` triggers resumed working. The Section 4.7 file-based log convention (CLAUDE.md) was essential for diagnosing this — without it the back-and-forth pasting of `gh` output would have taken 3-5x longer.
+
+**Prevention going forward:** Add this check to the end-of-session checkpoint (Section 0 Step 6) — a quick `gh api /repos/<owner>/<repo>/actions/permissions/workflow` returning `default_workflow_permissions: "write"` confirms the state is still correct. If the value drifts to `read`, re-apply the PUT immediately. We have NO theory for why GitHub reset the value — possibly an automated security policy, possibly an undocumented GitHub-side change. Re-check after any Dependabot batch or GitHub Actions security advisory.
+
+### 118.6 — `.github/workflows/ci.yml` gained `workflow_dispatch` trigger
+
+While debugging Pitfall #50, the workflow file was permanently modified to include `workflow_dispatch:` in addition to the existing `push: branches: [main]` and `pull_request: branches: [main]` triggers. This is left in place as a future emergency-trigger mechanism (e.g., to re-run a transient flaky test job without pushing a junk commit). Usage:
+
+```bash
+gh workflow run "CI" --ref <branch>
+```
+
+The trigger has no downside — it doesn't change normal CI behavior. It's a one-line addition that earns its keep the first time another similar GitHub Actions glitch happens.
+
+### 118.7 — Pitfall #51: Don't propose pause/break between agreed work items
+
+Mid-session, after a long sequence of CI debug iterations and PR ships, Claude proposed pausing for a break. Hedar's response (verbatim): *"كلاود عنده مشكلة بموضوع اكمال العمل... انا أعلم متى يجب أن اتوقف عن العمل, مفهوم؟"* and *"انا عم ادفع اشتراك 200 دولار بالشهر مو لحتى اشتغل ساعتين باليوم واتوقف عن الشغل."*
+
+**Rule:** Once a work plan is agreed (e.g., "C then B then A" for PR sequencing), Claude executes the full plan without inserting "should we pause?" prompts between completed items. Hedar decides when to stop. Asking burns turns and signals that Claude doesn't trust the user's stated intent.
+
+**Where this DOES apply:**
+- Multi-step plans where each step depends on the previous succeeding (PR ships, CI verifies, deploy, smoke).
+- Long debug loops where Claude wants to "check in" between iterations.
+
+**Where this does NOT apply:**
+- When an architectural decision opens up that wasn't in the original plan (e.g., a new pitfall surfaces requiring a strategy change). In those cases, surfacing the decision is correct — but ONE focused question per Section 8.9, not a generic "want to pause?".
+- When the work is complete and the natural next step is documentation. After Phase 6-D-4 PR 5 shipped, asking "should I write the docs PR now or later?" is acceptable because docs is a discrete additional unit of work, not a continuation.
+
+### 118.8 — Pricing model live in production: end-to-end check
+
+After Phase 6-D-4 PR 5 deployment, the full pricing model from Section 115 is now exercisable end-to-end in production (modulo the customer-facing UI which is Phase 6-D-5):
+
+- **Subscription state** — `subscriptions` table populated for MEP Construction with bracket 1-5, $27.00/seat/mo, plan_type=BASIC.
+- **Seat enforcement** — invite endpoint reads `subscribed_seats`, returns HTTP 402 USER_LIMIT_REACHED with bilingual message on the cap.
+- **Seat-change workflow** — customer admin can hit POST seat-request to insert audit row + open mailto; Hedar can apply via POST apply-change.
+- **Training quotes** — Hedar can create DRAFT training quote via `POST /super/training/quotes` (computes base + per-role + per-diem + optional flight) and send via `POST /super/training/quotes/:id/send` (transitions to QUOTE_SENT + emails customer admin).
+- **Custom demands** — Hedar can create custom milestone-based quotes via `POST /super/custom-demands/quotes`.
+- **Payments** — Hedar can record full/partial payments via `POST /super/payments/record` with overpayment guard.
+- **Trial extension** — `POST /super/subscriptions/:id/extend-trial` updates trial_ends_at.
+- **Invoice numbering** — sequential CONS-YYYY-NNNN, year-resetting, advisory-locked.
+- **Tax math** — QST 9.975% + GST 5%, computed in integer cents using thousandths-of-percent rates.
+
+What's still UI-only-deferred:
+- Customer-facing Subscription/Billing page (Phase 6-D-5 — June 2026).
+- SUPER_ADMIN Subscription Detail page with Apply Change form (Phase 6-D-6 — June-July 2026).
+- Training Quote / Custom Demand creation UI (Phase 6-D-6).
+- Payments log table UI (Phase 6-D-6).
+- Monthly invoice cron + trial expiry warning emails (Phase 6-D-7 — July 2026).
+
+For the September 2026 conference Hedar can demo the full flow via API calls today; the UI work is the next 8-10 weeks of effort.
+
+### 118.9 — Session Log — May 26, 2026
+
+**Duration:** ~14 hours total across context resumption (continuation from May 25 session).
+
+**Shipped:**
+- PR #266 — migration 020 (Pitfall #49 grants fix)
+- PR #267 — seat-change request endpoints + apply-change + Resend confirmation
+- PR #268 — training/custom-demands/payments/extend-trial + invoice numbering + tax helpers + migration 021
+
+**Deployed to prod:**
+- Migration 020 (May 25, after PR 266 merge)
+- Migration 021 (May 26, after PR 268 merge)
+- Backend restart × 2 (PR 267 deploy + PR 268 deploy); no frontend rebuilds (backend-only PRs)
+
+**Verified end-to-end:**
+- `app.constrai.ca/api/health` → 200 OK
+- `admin.constrai.ca/companies/5/branding` → seat counter + bracket + plan render correctly
+- `tax_rates` table shows QST=9975, GST=5000 (consistent scale)
+- `information_schema.role_table_grants` shows 40 rows for billing tables (mepuser + mepuser_super)
+
+**Pitfalls added:**
+- #50 — GitHub Actions silent reset of `default_workflow_permissions` to read
+- #51 — Don't propose pause/break between agreed work items
+
+**ci.yml change:** added `workflow_dispatch:` trigger as a permanent emergency-run mechanism.
+
+**Total sections in DECISIONS.md:** 86 (Section 118 NEW, but Section 111 still orphaned — numbering jumps from 110 to 112 — left as-is for historical accuracy).
+
+**Next session opening priority:** Phase 6-D-5 — customer-facing Subscription/Billing UI. Scope: Subscription page with Request seat change form (Section 117.4 hybrid workflow), Invoices list page, current bracket + price display. Estimated 1-2 weeks per the conference roadmap.
+
 
