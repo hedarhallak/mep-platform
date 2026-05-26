@@ -254,6 +254,24 @@ function mountAdminRoutes(app) {
   // change (seat / cancel / plan) and triggers Resend confirmation email.
   // The router exposes its own /subscriptions/:id/apply-change path.
   app.use('/api/super', auth, superAdmin, tenantDb, require('./routes/super_subscription_apply'));
+  // Section 115.4 + 115.8 / Phase 6-D-4 PR 5: SUPER_ADMIN training quote
+  // creation + send. Sequential CONS-YYYY-NNNN invoice numbering.
+  app.use('/api/super', auth, superAdmin, tenantDb, require('./routes/super_training_quotes'));
+  // Section 115.5 / Phase 6-D-4 PR 5: SUPER_ADMIN custom-demand quotes
+  // (custom integrations, custom reports, white-label work).
+  app.use('/api/super', auth, superAdmin, tenantDb, require('./routes/super_custom_demands'));
+  // Section 116.5 / Phase 6-D-4 PR 5: SUPER_ADMIN manual payment recording
+  // (bank transfer, cheque, cash). Stripe-driven payments land in Phase 9-B.
+  app.use('/api/super', auth, superAdmin, tenantDb, require('./routes/super_payments'));
+  // Phase 6-D-4 PR 5: subscription lifecycle ops (extend-trial today; future
+  // pause / resume / hard-cancel follow the same pattern).
+  app.use(
+    '/api/super',
+    auth,
+    superAdmin,
+    tenantDb,
+    require('./routes/super_subscription_lifecycle')
+  );
 }
 
 // =============================================================================

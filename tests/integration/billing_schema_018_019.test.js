@@ -9,7 +9,8 @@
 //   - invoice_type ENUM has the 4 expected values
 //   - CHECK constraints reject invalid values (status, plan_type, currency,
 //     amount bounds, total = subtotal + qst + gst, etc.)
-//   - tax_rates is seeded with QC/QST/9975bp + FEDERAL/GST/500bp
+//   - tax_rates is seeded with QC/QST/9975 + FEDERAL/GST/5000 (thousandths-of-percent
+//     after migration 021 normalized the GST scale; see lib/invoice_numbering.js)
 //   - seedSubscription helper produces a valid subscription + INITIAL
 //     seat_change row + correct bracket derivation per Section 115.3
 //   - Backfill correctness: every company has a subscription with sane
@@ -73,7 +74,7 @@ describeIfDb('Migration 018 — billing schema structure', () => {
     ]);
   });
 
-  test('tax_rates seeded with QC/QST/9975bp and FEDERAL/GST/500bp', async () => {
+  test('tax_rates seeded with QC/QST=9975 and FEDERAL/GST=5000 (thousandths-of-percent)', async () => {
     const pool = getPool();
     const { rows: qst } = await pool.query(
       `SELECT rate_basis_points FROM public.tax_rates
@@ -89,7 +90,9 @@ describeIfDb('Migration 018 — billing schema structure', () => {
         ORDER BY effective_from DESC LIMIT 1`
     );
     expect(gst).toHaveLength(1);
-    expect(gst[0].rate_basis_points).toBe(500);
+    // Migration 021 normalized GST to thousandths-of-percent scale (5000 = 5%),
+    // matching QST's storage convention.
+    expect(gst[0].rate_basis_points).toBe(5000);
   });
 
   test('subscriptions.status CHECK constraint rejects invalid value', async () => {
