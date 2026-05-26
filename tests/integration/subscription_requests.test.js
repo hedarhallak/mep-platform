@@ -71,12 +71,15 @@ describeIfDb('POST /api/admin/subscription/seat-request', () => {
       .send({ requested_seats: 8, reason: 'Hiring 3 new foremen for the summer push' });
 
     expect(res.statusCode).toBe(200);
+    // The arrow character `→` appears only in mailto_subject; mailto_body
+    // uses natural prose ("from 5 to 8") for the customer's email reader.
     expect(res.body).toMatchObject({
       ok: true,
       mailto_subject: expect.stringContaining('Seat change'),
-      mailto_body: expect.stringContaining('5 → 8'),
+      mailto_body: expect.stringContaining('from 5 to 8'),
       mailto_url: expect.stringContaining('mailto:billing@constrai.ca'),
     });
+    expect(res.body.mailto_subject).toMatch(/5\s*→\s*8/); // arrow in subject only
     expect(typeof res.body.request_audit_id).toBe('number');
     expect(res.body.request_audit_id).toBeGreaterThan(0);
 

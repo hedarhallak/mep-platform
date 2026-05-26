@@ -202,7 +202,9 @@ describeIfDb('apply-change — SEAT_CHANGE', () => {
     expect(sendEmail).toHaveBeenCalledTimes(1);
     const emailArgs = sendEmail.mock.calls[0][0];
     expect(emailArgs.subject).toContain('Re: Subscription change confirmed');
-    expect(emailArgs.html).toContain('SEAT_CHANGE');
+    // The HTML uses the friendly label ("seat change") not the raw ENUM literal.
+    // Both EN ("seat change") and FR ("modification du nombre de sièges") appear.
+    expect(emailArgs.html.toLowerCase()).toContain('seat change');
     expect(emailArgs.html).toContain('5'); // old seats
     expect(emailArgs.html).toContain('8'); // new seats
   });
