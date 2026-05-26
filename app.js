@@ -250,6 +250,10 @@ function mountAdminRoutes(app) {
   // chain. Same `/api/super` prefix; the router exposes its own
   // `/companies/:id/branding` path.
   app.use('/api/super', auth, superAdmin, tenantDb, require('./routes/super_admin_branding'));
+  // Section 117.4 / Phase 6-D-4 PR 4: SUPER_ADMIN applies a subscription
+  // change (seat / cancel / plan) and triggers Resend confirmation email.
+  // The router exposes its own /subscriptions/:id/apply-change path.
+  app.use('/api/super', auth, superAdmin, tenantDb, require('./routes/super_subscription_apply'));
 }
 
 // =============================================================================
@@ -310,6 +314,17 @@ function mountTenantRoutes(app) {
   app.use('/api/invite-employee', auth, tenantDb, require('./routes/invite_employee'));
   // Section 89-C/14: admin_users migrated to req.db (RLS-enforced).
   app.use('/api/admin/users', auth, tenantDb, loadRouter('./routes/admin_users'));
+  // Section 117.4 / Phase 6-D-4 PR 4: subscription change request endpoints
+  // (seat-request / cancel-request / plan-upgrade-request). Tenant
+  // COMPANY_ADMIN submits → audit_logs row #1 → mailto suggestion returned.
+  // SUPER_ADMIN later applies via /api/super/subscriptions/:id/apply-change
+  // (mounted on adminApp via mountAdminRoutes).
+  app.use(
+    '/api/admin/subscription',
+    auth,
+    tenantDb,
+    require('./routes/admin_subscription_requests')
+  );
 
   // ── RBAC Permissions ────────────────────────────────────────
   // Section 89-C/5: user_management migrated to req.db (RLS-enforced).
