@@ -23,6 +23,9 @@
  *   6. Resend auto-email confirms to the customer (Section 117.4)
  *
  * Endpoints (all require COMPANY_ADMIN role):
+ *   GET  /                       — read the tenant's current subscription + usage
+ *                                  (added Phase 6-D-5 PR 1 for the customer-facing
+ *                                   Subscription page UI)
  *   POST /seat-request           — request seat count change
  *   POST /cancel-request         — request subscription cancellation
  *   POST /plan-upgrade-request   — request plan type change (MONTHLY/ANNUAL/ENTERPRISE)
@@ -192,6 +195,91 @@ function buildMailtoUrl(category, ctx) {
   const body = encodeURIComponent(buildMailtoBody(category, ctx));
   return `mailto:${BILLING_EMAIL}?subject=${subject}&body=${body}`;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /
+//
+// Phase 6-D-5 PR 1 — returns the tenant's current subscription summary +
+// usage counters so the customer-facing Subscription page can render the
+// current plan, bracket, seat usage, status, and next-billing date.
+//
+// Response shape (200):
+//   {
+//     ok: true,
+//     subscription: {
+//       id, status, plan_type, subscribed_seats,
+//       current_unit_price_cents, current_bracket_label,
+//       next_billing_at, trial_ends_at, cancel_at_period_end,
+//     },
+//     usage: { current_employees, seats_remaining },
+//     company: { id, name, code },
+//   }
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/', async (req, res) => {
+  try {
+    const companyId = req.user?.company_id;
+    if (!companyId) {
+      return res.status(401).json({ ok: false, error: 'NO_TENANT' });
+    }
+
+    const { rows } = await req.db.query(
+      `SELECT c.company_id, c.name AS company_name, c.company_code,
+              s.id AS subscription_id, s.status, s.plan_type,
+              s.subscribed_seats, s.current_unit_price_cents,
+              s.current_bracket_label, s.next_billing_at, s.trial_ends_at,
+              s.cancel_at_period_end,
+              (SELECT COUNT(*)::int
+                 FROM public.employees e
+                WHERE e.company_id = c.company_id
+                  AND e.is_active = true) AS current_employees
+         FROM public.companies c
+         LEFT JOIN public.subscriptions s ON s.company_id = c.company_id
+        WHERE c.company_id = $1
+        LIMIT 1`,
+      [companyId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ ok: false, error: 'COMPANY_NOT_FOUND' });
+    }
+
+    const row = rows[0];
+    if (!row.subscription_id) {
+      return res.status(404).json({ ok: false, error: 'SUBSCRIPTION_NOT_FOUND' });
+    }
+
+    const subscribedSeats = Number(row.subscribed_seats);
+    const currentEmployees = Number(row.current_employees || 0);
+    const seatsRemaining = Math.max(0, subscribedSeats - currentEmployees);
+
+    return res.json({
+      ok: true,
+      subscription: {
+        id: Number(row.subscription_id),
+        status: row.status,
+        plan_type: row.plan_type,
+        subscribed_seats: subscribedSeats,
+        current_unit_price_cents: Number(row.current_unit_price_cents || 0),
+        current_bracket_label: row.current_bracket_label,
+        next_billing_at: row.next_billing_at,
+        trial_ends_at: row.trial_ends_at,
+        cancel_at_period_end: Boolean(row.cancel_at_period_end),
+      },
+      usage: {
+        current_employees: currentEmployees,
+        seats_remaining: seatsRemaining,
+      },
+      company: {
+        id: Number(row.company_id),
+        name: row.company_name,
+        code: row.company_code,
+      },
+    });
+  } catch (err) {
+    console.error('GET /admin/subscription error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
+  }
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /seat-request

@@ -54,6 +54,54 @@ async function seedTenantAdmin({ subscribedSeats = 5, planType = 'MONTHLY' } = {
 }
 
 // =============================================================================
+// GET /api/admin/subscription  (Phase 6-D-5 PR 1)
+// =============================================================================
+
+describeIfDb('GET /api/admin/subscription', () => {
+  afterAll(async () => {
+    await cleanupTestRows();
+    await closePool();
+  });
+
+  test('COMPANY_ADMIN reads their own subscription → 200 with summary + usage', async () => {
+    const ctx = await seedTenantAdmin({ subscribedSeats: 7, planType: 'MONTHLY' });
+    const res = await request(app)
+      .get('/api/admin/subscription')
+      .set('Authorization', `Bearer ${ctx.token}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({
+      ok: true,
+      subscription: expect.objectContaining({
+        id: ctx.subscription.id,
+        status: expect.any(String),
+        plan_type: 'MONTHLY',
+        subscribed_seats: 7,
+        cancel_at_period_end: expect.any(Boolean),
+      }),
+      usage: expect.objectContaining({
+        current_employees: expect.any(Number),
+        seats_remaining: expect.any(Number),
+      }),
+      company: expect.objectContaining({
+        id: ctx.company.company_id,
+        name: ctx.company.name,
+      }),
+    });
+    // unit_price_cents must be a non-negative integer (bracket-derived)
+    expect(Number.isInteger(res.body.subscription.current_unit_price_cents)).toBe(true);
+    expect(res.body.subscription.current_unit_price_cents).toBeGreaterThanOrEqual(0);
+    // seats_remaining = max(0, subscribed - current_employees)
+    expect(res.body.usage.seats_remaining).toBeGreaterThanOrEqual(0);
+  });
+
+  test('rejects unauthenticated request with 401', async () => {
+    const res = await request(app).get('/api/admin/subscription');
+    expect([401, 403]).toContain(res.statusCode);
+  });
+});
+
+// =============================================================================
 // POST /api/admin/subscription/seat-request
 // =============================================================================
 

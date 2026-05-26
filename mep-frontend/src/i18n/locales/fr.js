@@ -45,8 +45,67 @@ export default {
     userManagement: 'Gestion des utilisateurs',
     permissions: 'Permissions',
     settings: 'Paramètres',
+    subscription: 'Abonnement',
     logout: 'Déconnexion',
     companyFallback: 'Entreprise',
+  },
+
+  subscription: {
+    title: 'Abonnement',
+    loadError: 'Impossible de charger les détails de votre abonnement',
+    currentPlan: 'Forfait actuel',
+    bracketLine: '{{label}} ({{price}}/siège/mois)',
+    seatUsage: 'Utilisation des sièges',
+    seatsUsedOfSubscribed: 'sièges utilisés',
+    atCapacity: 'Capacité atteinte',
+    withinCapacity: 'Dans la capacité',
+    atCapacityHelp:
+      'Les nouvelles invitations seront refusées (HTTP 402) tant que des sièges ne sont pas ajoutés.',
+    seatsRemainingHelp: '{{count}} sièges restants avant la limite.',
+    trialEndsAt: 'Fin de l\'essai',
+    nextBillingAt: 'Prochaine facturation',
+    cancelAtPeriodEnd:
+      'Votre abonnement est programmé pour être annulé à la fin de la période de facturation actuelle.',
+    requestChanges: 'Demander un changement',
+    requestExplanation:
+      'Soumettez une demande ci-dessous. Votre demande sera enregistrée dans notre journal d\'audit et votre client de messagerie ouvrira un message pré-rempli destiné à billing@constrai.ca. Nous traitons toutes les demandes dans un délai d\'un jour ouvrable.',
+    actions: {
+      requestSeatChange: 'Demander un changement de sièges',
+      requestPlanUpgrade: 'Demander un changement de forfait',
+      requestCancel: 'Demander une annulation',
+    },
+    forms: {
+      newSeatCount: 'Nouveau nombre de sièges',
+      reasonOptional: 'Raison (facultative)',
+      submitAndEmail: 'Soumettre + ouvrir le courriel',
+      cancelImmediately: 'Annuler immédiatement (pas à la fin de la période)',
+      targetPlan: 'Forfait cible',
+    },
+    plans: {
+      BASIC: 'De base',
+      MONTHLY: 'Mensuel',
+      ANNUAL: 'Annuel',
+      ENTERPRISE: 'Entreprise',
+    },
+    statuses: {
+      ACTIVE: 'Actif',
+      TRIAL: 'Essai',
+      PAST_DUE: 'En retard',
+      SUSPENDED: 'Suspendu',
+      CANCELLED: 'Annulé',
+      DELETED: 'Supprimé',
+    },
+    errors: {
+      INVALID_REQUESTED_SEATS:
+        'Veuillez saisir un nombre de sièges valide entre 1 et 10000.',
+      NO_CHANGE:
+        'La valeur demandée correspond à votre valeur actuelle — aucun changement à faire.',
+      REASON_TOO_LONG: 'La raison est trop longue (max 1000 caractères).',
+      SUBSCRIPTION_NOT_FOUND: 'Aucun abonnement n\'est rattaché à votre entreprise.',
+      INVALID_PLAN_TYPE: 'Veuillez choisir un type de forfait valide.',
+      SERVER_ERROR:
+        'Une erreur est survenue. Veuillez réessayer ou contacter billing@constrai.ca.',
+    },
   },
 
   layout: {
