@@ -320,6 +320,71 @@
 
 ---
 
+## 14. Billing & Subscriptions
+
+> **Phase 6-D-4 (Sections 115-118).** Live as of May 26, 2026. The billing schema (subscriptions, subscription_seat_changes, invoices, payments, tax_rates) was added by migrations 018/019/020/021 and is documented in SCHEMA.md Section K. The customer-facing UI is Phase 6-D-5 (next); these endpoints are exercisable today via curl/Postman.
+
+### Customer-facing (COMPANY_ADMIN_UP middleware) — `routes/admin_subscription_requests.js`
+
+All three implement the **hybrid DB-audit + mailto** pattern from Section 117.4: the endpoint inserts an immutable audit_logs row, then returns a `mailto:` URL the frontend opens via `window.location.href`. Hedar manually applies the change later via the SUPER_ADMIN apply-change endpoint.
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| POST | `/api/admin/subscription/seat-request` | COMPANY_ADMIN_UP | Body: `{ requested_seats: number, reason?: string }`. Inserts audit row `CUSTOMER_REQUESTED_SUBSCRIPTION_CHANGE`. Returns `{ ok: true, mailto_url, audit_id }`. |
+| POST | `/api/admin/subscription/cancel-request` | COMPANY_ADMIN_UP | Body: `{ reason?: string, effective_date?: string }`. Inserts audit row `CUSTOMER_REQUESTED_CANCELLATION`. Returns `{ ok: true, mailto_url, audit_id }`. |
+| POST | `/api/admin/subscription/plan-upgrade-request` | COMPANY_ADMIN_UP | Body: `{ target_plan: 'MONTHLY'\|'ANNUAL'\|'ENTERPRISE', reason?: string }`. Inserts audit row `CUSTOMER_REQUESTED_PLAN_UPGRADE`. Returns `{ ok: true, mailto_url, audit_id }`. |
+
+### SUPER_ADMIN apply-change — `routes/super_subscription_apply.js`
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| POST | `/api/super/subscriptions/:id/apply-change` | SUPER_ADMIN | Body: `{ change_type: 'SEAT_CHANGE'\|'CANCEL'\|'PLAN_CHANGE', new_seats?, target_plan?, request_audit_id?, notes? }`. Updates subscription per branch + inserts audit row `SUPER_ADMIN_APPLIED_SUBSCRIPTION_CHANGE` + sends Resend confirmation email (bilingual EN/FR) to the customer admin. Idempotent against re-apply when state already matches request. |
+
+### SUPER_ADMIN training quotes — `routes/super_training_quotes.js`
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| POST | `/api/super/training/quotes` | SUPER_ADMIN | Creates a DRAFT invoice of type='TRAINING'. Body: `{ company_id, trainees: [{role, count}], distance_km, training_days, flight?, per_diem_rate_cents_per_day?, quote_expires_at?, customer_notes?, internal_notes?, payment_schedule? }`. Computes base $800 + per-role add-ons (Admin +$200, PM +$150, Foreman +$100, Worker +$50) + per-diem by geographic tier + flight pass-through + QST/GST. Returns `{ ok: true, invoice }`. Sequential `CONS-YYYY-NNNN` invoice number. |
+| POST | `/api/super/training/quotes/:id/send` | SUPER_ADMIN | Transitions DRAFT → QUOTE_SENT and emails the customer admin (lookup via `app_users.role = 'COMPANY_ADMIN'`) or `body.to` override. Idempotent — already-sent quotes return existing state. Returns `{ ok: true, invoice, email_sent }`. |
+
+### SUPER_ADMIN custom demands — `routes/super_custom_demands.js`
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| POST | `/api/super/custom-demands/quotes` | SUPER_ADMIN | Creates DRAFT invoice of type='CUSTOM_DEMAND' for milestone-based custom work. Body: `{ company_id, milestones: [{description, amount_cents}], customer_notes?, internal_notes?, quote_expires_at? }`. Returns `{ ok: true, invoice }`. |
+
+### SUPER_ADMIN payments — `routes/super_payments.js`
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| POST | `/api/super/payments/record` | SUPER_ADMIN | Records a payment against an invoice. Body: `{ invoice_id, amount_cents, payment_method, reference?, paid_at?, notes? }`. Supports full or partial payments. Rejects with `OVERPAYMENT` if total received would exceed invoice total. Rejects with `INVOICE_NOT_PAYABLE` if invoice status is VOID. Returns `{ ok: true, payment, invoice_updated }`. |
+
+### SUPER_ADMIN subscription lifecycle — `routes/super_subscription_lifecycle.js`
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| POST | `/api/super/subscriptions/:id/extend-trial` | SUPER_ADMIN | Body: `{ new_trial_ends_at: 'YYYY-MM-DD', reason?: string }`. Updates `subscriptions.trial_ends_at`. Inserts audit row. Returns `{ ok: true, subscription }`. |
+
+### Currency / tax conventions
+
+- All monetary fields stored as **INTEGER cents** (`subtotal_cents`, `qst_cents`, `gst_cents`, `total_cents`, `amount_cents`). Currency = CAD.
+- Tax rates stored as **thousandths-of-percent** in `tax_rates.rate_basis_points` (1 unit = 0.001%). QST=9975 (9.975%), GST=5000 (5%). Migration 021 normalized this.
+- Invoice numbering format: `CONS-YYYY-NNNN`. Year resets sequence. Generated under `pg_advisory_xact_lock(4242420001)` for serialization.
+
+### Audit chain for subscription changes (5 sources, Section 117.4)
+
+When a customer requests a change → SUPER_ADMIN applies it:
+
+1. `audit_logs` row #1 (customer's request, immutable per Pitfall #22)
+2. Customer's email Sent folder (their mailto-sent message)
+3. Hedar's inbox (the received message)
+4. `audit_logs` row #2 (Hedar's apply action, references row #1 via JSONB `details.request_audit_id`)
+5. Resend's delivery log (confirmation email sent back to customer)
+
+This 5-source chain is the legal defense against a denial-of-request scenario.
+
+---
+
 ## Conventions
 
 ### Auth header

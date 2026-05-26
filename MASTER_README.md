@@ -1,19 +1,20 @@
 # MEP Platform — Master Project README
-> Last updated: May 9, 2026 | Maintainer: Hedar Hallak
+> Last updated: May 26, 2026 | Maintainer: Hedar Hallak
 > Production: https://app.constrai.ca
 > Website: https://www.constrai.ca (Coming Soon landing page)
 > Server: root@143.110.218.84
-> Latest DECISIONS section: **Section 90 / Piece 90-F** (Phase 5 UAT discovered prod login outage from 89-E/3 strict RLS on `app_users`; rolled migration 013 back at ~05:08 UTC May 11, 2026; Pitfall #28 encoded; Piece 90-G planned). Section 85 = multi-tenant architecture (Model C single domain). Section 86 = Phase 1 Cloudflare + Origin SSL execution log. Section 87 = Phase 3 email login execution log. Sections 88–89 = Phase 4 (PostgreSQL RLS) — Stage 1 permissive (012), Stage 2 req.db migration of 22/22 routes, Stage 3 strict (013, **currently rolled back on prod**). Section 90 = Phase 5 architecture + execution (90-A through 90-E shipped; 90-F UAT exposed the strict-RLS bug; 90-G fix is next).
-> Active program: **Multi-Tenant Migration (Section 85, Phases 1-8)** — Phase 1 (Cloudflare + Origin SSL) ✅ DONE, Phase 2 (Tenant Resolver) ✅ no-op after Model C pivot, Phase 3 (email-based login + DB schema) ✅ DONE and deployed, **Phase 4 (PostgreSQL Row-Level Security) ⚠️ STAGE 3 ROLLED BACK** — all 20 tenant tables back on Stage 1 permissive RLS (tenant isolation still enforced via tenantDb GUC; fail-closed guarantee lost until 90-G ships). **Phase 5 (SUPER_ADMIN portal split)** — 90-A through 90-E all shipped + 90-F UAT verified Test A (SA login → CompaniesList). **Piece 90-G is next** — implement `superPool` in `db.js`, refactor `auth.js#login` to use it for the user lookup, re-apply migration 013. ~½ day. The Section 84 UI smoke test is **paused** until all 8 phases ship. Email migration SendGrid → Resend (Resend account ready, code change pending) sits between Phase 5 and Phase 6.
-> Web Tier 1 + Tier 2 DONE (10/10). ~509 i18n keys live. Tier 3 i18n deferred.
-> **Customer #1 status:** unsigned (constraint per Section 46). Sales materials still TODO; product side now in much better shape post-May-4 hygiene push.
-> **Prod is in sync with main**. `APP_NAME=Constrai` + `VITE_MAPBOX_TOKEN` live. Tab title "Constrai" everywhere.
-> **Deploy command** (after `ssh root@143.110.218.84`): `bash /var/www/mep/scripts/deploy.sh` — see Section 53/54 for behavior.
-> **Monitoring posture:** UptimeRobot pinging `/api/health/deep` ✅. Sentry alert rule (new issue → email Hedar) ✅. Sentry frontend SDK gap (Section 58 candidate).
-> Coverage thresholds: **58 / 49 / 58 / 59** (ratcheted in Section 80; measured 60.65 / 51.30 / 60.58 / 61.85). Backend tests: **566 / 66 suites**, all passing. Web i18n: **10/30 pages translated, live on prod** (Tier 1 + Tier 2 closed). Frontend bundle: **376 KB raw / 119 KB gzip** initial chunk after Section 67 lazy-load + Section 78 axios → fetch (-48% raw / -39% gzip from start of May 4).
+> Latest DECISIONS section: **Section 118** (May 26, 2026 — Phase 6-D-4 COMPLETE — all 5 PRs of the billing schema implementation phase shipped + deployed + verified; Pitfalls #50/#51 captured; ci.yml gained `workflow_dispatch:` trigger). Recent context: Section 115 = per-seat metered pricing lock + bracket ladder $27/$25/$24/$23/$22. Section 116 = subscription + billing schema design. Section 117 = PR 1+2 closeout + 3 strategic revisions to S115 + Pitfall #49 (postgres-owned tables need explicit GRANTs). Section 118 = PR 3/4/5 closeout (migration 020 grants + seat-change endpoints + training/custom-demands/payments + migration 021 GST scale normalization).
+> Active program: **Phase 6-D-4 COMPLETE.** Next is **Phase 6-D-5** (customer-facing Subscription/Billing UI) — Subscription page with Request seat change form (hybrid workflow per Section 117.4), Invoices list page, bracket + per-seat price display, bilingual EN/FR. Estimated 1-2 weeks per the September 2026 conference roadmap.
+> Multi-tenant migration: Phases 1-5 ✅ Done. Phase 4 strict RLS rolled back in 90-G then re-applied via Stage 2 GUC + Stage 3 strict on prod (sections 90-G + Phase 6 onward). Pattern B (SUPER_ADMIN portal split via `admin.constrai.ca`) verified end-to-end.
+> Web Tier 1 + Tier 2 DONE (10/10). ~509 i18n keys live. Tier 3 i18n deferred to Phase 6-D-5.
+> **Customer #1 status:** still unsigned. Conference demo + sales materials target = September 2026 (hard deadline).
+> **Prod is in sync with main**. Latest deploy: PR #268 (May 26, 2026) — Phase 6-D-4 PR 5.
+> **Deploy command** (after `ssh root@143.110.218.84`): `bash /var/www/mep/scripts/deploy.sh` — see Section 53/54 for behavior. Migrations require manual `sudo -u postgres psql -f` (Pitfall #45).
+> **Monitoring posture:** UptimeRobot pinging `/api/health/deep` ✅. Sentry alert rule (new issue → email Hedar) ✅.
+> Coverage thresholds: **58 / 49 / 58 / 59** (ratcheted in Section 80; latest measured ~67/57/65/66 on PR #268).
 > Backend path on server: /var/www/mep
 > Landing page path on server: /var/www/constrai-landing
-> DB: mepdb / mepuser / MepSecure2026X
+> DB: mepdb / mepuser / mepuser_super (rotated 2026-05-11; passwords in OneDrive `Constrai Keys`)
 > Repo: hedarhallak/mep-platform
 
 ---
