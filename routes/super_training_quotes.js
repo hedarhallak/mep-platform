@@ -37,7 +37,7 @@ const {
   getActiveTaxRates,
   calculateTaxes,
 } = require('../lib/invoice_numbering');
-const { sendEmail, escapeHtml: e } = require('../lib/email');
+const { sendTrainingQuoteEmail } = require('../lib/email_training_quote');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -228,13 +228,11 @@ router.post('/training/quotes/:id/send', async (req, res) => {
     const customerEmail =
       req.body?.to || (await findCustomerAdminEmail(req.db, invoice.company_id));
     if (!customerEmail) {
-      return res
-        .status(400)
-        .json({
-          ok: false,
-          error: 'NO_RECIPIENT',
-          message: 'No customer admin email found and no `to` override provided',
-        });
+      return res.status(400).json({
+        ok: false,
+        error: 'NO_RECIPIENT',
+        message: 'No customer admin email found and no `to` override provided',
+      });
     }
 
     // Mark as QUOTE_SENT (idempotent: already-sent stays QUOTE_SENT)
@@ -247,28 +245,12 @@ router.post('/training/quotes/:id/send', async (req, res) => {
       );
     }
 
-    // Build + send email (best-effort; never fails the request on email error)
-    const subject = `Training quote ${invoice.invoice_number} - ${invoice.company_name}`;
-    const subtotal = (Number(invoice.subtotal_cents) / 100).toFixed(2);
-    const total = (Number(invoice.total_cents) / 100).toFixed(2);
-    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family: 'Segoe UI', Arial, sans-serif; color:#0f172a;">
-      <h2>${e(`Training quote ${invoice.invoice_number}`)}</h2>
-      <p>Hello ${e(invoice.company_name)},</p>
-      <p>Please find your on-site training quote attached below. The quote is valid until ${e(String(invoice.quote_expires_at || '—'))}.</p>
-      <table style="border-collapse:collapse;">
-        <tr><td>Subtotal</td><td><strong>$${e(subtotal)} CAD</strong></td></tr>
-        <tr><td>QST + GST</td><td>$${e(((Number(invoice.qst_cents) + Number(invoice.gst_cents)) / 100).toFixed(2))} CAD</td></tr>
-        <tr><td>Total</td><td><strong>$${e(total)} CAD</strong></td></tr>
-      </table>
-      <p>Payment terms: 50% before training starts + 50% on the last day of training.</p>
-      <p>Reply to this email to approve the quote, or contact billing@constrai.ca with questions.</p>
-      <p>— Constrai billing</p>
-    </body></html>`;
-    const text = `Training quote ${invoice.invoice_number} for ${invoice.company_name}\nSubtotal: $${subtotal} CAD\nTotal (incl. tax): $${total} CAD\nValid until: ${invoice.quote_expires_at || '—'}\nReply to approve.\n— Constrai billing`;
-
+    // Build + send email via lib/email_training_quote.js (extracted to keep
+    // route handler thin + satisfy Semgrep's static XSS rule by avoiding
+    // nested template literals inside escape calls).
     let emailSent = false;
     try {
-      emailSent = await sendEmail({ to: customerEmail, subject, html, text });
+      emailSent = await sendTrainingQuoteEmail({ to: customerEmail, invoice });
     } catch (emailErr) {
       console.warn('Training quote email send failed:', emailErr?.message || emailErr);
     }
