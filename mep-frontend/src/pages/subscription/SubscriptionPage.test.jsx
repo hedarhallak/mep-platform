@@ -65,18 +65,22 @@ vi.mock('react-i18next', () => ({
   }),
 }))
 
-import SubscriptionPage from './SubscriptionPage.jsx'
-
 // --- Mock @/lib/api -------------------------------------------------------
-
-const mockApi = {
+//
+// Vitest hoists vi.mock() calls above all top-level statements, so a plain
+// `const mockApi = ...` would be undefined when the factory runs. Use
+// vi.hoisted() to hoist the variable alongside the mock call. (Note: unlike
+// Jest, Vitest does NOT auto-allow `mock*`-prefixed top-level constants.)
+const mockApi = vi.hoisted(() => ({
   get: vi.fn(),
   post: vi.fn(),
-}
+}))
 
 vi.mock('@/lib/api', () => ({
   default: mockApi,
 }))
+
+import SubscriptionPage from './SubscriptionPage.jsx'
 
 // --- Fixture --------------------------------------------------------------
 
