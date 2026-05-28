@@ -326,13 +326,14 @@
 
 ### Customer-facing (COMPANY_ADMIN_UP middleware) — `routes/admin_subscription_requests.js`
 
-All three implement the **hybrid DB-audit + mailto** pattern from Section 117.4: the endpoint inserts an immutable audit_logs row, then returns a `mailto:` URL the frontend opens via `window.location.href`. Hedar manually applies the change later via the SUPER_ADMIN apply-change endpoint.
+The POST endpoints implement the **hybrid DB-audit + mailto** pattern from Section 117.4: the endpoint inserts an immutable audit_logs row, then returns a `mailto:` URL the frontend opens via `window.location.href`. Hedar manually applies the change later via the SUPER_ADMIN apply-change endpoint.
 
 | Method | Path | Permission | Notes |
 |---|---|---|---|
+| GET  | `/api/admin/subscription` | COMPANY_ADMIN_UP | **(Section 119 — Phase 6-D-5 PR 1)** Returns the tenant's subscription summary + usage counters for the Subscription page UI. Response: `{ ok, subscription: { id, status, plan_type, subscribed_seats, current_unit_price_cents, current_bracket_label, next_billing_at, trial_ends_at, cancel_at_period_end }, usage: { current_employees, seats_remaining }, company: { id, name, code } }`. Returns 404 `SUBSCRIPTION_NOT_FOUND` if company has no subscription row. |
 | POST | `/api/admin/subscription/seat-request` | COMPANY_ADMIN_UP | Body: `{ requested_seats: number, reason?: string }`. Inserts audit row `CUSTOMER_REQUESTED_SUBSCRIPTION_CHANGE`. Returns `{ ok: true, mailto_url, audit_id }`. |
-| POST | `/api/admin/subscription/cancel-request` | COMPANY_ADMIN_UP | Body: `{ reason?: string, effective_date?: string }`. Inserts audit row `CUSTOMER_REQUESTED_CANCELLATION`. Returns `{ ok: true, mailto_url, audit_id }`. |
-| POST | `/api/admin/subscription/plan-upgrade-request` | COMPANY_ADMIN_UP | Body: `{ target_plan: 'MONTHLY'\|'ANNUAL'\|'ENTERPRISE', reason?: string }`. Inserts audit row `CUSTOMER_REQUESTED_PLAN_UPGRADE`. Returns `{ ok: true, mailto_url, audit_id }`. |
+| POST | `/api/admin/subscription/cancel-request` | COMPANY_ADMIN_UP | Body: `{ cancel_at_period_end?: boolean (default true), reason?: string }`. Inserts audit row `CUSTOMER_REQUESTED_SUBSCRIPTION_CHANGE` with `change_category=CANCEL`. Returns `{ ok: true, mailto_url, audit_id }`. |
+| POST | `/api/admin/subscription/plan-upgrade-request` | COMPANY_ADMIN_UP | Body: `{ requested_plan_type: 'MONTHLY'\|'ANNUAL'\|'ENTERPRISE', reason?: string }`. Inserts audit row `CUSTOMER_REQUESTED_SUBSCRIPTION_CHANGE` with `change_category=PLAN_CHANGE`. Returns `{ ok: true, mailto_url, audit_id }`. |
 
 ### SUPER_ADMIN apply-change — `routes/super_subscription_apply.js`
 
