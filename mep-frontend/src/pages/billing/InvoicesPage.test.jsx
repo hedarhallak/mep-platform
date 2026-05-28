@@ -146,8 +146,9 @@ describe('<InvoicesPage />', () => {
     // dropdown option, once in the table cell. getAllByText handles both.
     expect(screen.getAllByText('Training').length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByText('Subscription').length).toBeGreaterThanOrEqual(1)
-    // Total $919.80 = 91980 cents (only appears in the table row)
-    expect(screen.getByText(/\$919\.80/)).toBeInTheDocument()
+    // Total $919.80 = 91980 cents. Appears twice in the PAID invoice row:
+    // once in the total column ("$919.80 CAD") and once in the paid column.
+    expect(screen.getAllByText(/\$919\.80/).length).toBeGreaterThanOrEqual(1)
   })
 
   test('changing the type filter calls api.get with ?type= query', async () => {
