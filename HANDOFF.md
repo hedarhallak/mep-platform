@@ -1,11 +1,11 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 28, 2026 ~11:30 UTC — **✅ Phase 6-D-5 PR 1 SHIPPED.** Customer-facing Subscription page is live at `https://mep.constrai.ca/subscription` for COMPANY_ADMIN+. Backend `GET /api/admin/subscription` returns plan/bracket/seat-usage summary. Three inline request forms (seat change / cancel / plan upgrade) wire to existing endpoints + open mailto. Bilingual EN/FR. Verified end-to-end with browser smoke producing audit_logs row #143. Section 119 closeout recorded.
+> Last updated: May 28, 2026 ~16:00 UTC — **✅ Phase 6-D-5 COMPLETE.** Both customer-facing UI pages shipped, deployed, verified end-to-end on production. PR #270 = Subscription page (with 3 request forms + mailto). PR #272 = Invoices list page (paginated, filterable, status-colored). The Phase 6-D billing chain now works coherently across 7 PRs: SUPER_ADMIN creates training quote via `POST /api/super/training/quotes` (Phase 6-D-4 PR 5) → invoice number `CONS-2026-0001` generated → rendered in customer's `mep.constrai.ca/billing/invoices` (Phase 6-D-5 PR 2) with correct $1092.26 CAD computed via thousandths-of-percent tax math (migration 021). Cross-PR e2e proven on prod.
 >
-> **1 new pitfall this session — #52:** Vitest does NOT honor Jest's `mock*` prefix convention in `vi.mock` factories. Use `vi.hoisted()` to share state with hoisted mock calls. Function-body deferral (referencing the var inside a returned function) also works but is less explicit.
+> **1 new pitfall this session — #52:** Vitest does NOT honor Jest's `mock*` prefix convention in `vi.mock` factories. Use `vi.hoisted()` to share state with hoisted mock calls.
 >
-> **Next code task: Phase 6-D-5 PR 2** — Customer-facing Invoices list page at `mep.constrai.ca/billing/invoices`. Backend: new `GET /api/admin/invoices` (COMPANY_ADMIN_UP, paginated, joins on invoice_number + type + amount). Frontend: table with type/status/amount/issue date filter, optional download link, bilingual. Estimated 2-3 days. After PR 2, Phase 6-D-5 complete → Phase 6-D-6 (SUPER_ADMIN apply-change UI).
+> **Next code task: Phase 6-D-6** — SUPER_ADMIN apply-change UI on `admin.constrai.ca`. List pending subscription change requests (query `audit_logs` for `CUSTOMER_REQUESTED_*` rows without matching `SUPER_ADMIN_APPLIED_*` follow-up) with Apply/Decline buttons. Training Quotes / Custom Demands / Payments tabs with create + send + edit + void + record-payment forms wrapping the existing `/api/super/*` endpoints from Phase 6-D-4 PR 5. Estimated 1-2 weeks per conference roadmap.
 
 ---
 
@@ -47,7 +47,9 @@
 
 6. **(Section 119) Smoke the Subscription page in incognito** — open `https://mep.constrai.ca/subscription` → login as `admin@mep.constrai.app` / PIN `1234`. Should see Plan card (Monthly + Bracket 1-5 + $27.00/seat/month + Active badge), Seat usage 50/5 amber, three Request action buttons. Sidebar shows "Subscription" between User Management and Permissions with Receipt icon.
 
-7. **Only after all six are green**, continue with the regular task list below.
+7. **(Section 119.6) Smoke the Billing page** — same login → click "Billing" in sidebar (CreditCard icon below Subscription). Should show 2 invoices (CONS-2026-9999 Subscription Approved $155.22 + CONS-2026-0001 Training Draft $1092.26). If they're missing, the data may have been cleaned — re-seed via SQL (Section 119.7) or call `POST /api/super/training/quotes`.
+
+8. **Only after all seven are green**, continue with the regular task list below.
 
 ---
 
@@ -60,9 +62,9 @@
 | Window | Focus | Phases |
 |---|---|---|
 | **May 15 — May 26** | Branding stack + pricing model lock + schema build | ✅ Phase 6-D-3 (Section 114) → ✅ Section 115 pricing → ✅ Section 116 schema → ✅ **Phase 6-D-4 PR 1-5 ALL SHIPPED (Section 118)** |
-| **May 28** | Customer Subscription page (PR 1 of Phase 6-D-5) | ✅ **Phase 6-D-5 PR 1 SHIPPED (Section 119)** — Subscription page with 3 request forms live on mep.constrai.ca |
-| **Late May — mid-June 2026** | Customer Invoices page (PR 2 of Phase 6-D-5) | ⏳ **Phase 6-D-5 PR 2 (THIS SESSION NEXT)** — Invoices list with type filter (~2-3 days) |
-| **Mid-June — early July 2026** | SUPER_ADMIN training/quotes UI | ⏳ **Phase 6-D-6** — Subscription detail with Apply Change form, Training Quotes, Custom Demands, Payments Log (~1-2 weeks) |
+| **May 28 (AM)** | Customer Subscription page (PR 1 of Phase 6-D-5) | ✅ **Phase 6-D-5 PR 1 SHIPPED (Section 119.1)** — Subscription page with 3 request forms live on mep.constrai.ca |
+| **May 28 (PM)** | Customer Invoices page (PR 2 of Phase 6-D-5) | ✅ **Phase 6-D-5 PR 2 SHIPPED (Section 119.6)** — Invoices list with type filter live; cross-PR e2e proven with CONS-2026-0001 |
+| **Late May — mid-June 2026** | SUPER_ADMIN apply UI | ⏳ **Phase 6-D-6 (NEXT)** — Subscription request inbox with Apply/Decline + Training Quotes / Custom Demands / Payments management tabs on admin.constrai.ca (~1-2 weeks) |
 | **July 2026** | Invoice email automation + cron | ⏳ **Phase 6-D-7** — Monthly invoice cron, trial expiry emails, HTML email invoices (PDF deferred per scope-cut option) (~1-2 weeks) |
 | **July-August 2026** | Marketing + reference tenant + training materials | ⏳ **Phase 6-D-8** — Marketing site refresh, ToS legal review, reference tenant data, **modular training materials** (per Section 117.6 design guidance) (~2 weeks parallel) |
 | **August** | Pre-conference dry-run + code freeze | E2E rehearsal, bug fix only, 2-week freeze |
@@ -97,48 +99,46 @@
    - `RECOVERY.md` Section 2.4 only if relevant
 3. **Echo this exact line** as the first line of your reply:
    ```
-   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 119, Phase 6-D-5 PR 1 deployed and verified, next code task is Phase 6-D-5 PR 2 customer-facing Invoices page)
+   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 119, Phase 6-D-5 COMPLETE (PR 1 Subscription + PR 2 Invoices both deployed), next code task is Phase 6-D-6 SUPER_ADMIN apply-change UI on admin.constrai.ca)
    ```
-4. **Open with Phase 6-D-5 PR 2 as the active priority.** Scope:
-   - **Backend** — new `GET /api/admin/invoices` (COMPANY_ADMIN_UP, mounted alongside admin_subscription_requests.js or new file). Pagination (`?page=1&limit=20`), optional `?type=` filter (SUBSCRIPTION_RECURRING / TRAINING / CUSTOM_DEMAND / OTHER). Returns array of invoices with `invoice_number`, `type`, `status`, `subtotal_cents`, `qst_cents`, `gst_cents`, `total_cents`, `issue_date`, `quote_expires_at`, `amount_paid_cents`.
-   - **Frontend** — `mep-frontend/src/pages/billing/InvoicesPage.jsx` at `/billing/invoices`. Sortable table (issue_date desc default). Status badges color-coded (PAID green, PARTIAL amber, DRAFT/QUOTE_SENT slate, VOID red). Type filter dropdown.
-   - **Sidebar nav** — add second link "Billing" under "Subscription" (or rename Subscription to "Billing & Subscription" with submenu — Hedar's call).
-   - **Bilingual EN/FR** — `billing.*` i18n namespace.
-   - **Tests** — integration test for GET /api/admin/invoices (happy path + pagination + filter) + Vitest smoke for InvoicesPage (renders fixture, filter works). **Remember Pitfall #52** — use `vi.hoisted()` for shared mock state.
-   - Estimated: 2-3 days.
+4. **Open with Phase 6-D-6 as the active priority.** Scope (will be locked at session start):
+   - **Subscription Request Inbox** at `admin.constrai.ca/subscription-requests` — lists `audit_logs` rows where `action LIKE 'CUSTOMER_REQUESTED_%'` with no matching `SUPER_ADMIN_APPLIED_%` follow-up. Per row: company name, change category (SEAT / CANCEL / PLAN), current → requested, reason, requested-at timestamp, Apply / Decline buttons.
+   - **Apply form** — modal or inline form per row. Submit hits the existing `POST /api/super/subscriptions/:id/apply-change` (Phase 6-D-4 PR 4). Records audit row #2 and triggers Resend confirmation email.
+   - **Training Quotes tab** at `admin.constrai.ca/training-quotes` — list + create form wrapping `POST /api/super/training/quotes`. Per row: company, trainees breakdown, distance, status (DRAFT / QUOTE_SENT / APPROVED / PAID), Send / Edit / Void actions.
+   - **Custom Demands tab** at `admin.constrai.ca/custom-demands` — list + create form wrapping `POST /api/super/custom-demands/quotes`.
+   - **Payments tab** at `admin.constrai.ca/payments` — list of payments + Record Payment form wrapping `POST /api/super/payments/record`.
+   - All inside the existing AdminApp.jsx router with `<RequireSuperAdmin>` gate.
+   - Bilingual EN/FR not required for SUPER_ADMIN portal (only Hedar uses it).
+   - Estimated: 1-2 weeks.
 
    Then ask Hedar one of:
-   - "Start Phase 6-D-5 PR 2 with the GET /api/admin/invoices endpoint?" — recommended first step
-   - "Or do you want to revisit the Subscription page UX first (e.g., translate the plan_type label or add a custom discount field)?"
+   - "Start Phase 6-D-6 with the Subscription Request Inbox first?" — recommended first step (closes the loop on the hybrid workflow from Section 117.4)
+   - "Or build the Training Quotes UI first to get demo-able quotes in hand for September?"
 
 ---
 
 ## Pending tasks at session start (NEXT MAJOR CODE TASK)
 
-### 🎯 Phase 6-D-5 PR 2 — Customer-facing Invoices list page
+### 🎯 Phase 6-D-6 — SUPER_ADMIN apply-change UI
 
 **Scope:**
-- Backend: new `GET /api/admin/invoices` (COMPANY_ADMIN_UP, paginated, type filter).
-- Frontend: `mep-frontend/src/pages/billing/InvoicesPage.jsx` at `/billing/invoices` with sortable table + status color badges + type filter.
-- Sidebar nav: add "Billing" link (or submenu under Subscription).
-- Bilingual EN/FR (`billing.*` namespace).
-- Tests: integration + Vitest smoke. **Use `vi.hoisted()` for mock state per Pitfall #52.**
+- Subscription Request Inbox at `admin.constrai.ca/subscription-requests` — lists pending CUSTOMER_REQUESTED_* audit rows with Apply/Decline buttons.
+- Training Quotes tab — list + create form wrapping `POST /api/super/training/quotes`.
+- Custom Demands tab — wrapping `POST /api/super/custom-demands/quotes`.
+- Payments tab — list + Record Payment form wrapping `POST /api/super/payments/record`.
+- All inside AdminApp.jsx router gated by `<RequireSuperAdmin>`.
+- EN-only (SUPER_ADMIN portal is Hedar's only).
 
 **Critical references during implementation:**
-- Section 116.4-116.6 (invoice schema shape — type ENUM, JSONB details by type, integer cents)
-- Section 119 (PR 1 pattern to mirror for PR 2)
-- `API.md` Section 14 (existing billing endpoints)
-- `SCHEMA.md` Section K (billing tables reference)
+- Section 117.4 (hybrid workflow — request side now built, apply side needs UI wrapper)
+- Section 118.2 + 118.3 (PR 4 + PR 5 endpoint contracts)
+- Section 119.7 (cross-PR e2e — CONS-2026-0001 proof the chain works)
+- `API.md` Section 14 (full endpoint reference)
 
 **Critical pitfalls to avoid:**
-- Pitfall #38 — package.json changes require npm ci on prod
-- Pitfall #44 — verify field-name chain end-to-end (psql → curl → frontend lib)
-- Pitfall #46 — mep-webhook auto-pulls but doesn't migrate/restart
-- Pitfall #50 — verify `default_workflow_permissions` is `write` before assuming CI failures are code issues
-- Pitfall #51 — don't propose pause/break between agreed work items
-- Pitfall #52 (NEW) — Vitest needs `vi.hoisted()` for mock factory variables
+- Pitfall #38, #44, #46, #50, #51, #52 (per Section 119.5 + 119.6 notes)
 
-### After Phase 6-D-5 PR 2: Phase 6-D-5 closes → Phase 6-D-6 (SUPER_ADMIN apply-change UI)
+### After Phase 6-D-6: Phase 6-D-7 (Email automation + monthly cron)
 
 ---
 
@@ -153,9 +153,9 @@
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04) |
 | Backend | Node.js + Express + Postgres 16, pm2 at `/var/www/mep`. invite-employee reads from `subscriptions.subscribed_seats`. GET /super/companies/:id LEFT JOINs subscriptions. 6 new SUPER_ADMIN billing endpoints live (training quotes / custom demands / payments / extend-trial / apply-change). |
 | Frontend | React + Vite + Tailwind v4. CompanyBranding.jsx shows bracket + per-seat price (Section 117 refactor). Customer-facing subscription UI = Phase 6-D-5 (next). |
-| Latest deployed to prod | **Phase 6-D-5 PR 1 — customer-facing Subscription page** — PR #270, May 28. Backend restart + frontend rebuild (`main-DqP7PmU-.js`). |
-| Last merged to main | **PR #270** (Phase 6-D-5 PR 1 — Subscription page, May 28). |
-| Active program | **Phase 6-D-5 PR 1 SHIPPED.** Next is PR 2 (Invoices list page). |
+| Latest deployed to prod | **Phase 6-D-5 PR 2 — customer-facing Invoices page** — PR #272, May 28 PM. Backend restart + frontend rebuild (`main-B4vu5RTZ.js`). |
+| Last merged to main | **PR #272** (Phase 6-D-5 PR 2 — Invoices page, May 28 PM). |
+| Active program | **Phase 6-D-5 COMPLETE.** Next is Phase 6-D-6 (SUPER_ADMIN apply-change UI). |
 | Mobile app | Still on Bearer-token + PIN. Phase 7 (Q1 2027). |
 
 ### Multi-tenant migration progress
@@ -174,9 +174,10 @@
 | **Phase 6-D-4 PR 5 — Training/custom-demands/payments + numbering/tax helpers + migration 021** | ✅ **Deployed (PR #268, May 26)** |
 | **Section 117 — PR 1+2 closeout + 3 revisions to S115 + Pitfall #49** | ✅ **Recorded** |
 | **Section 118 — Phase 6-D-4 COMPLETE + Pitfalls #50/#51 + ci.yml workflow_dispatch** | ✅ **Recorded** |
-| **Phase 6-D-5 PR 1 — Customer-facing Subscription page** | ✅ **Deployed (PR #270, May 28)** |
-| **Section 119 — Phase 6-D-5 PR 1 closeout + Pitfall #52 (Vitest vi.hoisted)** | ✅ **Recorded (this session)** |
-| **Phase 6-D-5 PR 2 — Customer-facing Invoices list page** | ⏳ **NEXT (next session)** |
+| **Phase 6-D-5 PR 1 — Customer-facing Subscription page** | ✅ **Deployed (PR #270, May 28 AM)** |
+| **Phase 6-D-5 PR 2 — Customer-facing Invoices list page** | ✅ **Deployed (PR #272, May 28 PM)** |
+| **Section 119 — Phase 6-D-5 PR 1+2 closeout + Pitfall #52 (Vitest vi.hoisted)** | ✅ **Recorded** |
+| **Phase 6-D-6 — SUPER_ADMIN apply-change UI on admin.constrai.ca** | ⏳ **NEXT (this session)** |
 | Phase 6-D-6 — SUPER_ADMIN UI (Subscription detail with Apply Change, Training Quotes, etc.) | ⏳ June-July 2026 |
 | Phase 6-D-7 — Invoice email automation + monthly cron + trial expiry warnings | ⏳ July 2026 |
 | Phase 6-D-8 — Marketing site refresh + ToS legal review + reference tenant + training materials | ⏳ July-Aug 2026 |
@@ -190,7 +191,7 @@
 
 ## Backlog items still open (lower priority)
 
-- **⏳ Phase 6-D-5 PR 2** (next code task) — customer-facing Invoices list page.
+- **⏳ Phase 6-D-6** (next code task) — SUPER_ADMIN apply-change UI.
 - **⏳ MEP Construction demo posture** — Now achievable via SUPER_ADMIN Apply Change endpoint (`POST /api/super/subscriptions/:id/apply-change` with `change_type='PLAN_CHANGE'`). Recommended: bump MEP to ENTERPRISE plan with subscribed_seats=100, removes the over-cap amber warning. Can do now via curl; UI will come in Phase 6-D-6.
 - **⏳ Modular training materials** (Section 117.6) — design materials by topic (concepts, workflows, UI walkthroughs) with versioning.
 - **⏳ DO Spaces bucket activation** (Section 112.2). Trigger: first paying tenant OR August dry-run.
