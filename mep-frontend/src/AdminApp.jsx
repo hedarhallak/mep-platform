@@ -22,6 +22,7 @@ import CompaniesList from './admin/CompaniesList.jsx'
 import CreateCompany from './admin/CreateCompany.jsx'
 import CompanyBranding from './admin/CompanyBranding.jsx'
 import AdminLogin from './admin/AdminLogin.jsx'
+import SubscriptionRequestsPage from './admin/SubscriptionRequestsPage.jsx'
 
 function NotFound() {
   const { pathname } = useLocation()
@@ -48,6 +49,8 @@ export default function AdminApp() {
         <Route path="/companies/new" element={<CreateCompany />} />
         {/* Section 113 / Phase 6-D-3 frontend — per-tenant branding + seat usage page. */}
         <Route path="/companies/:id/branding" element={<CompanyBranding />} />
+        {/* Section 120 / Phase 6-D-6 PR 1 — pending customer subscription change inbox. */}
+        <Route path="/subscription-requests" element={<SubscriptionRequestsPage />} />
         <Route path="/login" element={<AdminLogin />} />
         <Route path="*" element={<NotFound />} />
       </Routes>

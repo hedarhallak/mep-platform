@@ -254,6 +254,15 @@ function mountAdminRoutes(app) {
   // change (seat / cancel / plan) and triggers Resend confirmation email.
   // The router exposes its own /subscriptions/:id/apply-change path.
   app.use('/api/super', auth, superAdmin, tenantDb, require('./routes/super_subscription_apply'));
+  // Section 120 / Phase 6-D-6 PR 1: SUPER_ADMIN subscription request inbox
+  // — lists CUSTOMER_REQUESTED_* audit rows that haven't been applied yet.
+  app.use(
+    '/api/super',
+    auth,
+    superAdmin,
+    tenantDb,
+    require('./routes/super_subscription_requests')
+  );
   // Section 115.4 + 115.8 / Phase 6-D-4 PR 5: SUPER_ADMIN training quote
   // creation + send. Sequential CONS-YYYY-NNNN invoice numbering.
   app.use('/api/super', auth, superAdmin, tenantDb, require('./routes/super_training_quotes'));
