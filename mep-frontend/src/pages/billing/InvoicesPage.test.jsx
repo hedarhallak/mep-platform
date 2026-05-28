@@ -142,9 +142,11 @@ describe('<InvoicesPage />', () => {
       expect(screen.getByText('CONS-2026-0001')).toBeInTheDocument()
     })
     expect(screen.getByText('CONS-2026-0002')).toBeInTheDocument()
-    expect(screen.getByText('Training')).toBeInTheDocument()
-    expect(screen.getByText('Subscription')).toBeInTheDocument()
-    // Total $919.80 = 91980 cents
+    // "Training" / "Subscription" appear twice each: once in the type filter
+    // dropdown option, once in the table cell. getAllByText handles both.
+    expect(screen.getAllByText('Training').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('Subscription').length).toBeGreaterThanOrEqual(1)
+    // Total $919.80 = 91980 cents (only appears in the table row)
     expect(screen.getByText(/\$919\.80/)).toBeInTheDocument()
   })
 
