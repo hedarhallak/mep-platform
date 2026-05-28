@@ -14749,6 +14749,58 @@ Why other tests in this repo (e.g. `LoginPage.test.jsx`) appear to work with top
 
 **Next session opening priority:** Phase 6-D-5 **PR 2** — customer-facing Invoices list page at `mep.constrai.ca/billing/invoices`. Scope: table of invoices (type / status / amount / issue date / due date) with filter by type, optional download link per row, bilingual EN/FR. Estimated 2-3 days. Backend will need a new `GET /api/admin/invoices` endpoint (COMPANY_ADMIN_UP, paginated, joins on invoice_number + type + amount fields from the `invoices` table). After PR 2, Phase 6-D-5 is complete and we move to Phase 6-D-6 (SUPER_ADMIN UI for processing requests).
 
-**Total sections in DECISIONS.md:** 87 (Section 119 NEW).
+### 119.6 — Phase 6-D-5 PR 2 (Invoices list page) SHIPPED (May 28, 2026 PM)
+
+PR #272 merged + deployed + browser smoke verified end-to-end on production. Frontend bundle: `main-B4vu5RTZ.js`.
+
+**Backend:** new `GET /api/admin/invoices` endpoint in `routes/admin_invoices.js`:
+- COMPANY_ADMIN_UP middleware (same gate as the subscription request endpoints).
+- Query params: `page` (default 1), `limit` (default 20, max 100), optional `type` (SUBSCRIPTION_RECURRING / TRAINING / CUSTOM_DEMAND / OTHER) and `status` filters.
+- Response shape: `{ ok, invoices: [...], pagination: { page, limit, total, total_pages } }`.
+- Always scoped by `req.user.company_id` (tenant isolation enforced at WHERE clause level + RLS on the invoices table for mepuser).
+- Deliberately excludes `internal_notes`, `pdf_url`, and `approved_by` columns — those are SUPER_ADMIN-only per the schema comment in migration 018.
+- Mounted in `app.js` alongside `admin_subscription_requests` per the existing tenant-API pattern.
+
+**Frontend:** new `mep-frontend/src/pages/billing/InvoicesPage.jsx`:
+- Sortable table at `/billing/invoices` with the columns Invoice # / Type / Status / Total / Paid / Issued / Due.
+- Type filter dropdown (resets to page 1 when changed).
+- Color-coded status badges: PAID emerald, PARTIAL_PAID amber, OVERDUE red, APPROVED sky, DRAFT/QUOTE_SENT slate, VOID/REFUNDED slate with strikethrough.
+- Pagination controls (Previous / Next + "Page X of Y" + showing-N-of-M) — only rendered when `total > PAGE_SIZE`.
+- Empty state copy explaining when invoices will appear.
+- `useQuery` from `@tanstack/react-query` with `keepPreviousData` so filter changes don't flash the loading spinner.
+- Sidebar nav link "Billing" added with `CreditCard` icon, sits between Subscription and Permissions, gated on `settings.company` (same RBAC as Subscription page from PR 1).
+- Bilingual EN/FR via new `billing.*` i18n namespace (~30 keys per language).
+
+**Tests:**
+- `tests/integration/admin_invoices.test.js` — happy path (200 + paginated + cross-tenant scoping verified by seeding an invoice for ANOTHER company and asserting it's filtered out), type filter, invalid type rejection (400), unauthenticated request (401/403).
+- `mep-frontend/src/pages/billing/InvoicesPage.test.jsx` — Vitest + RTL with `vi.hoisted()` per Pitfall #52. Renders fixture rows, type filter triggers refetch with `?type=`, empty state.
+
+### 119.7 — Cross-PR end-to-end proof (Phase 6-D-4 PR 5 ↔ Phase 6-D-5 PR 2)
+
+The browser smoke for PR 2 unexpectedly produced the cleanest possible cross-PR validation: while exploring the page, Hedar called the `POST /api/super/training/quotes` endpoint shipped in Phase 6-D-4 PR 5 (Section 118.3) to create a real training quote for MEP Construction. The response generated `CONS-2026-0001` — the first sequential invoice number of the year via `generateInvoiceNumber()` (Section 118.3 + Pitfall #49 grants). When the Billing page reloaded, the new Training/Draft row appeared correctly alongside the SQL-seeded `CONS-2026-9999` Subscription row.
+
+**This confirms the entire Phase 6-D billing chain is live and connected end-to-end:**
+
+1. SUPER_ADMIN creates training quote → `POST /api/super/training/quotes` (PR 5) → `INSERT INTO invoices` (migration 018, GRANTed via 020) using `generateInvoiceNumber()` + `calculateTaxes()` (PR 5 helpers, divisor /100000 per migration 021).
+2. Customer COMPANY_ADMIN opens `mep.constrai.ca/billing/invoices` (PR 2) → `GET /api/admin/invoices` (PR 2 endpoint) → invoice rendered in the table with correct type label, status badge, amount, and date.
+3. The amount $1092.26 CAD = 800 + per-role × per-diem × distance tier from `lib/training_quote.js` (PR 5) + QST 9.975% + GST 5% computed via thousandths-of-percent rates (migration 021).
+
+The whole 5-PR Phase 6-D-4 backend stack + 2-PR Phase 6-D-5 customer UI works as a single coherent system on production today.
+
+### 119.8 — Phase 6-D-5 closeout summary
+
+**Shipped in Phase 6-D-5 (2 PRs):**
+- PR #270 (PR 1) — Customer-facing Subscription page (Section 119.1) + audit row #143 captured Arabic Unicode end-to-end.
+- PR #272 (PR 2) — Customer-facing Invoices list page (Section 119.6) + first real training invoice rendered via cross-PR e2e (Section 119.7).
+
+**Next phase: Phase 6-D-6** — SUPER_ADMIN apply-change UI. Today Hedar applies seat-change requests via direct `POST /api/super/subscriptions/:id/apply-change` (curl/Postman). PR 6-D-6 builds a SUPER_ADMIN web UI on `admin.constrai.ca` that:
+- Lists pending subscription change requests (queries `audit_logs` for `CUSTOMER_REQUESTED_*` rows without a matching `SUPER_ADMIN_APPLIED_*` row).
+- Provides Apply / Decline buttons that hit the existing apply-change endpoint.
+- Lists training quotes and custom demands with Send / Edit / Void actions.
+- Lists payments with Record Payment form (hits `POST /api/super/payments/record`).
+
+Estimated 1-2 weeks per the conference roadmap.
+
+
 
 
