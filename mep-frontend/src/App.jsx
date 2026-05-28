@@ -30,6 +30,7 @@ const StandupPage          = lazy(() => import('@/pages/StandupPage'))
 const ReportsPage          = lazy(() => import('@/pages/ReportsPage'))
 const ProfilePage          = lazy(() => import('@/pages/profile/ProfilePage'))
 const SubscriptionPage     = lazy(() => import('@/pages/subscription/SubscriptionPage'))
+const InvoicesPage         = lazy(() => import('@/pages/billing/InvoicesPage'))
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
@@ -143,6 +144,11 @@ function AppRoutes() {
           <Route path="subscription" element={
             <RequirePermission module="settings" action="company">
               <SubscriptionPage />
+            </RequirePermission>
+          }/>
+          <Route path="billing/invoices" element={
+            <RequirePermission module="settings" action="company">
+              <InvoicesPage />
             </RequirePermission>
           }/>
 

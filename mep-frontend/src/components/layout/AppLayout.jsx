@@ -9,7 +9,7 @@ import {
   LayoutDashboard, FolderKanban, Users, ClipboardList,
   Settings, LogOut, Building2, BarChart2, Brain,
   ChevronDown, ChevronRight, CalendarCheck, Inbox, Package, Truck, FileText, Shield, Send,
-  Download, WifiOff, RefreshCw, Receipt
+  Download, WifiOff, RefreshCw, Receipt, CreditCard
 } from 'lucide-react'
 
 // Section 50: nav items reference i18n keys instead of inline EN strings.
@@ -123,9 +123,10 @@ export default function AppLayout() {
   const showUserMgmt    = !permsLoading && can('settings', 'user_management')
   const showPermissions = !permsLoading && can('settings', 'permissions')
   const showSettings    = !permsLoading && can('settings', 'company')
-  // Phase 6-D-5 PR 1: Subscription page reuses `settings.company` permission
-  // (COMPANY_ADMIN + IT_ADMIN + SUPER_ADMIN). Foremen/workers never see it.
+  // Phase 6-D-5 PR 1+2: Subscription + Billing pages reuse `settings.company`
+  // (COMPANY_ADMIN + IT_ADMIN + SUPER_ADMIN). Foremen/workers never see them.
   const showSubscription = !permsLoading && can('settings', 'company')
+  const showBilling      = !permsLoading && can('settings', 'company')
 
   return (
     <>
@@ -227,6 +228,19 @@ export default function AppLayout() {
                 }
               >
                 <Receipt size={16} />{t('nav.subscription')}
+              </NavLink>
+            )}
+
+            {/* Billing — Invoices (Phase 6-D-5 PR 2) */}
+            {showBilling && (
+              <NavLink to="/billing/invoices"
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    isActive ? 'bg-primary text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                  }`
+                }
+              >
+                <CreditCard size={16} />{t('nav.billing')}
               </NavLink>
             )}
 
