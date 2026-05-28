@@ -343,6 +343,9 @@ function mountTenantRoutes(app) {
     tenantDb,
     require('./routes/admin_subscription_requests')
   );
+  // Section 119 / Phase 6-D-5 PR 2: customer-facing Invoices list endpoint
+  // used by the tenant Billing page. COMPANY_ADMIN_UP middleware inside.
+  app.use('/api/admin/invoices', auth, tenantDb, require('./routes/admin_invoices'));
 
   // ── RBAC Permissions ────────────────────────────────────────
   // Section 89-C/5: user_management migrated to req.db (RLS-enforced).

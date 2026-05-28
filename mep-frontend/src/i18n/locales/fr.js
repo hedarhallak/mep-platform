@@ -46,8 +46,59 @@ export default {
     permissions: 'Permissions',
     settings: 'Paramètres',
     subscription: 'Abonnement',
+    billing: 'Facturation',
     logout: 'Déconnexion',
     companyFallback: 'Entreprise',
+  },
+
+  billing: {
+    title: 'Facturation et factures',
+    subtitle: 'Toutes les factures émises à votre entreprise',
+    loadError: 'Impossible de charger les factures',
+    empty: 'Aucune facture pour le moment. Les factures d\'abonnement, de formation et de travaux sur mesure apparaîtront ici dès leur émission.',
+    totalCount: '{{count}} facture(s) au total',
+    filters: {
+      typeLabel: 'Type',
+      allTypes: 'Tous les types',
+    },
+    types: {
+      SUBSCRIPTION_RECURRING: 'Abonnement',
+      TRAINING: 'Formation',
+      CUSTOM_DEMAND: 'Travaux sur mesure',
+      OTHER: 'Autre',
+    },
+    statuses: {
+      DRAFT: 'Brouillon',
+      QUOTE_SENT: 'Devis envoyé',
+      APPROVED: 'Approuvée',
+      PARTIAL_PAID: 'Partielle',
+      PAID: 'Payée',
+      OVERDUE: 'En retard',
+      VOID: 'Annulée',
+      REFUNDED: 'Remboursée',
+    },
+    table: {
+      invoiceNumber: 'No de facture',
+      type: 'Type',
+      status: 'Statut',
+      total: 'Total',
+      paid: 'Payé',
+      issueDate: 'Émise',
+      dueDate: 'Échéance',
+    },
+    pagination: {
+      prev: 'Précédent',
+      next: 'Suivant',
+      pageOf: 'Page {{page}} sur {{totalPages}}',
+      showing: 'Affichage de {{from}}-{{to}} sur {{total}}',
+    },
+    errors: {
+      INVALID_TYPE: 'Filtre de type de facture invalide.',
+      INVALID_STATUS: 'Filtre de statut de facture invalide.',
+      INVALID_PAGINATION: 'Paramètres de pagination invalides.',
+      SERVER_ERROR:
+        'Une erreur est survenue. Veuillez réessayer ou contacter billing@constrai.ca.',
+    },
   },
 
   subscription: {

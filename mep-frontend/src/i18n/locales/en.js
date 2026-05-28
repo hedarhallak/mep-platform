@@ -46,8 +46,58 @@ export default {
     permissions: 'Permissions',
     settings: 'Settings',
     subscription: 'Subscription',
+    billing: 'Billing',
     logout: 'Logout',
     companyFallback: 'Company',
+  },
+
+  billing: {
+    title: 'Billing & Invoices',
+    subtitle: 'All invoices issued to your company',
+    loadError: 'Could not load invoices',
+    empty: 'No invoices yet. Subscription, training, and custom-demand invoices will appear here as they are issued.',
+    totalCount: '{{count}} invoice(s) total',
+    filters: {
+      typeLabel: 'Type',
+      allTypes: 'All types',
+    },
+    types: {
+      SUBSCRIPTION_RECURRING: 'Subscription',
+      TRAINING: 'Training',
+      CUSTOM_DEMAND: 'Custom work',
+      OTHER: 'Other',
+    },
+    statuses: {
+      DRAFT: 'Draft',
+      QUOTE_SENT: 'Quote sent',
+      APPROVED: 'Approved',
+      PARTIAL_PAID: 'Partial',
+      PAID: 'Paid',
+      OVERDUE: 'Overdue',
+      VOID: 'Void',
+      REFUNDED: 'Refunded',
+    },
+    table: {
+      invoiceNumber: 'Invoice #',
+      type: 'Type',
+      status: 'Status',
+      total: 'Total',
+      paid: 'Paid',
+      issueDate: 'Issued',
+      dueDate: 'Due',
+    },
+    pagination: {
+      prev: 'Previous',
+      next: 'Next',
+      pageOf: 'Page {{page}} of {{totalPages}}',
+      showing: 'Showing {{from}}-{{to}} of {{total}}',
+    },
+    errors: {
+      INVALID_TYPE: 'Invalid invoice type filter.',
+      INVALID_STATUS: 'Invalid invoice status filter.',
+      INVALID_PAGINATION: 'Invalid pagination parameters.',
+      SERVER_ERROR: 'Something went wrong. Please try again or contact billing@constrai.ca.',
+    },
   },
 
   subscription: {
