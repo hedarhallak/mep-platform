@@ -14634,4 +14634,121 @@ For the September 2026 conference Hedar can demo the full flow via API calls tod
 
 **Next session opening priority:** Phase 6-D-5 — customer-facing Subscription/Billing UI. Scope: Subscription page with Request seat change form (Section 117.4 hybrid workflow), Invoices list page, current bracket + price display. Estimated 1-2 weeks per the conference roadmap.
 
+---
+
+## 119. Section 119 — May 28, 2026 — Phase 6-D-5 PR 1 SHIPPED — Customer-facing Subscription page + GET endpoint + Vitest hoisting pitfall (#52)
+
+> **Status:** ✅ **Phase 6-D-5 PR 1 deployed and verified end-to-end on production.** PR #270 merged + frontend rebuilt + browser smoke at `mep.constrai.ca/subscription` produced audit row #143 capturing a SEAT_CHANGE request from `admin@mep.constrai.app` (5 → 8 seats), confirming the full hybrid DB-audit + mailto workflow from Section 117.4 works for real customer accounts. New backend endpoint `GET /api/admin/subscription` returns the tenant's subscription summary + employee usage counters. The CI debug loop on this PR captured Pitfall #52 (Vitest does NOT auto-allow `mock*`-prefixed top-level constants in `vi.mock` factories — use `vi.hoisted()` instead).
+
+### 119.1 — PR #270 scope (delivered)
+
+**Backend:**
+- New endpoint `GET /api/admin/subscription` (mounted in `app.js` via the existing `admin_subscription_requests.js` router) returns the tenant's current subscription row joined with their live employee count. Response shape:
+  ```json
+  {
+    "ok": true,
+    "subscription": { "id", "status", "plan_type", "subscribed_seats",
+                      "current_unit_price_cents", "current_bracket_label",
+                      "next_billing_at", "trial_ends_at", "cancel_at_period_end" },
+    "usage": { "current_employees", "seats_remaining" },
+    "company": { "id", "name", "code" }
+  }
+  ```
+  COMPANY_ADMIN_UP middleware. Returns `SUBSCRIPTION_NOT_FOUND` (404) if the company has no subscription row.
+
+**Frontend (mep-frontend):**
+- `src/pages/subscription/SubscriptionPage.jsx` (NEW) — 3 cards: Plan card (plan_type + bracket + unit price + status badge + next billing date), Seat Usage card (current/subscribed with progress bar + over-cap warning), Request Changes section (3 inline forms: seat change / cancel / plan upgrade).
+- Each request form POSTs to its existing endpoint and `window.location.href = response.mailto_url` to launch the customer's email client with pre-filled message to `billing@constrai.ca`.
+- `src/App.jsx` — lazy import + `<Route path="subscription">` with `<RequirePermission module="settings" action="company">`.
+- `src/components/layout/AppLayout.jsx` — sidebar nav link with `Receipt` icon, gated on `settings.company` (COMPANY_ADMIN + IT_ADMIN + SUPER_ADMIN see it; foremen/workers don't).
+- `src/i18n/locales/en.js` + `fr.js` — new `subscription.*` namespace with ~30 keys per language (plans / statuses / form labels / error messages / mailto-related copy).
+
+**Tests:**
+- `tests/integration/subscription_requests.test.js` — added `describeIfDb('GET /api/admin/subscription', ...)` block with one happy-path test (200 + correct shape) + one unauthenticated test (401/403).
+- `mep-frontend/src/pages/subscription/SubscriptionPage.test.jsx` (NEW) — 3 Vitest + RTL smoke tests covering render-from-fixture, form-opens-on-click, and submit-calls-POST-and-follows-mailto.
+
+### 119.2 — Production deployment
+
+Deployed May 28, 2026 ~11:00 UTC after PR #270 merged. Full deploy block per Pitfall #38 (frontend touched, so `npm ci` + `npm run build` required):
+
+```bash
+cd /var/www/mep
+git pull origin main
+npm ci --omit=dev --ignore-scripts
+pm2 restart mep-backend
+sleep 3
+cd mep-frontend
+npm ci --ignore-scripts
+npm run build 2>&1 | tail -10
+cd /var/www/mep
+pm2 status mep-backend
+curl -sS -o /dev/null -w "Health: %{http_code}\n" https://app.constrai.ca/api/health
+grep -oE 'main-[A-Za-z0-9_-]+\.js' /var/www/mep/mep-frontend/dist/index.html | head -1
+```
+
+Output:
+- Backend restart: ✓ (mep-backend online, restart count incremented)
+- Frontend rebuild: `main-DqP7PmU-.js` (new hash)
+- Health: 200
+- No new errors in pm2 logs (the historical `permission denied for table subscriptions` errors are from BEFORE migration 020 — confirmed by lack of new error lines post-restart)
+
+### 119.3 — Browser smoke verification
+
+Browser smoke at `https://mep.constrai.ca/subscription` after login as `admin@mep.constrai.app` (COMPANY_ADMIN, PIN 1234):
+
+- Subscription page renders with: Plan=Monthly, Bracket 1-5 ($27.00/seat/month), Status=Active, Next billing=2026-06-01, Seat usage 50/5 with amber "At capacity" badge + 100% amber progress bar, 3 request action buttons.
+- Sidebar shows "Subscription" between User Management and Permissions with Receipt icon.
+- Clicked "Request seat change" → inline form opened (input + textarea + Submit/Cancel).
+- Submitted requested_seats=8 with reason "بليب" (intentional Arabic to validate Unicode end-to-end).
+- Windows "Select an app to open this 'mailto' link" dialog appeared — proves `mailto_url` reached `window.location.href`.
+- `audit_logs` query confirmed row #143 with action `CUSTOMER_REQUESTED_SUBSCRIPTION_CHANGE`, details captured: `change_category=SEAT_CHANGE`, `current.subscribed_seats=5`, `requested.subscribed_seats=8`, `current.bracket_label=1-5`, `current.unit_price_cents=2700`, `reason="بليب"` (Unicode preserved), `source=web_app_button`, full user_agent, ISO timestamp.
+
+The 5-source distributed evidence chain (Section 117.4) is now functionally provable end-to-end:
+1. DB audit row (just verified)
+2. Customer's email client Sent folder (after user clicks Send in Outlook)
+3. Hedar's inbox (after email delivery)
+4. SUPER_ADMIN apply audit row (future, when Hedar uses `POST /api/super/subscriptions/:id/apply-change`)
+5. Resend delivery log + customer confirmation email
+
+### 119.4 — Pitfall #52: Vitest does NOT honor the Jest `mock*` prefix convention
+
+The first CI run on PR #270 failed with `ReferenceError: Cannot access 'mockApi' before initialization` in `SubscriptionPage.test.jsx`. The test had a top-level `const mockApi = { get: vi.fn(), post: vi.fn() }` followed by `vi.mock('@/lib/api', () => ({ default: mockApi }))`.
+
+Per CLAUDE.md Section 4.6 / Phase 73 retro, **Jest** specifically allows `mock*`-prefixed variables to be referenced in hoisted `jest.mock` factories. **Vitest does NOT have this exemption.** Even renaming to `mockApi` (already prefixed) still fails because Vitest's `vi.mock` hoister hoists the `vi.mock` call above all top-level statements without exception — the variable is genuinely uninitialized when the factory runs.
+
+**The Vitest-correct pattern is `vi.hoisted()`:**
+
+```js
+const mockApi = vi.hoisted(() => ({
+  get: vi.fn(),
+  post: vi.fn(),
+}))
+
+vi.mock('@/lib/api', () => ({
+  default: mockApi,
+}))
+```
+
+`vi.hoisted()` is Vitest's explicit "hoist this expression to the top alongside vi.mock calls" API. It's the documented escape hatch for sharing state with mock factories.
+
+Why other tests in this repo (e.g. `LoginPage.test.jsx`) appear to work with top-level `const mockLogin = vi.fn()` patterns: those mocks are referenced INSIDE a function body (e.g. `useAuth: () => ({ login: mockLogin })`) — the function isn't called until a component invokes the hook, by which time the top-level declarations have run. The failing pattern is direct reference at factory call time (e.g. `default: mockApi`), which forces evaluation during hoist.
+
+**Encoded rule:** When a `vi.mock` factory needs to return a value derived from a top-level variable, ALWAYS use `vi.hoisted()`. The "function-body deferral" pattern (referencing the var inside a returned function) also works, but is less explicit. Prefer `vi.hoisted()` for clarity.
+
+### 119.5 — Session Log — May 28, 2026
+
+**Shipped:**
+- PR #270 — Customer-facing Subscription page + GET endpoint + i18n (~30 keys per language) + tests
+
+**Deployed to prod:**
+- Backend restart + frontend rebuild (`main-DqP7PmU-.js`); no migrations
+- Browser-verified COMPANY_ADMIN flow end-to-end with audit row #143
+
+**Pitfalls added:**
+- #52 — Vitest does not honor Jest's `mock*` prefix convention; use `vi.hoisted()` instead
+
+**Next session opening priority:** Phase 6-D-5 **PR 2** — customer-facing Invoices list page at `mep.constrai.ca/billing/invoices`. Scope: table of invoices (type / status / amount / issue date / due date) with filter by type, optional download link per row, bilingual EN/FR. Estimated 2-3 days. Backend will need a new `GET /api/admin/invoices` endpoint (COMPANY_ADMIN_UP, paginated, joins on invoice_number + type + amount fields from the `invoices` table). After PR 2, Phase 6-D-5 is complete and we move to Phase 6-D-6 (SUPER_ADMIN UI for processing requests).
+
+**Total sections in DECISIONS.md:** 87 (Section 119 NEW).
+
 

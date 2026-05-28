@@ -1,15 +1,11 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 26, 2026 ~14:00 UTC — **✅ Phase 6-D-4 COMPLETE.** All 5 PRs of the billing schema implementation phase shipped, deployed, verified. The Section 117.7 scope (originally one PR 3) ended up split across PRs #266 (migration 020 grants), #267 (seat-change + apply-change + Resend), and #268 (training/custom-demands/payments + invoice numbering + tax helpers + migration 021 GST scale fix). All Section 118 closeout.
+> Last updated: May 28, 2026 ~11:30 UTC — **✅ Phase 6-D-5 PR 1 SHIPPED.** Customer-facing Subscription page is live at `https://mep.constrai.ca/subscription` for COMPANY_ADMIN+. Backend `GET /api/admin/subscription` returns plan/bracket/seat-usage summary. Three inline request forms (seat change / cancel / plan upgrade) wire to existing endpoints + open mailto. Bilingual EN/FR. Verified end-to-end with browser smoke producing audit_logs row #143. Section 119 closeout recorded.
 >
-> **2 new pitfalls this session:**
-> - **#50** — GitHub Actions silently reset `default_workflow_permissions` to `read` mid-session, causing 403 on git clone in every workflow job. Fix: `gh api -X PUT /repos/<owner>/<repo>/actions/permissions/workflow -f default_workflow_permissions=write`. Add a check to end-of-session checkpoint.
-> - **#51** — Don't propose pause/break between agreed work items. Hedar decides when to stop. Once a plan is agreed, execute it through; only surface decisions if an architectural choice opens up.
+> **1 new pitfall this session — #52:** Vitest does NOT honor Jest's `mock*` prefix convention in `vi.mock` factories. Use `vi.hoisted()` to share state with hoisted mock calls. Function-body deferral (referencing the var inside a returned function) also works but is less explicit.
 >
-> **ci.yml change:** `workflow_dispatch:` trigger added permanently — `gh workflow run "CI" --ref <branch>` works for emergency manual runs.
->
-> **Next code task: Phase 6-D-5** — Customer-facing Subscription/Billing UI. Subscription page with Request seat change form (hybrid workflow per Section 117.4), Invoices list page, bracket + per-seat price display. Estimated 1-2 weeks per conference roadmap.
+> **Next code task: Phase 6-D-5 PR 2** — Customer-facing Invoices list page at `mep.constrai.ca/billing/invoices`. Backend: new `GET /api/admin/invoices` (COMPANY_ADMIN_UP, paginated, joins on invoice_number + type + amount). Frontend: table with type/status/amount/issue date filter, optional download link, bilingual. Estimated 2-3 days. After PR 2, Phase 6-D-5 complete → Phase 6-D-6 (SUPER_ADMIN apply-change UI).
 
 ---
 
@@ -49,7 +45,9 @@
    ```
    Expected: `{"default_workflow_permissions":"write","can_approve_pull_request_reviews":true}`. If `read`, re-apply via the PUT command in Section 118.5.
 
-6. **Only after all five are green**, continue with the regular task list below.
+6. **(Section 119) Smoke the Subscription page in incognito** — open `https://mep.constrai.ca/subscription` → login as `admin@mep.constrai.app` / PIN `1234`. Should see Plan card (Monthly + Bracket 1-5 + $27.00/seat/month + Active badge), Seat usage 50/5 amber, three Request action buttons. Sidebar shows "Subscription" between User Management and Permissions with Receipt icon.
+
+7. **Only after all six are green**, continue with the regular task list below.
 
 ---
 
@@ -57,12 +55,13 @@
 
 > **~3.5 months runway from May 26, 2026.** Conference demo + sales readiness by September. ~3 months of build + 2 weeks of code freeze before conference.
 
-**Roadmap to conference (Sections 105 / 114 / 115 / 116 / 117 / 118):**
+**Roadmap to conference (Sections 105 / 114 / 115 / 116 / 117 / 118 / 119):**
 
 | Window | Focus | Phases |
 |---|---|---|
 | **May 15 — May 26** | Branding stack + pricing model lock + schema build | ✅ Phase 6-D-3 (Section 114) → ✅ Section 115 pricing → ✅ Section 116 schema → ✅ **Phase 6-D-4 PR 1-5 ALL SHIPPED (Section 118)** |
-| **Late May — mid-June 2026** | Customer-facing billing UI | ⏳ **Phase 6-D-5 (THIS SESSION NEXT)** — Subscription page with seat-change request form, Billing/Invoices list (~2 weeks) |
+| **May 28** | Customer Subscription page (PR 1 of Phase 6-D-5) | ✅ **Phase 6-D-5 PR 1 SHIPPED (Section 119)** — Subscription page with 3 request forms live on mep.constrai.ca |
+| **Late May — mid-June 2026** | Customer Invoices page (PR 2 of Phase 6-D-5) | ⏳ **Phase 6-D-5 PR 2 (THIS SESSION NEXT)** — Invoices list with type filter (~2-3 days) |
 | **Mid-June — early July 2026** | SUPER_ADMIN training/quotes UI | ⏳ **Phase 6-D-6** — Subscription detail with Apply Change form, Training Quotes, Custom Demands, Payments Log (~1-2 weeks) |
 | **July 2026** | Invoice email automation + cron | ⏳ **Phase 6-D-7** — Monthly invoice cron, trial expiry emails, HTML email invoices (PDF deferred per scope-cut option) (~1-2 weeks) |
 | **July-August 2026** | Marketing + reference tenant + training materials | ⏳ **Phase 6-D-8** — Marketing site refresh, ToS legal review, reference tenant data, **modular training materials** (per Section 117.6 design guidance) (~2 weeks parallel) |
@@ -98,46 +97,48 @@
    - `RECOVERY.md` Section 2.4 only if relevant
 3. **Echo this exact line** as the first line of your reply:
    ```
-   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 118, Phase 6-D-4 COMPLETE — all 5 PRs deployed, next code task is Phase 6-D-5 customer-facing Subscription UI)
+   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 119, Phase 6-D-5 PR 1 deployed and verified, next code task is Phase 6-D-5 PR 2 customer-facing Invoices page)
    ```
-4. **Open with Phase 6-D-5 as the active priority.** Scope (full design TBD with Hedar at session start):
-   - **Customer-facing Subscription page** at `app.constrai.ca/subscription` (or `mep.constrai.ca/subscription` per Pattern B). Renders current bracket + per-seat price + plan + seat usage + Request seat change form per Section 117.4 hybrid workflow.
-   - **Customer-facing Billing/Invoices page** — lists invoices (training quotes, recurring, custom demands) with status + amount + download link.
-   - **mailto: button wiring** — Request seat change → POST `/api/admin/subscription/seat-request` (already shipped) → returns mailto URL → JS opens user's email client.
-   - **Bilingual EN/FR** per i18n Tier 3 (deferred from Section 81).
-   - Estimated: 1-2 weeks (Section 118 roadmap).
+4. **Open with Phase 6-D-5 PR 2 as the active priority.** Scope:
+   - **Backend** — new `GET /api/admin/invoices` (COMPANY_ADMIN_UP, mounted alongside admin_subscription_requests.js or new file). Pagination (`?page=1&limit=20`), optional `?type=` filter (SUBSCRIPTION_RECURRING / TRAINING / CUSTOM_DEMAND / OTHER). Returns array of invoices with `invoice_number`, `type`, `status`, `subtotal_cents`, `qst_cents`, `gst_cents`, `total_cents`, `issue_date`, `quote_expires_at`, `amount_paid_cents`.
+   - **Frontend** — `mep-frontend/src/pages/billing/InvoicesPage.jsx` at `/billing/invoices`. Sortable table (issue_date desc default). Status badges color-coded (PAID green, PARTIAL amber, DRAFT/QUOTE_SENT slate, VOID red). Type filter dropdown.
+   - **Sidebar nav** — add second link "Billing" under "Subscription" (or rename Subscription to "Billing & Subscription" with submenu — Hedar's call).
+   - **Bilingual EN/FR** — `billing.*` i18n namespace.
+   - **Tests** — integration test for GET /api/admin/invoices (happy path + pagination + filter) + Vitest smoke for InvoicesPage (renders fixture, filter works). **Remember Pitfall #52** — use `vi.hoisted()` for shared mock state.
+   - Estimated: 2-3 days.
 
    Then ask Hedar one of:
-   - "Start Phase 6-D-5 by sketching the Subscription page wireframe?" — recommended first step
-   - "Or do you want to demo the Phase 6-D-4 endpoints via curl first to confirm the API contracts?"
+   - "Start Phase 6-D-5 PR 2 with the GET /api/admin/invoices endpoint?" — recommended first step
+   - "Or do you want to revisit the Subscription page UX first (e.g., translate the plan_type label or add a custom discount field)?"
 
 ---
 
 ## Pending tasks at session start (NEXT MAJOR CODE TASK)
 
-### 🎯 Phase 6-D-5 — Customer-facing Subscription/Billing UI
+### 🎯 Phase 6-D-5 PR 2 — Customer-facing Invoices list page
 
-**Scope** (will be locked in at session start):
-- Subscription page: current bracket + price + plan + seat usage + Request seat change form + Request cancel + Request plan upgrade.
-- Billing/Invoices page: list of invoices with type (SUBSCRIPTION_RECURRING / TRAINING / CUSTOM_DEMAND / OTHER) + status + amount + issue date.
-- Wire all 3 customer-facing endpoints (`/api/admin/subscription/seat-request|cancel-request|plan-upgrade-request`) into the UI forms.
-- Bilingual EN/FR labels.
-- COMPANY_ADMIN-only access.
+**Scope:**
+- Backend: new `GET /api/admin/invoices` (COMPANY_ADMIN_UP, paginated, type filter).
+- Frontend: `mep-frontend/src/pages/billing/InvoicesPage.jsx` at `/billing/invoices` with sortable table + status color badges + type filter.
+- Sidebar nav: add "Billing" link (or submenu under Subscription).
+- Bilingual EN/FR (`billing.*` namespace).
+- Tests: integration + Vitest smoke. **Use `vi.hoisted()` for mock state per Pitfall #52.**
 
 **Critical references during implementation:**
-- Section 115.3 (revised bracket prices, revised self-serve → hybrid)
-- Section 117.4 (hybrid audit chain design — UI side now needs implementation)
-- Section 118.2 (PR 4 endpoint contracts — body shapes + mailto URL return)
-- `API.md` Section 14 (full billing endpoint reference)
+- Section 116.4-116.6 (invoice schema shape — type ENUM, JSONB details by type, integer cents)
+- Section 119 (PR 1 pattern to mirror for PR 2)
+- `API.md` Section 14 (existing billing endpoints)
+- `SCHEMA.md` Section K (billing tables reference)
 
 **Critical pitfalls to avoid:**
 - Pitfall #38 — package.json changes require npm ci on prod
 - Pitfall #44 — verify field-name chain end-to-end (psql → curl → frontend lib)
 - Pitfall #46 — mep-webhook auto-pulls but doesn't migrate/restart
-- Pitfall #50 (NEW) — verify `default_workflow_permissions` is `write` before assuming CI failures are code issues
-- Pitfall #51 (NEW) — don't propose pause/break between agreed work items
+- Pitfall #50 — verify `default_workflow_permissions` is `write` before assuming CI failures are code issues
+- Pitfall #51 — don't propose pause/break between agreed work items
+- Pitfall #52 (NEW) — Vitest needs `vi.hoisted()` for mock factory variables
 
-### After Phase 6-D-5: continues per roadmap (Phase 6-D-6/7/8)
+### After Phase 6-D-5 PR 2: Phase 6-D-5 closes → Phase 6-D-6 (SUPER_ADMIN apply-change UI)
 
 ---
 
@@ -152,9 +153,9 @@
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04) |
 | Backend | Node.js + Express + Postgres 16, pm2 at `/var/www/mep`. invite-employee reads from `subscriptions.subscribed_seats`. GET /super/companies/:id LEFT JOINs subscriptions. 6 new SUPER_ADMIN billing endpoints live (training quotes / custom demands / payments / extend-trial / apply-change). |
 | Frontend | React + Vite + Tailwind v4. CompanyBranding.jsx shows bracket + per-seat price (Section 117 refactor). Customer-facing subscription UI = Phase 6-D-5 (next). |
-| Latest deployed to prod | **Phase 6-D-4 PR 5 — SUPER_ADMIN training/custom-demands/payments + invoice numbering + tax helpers + migration 021** — PR #268, May 26. Backend bundle restart only (no frontend bundle change). |
-| Last merged to main | **PR #268** (Phase 6-D-4 PR 5 — final, May 26). |
-| Active program | **Phase 6-D-4 COMPLETE.** Next is Phase 6-D-5 (customer UI). |
+| Latest deployed to prod | **Phase 6-D-5 PR 1 — customer-facing Subscription page** — PR #270, May 28. Backend restart + frontend rebuild (`main-DqP7PmU-.js`). |
+| Last merged to main | **PR #270** (Phase 6-D-5 PR 1 — Subscription page, May 28). |
+| Active program | **Phase 6-D-5 PR 1 SHIPPED.** Next is PR 2 (Invoices list page). |
 | Mobile app | Still on Bearer-token + PIN. Phase 7 (Q1 2027). |
 
 ### Multi-tenant migration progress
@@ -172,8 +173,10 @@
 | **Phase 6-D-4 PR 4 — Seat-change request endpoints + apply-change + Resend** | ✅ **Deployed (PR #267, May 25)** |
 | **Phase 6-D-4 PR 5 — Training/custom-demands/payments + numbering/tax helpers + migration 021** | ✅ **Deployed (PR #268, May 26)** |
 | **Section 117 — PR 1+2 closeout + 3 revisions to S115 + Pitfall #49** | ✅ **Recorded** |
-| **Section 118 — Phase 6-D-4 COMPLETE + Pitfalls #50/#51 + ci.yml workflow_dispatch** | ✅ **Recorded (this session)** |
-| **Phase 6-D-5 — Customer-facing billing UI (Subscription page with request form)** | ⏳ **NEXT (next session)** |
+| **Section 118 — Phase 6-D-4 COMPLETE + Pitfalls #50/#51 + ci.yml workflow_dispatch** | ✅ **Recorded** |
+| **Phase 6-D-5 PR 1 — Customer-facing Subscription page** | ✅ **Deployed (PR #270, May 28)** |
+| **Section 119 — Phase 6-D-5 PR 1 closeout + Pitfall #52 (Vitest vi.hoisted)** | ✅ **Recorded (this session)** |
+| **Phase 6-D-5 PR 2 — Customer-facing Invoices list page** | ⏳ **NEXT (next session)** |
 | Phase 6-D-6 — SUPER_ADMIN UI (Subscription detail with Apply Change, Training Quotes, etc.) | ⏳ June-July 2026 |
 | Phase 6-D-7 — Invoice email automation + monthly cron + trial expiry warnings | ⏳ July 2026 |
 | Phase 6-D-8 — Marketing site refresh + ToS legal review + reference tenant + training materials | ⏳ July-Aug 2026 |
@@ -187,7 +190,7 @@
 
 ## Backlog items still open (lower priority)
 
-- **⏳ Phase 6-D-5** (next code task) — customer-facing Subscription + Billing pages.
+- **⏳ Phase 6-D-5 PR 2** (next code task) — customer-facing Invoices list page.
 - **⏳ MEP Construction demo posture** — Now achievable via SUPER_ADMIN Apply Change endpoint (`POST /api/super/subscriptions/:id/apply-change` with `change_type='PLAN_CHANGE'`). Recommended: bump MEP to ENTERPRISE plan with subscribed_seats=100, removes the over-cap amber warning. Can do now via curl; UI will come in Phase 6-D-6.
 - **⏳ Modular training materials** (Section 117.6) — design materials by topic (concepts, workflows, UI walkthroughs) with versioning.
 - **⏳ DO Spaces bucket activation** (Section 112.2). Trigger: first paying tenant OR August dry-run.
@@ -295,6 +298,19 @@ Prod `/var/www/mep/.env` is in sync. `DO_SPACES_*` env vars not yet set (deferre
     ```
     **Add to end-of-session checkpoint:** `gh api /repos/<owner>/<repo>/actions/permissions/workflow` should return `default_workflow_permissions: "write"`. If it drifts to `read`, re-apply immediately. Root cause for the drift is unknown (possibly automated security policy on GitHub's side); re-check after any Dependabot batch or GitHub Actions security advisory. Section 118.5 has the full diagnostic + symptoms walkthrough.
 51. **(NEW — Section 118) Don't propose pause/break between agreed work items.** Once Hedar locks a multi-step plan (e.g., "C then B then A" for PR sequencing, or "deploy and verify and document"), execute it end-to-end without "should we pause?" prompts between steps. Hedar decides when to stop. Asking burns turns and signals distrust of stated intent. Applies to: multi-step plans where each step depends on the previous succeeding, long debug loops. Does NOT apply to: when a NEW architectural decision opens up mid-execution (surface that, but ONE focused question per Section 8.9), or after a discrete unit of work completes and the next is a different shape (e.g., asking "should I write the docs PR now or later?" after a code PR ships is fine because docs is a separate discrete unit). Section 118.7 has the verbatim user statement that anchored this rule.
+52. **(NEW — Section 119) Vitest does NOT honor Jest's `mock*` prefix convention in `vi.mock` factories.** A top-level `const mockApi = ...` referenced directly inside `vi.mock('@/lib/api', () => ({ default: mockApi }))` will throw `ReferenceError: Cannot access 'mockApi' before initialization` because `vi.mock` is hoisted above all top-level statements. **Two correct patterns:**
+    1. **`vi.hoisted()` (preferred — explicit):**
+       ```js
+       const mockApi = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }))
+       vi.mock('@/lib/api', () => ({ default: mockApi }))
+       ```
+    2. **Function-body deferral (works when the factory returns functions):**
+       ```js
+       vi.mock('@/hooks/useAuth', () => ({
+         useAuth: () => ({ login: mockLogin }),   // mockLogin resolved at hook-call time
+       }))
+       ```
+    Pattern #1 is required when the factory needs the variable's value at hoist time (direct assignment to `default` or a property). Pattern #2 is what existing tests like `LoginPage.test.jsx` use successfully — but only because the variable is referenced inside a returned function, not as a value at the top level.
 
 ---
 
