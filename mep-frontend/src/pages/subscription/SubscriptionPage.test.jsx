@@ -69,13 +69,13 @@ import SubscriptionPage from './SubscriptionPage.jsx'
 
 // --- Mock @/lib/api -------------------------------------------------------
 
-const apiMock = {
+const mockApi = {
   get: vi.fn(),
   post: vi.fn(),
 }
 
 vi.mock('@/lib/api', () => ({
-  default: apiMock,
+  default: mockApi,
 }))
 
 // --- Fixture --------------------------------------------------------------
@@ -121,9 +121,9 @@ function renderPage() {
 // --- Setup / teardown -----------------------------------------------------
 
 beforeEach(() => {
-  apiMock.get.mockReset()
-  apiMock.post.mockReset()
-  apiMock.get.mockResolvedValue({ data: SUBSCRIPTION_FIXTURE, status: 200, ok: true })
+  mockApi.get.mockReset()
+  mockApi.post.mockReset()
+  mockApi.get.mockResolvedValue({ data: SUBSCRIPTION_FIXTURE, status: 200, ok: true })
 })
 
 afterEach(() => {
@@ -179,7 +179,7 @@ describe('<SubscriptionPage />', () => {
       value: { ...window.location, set href(v) { hrefSetter(v) } },
     })
 
-    apiMock.post.mockResolvedValue({
+    mockApi.post.mockResolvedValue({
       data: {
         ok: true,
         request_audit_id: 999,
@@ -208,7 +208,7 @@ describe('<SubscriptionPage />', () => {
     )
 
     await waitFor(() => {
-      expect(apiMock.post).toHaveBeenCalledWith('/admin/subscription/seat-request', {
+      expect(mockApi.post).toHaveBeenCalledWith('/admin/subscription/seat-request', {
         requested_seats: 15,
         reason: undefined,
       })
