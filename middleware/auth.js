@@ -43,6 +43,9 @@ module.exports = function auth(req, res, next) {
       username: payload.username || null,
       role,
       company_id: payload.company_id != null ? String(payload.company_id) : null,
+      // Section 121 (Phase 6-D-6.5): TOTP 2FA flag. Carry it through so
+      // middleware/super_admin.js can enforce when TOTP_ENFORCE=true.
+      totp_verified: payload.totp_verified === true,
       // keep full payload if you need later
       _token_payload: payload,
     };
