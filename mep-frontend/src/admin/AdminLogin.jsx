@@ -27,13 +27,25 @@ import { useNavigate } from 'react-router-dom'
 // email doesn't appear in the tenant prefill (and vice versa).
 const REMEMBER_ADMIN_EMAIL_KEY = 'mep_remember_admin_email'
 
+// Phase 6-D-6.5 / Section 121 — two-step login with TOTP 2FA.
+// step === 'pin'    → email + PIN form (initial state)
+// step === 'setup'  → first-time enrollment wizard with QR code + 6-digit input
+// step === 'verify' → 6-digit code input for already-enrolled users
+
 export default function AdminLogin() {
   const navigate = useNavigate()
+  const [step, setStep] = useState('pin')
   const [email, setEmail] = useState('')
   const [pin, setPin] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
   const [rememberMe, setRememberMe] = useState(false)
+  // TOTP state for step 'setup' and 'verify'
+  const [pendingToken, setPendingToken] = useState(null)
+  const [setupToken, setSetupToken] = useState(null)
+  const [qrDataUrl, setQrDataUrl] = useState(null)
+  const [secretBase32, setSecretBase32] = useState(null)
+  const [totpCode, setTotpCode] = useState('')
 
   useEffect(() => {
     try {
@@ -102,6 +114,31 @@ export default function AdminLogin() {
         return
       }
 
+      // Phase 6-D-6.5 / Section 121 — TOTP branching. The backend returns
+      // 200 with ok:false + a specific error code when TOTP is required.
+      // We jump to the second-step UI; the JWT is NOT issued until the
+      // 6-digit code verifies.
+      if (data && data.ok === false) {
+        if (data.error === 'TOTP_SETUP_REQUIRED') {
+          setPendingToken(data.totp_pending_token)
+          setSetupToken(data.totp_setup_token)
+          setQrDataUrl(data.totp_qr_code_data_url)
+          setSecretBase32(data.totp_secret_base32)
+          setTotpCode('')
+          setStep('setup')
+          return
+        }
+        if (data.error === 'TOTP_REQUIRED') {
+          setPendingToken(data.totp_pending_token)
+          setTotpCode('')
+          setStep('verify')
+          return
+        }
+        // Unknown ok:false shape — surface verbatim.
+        setError(data.message || data.error || 'Sign-in failed')
+        return
+      }
+
       // Phase 6-D-1c (Section 102): the web response no longer includes
       // a body `token` — the HttpOnly access_token cookie set by the
       // backend is the source of truth. We only persist to localStorage
@@ -144,6 +181,153 @@ export default function AdminLogin() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  // Phase 6-D-6.5 / Section 121 — second-step submit (TOTP code).
+  async function handleTotpSubmit(e) {
+    e.preventDefault()
+    setError(null)
+    setSubmitting(true)
+    try {
+      const endpoint = step === 'setup' ? '/api/auth/totp/confirm-setup' : '/api/auth/totp/verify'
+      const body = step === 'setup'
+        ? { totp_pending_token: pendingToken, totp_setup_token: setupToken, code: totpCode.trim() }
+        : { totp_pending_token: pendingToken, code: totpCode.trim() }
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', 'X-Auth-Channel': 'cookie' },
+        body: JSON.stringify(body),
+      })
+      let data = null
+      try { data = await res.json() } catch { /* ignore */ }
+      if (!res.ok || !data || data.ok !== true) {
+        const code = data?.error || `HTTP_${res.status}`
+        if (code === 'INVALID_TOTP_CODE') {
+          setError('Code rejected — check your Authenticator app and try again.')
+        } else if (code === 'EXPIRED_TOTP_PENDING_TOKEN' || code === 'EXPIRED_TOTP_SETUP_TOKEN') {
+          setError('Your sign-in attempt expired. Returning to the PIN screen.')
+          setStep('pin')
+        } else {
+          setError(data?.message || code)
+        }
+        return
+      }
+      try {
+        if (data.token) {
+          localStorage.setItem('mep_token', data.token)
+          if (data.refresh_token) localStorage.setItem('mep_refresh_token', data.refresh_token)
+        } else {
+          localStorage.removeItem('mep_token')
+          localStorage.removeItem('mep_refresh_token')
+        }
+      } catch { /* private mode */ }
+      navigate('/', { replace: true })
+    } catch (networkErr) {
+      setError(networkErr.message || 'Network error')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  function handleCancelTotp() {
+    setStep('pin')
+    setPendingToken(null)
+    setSetupToken(null)
+    setQrDataUrl(null)
+    setSecretBase32(null)
+    setTotpCode('')
+    setError(null)
+  }
+
+  // ── Step 2/3: TOTP UI ────────────────────────────────────────────────
+  if (step === 'setup' || step === 'verify') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-900 text-slate-200 px-4">
+        <div className="w-full max-w-md">
+          <div className="text-center mb-6">
+            <h1 className="text-2xl font-bold mb-1">
+              {step === 'setup' ? 'Enable two-factor authentication' : 'Two-factor authentication'}
+            </h1>
+            <p className="text-sm text-slate-400">
+              {step === 'setup'
+                ? 'Scan the QR code with Google Authenticator / 1Password / Authy.'
+                : 'Enter the 6-digit code from your Authenticator app.'}
+            </p>
+          </div>
+          <form
+            onSubmit={handleTotpSubmit}
+            className="bg-slate-800/50 border border-slate-700 rounded-lg p-6 space-y-4"
+            aria-label={step === 'setup' ? 'TOTP setup' : 'TOTP verification'}
+          >
+            {step === 'setup' && qrDataUrl && (
+              <div className="text-center">
+                <img
+                  src={qrDataUrl}
+                  alt="TOTP QR code"
+                  className="mx-auto rounded bg-white p-2"
+                  style={{ width: 220, height: 220 }}
+                />
+                {secretBase32 && (
+                  <div className="mt-3">
+                    <div className="text-xs text-slate-500 mb-1">Manual entry (if scanning fails):</div>
+                    <code className="text-xs font-mono text-slate-300 break-all">{secretBase32}</code>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div>
+              <label htmlFor="admin-totp-code" className="block text-xs font-medium text-slate-400 mb-1">
+                6-digit code
+              </label>
+              <input
+                id="admin-totp-code"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="\d{6}"
+                maxLength={6}
+                required
+                value={totpCode}
+                onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                disabled={submitting}
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded text-center tracking-widest text-lg font-mono text-slate-100 focus:outline-none focus:border-slate-500 disabled:opacity-50"
+                placeholder="000000"
+                autoFocus
+              />
+            </div>
+
+            {error && (
+              <div role="alert" className="p-3 bg-rose-900/30 border border-rose-700/50 rounded text-sm text-rose-200">
+                {error}
+              </div>
+            )}
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleCancelTotp}
+                disabled={submitting}
+                className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-medium rounded disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={submitting || totpCode.length !== 6}
+                className="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:cursor-not-allowed text-white text-sm font-medium rounded"
+              >
+                {submitting ? 'Verifying…' : step === 'setup' ? 'Confirm + sign in' : 'Sign in'}
+              </button>
+            </div>
+          </form>
+          <p className="text-center text-xs text-slate-500 mt-6">
+            Phase 6-D-6.5 • Two-factor authentication
+          </p>
+        </div>
+      </div>
+    )
   }
 
   return (

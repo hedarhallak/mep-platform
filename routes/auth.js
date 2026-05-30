@@ -6,6 +6,8 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const { pool, superPool } = require('../db');
 const { JWT_SECRET, hashPin, verifyPin } = require('../lib/auth_utils');
+// Phase 6-D-6.5 / Section 121 — TOTP 2FA helper.
+const totpLib = require('../lib/totp');
 const { audit, ACTIONS } = require('../lib/audit');
 // Phase 6-D-1a (Section 100, May 14, 2026): cookie-based session for web.
 // See lib/cookie_options.js for the policy. Mobile still uses Bearer.
@@ -80,7 +82,10 @@ async function saveRefreshToken(userId, refreshToken, req) {
   );
 }
 
-function buildTokenPayload(user, role, mustChangePin) {
+function buildTokenPayload(user, role, mustChangePin, opts = {}) {
+  // Section 121 (Phase 6-D-6.5): explicit totp_verified flag. Required on
+  // the JWT for any user where totpLib.totpRequiredForUser() returns true.
+  // For non-TOTP users this stays false and the middleware ignores it.
   return {
     user_id: String(user.id),
     username: user.username,
@@ -88,7 +93,27 @@ function buildTokenPayload(user, role, mustChangePin) {
     company_id: user.company_id ? String(user.company_id) : null,
     role,
     must_change_pin: mustChangePin || false,
+    totp_verified: opts.totpVerified === true,
   };
+}
+
+// Section 121: short-lived "pending TOTP" token issued between step 1 (PIN)
+// and step 2 (6-digit code). Carries enough info to identify the user and
+// reach the secret on the verify endpoint, but cannot authenticate to any
+// /api/super or /api/* route on its own (kind='totp-pending').
+const TOTP_PENDING_EXPIRES = '5m';
+function signTotpPendingToken(user, role, mode /* 'setup' | 'verify' */) {
+  return jwt.sign(
+    {
+      kind: 'totp-pending',
+      user_id: String(user.id),
+      username: user.username,
+      role,
+      mode,
+    },
+    JWT_SECRET,
+    { expiresIn: TOTP_PENDING_EXPIRES }
+  );
 }
 
 // Phase 6-D-1b (Section 101, May 14, 2026): inline JWT-using handlers
@@ -192,6 +217,7 @@ router.post('/login', async (req, res) => {
     const { rows } = await authPool.query(
       `SELECT au.id, au.username, au.email, au.employee_id, au.company_id, au.role,
               au.is_active, au.pin_hash, au.must_change_pin,
+              au.totp_secret_encrypted, au.totp_iv, au.totp_auth_tag, au.totp_enabled_at,
               ep.full_name,
               c.company_code, c.name AS company_name
        FROM public.app_users au
@@ -276,6 +302,64 @@ router.post('/login', async (req, res) => {
     const role = user.role ? String(user.role).toUpperCase() : null;
     const mustChangePin = user.must_change_pin === true;
 
+    // ── Section 121 (Phase 6-D-6.5) — TOTP 2FA branching ──────────────────
+    //
+    // After PIN succeeds, decide whether to issue a normal JWT or a
+    // pending-TOTP token. Two TOTP states:
+    //
+    //   - setup   → user is required to enroll, totp_enabled_at IS NULL.
+    //               We generate a fresh secret (NOT persisted yet) and
+    //               return the otpauth URI + base64 PNG QR. The frontend
+    //               renders the wizard; the user submits POST /auth/totp/
+    //               confirm-setup with the pending token + first 6-digit
+    //               code, and only then do we persist totp_secret_encrypted.
+    //
+    //   - verify  → user already enrolled, must provide today's 6-digit
+    //               code via POST /auth/totp/verify with the pending token.
+    //
+    // For users where TOTP is NOT required (everything except SUPER_ADMIN
+    // when TOTP_ENFORCE !== 'true'), we fall through to the normal flow.
+    if (totpLib.totpRequiredForUser({ role })) {
+      const setupRequired = !user.totp_enabled_at;
+      const pendingToken = signTotpPendingToken(user, role, setupRequired ? 'setup' : 'verify');
+      if (setupRequired) {
+        // Generate a NEW secret for this enrollment attempt. It is NOT
+        // persisted until the user proves they can read codes from it.
+        // We embed it in an HMAC envelope inside the pending token so the
+        // confirm-setup endpoint doesn't need a side channel.
+        const secret = totpLib.generateSecret();
+        const label = user.email || user.username;
+        const uri = totpLib.buildOtpauthUri({ secret, label });
+        const qrCodeDataUrl = await totpLib.buildQrCodeDataUrl(uri);
+        // Sign the secret inside a SEPARATE short-lived token so the client
+        // round-trips it back to us on confirm-setup. The pending token
+        // signs the user identity; the setup token signs the candidate
+        // secret. Both expire in 5 minutes.
+        const setupToken = jwt.sign(
+          { kind: 'totp-setup-secret', user_id: String(user.id), secret },
+          JWT_SECRET,
+          { expiresIn: '5m' }
+        );
+        return res.status(200).json({
+          ok: false,
+          error: 'TOTP_SETUP_REQUIRED',
+          totp_pending_token: pendingToken,
+          totp_setup_token: setupToken,
+          totp_secret_base32: secret,
+          totp_otpauth_uri: uri,
+          totp_qr_code_data_url: qrCodeDataUrl,
+          issuer: process.env.TOTP_ISSUER || 'Constrai Admin',
+          label,
+        });
+      }
+      // Setup is complete; just need today's code.
+      return res.status(200).json({
+        ok: false,
+        error: 'TOTP_REQUIRED',
+        totp_pending_token: pendingToken,
+      });
+    }
+
     const payload = buildTokenPayload(user, role, mustChangePin);
     const accessToken = signAccessToken(payload);
     const refreshToken = generateRefreshToken();
@@ -338,6 +422,152 @@ router.post('/login', async (req, res) => {
     return res.json(responseBody);
   } catch (err) {
     console.error('LOGIN ERROR:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
+  }
+});
+
+// =============================================================================
+// TOTP 2FA — confirm setup + verify (Phase 6-D-6.5 / Section 121)
+// =============================================================================
+//
+// Both endpoints are called AFTER a successful PIN login that returned a
+// TOTP_SETUP_REQUIRED or TOTP_REQUIRED response. They consume the short-
+// lived pending JWT to identify the user, validate the 6-digit code, then
+// issue a fully-authenticated access+refresh pair with totp_verified=true.
+
+function verifyPendingToken(token, expectedMode) {
+  if (!token) return { ok: false, error: 'MISSING_TOTP_PENDING_TOKEN' };
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    if (payload.kind !== 'totp-pending') {
+      return { ok: false, error: 'INVALID_TOTP_PENDING_TOKEN' };
+    }
+    if (expectedMode && payload.mode !== expectedMode) {
+      return { ok: false, error: 'INVALID_TOTP_PENDING_TOKEN' };
+    }
+    return { ok: true, payload };
+  } catch (_err) {
+    return { ok: false, error: 'EXPIRED_TOTP_PENDING_TOKEN' };
+  }
+}
+
+async function loadUserById(userId) {
+  const { rows } = await authPool.query(
+    `SELECT id, username, email, employee_id, company_id, role,
+            is_active, must_change_pin,
+            totp_secret_encrypted, totp_iv, totp_auth_tag, totp_enabled_at
+       FROM public.app_users WHERE id = $1 LIMIT 1`,
+    [userId]
+  );
+  return rows[0] || null;
+}
+
+async function finishLoginAfterTotp(req, res, user, role) {
+  const mustChangePin = user.must_change_pin === true;
+  const payload = buildTokenPayload(user, role, mustChangePin, { totpVerified: true });
+  const accessToken = signAccessToken(payload);
+  const refreshToken = generateRefreshToken();
+  await saveRefreshToken(user.id, refreshToken, req);
+  await audit(pool, req, {
+    action: ACTIONS.LOGIN_SUCCESS,
+    entity_type: 'user',
+    entity_id: user.id,
+    entity_name: user.username,
+    details: { role, totp_verified: true },
+  });
+  res.cookie('access_token', accessToken, accessTokenCookieOptions(req));
+  res.cookie('refresh_token', refreshToken, refreshTokenCookieOptions(req));
+  return res.status(200).json({
+    ok: true,
+    token: accessToken,
+    refresh_token: refreshToken,
+    user: {
+      id: user.id,
+      username: user.username,
+      role,
+      must_change_pin: mustChangePin,
+    },
+  });
+}
+
+router.post('/totp/confirm-setup', async (req, res) => {
+  try {
+    const { totp_pending_token, totp_setup_token, code } = req.body || {};
+    if (!code || !totp_setup_token) {
+      return res.status(400).json({ ok: false, error: 'MISSING_FIELDS' });
+    }
+    const pendingCheck = verifyPendingToken(totp_pending_token, 'setup');
+    if (!pendingCheck.ok) {
+      return res.status(401).json({ ok: false, error: pendingCheck.error });
+    }
+    let setupPayload;
+    try {
+      setupPayload = jwt.verify(totp_setup_token, JWT_SECRET);
+    } catch (_err) {
+      return res.status(401).json({ ok: false, error: 'EXPIRED_TOTP_SETUP_TOKEN' });
+    }
+    if (setupPayload.kind !== 'totp-setup-secret') {
+      return res.status(401).json({ ok: false, error: 'INVALID_TOTP_SETUP_TOKEN' });
+    }
+    if (String(setupPayload.user_id) !== String(pendingCheck.payload.user_id)) {
+      return res.status(401).json({ ok: false, error: 'TOKEN_MISMATCH' });
+    }
+    if (!totpLib.verifyCode(code, setupPayload.secret)) {
+      return res.status(400).json({ ok: false, error: 'INVALID_TOTP_CODE' });
+    }
+    const user = await loadUserById(pendingCheck.payload.user_id);
+    if (!user) return res.status(404).json({ ok: false, error: 'USER_NOT_FOUND' });
+    const role = String(user.role || '').toUpperCase();
+
+    // Persist the encrypted secret + mark enrollment complete.
+    const { encrypted, iv, authTag } = totpLib.encryptSecret(setupPayload.secret);
+    await pool.query(
+      `UPDATE public.app_users
+          SET totp_secret_encrypted = $1,
+              totp_iv = $2,
+              totp_auth_tag = $3,
+              totp_enabled_at = NOW()
+        WHERE id = $4`,
+      [encrypted, iv, authTag, user.id]
+    );
+    return await finishLoginAfterTotp(req, res, user, role);
+  } catch (err) {
+    console.error('POST /auth/totp/confirm-setup error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
+  }
+});
+
+router.post('/totp/verify', async (req, res) => {
+  try {
+    const { totp_pending_token, code } = req.body || {};
+    if (!code) return res.status(400).json({ ok: false, error: 'MISSING_FIELDS' });
+    const pendingCheck = verifyPendingToken(totp_pending_token, 'verify');
+    if (!pendingCheck.ok) {
+      return res.status(401).json({ ok: false, error: pendingCheck.error });
+    }
+    const user = await loadUserById(pendingCheck.payload.user_id);
+    if (!user || !user.totp_enabled_at) {
+      return res.status(404).json({ ok: false, error: 'USER_NOT_FOUND' });
+    }
+    const role = String(user.role || '').toUpperCase();
+    const secret = totpLib.decryptSecret({
+      encrypted: user.totp_secret_encrypted,
+      iv: user.totp_iv,
+      authTag: user.totp_auth_tag,
+    });
+    if (!totpLib.verifyCode(code, secret)) {
+      await audit(pool, req, {
+        action: ACTIONS.LOGIN_FAILED,
+        entity_type: 'user',
+        entity_id: user.id,
+        entity_name: user.username,
+        details: { reason: 'INVALID_TOTP_CODE' },
+      });
+      return res.status(400).json({ ok: false, error: 'INVALID_TOTP_CODE' });
+    }
+    return await finishLoginAfterTotp(req, res, user, role);
+  } catch (err) {
+    console.error('POST /auth/totp/verify error:', err);
     return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
 });
