@@ -10,7 +10,6 @@
 process.env.TOTP_ENCRYPTION_KEY = 'a'.repeat(64);
 
 const totpLib = require('../../lib/totp');
-const { authenticator } = require('otplib');
 
 describe('lib/totp encryption roundtrip', () => {
   test('encryptSecret + decryptSecret returns the original secret', () => {
@@ -36,7 +35,7 @@ describe('lib/totp encryption roundtrip', () => {
 describe('lib/totp code verification', () => {
   test('verifyCode accepts a code generated for the current step', () => {
     const secret = totpLib.generateSecret();
-    const code = authenticator.generate(secret);
+    const code = totpLib.totp(secret);
     expect(totpLib.verifyCode(code, secret)).toBe(true);
   });
 
@@ -47,8 +46,22 @@ describe('lib/totp code verification', () => {
 
   test('verifyCode tolerates spaces in the input', () => {
     const secret = totpLib.generateSecret();
-    const code = authenticator.generate(secret);
+    const code = totpLib.totp(secret);
     expect(totpLib.verifyCode(`${code.slice(0, 3)} ${code.slice(3)}`, secret)).toBe(true);
+  });
+
+  test('verifyCode accepts a code from the previous 30s window (clock skew)', () => {
+    const secret = totpLib.generateSecret();
+    const prevTime = Date.now() - 31000;
+    const oldCode = totpLib.totp(secret, prevTime);
+    expect(totpLib.verifyCode(oldCode, secret)).toBe(true);
+  });
+
+  // RFC 6238 known test vectors (Appendix B, using the 20-byte ASCII secret
+  // "12345678901234567890" → base32 "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ").
+  test('matches RFC 6238 Appendix B test vector for T=59', () => {
+    const secret = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';
+    expect(totpLib.totp(secret, 59 * 1000)).toBe('287082');
   });
 
   test('verifyCode returns false for null/undefined inputs', () => {
