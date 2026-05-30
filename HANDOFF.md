@@ -1,11 +1,13 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 28, 2026 ~16:00 UTC — **✅ Phase 6-D-5 COMPLETE.** Both customer-facing UI pages shipped, deployed, verified end-to-end on production. PR #270 = Subscription page (with 3 request forms + mailto). PR #272 = Invoices list page (paginated, filterable, status-colored). The Phase 6-D billing chain now works coherently across 7 PRs: SUPER_ADMIN creates training quote via `POST /api/super/training/quotes` (Phase 6-D-4 PR 5) → invoice number `CONS-2026-0001` generated → rendered in customer's `mep.constrai.ca/billing/invoices` (Phase 6-D-5 PR 2) with correct $1092.26 CAD computed via thousandths-of-percent tax math (migration 021). Cross-PR e2e proven on prod.
+> Last updated: May 28, 2026 ~20:00 UTC — **✅ Phase 6-D-6 PR 1+2 SHIPPED.** SUPER_ADMIN Subscription Request Inbox (PR #274) + Training Quotes UI (PR #275) live at `admin.constrai.ca/subscription-requests` and `admin.constrai.ca/training-quotes`. Shared `AdminLogoutButton` added to all 4 admin pages. Browser-verified end-to-end with the CONS-2026-0001 training quote rendering correctly + audit row #143 from Phase 6-D-5 visible in the inbox with Arabic reason "بليب" preserved.
 >
-> **1 new pitfall this session — #52:** Vitest does NOT honor Jest's `mock*` prefix convention in `vi.mock` factories. Use `vi.hoisted()` to share state with hoisted mock calls.
+> **Security gap surfaced + scheduled:** Hedar flagged SUPER_ADMIN single-factor-PIN auth as a risk for the September conference. Pulled TOTP 2FA forward from Phase 7 (Q1 2027) into **Phase 6-D-6.5 (NEXT)**. Scope: app_users.totp_secret column + setup wizard + login flow + JWT totp_verified flag + middleware enforcement. Library: `otplib`. ~1-2 days. See Section 120.5.
 >
-> **Next code task: Phase 6-D-6** — SUPER_ADMIN apply-change UI on `admin.constrai.ca`. List pending subscription change requests (query `audit_logs` for `CUSTOMER_REQUESTED_*` rows without matching `SUPER_ADMIN_APPLIED_*` follow-up) with Apply/Decline buttons. Training Quotes / Custom Demands / Payments tabs with create + send + edit + void + record-payment forms wrapping the existing `/api/super/*` endpoints from Phase 6-D-4 PR 5. Estimated 1-2 weeks per conference roadmap.
+> **No new pitfalls this section** — Pitfall #52 (Vitest vi.hoisted) continued to apply but is already encoded.
+>
+> **Next code task: Phase 6-D-6.5** — TOTP 2FA for SUPER_ADMIN. After 6.5 ships, return to Phase 6-D-6 PR 3 (Custom Demands UI) + PR 4 (Payments UI).
 
 ---
 
@@ -49,7 +51,9 @@
 
 7. **(Section 119.6) Smoke the Billing page** — same login → click "Billing" in sidebar (CreditCard icon below Subscription). Should show 2 invoices (CONS-2026-9999 Subscription Approved $155.22 + CONS-2026-0001 Training Draft $1092.26). If they're missing, the data may have been cleaned — re-seed via SQL (Section 119.7) or call `POST /api/super/training/quotes`.
 
-8. **Only after all seven are green**, continue with the regular task list below.
+8. **(Section 120) Smoke admin.constrai.ca apply-change loop** — login `hedar.hallak@gmail.com` / `hedar2026` on admin.constrai.ca. Click "Subscription requests" in CompaniesList toolbar → should see audit row #143 (or any pending requests) with company / change summary / Apply button. Click "Training quotes" → should see CONS-2026-0001. Click "Sign out" top-right → should land on `/login` with localStorage cleared.
+
+9. **Only after all eight are green**, continue with the regular task list below.
 
 ---
 
@@ -64,7 +68,9 @@
 | **May 15 — May 26** | Branding stack + pricing model lock + schema build | ✅ Phase 6-D-3 (Section 114) → ✅ Section 115 pricing → ✅ Section 116 schema → ✅ **Phase 6-D-4 PR 1-5 ALL SHIPPED (Section 118)** |
 | **May 28 (AM)** | Customer Subscription page (PR 1 of Phase 6-D-5) | ✅ **Phase 6-D-5 PR 1 SHIPPED (Section 119.1)** — Subscription page with 3 request forms live on mep.constrai.ca |
 | **May 28 (PM)** | Customer Invoices page (PR 2 of Phase 6-D-5) | ✅ **Phase 6-D-5 PR 2 SHIPPED (Section 119.6)** — Invoices list with type filter live; cross-PR e2e proven with CONS-2026-0001 |
-| **Late May — mid-June 2026** | SUPER_ADMIN apply UI | ⏳ **Phase 6-D-6 (NEXT)** — Subscription request inbox with Apply/Decline + Training Quotes / Custom Demands / Payments management tabs on admin.constrai.ca (~1-2 weeks) |
+| **May 28 (evening)** | SUPER_ADMIN apply UI PR 1+2 | ✅ **Phase 6-D-6 PR 1+2 SHIPPED (Section 120)** — Subscription Request Inbox + Training Quotes UI + AdminLogoutButton on all admin pages |
+| **Late May (this session continues)** | Pull TOTP 2FA forward from Phase 7 | ⏳ **Phase 6-D-6.5 (NEXT)** — TOTP for SUPER_ADMIN (~1-2 days, otplib + setup wizard + middleware) |
+| **Early June 2026** | SUPER_ADMIN apply UI PR 3+4 | ⏳ **Phase 6-D-6 PR 3+4** — Custom Demands UI + Payments UI (Record Payment form + history) |
 | **July 2026** | Invoice email automation + cron | ⏳ **Phase 6-D-7** — Monthly invoice cron, trial expiry emails, HTML email invoices (PDF deferred per scope-cut option) (~1-2 weeks) |
 | **July-August 2026** | Marketing + reference tenant + training materials | ⏳ **Phase 6-D-8** — Marketing site refresh, ToS legal review, reference tenant data, **modular training materials** (per Section 117.6 design guidance) (~2 weeks parallel) |
 | **August** | Pre-conference dry-run + code freeze | E2E rehearsal, bug fix only, 2-week freeze |
@@ -99,46 +105,49 @@
    - `RECOVERY.md` Section 2.4 only if relevant
 3. **Echo this exact line** as the first line of your reply:
    ```
-   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 119, Phase 6-D-5 COMPLETE (PR 1 Subscription + PR 2 Invoices both deployed), next code task is Phase 6-D-6 SUPER_ADMIN apply-change UI on admin.constrai.ca)
+   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 120, Phase 6-D-6 PR 1+2 deployed (Subscription Inbox + Training Quotes + AdminLogoutButton), next code task is Phase 6-D-6.5 TOTP 2FA for SUPER_ADMIN)
    ```
-4. **Open with Phase 6-D-6 as the active priority.** Scope (will be locked at session start):
-   - **Subscription Request Inbox** at `admin.constrai.ca/subscription-requests` — lists `audit_logs` rows where `action LIKE 'CUSTOMER_REQUESTED_%'` with no matching `SUPER_ADMIN_APPLIED_%` follow-up. Per row: company name, change category (SEAT / CANCEL / PLAN), current → requested, reason, requested-at timestamp, Apply / Decline buttons.
-   - **Apply form** — modal or inline form per row. Submit hits the existing `POST /api/super/subscriptions/:id/apply-change` (Phase 6-D-4 PR 4). Records audit row #2 and triggers Resend confirmation email.
-   - **Training Quotes tab** at `admin.constrai.ca/training-quotes` — list + create form wrapping `POST /api/super/training/quotes`. Per row: company, trainees breakdown, distance, status (DRAFT / QUOTE_SENT / APPROVED / PAID), Send / Edit / Void actions.
-   - **Custom Demands tab** at `admin.constrai.ca/custom-demands` — list + create form wrapping `POST /api/super/custom-demands/quotes`.
-   - **Payments tab** at `admin.constrai.ca/payments` — list of payments + Record Payment form wrapping `POST /api/super/payments/record`.
-   - All inside the existing AdminApp.jsx router with `<RequireSuperAdmin>` gate.
-   - Bilingual EN/FR not required for SUPER_ADMIN portal (only Hedar uses it).
-   - Estimated: 1-2 weeks.
+4. **Open with Phase 6-D-6.5 as the active priority.** Scope (locked in Section 120.5):
+   - **Migration** — add `totp_secret BYTEA` (encrypted-at-rest via app-level AES/Fernet with a key from `.env`) + `totp_enabled_at TIMESTAMPTZ` to `app_users`. Sequence-based migration number (next free after 021).
+   - **Setup wizard** — on first SUPER_ADMIN login after deploy, if `totp_enabled_at IS NULL`, force a one-time setup screen: generate a random TOTP secret via `otplib.authenticator.generateSecret()`, render the otpauth:// URI as a QR code (use `qrcode` lib client-side), display the base32 secret as a fallback. User scans + enters first 6-digit code; backend verifies + persists.
+   - **AdminLogin update** — after PIN succeeds for a user with TOTP enabled, render a second step asking for the 6-digit code. Backend `POST /api/auth/login` accepts an optional `totp_code` and returns `TOTP_REQUIRED` (with a short-lived continuation token) if missing.
+   - **JWT claim** — `totp_verified: true` issued only when login completes with a valid code. `superAdmin` middleware on `/api/super/*` rejects tokens without it (treats as 401).
+   - **Library:** `otplib` (no native deps; well-maintained).
+   - **Estimated:** 1-2 days.
+   - **Optional Phase 6-D-6.6:** Cloudflare or nginx IP allowlist on `admin.constrai.ca` (~30 min). Defer until traveling forces it off.
 
    Then ask Hedar one of:
-   - "Start Phase 6-D-6 with the Subscription Request Inbox first?" — recommended first step (closes the loop on the hybrid workflow from Section 117.4)
-   - "Or build the Training Quotes UI first to get demo-able quotes in hand for September?"
+   - "Start Phase 6-D-6.5 by designing the setup wizard flow first?" — recommended (UX decisions before code)
+   - "Or jump straight to the migration + library install?"
 
 ---
 
 ## Pending tasks at session start (NEXT MAJOR CODE TASK)
 
-### 🎯 Phase 6-D-6 — SUPER_ADMIN apply-change UI
+### 🎯 Phase 6-D-6.5 — TOTP 2FA for SUPER_ADMIN
 
-**Scope:**
-- Subscription Request Inbox at `admin.constrai.ca/subscription-requests` — lists pending CUSTOMER_REQUESTED_* audit rows with Apply/Decline buttons.
-- Training Quotes tab — list + create form wrapping `POST /api/super/training/quotes`.
-- Custom Demands tab — wrapping `POST /api/super/custom-demands/quotes`.
-- Payments tab — list + Record Payment form wrapping `POST /api/super/payments/record`.
-- All inside AdminApp.jsx router gated by `<RequireSuperAdmin>`.
-- EN-only (SUPER_ADMIN portal is Hedar's only).
+**Scope** (locked in Section 120.5):
+- Migration adds `totp_secret` + `totp_enabled_at` columns to `app_users` (encrypted-at-rest).
+- Setup wizard at first SA login (QR code via `qrcode` lib + base32 fallback).
+- AdminLogin two-step: PIN → if `TOTP_REQUIRED` → 6-digit code.
+- `POST /api/auth/login` accepts optional `totp_code`; returns `TOTP_REQUIRED` + continuation token if missing.
+- JWT `totp_verified: true` claim; `superAdmin` middleware enforces it on `/api/super/*`.
+- Library: `otplib`.
+- Estimated: 1-2 days.
 
-**Critical references during implementation:**
-- Section 117.4 (hybrid workflow — request side now built, apply side needs UI wrapper)
-- Section 118.2 + 118.3 (PR 4 + PR 5 endpoint contracts)
-- Section 119.7 (cross-PR e2e — CONS-2026-0001 proof the chain works)
-- `API.md` Section 14 (full endpoint reference)
+**Critical references:**
+- Section 120.5 (decision + scope lock)
+- Phase 7 roadmap (Q1 2027) — what we are NOT pulling forward (WebAuthn, COMPANY_ADMIN TOTP)
+- `OPS.md` / `RECOVERY.md` for credentials inventory + .env handling
 
 **Critical pitfalls to avoid:**
-- Pitfall #38, #44, #46, #50, #51, #52 (per Section 119.5 + 119.6 notes)
+- Pitfall #29 / #30 — never commit secrets; the TOTP encryption key lives in `.env` (OneDrive backup).
+- Pitfall #38 — package.json changes require `npm ci` on prod (otplib + qrcode add new deps).
+- Pitfall #45 — migration on prod via `sudo -u postgres psql`.
+- Pitfall #51 — execute the agreed sequence without proposing pauses.
+- Pitfall #52 — vi.hoisted() for mock factories in any frontend tests.
 
-### After Phase 6-D-6: Phase 6-D-7 (Email automation + monthly cron)
+### After Phase 6-D-6.5: Phase 6-D-6 PR 3 (Custom Demands UI) + PR 4 (Payments UI) → Phase 6-D-7
 
 ---
 
@@ -153,9 +162,9 @@
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04) |
 | Backend | Node.js + Express + Postgres 16, pm2 at `/var/www/mep`. invite-employee reads from `subscriptions.subscribed_seats`. GET /super/companies/:id LEFT JOINs subscriptions. 6 new SUPER_ADMIN billing endpoints live (training quotes / custom demands / payments / extend-trial / apply-change). |
 | Frontend | React + Vite + Tailwind v4. CompanyBranding.jsx shows bracket + per-seat price (Section 117 refactor). Customer-facing subscription UI = Phase 6-D-5 (next). |
-| Latest deployed to prod | **Phase 6-D-5 PR 2 — customer-facing Invoices page** — PR #272, May 28 PM. Backend restart + frontend rebuild (`main-B4vu5RTZ.js`). |
-| Last merged to main | **PR #272** (Phase 6-D-5 PR 2 — Invoices page, May 28 PM). |
-| Active program | **Phase 6-D-5 COMPLETE.** Next is Phase 6-D-6 (SUPER_ADMIN apply-change UI). |
+| Latest deployed to prod | **Phase 6-D-6 PR 2 — Training Quotes UI + admin logout** — PR #275, May 28 evening. Backend restart + frontend rebuild (`main-_f6EVJKn.js`). |
+| Last merged to main | **PR #275** (Phase 6-D-6 PR 2, May 28 evening). |
+| Active program | **Phase 6-D-6 PR 1+2 SHIPPED.** Next is Phase 6-D-6.5 (TOTP 2FA for SUPER_ADMIN). |
 | Mobile app | Still on Bearer-token + PIN. Phase 7 (Q1 2027). |
 
 ### Multi-tenant migration progress
@@ -177,7 +186,11 @@
 | **Phase 6-D-5 PR 1 — Customer-facing Subscription page** | ✅ **Deployed (PR #270, May 28 AM)** |
 | **Phase 6-D-5 PR 2 — Customer-facing Invoices list page** | ✅ **Deployed (PR #272, May 28 PM)** |
 | **Section 119 — Phase 6-D-5 PR 1+2 closeout + Pitfall #52 (Vitest vi.hoisted)** | ✅ **Recorded** |
-| **Phase 6-D-6 — SUPER_ADMIN apply-change UI on admin.constrai.ca** | ⏳ **NEXT (this session)** |
+| **Phase 6-D-6 PR 1 — Subscription Request Inbox** | ✅ **Deployed (PR #274, May 28 evening)** |
+| **Phase 6-D-6 PR 2 — Training Quotes UI + AdminLogoutButton** | ✅ **Deployed (PR #275, May 28 evening)** |
+| **Section 120 — Phase 6-D-6 PR 1+2 closeout + 2FA decision** | ✅ **Recorded (this session)** |
+| **Phase 6-D-6.5 — TOTP 2FA for SUPER_ADMIN** | ⏳ **NEXT (this session continues)** |
+| **Phase 6-D-6 PR 3+4 — Custom Demands + Payments UIs** | ⏳ After 6.5 |
 | Phase 6-D-6 — SUPER_ADMIN UI (Subscription detail with Apply Change, Training Quotes, etc.) | ⏳ June-July 2026 |
 | Phase 6-D-7 — Invoice email automation + monthly cron + trial expiry warnings | ⏳ July 2026 |
 | Phase 6-D-8 — Marketing site refresh + ToS legal review + reference tenant + training materials | ⏳ July-Aug 2026 |

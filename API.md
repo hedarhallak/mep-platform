@@ -342,10 +342,17 @@ The POST endpoints implement the **hybrid DB-audit + mailto** pattern from Secti
 |---|---|---|---|
 | POST | `/api/super/subscriptions/:id/apply-change` | SUPER_ADMIN | Body: `{ change_type: 'SEAT_CHANGE'\|'CANCEL'\|'PLAN_CHANGE', new_seats?, target_plan?, request_audit_id?, notes? }`. Updates subscription per branch + inserts audit row `SUPER_ADMIN_APPLIED_SUBSCRIPTION_CHANGE` + sends Resend confirmation email (bilingual EN/FR) to the customer admin. Idempotent against re-apply when state already matches request. |
 
+### SUPER_ADMIN subscription request inbox — `routes/super_subscription_requests.js` (Section 120.1)
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET | `/api/super/subscription-requests` | SUPER_ADMIN | **(Phase 6-D-6 PR 1)** Lists pending customer-initiated subscription change requests. Returns `audit_logs` rows where `action='CUSTOMER_REQUESTED_SUBSCRIPTION_CHANGE'` with NO matching `SUPER_ADMIN_APPLIED_SUBSCRIPTION_CHANGE` row referencing them via `details.request_audit_id`. Joined with `companies` + `subscriptions` for the tenant name + current state. Response: `{ ok, requests: [{ audit_id, created_at, change_category, current, requested, reason, source, user_agent, requester: { user_id, username, role }, company: { id, name, company_code }, subscription: { id, subscribed_seats, plan_type, status } }] }`. Cross-tenant visibility for the SA. |
+
 ### SUPER_ADMIN training quotes — `routes/super_training_quotes.js`
 
 | Method | Path | Permission | Notes |
 |---|---|---|---|
+| GET  | `/api/super/training/quotes` | SUPER_ADMIN | **(Section 120.3 — Phase 6-D-6 PR 2)** Cross-tenant list of TRAINING invoices for the SUPER_ADMIN Training Quotes UI. Query params: `status` (optional), `limit` (default 50, max 200). Response: `{ ok, quotes: [{ id, invoice_number, status, company_id, company_name, company_code, subtotal_cents, qst_cents, gst_cents, total_cents, amount_paid_cents, currency, issue_date, quote_expires_at, customer_notes, details, created_at }] }`. Ordered `issue_date DESC, id DESC`. |
 | POST | `/api/super/training/quotes` | SUPER_ADMIN | Creates a DRAFT invoice of type='TRAINING'. Body: `{ company_id, trainees: [{role, count}], distance_km, training_days, flight?, per_diem_rate_cents_per_day?, quote_expires_at?, customer_notes?, internal_notes?, payment_schedule? }`. Computes base $800 + per-role add-ons (Admin +$200, PM +$150, Foreman +$100, Worker +$50) + per-diem by geographic tier + flight pass-through + QST/GST. Returns `{ ok: true, invoice }`. Sequential `CONS-YYYY-NNNN` invoice number. |
 | POST | `/api/super/training/quotes/:id/send` | SUPER_ADMIN | Transitions DRAFT → QUOTE_SENT and emails the customer admin (lookup via `app_users.role = 'COMPANY_ADMIN'`) or `body.to` override. Idempotent — already-sent quotes return existing state. Returns `{ ok: true, invoice, email_sent }`. |
 

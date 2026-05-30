@@ -14801,6 +14801,108 @@ The whole 5-PR Phase 6-D-4 backend stack + 2-PR Phase 6-D-5 customer UI works as
 
 Estimated 1-2 weeks per the conference roadmap.
 
+---
+
+## 120. Section 120 — May 28, 2026 (evening) — Phase 6-D-6 PR 1+2 SHIPPED — Subscription Request Inbox + Training Quotes UI + admin logout + security gap identified
+
+> **Status:** ✅ **Phase 6-D-6 PR 1+2 deployed and verified on production.** PR #274 = Subscription Request Inbox at `admin.constrai.ca/subscription-requests`. PR #275 = Training Quotes UI at `admin.constrai.ca/training-quotes` + shared `AdminLogoutButton` component dropped into all 4 admin pages (CompaniesList, CompanyBranding, SubscriptionRequestsPage, TrainingQuotesPage). Closes the apply-change loop from Section 117.4 hybrid workflow — Hedar no longer needs curl/Postman to handle customer subscription requests. Also closes the "no logout button on SUPER_ADMIN portal" gap Hedar flagged after the PR 1 ship. A second security concern Hedar raised — SUPER_ADMIN auth is only PIN-based — is captured in Section 120.5 as the trigger for Phase 6-D-6.5 (TOTP 2FA pull-forward from Phase 7).
+
+### 120.1 — PR #274 scope (Subscription Request Inbox)
+
+**Backend:** new `GET /api/super/subscription-requests` in `routes/super_subscription_requests.js`. Returns the list of `audit_logs` rows with `action='CUSTOMER_REQUESTED_SUBSCRIPTION_CHANGE'` that have NO matching `SUPER_ADMIN_APPLIED_SUBSCRIPTION_CHANGE` row referencing them via `details.request_audit_id`. Each row is joined with `companies` for the tenant name + `subscriptions` for the current state snapshot. Cross-company visibility via the `mepuser_super` bypass-RLS role.
+
+**Frontend:** new `mep-frontend/src/admin/SubscriptionRequestsPage.jsx`:
+- Table per request: timestamp, company (name + code), change category badge (SEAT_CHANGE sky, CANCEL rose, PLAN_CHANGE amber), one-line summary (`5 → 8 seats` for seat change, `MONTHLY → ANNUAL` for plan), reason, requester username + role, Apply button.
+- Apply opens a modal pre-filled with the request's `requested` values. Per category, the form exposes either a new-seat input, a plan dropdown, or a cancel-immediately checkbox. Optional notes (recorded in audit row #2). Optional "send Resend confirmation email" checkbox (default on).
+- Submit POSTs to the existing `/api/super/subscriptions/:id/apply-change` endpoint (Phase 6-D-4 PR 4), then refreshes the list and shows a transient success flash.
+- CompaniesList toolbar gains a "Subscription requests" link.
+
+**Tests:** integration coverage in `tests/admin/super_subscription_requests.test.js`:
+- Anonymous → 401.
+- Non-SA tenant token → 403.
+- Pending filtering: returns the CUSTOMER_REQUESTED row; excludes the already-applied row.
+- Cross-tenant visibility: SA sees pending requests across multiple companies.
+
+### 120.2 — PR #274 browser smoke (with screenshot evidence)
+
+Browser smoke at `admin.constrai.ca/subscription-requests` after login as `hedar.hallak@gmail.com` (SUPER_ADMIN) showed audit row #143 (the SEAT_CHANGE request from `admin@mep.constrai.app` captured during Section 119.3 with the Arabic reason "بليب") rendering correctly with the change summary "5 → 8 seats", Arabic reason preserved, requester "admin" / "COMPANY_ADMIN", and timestamp "May 28, 2026, 07:19 AM".
+
+### 120.3 — PR #275 scope (Training Quotes UI + admin logout)
+
+**Backend:** added `GET /training/quotes` to `routes/super_training_quotes.js` (alongside the existing POST endpoints). Returns cross-tenant TRAINING-type invoices joined with company name + code. Optional `?status` filter; default limit 50 (max 200); ordered `issue_date DESC, id DESC`.
+
+**Frontend:**
+- `mep-frontend/src/admin/AdminLogoutButton.jsx` (NEW shared component) — best-effort `POST /api/auth/logout` to revoke server-side, clears `mep_token` + `mep_refresh_token` from localStorage, hard-redirects to `/login`. Continues even if the logout POST fails (so a user with an expired token can still sign out cleanly).
+- `mep-frontend/src/admin/TrainingQuotesPage.jsx` (NEW) — cross-company list of training invoices (invoice # / company / status / total / paid / issued / actions) + Create modal wrapping `POST /super/training/quotes` with company picker (sourced from `/super/companies/overview`), distance, training days, per-role trainee counts grid, optional flight cost pass-through, customer notes. Per DRAFT row, a "Send →" action wraps `POST /super/training/quotes/:id/send`.
+- Logout button added to header of CompaniesList, CompanyBranding, SubscriptionRequestsPage, and TrainingQuotesPage so SUPER_ADMIN can sign out from any screen.
+- CompaniesList toolbar gains a "Training quotes" link.
+
+**Tests:** added 3 tests to `tests/admin/super_training_payments.test.js`:
+- Cross-tenant visibility: GET returns TRAINING invoices for multiple companies in one query; SUBSCRIPTION_RECURRING rows are filtered out by the `type='TRAINING'` constraint.
+- Status filter: `?status=QUOTE_SENT` returns only that status.
+- Unauthenticated → 401.
+
+### 120.4 — PR #275 browser smoke
+
+Browser smoke at `admin.constrai.ca/training-quotes` after deploy showed the existing CONS-2026-0001 training quote (created in Section 119.7) rendering correctly with company "MEP Construction" + status "DRAFT" badge + total $1092.26 CAD. The "+ New quote" modal opened with the company picker pre-loaded from `super/companies/overview`. The logout button visibly rendered in the top-right of every admin page (CompaniesList, SubscriptionRequestsPage, TrainingQuotesPage, CompanyBranding).
+
+### 120.5 — Security gap captured: SUPER_ADMIN auth is single-factor PIN
+
+Hedar flagged two related concerns immediately after PR 1 browser smoke:
+1. **No logout button on the SUPER_ADMIN portal** — fixed in PR 2 (Section 120.3 above).
+2. **SUPER_ADMIN auth is weak** — only an 8-char PIN (`hedar2026`). A SUPER_ADMIN token leak = full access to ALL tenants' data, billing, subscription apply, training quote creation, company suspension. The risk vs reward asymmetry is too high for the September 2026 conference where we'll be demoing to prospective customers ("is your admin secure?" is a natural sales question).
+
+**Decision:** Pull TOTP 2FA forward from Phase 7 (Q1 2027) into Phase 6-D-6.5 (May–June 2026). Specifically:
+
+- **Phase 6-D-6.5 scope (TOTP 2FA):**
+  - Migration: new `totp_secret` (BYTEA, encrypted-at-rest via app-level Fernet/AES), `totp_enabled_at` (TIMESTAMPTZ) columns on `app_users`.
+  - Setup flow: on first SUPER_ADMIN login post-deploy, force a one-time setup wizard that displays a QR code + base32 secret, prompts for first 6-digit code to confirm, persists `totp_secret` + `totp_enabled_at`.
+  - Login flow: AdminLogin gains a "Authentication code" 6-digit field shown only after PIN succeeds (two-step UI) for users with TOTP enabled.
+  - Middleware: new `requireTotpVerified` flag in JWT — issued only when login provides a valid TOTP code. `superAdmin` middleware on `/api/super/*` rejects tokens without this flag.
+  - Library: `otplib` (well-maintained, no native deps).
+  - Estimated: 1–2 days.
+
+- **Optional Phase 6-D-6.6 (IP allowlist):** Cloudflare or nginx `allow/deny` rules restricting `admin.constrai.ca` to Hedar's home + office IPs. Cheap belt-and-suspenders layer; trivial to disable when traveling.
+
+- **What we are NOT doing in 6.5:** WebAuthn / passkeys (too much UX overhead for one user), forcing TOTP on COMPANY_ADMIN accounts (out of scope; their data is per-tenant, lower blast radius). Both stay in Phase 7 (Q1 2027) per the original roadmap.
+
+This adjustment trades ~2 days of code for a meaningful security posture upgrade ahead of the conference. After 6.5 ships, the September sales conversation can credibly include: "SUPER_ADMIN portal requires PIN + TOTP code from your phone; tokens are short-lived (1h access, 7d refresh); revocation is server-side."
+
+### 120.6 — Phase 6-D-6 progress so far
+
+| PR | Component | Status |
+|---|---|---|
+| **PR 1 (PR #274)** | Subscription Request Inbox | ✅ Shipped + verified |
+| **PR 2 (PR #275)** | Training Quotes UI + admin logout button | ✅ Shipped + verified |
+| **PR 3** | Custom Demands UI | ⏳ After Phase 6-D-6.5 |
+| **PR 4** | Payments UI (Record Payment form + payment history) | ⏳ After Phase 6-D-6.5 |
+| **Phase 6-D-6.5** | TOTP 2FA for SUPER_ADMIN | ⏳ **NEXT** |
+
+Once Phase 6-D-6.5 + remaining PRs ship, Phase 6-D-6 is complete and we move to Phase 6-D-7 (monthly invoice cron + email automation).
+
+### 120.7 — Session Log — May 28, 2026 (evening)
+
+**Shipped:**
+- PR #274 — Subscription Request Inbox (backend + frontend + integration tests).
+- PR #275 — Training Quotes UI + AdminLogoutButton + Logout added to all 4 admin pages.
+
+**Deployed to prod:**
+- Frontend bundles: `main-B4vu5RTZ.js` (PR 1) and then `main-_f6EVJKn.js` (PR 2 with the chunked `log-out` lucide icon split).
+- Backend restarts × 2 (PR 1 + PR 2); no migrations.
+
+**Verified end-to-end:**
+- Inbox at `admin.constrai.ca/subscription-requests` rendered audit row #143 with Arabic reason "بليب" intact.
+- Training quotes page rendered CONS-2026-0001 with correct status badge + total + actions.
+- Logout button visible + functional on all 4 admin pages.
+
+**Pitfalls added this section:** none new — Pitfall #52 (vi.hoisted) continued to apply but was already encoded.
+
+**Security work pulled forward into Phase 6-D-6.5:** TOTP 2FA for SUPER_ADMIN. Triggered by Hedar identifying the single-factor-PIN risk after PR 1 browser smoke. Decision recorded in 120.5.
+
+**Total sections in DECISIONS.md:** 88 (Section 120 NEW).
+
+**Next session opening priority:** Phase 6-D-6.5 — TOTP 2FA for SUPER_ADMIN. After 6.5 ships, return to Phase 6-D-6 PR 3 (Custom Demands UI) and PR 4 (Payments UI).
+
 
 
 
