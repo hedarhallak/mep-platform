@@ -1,13 +1,15 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 28, 2026 ~20:00 UTC — **✅ Phase 6-D-6 PR 1+2 SHIPPED.** SUPER_ADMIN Subscription Request Inbox (PR #274) + Training Quotes UI (PR #275) live at `admin.constrai.ca/subscription-requests` and `admin.constrai.ca/training-quotes`. Shared `AdminLogoutButton` added to all 4 admin pages. Browser-verified end-to-end with the CONS-2026-0001 training quote rendering correctly + audit row #143 from Phase 6-D-5 visible in the inbox with Arabic reason "بليب" preserved.
+> Last updated: May 30, 2026 ~17:00 UTC — **✅ Phase 6-D-6.5 SHIPPED.** SUPER_ADMIN login on `admin.constrai.ca` now requires PIN + 6-digit TOTP from an authenticator app. Migration 022 + 3 PRs (#277 initial + #278 window bump + #280 claim propagation fix). Browser-verified end-to-end on prod — login flow, setup wizard, code verification, CompaniesList render without `TOTP_REQUIRED` banner.
 >
-> **Security gap surfaced + scheduled:** Hedar flagged SUPER_ADMIN single-factor-PIN auth as a risk for the September conference. Pulled TOTP 2FA forward from Phase 7 (Q1 2027) into **Phase 6-D-6.5 (NEXT)**. Scope: app_users.totp_secret column + setup wizard + login flow + JWT totp_verified flag + middleware enforcement. Library: `otplib`. ~1-2 days. See Section 120.5.
+> **4 new pitfalls captured this session — #52, #53, #54, #55:**
+> - **#52** — Jest can't transform `@scure/base` (otplib ESM transitive dep); use a self-contained `node:crypto` TOTP impl instead.
+> - **#53** — Semgrep `gcm-no-tag-length` blocks AES-GCM cipher construction without `authTagLength`; always pin to 16.
+> - **#54** — TOTP `window=1` (±30s) is too tight in the field; `window=2` (±60s) is standard practice.
+> - **#55** — `middleware/auth.js` rebuilds `req.user` field-by-field; any new JWT claim (here, `totp_verified`) must be added explicitly to the constructor or it drops silently and downstream middleware sees `undefined`.
 >
-> **No new pitfalls this section** — Pitfall #52 (Vitest vi.hoisted) continued to apply but is already encoded.
->
-> **Next code task: Phase 6-D-6.5** — TOTP 2FA for SUPER_ADMIN. After 6.5 ships, return to Phase 6-D-6 PR 3 (Custom Demands UI) + PR 4 (Payments UI).
+> **Next code task: Phase 6-D-6 PR 3** — Custom Demands UI at `admin.constrai.ca/custom-demands`. Wraps existing `POST /api/super/custom-demands/quotes` (Phase 6-D-4 PR 5) with list + create form, mirroring the Training Quotes UI pattern from PR 2. Estimated 2-3 days.
 
 ---
 
@@ -51,9 +53,11 @@
 
 7. **(Section 119.6) Smoke the Billing page** — same login → click "Billing" in sidebar (CreditCard icon below Subscription). Should show 2 invoices (CONS-2026-9999 Subscription Approved $155.22 + CONS-2026-0001 Training Draft $1092.26). If they're missing, the data may have been cleaned — re-seed via SQL (Section 119.7) or call `POST /api/super/training/quotes`.
 
-8. **(Section 120) Smoke admin.constrai.ca apply-change loop** — login `hedar.hallak@gmail.com` / `hedar2026` on admin.constrai.ca. Click "Subscription requests" in CompaniesList toolbar → should see audit row #143 (or any pending requests) with company / change summary / Apply button. Click "Training quotes" → should see CONS-2026-0001. Click "Sign out" top-right → should land on `/login` with localStorage cleared.
+8. **(Section 120) Smoke admin.constrai.ca apply-change loop** — login `hedar.hallak@gmail.com` / `hedar2026` on admin.constrai.ca. After PIN, a TOTP verification step now appears (Section 121); enter the 6-digit code from your authenticator app. Click "Subscription requests" in CompaniesList toolbar → should see audit row #143 (or any pending requests) with company / change summary / Apply button. Click "Training quotes" → should see CONS-2026-0001. Click "Sign out" top-right → should land on `/login` with localStorage cleared.
 
-9. **Only after all eight are green**, continue with the regular task list below.
+9. **(Section 121) Confirm TOTP_ENFORCE is on** — `grep '^TOTP_' /var/www/mep/.env` should show `TOTP_ENCRYPTION_KEY=...`, `TOTP_ENFORCE=true`, `TOTP_ISSUER=Constrai Admin`. If `TOTP_ENFORCE=false`, the SA portal is unprotected — flip via `sed -i 's/TOTP_ENFORCE=false/TOTP_ENFORCE=true/' .env && pm2 restart mep-backend --update-env`.
+
+10. **Only after all nine are green**, continue with the regular task list below.
 
 ---
 
@@ -69,8 +73,8 @@
 | **May 28 (AM)** | Customer Subscription page (PR 1 of Phase 6-D-5) | ✅ **Phase 6-D-5 PR 1 SHIPPED (Section 119.1)** — Subscription page with 3 request forms live on mep.constrai.ca |
 | **May 28 (PM)** | Customer Invoices page (PR 2 of Phase 6-D-5) | ✅ **Phase 6-D-5 PR 2 SHIPPED (Section 119.6)** — Invoices list with type filter live; cross-PR e2e proven with CONS-2026-0001 |
 | **May 28 (evening)** | SUPER_ADMIN apply UI PR 1+2 | ✅ **Phase 6-D-6 PR 1+2 SHIPPED (Section 120)** — Subscription Request Inbox + Training Quotes UI + AdminLogoutButton on all admin pages |
-| **Late May (this session continues)** | Pull TOTP 2FA forward from Phase 7 | ⏳ **Phase 6-D-6.5 (NEXT)** — TOTP for SUPER_ADMIN (~1-2 days, otplib + setup wizard + middleware) |
-| **Early June 2026** | SUPER_ADMIN apply UI PR 3+4 | ⏳ **Phase 6-D-6 PR 3+4** — Custom Demands UI + Payments UI (Record Payment form + history) |
+| **May 30** | TOTP 2FA pulled forward from Phase 7 | ✅ **Phase 6-D-6.5 SHIPPED (Section 121)** — TOTP 2FA live on `admin.constrai.ca` |
+| **Early June 2026** | SUPER_ADMIN apply UI PR 3+4 | ⏳ **Phase 6-D-6 PR 3 (NEXT)** — Custom Demands UI + then PR 4 (Payments UI) |
 | **July 2026** | Invoice email automation + cron | ⏳ **Phase 6-D-7** — Monthly invoice cron, trial expiry emails, HTML email invoices (PDF deferred per scope-cut option) (~1-2 weeks) |
 | **July-August 2026** | Marketing + reference tenant + training materials | ⏳ **Phase 6-D-8** — Marketing site refresh, ToS legal review, reference tenant data, **modular training materials** (per Section 117.6 design guidance) (~2 weeks parallel) |
 | **August** | Pre-conference dry-run + code freeze | E2E rehearsal, bug fix only, 2-week freeze |
@@ -105,49 +109,44 @@
    - `RECOVERY.md` Section 2.4 only if relevant
 3. **Echo this exact line** as the first line of your reply:
    ```
-   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 120, Phase 6-D-6 PR 1+2 deployed (Subscription Inbox + Training Quotes + AdminLogoutButton), next code task is Phase 6-D-6.5 TOTP 2FA for SUPER_ADMIN)
+   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 121, Phase 6-D-6.5 TOTP 2FA deployed and verified, next code task is Phase 6-D-6 PR 3 Custom Demands UI)
    ```
-4. **Open with Phase 6-D-6.5 as the active priority.** Scope (locked in Section 120.5):
-   - **Migration** — add `totp_secret BYTEA` (encrypted-at-rest via app-level AES/Fernet with a key from `.env`) + `totp_enabled_at TIMESTAMPTZ` to `app_users`. Sequence-based migration number (next free after 021).
-   - **Setup wizard** — on first SUPER_ADMIN login after deploy, if `totp_enabled_at IS NULL`, force a one-time setup screen: generate a random TOTP secret via `otplib.authenticator.generateSecret()`, render the otpauth:// URI as a QR code (use `qrcode` lib client-side), display the base32 secret as a fallback. User scans + enters first 6-digit code; backend verifies + persists.
-   - **AdminLogin update** — after PIN succeeds for a user with TOTP enabled, render a second step asking for the 6-digit code. Backend `POST /api/auth/login` accepts an optional `totp_code` and returns `TOTP_REQUIRED` (with a short-lived continuation token) if missing.
-   - **JWT claim** — `totp_verified: true` issued only when login completes with a valid code. `superAdmin` middleware on `/api/super/*` rejects tokens without it (treats as 401).
-   - **Library:** `otplib` (no native deps; well-maintained).
-   - **Estimated:** 1-2 days.
-   - **Optional Phase 6-D-6.6:** Cloudflare or nginx IP allowlist on `admin.constrai.ca` (~30 min). Defer until traveling forces it off.
+4. **Open with Phase 6-D-6 PR 3 as the active priority.** Scope:
+   - **Backend:** new `GET /api/super/custom-demands/quotes` (cross-tenant list of CUSTOM_DEMAND-type invoices). Mirror the GET endpoint added to `routes/super_training_quotes.js` (Section 120.3 / Phase 6-D-6 PR 2). Filter by `?status=`, limit default 50/max 200, joined with company name + code.
+   - **Frontend:** new `mep-frontend/src/admin/CustomDemandsPage.jsx` at `/custom-demands`. Mirror `TrainingQuotesPage.jsx`: cross-company table (invoice # / company / status / total / paid / issued / actions) + Create form modal wrapping `POST /api/super/custom-demands/quotes`. Per DRAFT row, a Send action (when we add `POST /api/super/custom-demands/quotes/:id/send`).
+   - **Sidebar nav:** add "Custom demands" link in CompaniesList toolbar beside "Training quotes".
+   - **Logout button** already in `AdminLogoutButton`; reuse.
+   - **EN-only** (SUPER_ADMIN portal).
+   - **Tests:** integration for GET endpoint + Vitest smoke for CustomDemandsPage.
+   - **Estimated:** 2-3 days.
 
    Then ask Hedar one of:
-   - "Start Phase 6-D-6.5 by designing the setup wizard flow first?" — recommended (UX decisions before code)
-   - "Or jump straight to the migration + library install?"
+   - "Start Phase 6-D-6 PR 3 by adding the GET endpoint to super_custom_demands.js?" — recommended first step
+   - "Or do you want to revisit the Training Quotes UX first based on what we learned during 6.5 deploy?"
 
 ---
 
 ## Pending tasks at session start (NEXT MAJOR CODE TASK)
 
-### 🎯 Phase 6-D-6.5 — TOTP 2FA for SUPER_ADMIN
+### 🎯 Phase 6-D-6 PR 3 — Custom Demands UI
 
-**Scope** (locked in Section 120.5):
-- Migration adds `totp_secret` + `totp_enabled_at` columns to `app_users` (encrypted-at-rest).
-- Setup wizard at first SA login (QR code via `qrcode` lib + base32 fallback).
-- AdminLogin two-step: PIN → if `TOTP_REQUIRED` → 6-digit code.
-- `POST /api/auth/login` accepts optional `totp_code`; returns `TOTP_REQUIRED` + continuation token if missing.
-- JWT `totp_verified: true` claim; `superAdmin` middleware enforces it on `/api/super/*`.
-- Library: `otplib`.
-- Estimated: 1-2 days.
+**Scope:**
+- Backend: new `GET /api/super/custom-demands/quotes` (cross-tenant list).
+- Frontend: `mep-frontend/src/admin/CustomDemandsPage.jsx` at `/custom-demands` with table + Create modal.
+- Sidebar: add "Custom demands" link in CompaniesList toolbar.
+- Tests: integration + Vitest smoke.
 
 **Critical references:**
-- Section 120.5 (decision + scope lock)
-- Phase 7 roadmap (Q1 2027) — what we are NOT pulling forward (WebAuthn, COMPANY_ADMIN TOTP)
-- `OPS.md` / `RECOVERY.md` for credentials inventory + .env handling
+- Section 120.3 (Training Quotes UI pattern to mirror)
+- Section 116.5 (custom demand schema — milestones array in JSONB)
+- `API.md` Section 14 (existing endpoint contracts)
 
 **Critical pitfalls to avoid:**
-- Pitfall #29 / #30 — never commit secrets; the TOTP encryption key lives in `.env` (OneDrive backup).
-- Pitfall #38 — package.json changes require `npm ci` on prod (otplib + qrcode add new deps).
-- Pitfall #45 — migration on prod via `sudo -u postgres psql`.
-- Pitfall #51 — execute the agreed sequence without proposing pauses.
-- Pitfall #52 — vi.hoisted() for mock factories in any frontend tests.
+- Pitfall #38, #44, #46, #50, #51, #52, #55 (per Section 120/121 notes)
+- Pitfall #52 (Vitest vi.hoisted for shared mock state)
+- Pitfall #55 (any new JWT claim must also be added to middleware/auth.js — no new claims expected in this PR, but worth re-checking if scope expands)
 
-### After Phase 6-D-6.5: Phase 6-D-6 PR 3 (Custom Demands UI) + PR 4 (Payments UI) → Phase 6-D-7
+### After Phase 6-D-6 PR 3: PR 4 (Payments UI) → Phase 6-D-7 (monthly invoice cron + email automation)
 
 ---
 
@@ -162,9 +161,9 @@
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04) |
 | Backend | Node.js + Express + Postgres 16, pm2 at `/var/www/mep`. invite-employee reads from `subscriptions.subscribed_seats`. GET /super/companies/:id LEFT JOINs subscriptions. 6 new SUPER_ADMIN billing endpoints live (training quotes / custom demands / payments / extend-trial / apply-change). |
 | Frontend | React + Vite + Tailwind v4. CompanyBranding.jsx shows bracket + per-seat price (Section 117 refactor). Customer-facing subscription UI = Phase 6-D-5 (next). |
-| Latest deployed to prod | **Phase 6-D-6 PR 2 — Training Quotes UI + admin logout** — PR #275, May 28 evening. Backend restart + frontend rebuild (`main-_f6EVJKn.js`). |
-| Last merged to main | **PR #275** (Phase 6-D-6 PR 2, May 28 evening). |
-| Active program | **Phase 6-D-6 PR 1+2 SHIPPED.** Next is Phase 6-D-6.5 (TOTP 2FA for SUPER_ADMIN). |
+| Latest deployed to prod | **Phase 6-D-6.5 — TOTP 2FA for SUPER_ADMIN** — PRs #277/#278/#280, May 30. Backend restart only (lib + middleware changes). Migration 022 applied. |
+| Last merged to main | **PR #280** (Phase 6-D-6.5 fix — totp_verified claim propagation, May 30). |
+| Active program | **Phase 6-D-6.5 SHIPPED.** Next is Phase 6-D-6 PR 3 (Custom Demands UI). |
 | Mobile app | Still on Bearer-token + PIN. Phase 7 (Q1 2027). |
 
 ### Multi-tenant migration progress
@@ -188,9 +187,11 @@
 | **Section 119 — Phase 6-D-5 PR 1+2 closeout + Pitfall #52 (Vitest vi.hoisted)** | ✅ **Recorded** |
 | **Phase 6-D-6 PR 1 — Subscription Request Inbox** | ✅ **Deployed (PR #274, May 28 evening)** |
 | **Phase 6-D-6 PR 2 — Training Quotes UI + AdminLogoutButton** | ✅ **Deployed (PR #275, May 28 evening)** |
-| **Section 120 — Phase 6-D-6 PR 1+2 closeout + 2FA decision** | ✅ **Recorded (this session)** |
-| **Phase 6-D-6.5 — TOTP 2FA for SUPER_ADMIN** | ⏳ **NEXT (this session continues)** |
-| **Phase 6-D-6 PR 3+4 — Custom Demands + Payments UIs** | ⏳ After 6.5 |
+| **Section 120 — Phase 6-D-6 PR 1+2 closeout + 2FA decision** | ✅ **Recorded** |
+| **Phase 6-D-6.5 — TOTP 2FA for SUPER_ADMIN** | ✅ **Deployed (PRs #277/#278/#280, May 30)** |
+| **Section 121 — Phase 6-D-6.5 closeout + Pitfalls #52-#55** | ✅ **Recorded (this session)** |
+| **Phase 6-D-6 PR 3 — Custom Demands UI** | ⏳ **NEXT (next session)** |
+| **Phase 6-D-6 PR 4 — Payments UI** | ⏳ After PR 3 |
 | Phase 6-D-6 — SUPER_ADMIN UI (Subscription detail with Apply Change, Training Quotes, etc.) | ⏳ June-July 2026 |
 | Phase 6-D-7 — Invoice email automation + monthly cron + trial expiry warnings | ⏳ July 2026 |
 | Phase 6-D-8 — Marketing site refresh + ToS legal review + reference tenant + training materials | ⏳ July-Aug 2026 |
@@ -204,7 +205,7 @@
 
 ## Backlog items still open (lower priority)
 
-- **⏳ Phase 6-D-6** (next code task) — SUPER_ADMIN apply-change UI.
+- **⏳ Phase 6-D-6 PR 3** (next code task) — Custom Demands UI.
 - **⏳ MEP Construction demo posture** — Now achievable via SUPER_ADMIN Apply Change endpoint (`POST /api/super/subscriptions/:id/apply-change` with `change_type='PLAN_CHANGE'`). Recommended: bump MEP to ENTERPRISE plan with subscribed_seats=100, removes the over-cap amber warning. Can do now via curl; UI will come in Phase 6-D-6.
 - **⏳ Modular training materials** (Section 117.6) — design materials by topic (concepts, workflows, UI walkthroughs) with versioning.
 - **⏳ DO Spaces bucket activation** (Section 112.2). Trigger: first paying tenant OR August dry-run.
@@ -324,7 +325,15 @@ Prod `/var/www/mep/.env` is in sync. `DO_SPACES_*` env vars not yet set (deferre
          useAuth: () => ({ login: mockLogin }),   // mockLogin resolved at hook-call time
        }))
        ```
-    Pattern #1 is required when the factory needs the variable's value at hoist time (direct assignment to `default` or a property). Pattern #2 is what existing tests like `LoginPage.test.jsx` use successfully — but only because the variable is referenced inside a returned function, not as a value at the top level.
+    Pattern #1 is required when the factory needs the variable's value at hoist time (direct assignment to `default` or a property). Pattern #2 is what existing tests like `LoginPage.test.jsx` use successfully — but only because the variable is referenced inside a returned function, not as a value at the top level. *(Note: Section 121 re-numbered this pitfall to clarify it was the original #52 from Phase 6-D-5. The lib-name #52 about otplib/Jest below was introduced after.)*
+
+53. **(NEW — Section 121) Semgrep `gcm-no-tag-length` blocks AES-GCM cipher construction without `authTagLength`.** Any call to `crypto.createCipheriv('aes-256-gcm', key, iv)` or `crypto.createDecipheriv('aes-256-gcm', key, iv)` triggers Semgrep rule `javascript.node-crypto.security.gcm-no-tag-length` — the cipher would accept any tag length the attacker provides at decrypt time, enabling shortened-tag forgery. **Fix:** pass `{ authTagLength: 16 }` to *both* `createCipheriv` and `createDecipheriv`. Symmetric — encrypt and decrypt must agree on the tag size. Encode this in our diff template / any future custom Semgrep rule layer.
+
+54. **(NEW — Section 121) TOTP `window=1` (±30s) is too tight in the field; use `window=2` (±60s).** RFC 6238 §5.2 nominally allows ±1 step, but phone clocks routinely drift ~30s from NTP-perfect time (especially under battery-saver), and read+type+submit adds 10-15s on top. A code from counter K can hit the server at counter K+1 — `window=1` (which checks K, K-1, K+1) won't accept K-2. **Rule:** start TOTP impls at `window=2` (accepts K±2, ±60s). Standard practice across Google/Authy/1Password/Microsoft. Marginal security cost is 30 extra seconds of valid codes; brute-force resistance is still 1-in-1,000,000 per step.
+
+55. **(NEW — Section 121) `middleware/auth.js` rebuilds `req.user` field-by-field; any new JWT claim must be added explicitly to the constructor.** When `routes/auth.js` adds a new JWT claim (e.g. Section 121's `totp_verified`), the middleware decoder has to be updated separately. It does NOT `Object.assign(req.user, payload)` — every field is explicit. Forgetting to copy a new claim means downstream middleware sees `undefined`. This broke PR #277 (TOTP returned `TOTP_REQUIRED` on every `/api/super/*` call even after a successful 2FA login); fixed in PR #280. **Rule:** when adding a new JWT claim, update *both* the token-build site in `routes/auth.js` *and* the `req.user = {...}` constructor in `middleware/auth.js` in the same PR. Code-search safety net: `grep "req.user = {" -R` lists every materialization site.
+
+56. **(NEW — Section 121) Jest's default transform pipeline cannot handle ESM-only deps like `@scure/base` (transitive of `otplib`).** Most tests in this repo require `app.js` which transitively pulls in the auth/totp libs. Adding `otplib` broke ~100+ test suites with `SyntaxError: Unexpected token 'export'` because Jest skips `node_modules` transformation and we have no babel-jest preset. The `transformIgnorePatterns: ['/node_modules/(?!@scure|...)']` whitelist *requires* a babel preset (`@babel/preset-env`) to do the actual transform — without one, Jest still chokes. **Rule:** before adding any crypto/auth library, try `node -e "require('lib-name')"` from a Jest test file context — if it fails on ESM syntax, either (a) configure babel-jest + preset, OR (b) write the algorithm directly against `node:crypto`. For RFC 6238 TOTP, the algorithm is ~30 lines (base32 + HMAC-SHA1 + dynamic truncation); we did (b) and it works perfectly. Worth the 30-min implementation vs the days of CI debugging.
 
 ---
 
