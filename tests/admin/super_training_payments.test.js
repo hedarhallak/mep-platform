@@ -349,6 +349,89 @@ describeIfDb('POST /api/super/training/quotes/:id/send', () => {
 });
 
 // =============================================================================
+// GET /api/super/custom-demands/quotes  (Phase 6-D-6 PR 3 / Section 122)
+// =============================================================================
+
+describeIfDb('GET /api/super/custom-demands/quotes', () => {
+  let sa, saToken;
+  beforeEach(async () => {
+    sa = await seedUser({ role: 'SUPER_ADMIN', pin: 'sa-pin-1234' });
+    saToken = buildSuperAdminToken(sa);
+  });
+
+  afterAll(async () => {
+    await cleanupTestRows();
+    await closePool();
+  });
+
+  test('SUPER_ADMIN sees CUSTOM_DEMAND invoices across all tenants', async () => {
+    const pool = getPool();
+    const c1 = await seedCompany();
+    const c2 = await seedCompany();
+
+    // 2 CUSTOM_DEMAND + 1 TRAINING (should be filtered out)
+    const insert = (companyId, type, num, total) =>
+      pool.query(
+        `INSERT INTO public.invoices
+           (company_id, type, invoice_number, status, subtotal_cents,
+            qst_cents, gst_cents, total_cents, issue_date)
+         VALUES ($1, $2, $3, 'DRAFT', $4, 0, 0, $4, CURRENT_DATE)`,
+        [companyId, type, num, total]
+      );
+    const stamp = Date.now();
+    await insert(c1.company_id, 'CUSTOM_DEMAND', `CD1-${stamp}`, 400000);
+    await insert(c2.company_id, 'CUSTOM_DEMAND', `CD2-${stamp}`, 250000);
+    await insert(c1.company_id, 'TRAINING', `TR1-${stamp}`, 80000);
+
+    const res = await request(app)
+      .get('/api/super/custom-demands/quotes')
+      .set('Host', 'admin.constrai.ca')
+      .set('Authorization', `Bearer ${saToken}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+    const nums = res.body.quotes.map((q) => q.invoice_number);
+    expect(nums).toContain(`CD1-${stamp}`);
+    expect(nums).toContain(`CD2-${stamp}`);
+    expect(nums).not.toContain(`TR1-${stamp}`);
+    // company_name is joined from companies table
+    const sampleCd = res.body.quotes.find((q) => q.invoice_number === `CD1-${stamp}`);
+    expect(sampleCd.company_name).toBe(c1.name);
+  });
+
+  test('status filter limits results', async () => {
+    const pool = getPool();
+    const c = await seedCompany();
+    const stamp = Date.now();
+    await pool.query(
+      `INSERT INTO public.invoices
+         (company_id, type, invoice_number, status, subtotal_cents,
+          qst_cents, gst_cents, total_cents, issue_date)
+       VALUES ($1, 'CUSTOM_DEMAND', $2, 'DRAFT', 400000, 0, 0, 400000, CURRENT_DATE),
+              ($1, 'CUSTOM_DEMAND', $3, 'QUOTE_SENT', 500000, 0, 0, 500000, CURRENT_DATE)`,
+      [c.company_id, `CDs-D-${stamp}`, `CDs-Q-${stamp}`]
+    );
+
+    const res = await request(app)
+      .get('/api/super/custom-demands/quotes?status=QUOTE_SENT')
+      .set('Host', 'admin.constrai.ca')
+      .set('Authorization', `Bearer ${saToken}`);
+
+    expect(res.statusCode).toBe(200);
+    const nums = res.body.quotes.map((q) => q.invoice_number);
+    expect(nums).toContain(`CDs-Q-${stamp}`);
+    expect(nums).not.toContain(`CDs-D-${stamp}`);
+  });
+
+  test('rejects unauthenticated with 401', async () => {
+    const res = await request(app)
+      .get('/api/super/custom-demands/quotes')
+      .set('Host', 'admin.constrai.ca');
+    expect(res.statusCode).toBe(401);
+  });
+});
+
+// =============================================================================
 // POST /api/super/custom-demands/quotes
 // =============================================================================
 
