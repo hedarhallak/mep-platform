@@ -14903,6 +14903,133 @@ Once Phase 6-D-6.5 + remaining PRs ship, Phase 6-D-6 is complete and we move to 
 
 **Next session opening priority:** Phase 6-D-6.5 — TOTP 2FA for SUPER_ADMIN. After 6.5 ships, return to Phase 6-D-6 PR 3 (Custom Demands UI) and PR 4 (Payments UI).
 
+---
+
+## 121. Section 121 — May 30, 2026 — Phase 6-D-6.5 SHIPPED — TOTP 2FA for SUPER_ADMIN live + 4 deploy-time fixes + Pitfalls #52-#55
+
+> **Status:** ✅ **Phase 6-D-6.5 deployed and verified end-to-end on production.** SUPER_ADMIN login now requires PIN + 6-digit TOTP code from an authenticator app. Migration 022 added 4 columns to `app_users` for the AES-256-GCM-encrypted secret. New routes `POST /auth/totp/confirm-setup` + `POST /auth/totp/verify` handle the two-step flow. Frontend `AdminLogin.jsx` rebuilt as a 3-step component (PIN → setup wizard with QR + base32 fallback → verify) with `?one-time-code` autocomplete. The deploy surfaced 4 distinct issues that all needed code/config fixes; documented below as Pitfalls #52-#55 so future TOTP work skips them.
+
+### 121.1 — Design decisions (locked from Section 120.5)
+
+- **Scope:** SUPER_ADMIN only. COMPANY_ADMIN extension remains Phase 6-D-6.7 backlog (Hedar argued for it as a sales/trust signal — recorded as "after PR 3+4 ship").
+- **Storage:** AES-256-GCM with `TOTP_ENCRYPTION_KEY` in `.env`. DB columns store ciphertext + IV + auth tag. Auth tag length pinned to 16 bytes via `authTagLength` option (added after Semgrep flagged the missing parameter — see Pitfall #53).
+- **Continuation token:** short-lived JWT (5 min), stateless. Two separate tokens issued during setup — one for the pending login session, one carrying the candidate secret round-trip. Both signed with `JWT_SECRET`, both expire in 5 minutes.
+- **Library choice:** rejected `otplib` after it pulled `@scure/base` (ESM-only) and broke Jest. Rewrote TOTP as a self-contained RFC 6238 implementation using `node:crypto`. `qrcode` (pure CJS) retained for QR PNG generation. See Pitfall #52.
+- **Window tolerance:** initial ±30s (window=1) proved too tight in field testing — bumped to ±60s (window=2) so phone clock drift + read/type latency doesn't reject valid codes. See Pitfall #54.
+
+### 121.2 — Files shipped (3 PRs)
+
+- **PR #277 — Initial implementation:**
+  - `migrations/022_totp_2fa_super_admin.sql` — adds `totp_secret_encrypted BYTEA`, `totp_iv BYTEA`, `totp_auth_tag BYTEA`, `totp_enabled_at TIMESTAMPTZ` + partial index on `role` where `totp_enabled_at IS NULL` (cheap "needs setup" lookup).
+  - `lib/totp.js` — base32 encode/decode, HOTP (RFC 4226), TOTP (RFC 6238), AES-256-GCM encrypt/decrypt envelope, `totpRequiredForUser()` rollout flag helper. Self-contained, no external lib deps for the core algorithm.
+  - `routes/auth.js` — login branches into `TOTP_SETUP_REQUIRED` or `TOTP_REQUIRED` after PIN succeeds; two new endpoints (`/totp/confirm-setup` and `/totp/verify`).
+  - `middleware/super_admin.js` — when `TOTP_ENFORCE=true`, requires `req.user.totp_verified === true`.
+  - `mep-frontend/src/admin/AdminLogin.jsx` — 3-step UI (pin / setup / verify).
+  - `tests/smoke/totp_lib.test.js` — RFC 6238 test vector + encryption roundtrip + tampering rejection.
+  - `.env.example` documents `TOTP_ENCRYPTION_KEY`, `TOTP_ENFORCE`, `TOTP_ISSUER`.
+- **PR #278 — Window bump:** `WINDOW = 2` in `lib/totp.js`.
+- **PR #280 — Claim propagation fix:** `middleware/auth.js` now copies `totp_verified` from JWT payload onto `req.user`.
+
+### 121.3 — Production deployment + env-var setup
+
+1. Generated 64-char hex key via `openssl rand -hex 32` on prod server.
+2. Saved to `OneDrive\Constrai Keys\TOTP_ENCRYPTION_KEY 2026-05-30.txt`.
+3. Appended `TOTP_ENCRYPTION_KEY`, `TOTP_ENFORCE=false`, `TOTP_ISSUER=Constrai Admin` to `/var/www/mep/.env`.
+4. Ran migration 022 via `sudo -u postgres psql mepdb -f` (Pitfall #45). Output: `BEGIN / ALTER TABLE / COMMENT × 4 / CREATE INDEX / COMMIT`.
+5. Full deploy block per Pitfall #38 (package.json changes — added `qrcode`).
+6. After PRs 278 and 280 also landed: flipped `TOTP_ENFORCE=false → true` via `sed -i ... .env` + `pm2 restart mep-backend --update-env`.
+7. Browser smoke confirmed setup wizard, code verification, redirect to CompaniesList — no banner errors.
+
+### 121.4 — Pitfalls captured (#53-#56)
+
+> **Numbering note:** Pitfall #52 in this repo is the Vitest `vi.hoisted` rule from Section 119. The 4 new pitfalls from this session take the next 4 numbers (#53-#56) per the HANDOFF list.
+
+#### Pitfall #56 — Jest cannot transform `@scure/base` (otplib transitive ESM dep)
+
+`otplib` requires `@scure/base` which ships as ES modules (`export const utils = ...`). Jest's default transform pipeline ignores `node_modules` and there's no babel-jest config at the project root. Every test that requires `app.js` (most tests) failed with `SyntaxError: Unexpected token 'export'` at the `@scure/base/index.js` line.
+
+**Quick fix attempt** (didn't work): adding `transformIgnorePatterns: ['/node_modules/(?!@scure|@noble|otplib...)']` to `jest.config.js`. Requires babel-jest + `@babel/preset-env` to actually transform the modules. Without a preset, jest still chokes on the ESM syntax.
+
+**Permanent fix:** removed `otplib` entirely; rewrote `lib/totp.js` to use `node:crypto` for HMAC-SHA1 + a 30-line base32 encode/decode. The RFC 6238 algorithm is simple enough that a clean-room implementation is shorter than the dependency wrangling. `qrcode` (pure CommonJS) is the only external dep.
+
+**Rule for future TOTP/crypto work in this repo:** before adding a crypto library, run `node -e "require('lib-name')"` from a Jest test file context to confirm Jest can transform it. ESM-only modules need a babel preset; if that's not already configured, write the algorithm directly against `node:crypto`.
+
+#### Pitfall #53 — Semgrep `gcm-no-tag-length` blocks `createCipheriv` / `createDecipheriv` without `authTagLength`
+
+> (Listed first numerically; section order kept by trigger sequence — otplib bit us at install time, Semgrep bit us at CI time, window=1 bit us in field testing, claim drop bit us at first verified login.)
+
+Semgrep rule `javascript.node-crypto.security.gcm-no-tag-length` flags AES-GCM cipher construction that doesn't pass an explicit `authTagLength` option. Without it, the cipher will accept *any* tag length the attacker provides at decrypt time — opening a shortened-tag forgery attack.
+
+**Fix:** pass `{ authTagLength: 16 }` (GCM standard tag length) to **both** `createCipheriv` and `createDecipheriv`. Symmetric — encrypt and decrypt must agree.
+
+**Rule:** any new GCM cipher in this codebase must pin `authTagLength`. Encode in the diff template / lint config when we add a custom Semgrep rule layer.
+
+#### Pitfall #54 — TOTP `window=1` (±30s) too tight in the field; use `window=2` (±60s)
+
+
+RFC 6238 §5.2 explicitly allows ±1 step for "transmission delay" but field testing showed:
+
+1. Phone clocks regularly drift ~30s from NTP-perfect time, especially after battery-saver kicks in.
+2. Read-the-code → switch apps → type 6 digits → click Confirm easily takes 10-15s.
+3. Combined: a code displayed at counter K can be received by the server at counter K+1, which under `window=1` falls outside the accept window.
+
+Field repro on May 30: server now=K, user's app showed code for counter K-1 (phone 30s behind), but by submit-time server moved to K+1, and `window=1` (checking K, K±1) no longer accepts K-1.
+
+**Fix:** `WINDOW = 2` in `lib/totp.js`. Accepts K-2, K-1, K, K+1, K+2 — ±60s. Standard practice across Google/Authy/1Password/Microsoft. The marginal cost is 30 extra seconds of valid codes (still 1-in-1000000 brute-force probability per step; no practical security impact).
+
+**Rule:** start TOTP implementations at `window=2`. `window=1` is the RFC minimum, not the practical floor.
+
+#### Pitfall #55 — `middleware/auth.js` rebuilds `req.user` and drops claims unless explicitly copied
+
+
+When `routes/auth.js` adds a new JWT claim (here, `totp_verified`), the middleware that decodes the token has to be updated separately to surface that claim on `req.user`. The middleware doesn't `Object.assign(req.user, payload)` — it constructs `req.user` field by field. Any new claim that isn't in the construction list gets silently dropped, and downstream middleware sees `undefined`.
+
+This bit us hard: PR #277 set `totp_verified` correctly in the JWT, but `req.user.totp_verified` was still `undefined`, so `middleware/super_admin.js` rejected `/api/super/*` calls with `TOTP_REQUIRED` even after a successful 2FA login. PR #280 added the explicit copy.
+
+**Rule:** when adding a new JWT claim, update **both** the `routes/auth.js` token-build site **and** the `middleware/auth.js` `req.user` constructor in the same PR. A code-search safety net: grep for `req.user = {` to find every place that materializes the user shape from the payload.
+
+### 121.5 — End-to-end verification
+
+Browser smoke after final deploy:
+
+1. Incognito tab → `admin.constrai.ca` → enter `hedar.hallak@gmail.com` + PIN `hedar2026`.
+2. Setup wizard renders (totp_enabled_at was NULL because earlier attempts rejected with old window=1).
+3. After deleting stale "Constrai Admin" entries from the password app (per Pitfall — multiple scan attempts left duplicates), scanned the fresh QR.
+4. Read the 6-digit code → typed → "Confirm + sign in".
+5. CompaniesList renders cleanly: MEP Construction, BASIC plan, ACTIVE status, 50 employees, 5 projects. **No "Failed to load: TOTP_REQUIRED" banner.**
+6. Sign out button visible top-right; logout flow works (clears cookie + localStorage + redirects to `/login`).
+
+Subsequent sign-ins now go through PIN → 6-digit code (verify step, no QR — the secret persists in `app_users.totp_secret_encrypted`).
+
+### 121.6 — Recovery procedure (manual SQL)
+
+Documented for `RECOVERY.md` follow-up. If Hedar loses his phone OR the authenticator app gets wiped:
+
+```bash
+ssh root@143.110.218.84
+sudo -u postgres psql mepdb -c "UPDATE public.app_users SET totp_secret_encrypted=NULL, totp_iv=NULL, totp_auth_tag=NULL, totp_enabled_at=NULL WHERE username='hedar';"
+```
+
+Next login triggers the setup wizard fresh. The encryption key is **not** invalidated by this — only the per-user secret is reset.
+
+### 121.7 — Phase 6-D-6.5 closeout summary
+
+**Shipped (3 PRs):**
+- PR #277 — Initial TOTP infrastructure (backend + frontend + tests + migration 022).
+- PR #278 — `WINDOW = 2` field-tolerance bump.
+- PR #280 — `totp_verified` claim propagation in `middleware/auth.js`.
+
+**Pitfalls captured:** #53 (Semgrep gcm-no-tag-length), #54 (window=2 standard practice), #55 (req.user claim drops), #56 (otplib ESM transitive deps + Jest).
+
+**Deployed:**
+- `TOTP_ENCRYPTION_KEY` (64 hex) in `.env` + OneDrive backup.
+- `TOTP_ENFORCE=true` on prod.
+- Migration 022 applied.
+
+**Verified:** End-to-end browser smoke clean; TOTP enforced on every SUPER_ADMIN login + every `/api/super/*` request.
+
+**Next session opening priority:** Phase 6-D-6 PR 3 — Custom Demands UI. Wraps `POST /api/super/custom-demands/quotes` (Phase 6-D-4 PR 5) with a SUPER_ADMIN management table at `admin.constrai.ca/custom-demands`. After PR 3, Phase 6-D-6 PR 4 (Payments UI) closes Phase 6-D-6. Then Phase 6-D-7 (monthly invoice cron + email automation).
+
 
 
 
