@@ -19,6 +19,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../lib/api'
+import AdminLogoutButton from './AdminLogoutButton.jsx'
 
 function formatDate(iso) {
   if (!iso) return '—'
@@ -307,9 +308,12 @@ export default function SubscriptionRequestsPage() {
               Pending customer-initiated subscription changes (Section 117.4 audit chain).
             </p>
           </div>
-          <Link to="/" className="text-indigo-400 hover:text-indigo-300 text-sm">
-            ← Back to companies
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link to="/" className="text-indigo-400 hover:text-indigo-300 text-sm">
+              ← Back to companies
+            </Link>
+            <AdminLogoutButton />
+          </div>
         </div>
 
         {/* Flash */}

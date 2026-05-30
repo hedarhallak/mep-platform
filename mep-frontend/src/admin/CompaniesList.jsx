@@ -17,6 +17,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../lib/api'
+import AdminLogoutButton from './AdminLogoutButton.jsx'
 
 const COLUMNS = [
   { key: 'name', label: 'Name', sortable: true },
@@ -140,7 +141,10 @@ export default function CompaniesList() {
       <header className="border-b border-slate-800 px-6 py-4">
         <div className="flex items-center justify-between gap-4 max-w-7xl mx-auto">
           <h1 className="text-xl font-semibold">Constrai Admin · Companies</h1>
-          <span className="text-xs text-slate-500">90-D • All Companies (read-only)</span>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-slate-500">90-D • All Companies (read-only)</span>
+            <AdminLogoutButton />
+          </div>
         </div>
       </header>
 
@@ -162,6 +166,12 @@ export default function CompaniesList() {
             className="ml-auto px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-slate-100 text-sm font-medium"
           >
             Subscription requests
+          </Link>
+          <Link
+            to="/training-quotes"
+            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-slate-100 text-sm font-medium"
+          >
+            Training quotes
           </Link>
           <Link
             to="/companies/new"
