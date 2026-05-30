@@ -24,6 +24,7 @@ import CompanyBranding from './admin/CompanyBranding.jsx'
 import AdminLogin from './admin/AdminLogin.jsx'
 import SubscriptionRequestsPage from './admin/SubscriptionRequestsPage.jsx'
 import TrainingQuotesPage from './admin/TrainingQuotesPage.jsx'
+import CustomDemandsPage from './admin/CustomDemandsPage.jsx'
 
 function NotFound() {
   const { pathname } = useLocation()
@@ -54,6 +55,8 @@ export default function AdminApp() {
         <Route path="/subscription-requests" element={<SubscriptionRequestsPage />} />
         {/* Section 120 / Phase 6-D-6 PR 2 — cross-company training quote management. */}
         <Route path="/training-quotes" element={<TrainingQuotesPage />} />
+        {/* Section 122 / Phase 6-D-6 PR 3 — cross-company custom demand management. */}
+        <Route path="/custom-demands" element={<CustomDemandsPage />} />
         <Route path="/login" element={<AdminLogin />} />
         <Route path="*" element={<NotFound />} />
       </Routes>

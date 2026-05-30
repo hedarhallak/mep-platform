@@ -32,6 +32,82 @@ const {
   calculateTaxes,
 } = require('../lib/invoice_numbering');
 
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /custom-demands/quotes
+//
+// Phase 6-D-6 PR 3 / Section 122 — cross-company list of CUSTOM_DEMAND
+// invoices for the SUPER_ADMIN Custom Demands management UI. Mirrors the
+// GET /training/quotes endpoint shape (Section 120.3) so the frontend
+// pattern is identical.
+//
+// Query params:
+//   - status (optional): DRAFT/QUOTE_SENT/APPROVED/PARTIAL_PAID/PAID/...
+//   - limit  (optional, default 50, max 200)
+//
+// Response 200: { ok, quotes: [{ id, invoice_number, status, company_id,
+//                  company_name, company_code, subtotal_cents, qst_cents,
+//                  gst_cents, total_cents, amount_paid_cents, currency,
+//                  issue_date, quote_expires_at, customer_notes,
+//                  details, created_at }] }
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/custom-demands/quotes', async (req, res) => {
+  try {
+    const status = req.query.status ? String(req.query.status).toUpperCase() : null;
+    const rawLimit = parseInt(req.query.limit, 10) || 50;
+    const limit = Math.min(200, Math.max(1, rawLimit));
+
+    const where = [`i.type = 'CUSTOM_DEMAND'`];
+    const params = [];
+    let idx = 1;
+    if (status) {
+      where.push(`i.status = $${idx++}`);
+      params.push(status);
+    }
+    params.push(limit);
+
+    const { rows } = await req.db.query(
+      `SELECT i.id, i.invoice_number, i.status, i.company_id,
+              c.name AS company_name, c.company_code,
+              i.subtotal_cents, i.qst_cents, i.gst_cents,
+              i.total_cents, i.amount_paid_cents, i.currency,
+              i.issue_date, i.quote_expires_at,
+              i.customer_notes, i.details, i.created_at
+         FROM public.invoices i
+         JOIN public.companies c ON c.company_id = i.company_id
+        WHERE ${where.join(' AND ')}
+        ORDER BY i.issue_date DESC, i.id DESC
+        LIMIT $${idx}`,
+      params
+    );
+
+    return res.json({
+      ok: true,
+      quotes: rows.map((r) => ({
+        id: Number(r.id),
+        invoice_number: r.invoice_number,
+        status: r.status,
+        company_id: Number(r.company_id),
+        company_name: r.company_name,
+        company_code: r.company_code,
+        subtotal_cents: Number(r.subtotal_cents),
+        qst_cents: Number(r.qst_cents),
+        gst_cents: Number(r.gst_cents),
+        total_cents: Number(r.total_cents),
+        amount_paid_cents: Number(r.amount_paid_cents),
+        currency: r.currency,
+        issue_date: r.issue_date,
+        quote_expires_at: r.quote_expires_at,
+        customer_notes: r.customer_notes,
+        details: r.details || {},
+        created_at: r.created_at,
+      })),
+    });
+  } catch (err) {
+    console.error('GET /super/custom-demands/quotes error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
+  }
+});
+
 router.post('/custom-demands/quotes', async (req, res) => {
   try {
     const body = req.body || {};
