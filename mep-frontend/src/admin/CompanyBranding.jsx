@@ -30,6 +30,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import api from '../lib/api'
+import AdminLogoutButton from './AdminLogoutButton.jsx'
 
 const MAX_FILE_BYTES = 2 * 1024 * 1024 // matches multer limit in routes/super_admin_branding.js
 const ACCEPTED_MIME = ['image/png', 'image/jpeg', 'image/webp']
@@ -389,12 +390,15 @@ export default function CompanyBranding() {
               Section 113 · Tenant branding &amp; seat usage
             </p>
           </div>
-          <Link
-            to="/"
-            className="text-sm text-slate-400 hover:text-slate-200"
-          >
-            ← Back to companies
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link
+              to="/"
+              className="text-sm text-slate-400 hover:text-slate-200"
+            >
+              ← Back to companies
+            </Link>
+            <AdminLogoutButton />
+          </div>
         </div>
 
         {/* ── Seat-cap panel ──────────────────────────────────── */}
