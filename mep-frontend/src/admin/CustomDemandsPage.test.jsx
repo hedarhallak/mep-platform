@@ -185,8 +185,11 @@ describe('CustomDemandsPage — create modal', () => {
 
     await user.click(screen.getByRole('button', { name: /\+ New custom demand/i }))
 
-    // Modal header is now present
-    expect(screen.getByText(/New custom demand/i)).toBeInTheDocument()
+    // Modal header (h3) is now present. Use role+name to avoid colliding with
+    // the "+ New custom demand" button which also matches the text regex.
+    expect(
+      screen.getByRole('heading', { name: /New custom demand/i })
+    ).toBeInTheDocument()
 
     await user.type(screen.getByPlaceholderText(/Custom AP integration/i), 'Custom dashboard')
     await user.type(screen.getByPlaceholderText('1500.00'), '2500')
@@ -219,13 +222,18 @@ describe('CustomDemandsPage — create modal', () => {
     })
 
     await user.click(screen.getByRole('button', { name: /\+ New custom demand/i }))
-    expect(screen.getByText(/New custom demand/i)).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: /New custom demand/i })
+    ).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /Cancel/i }))
 
-    // Modal header is gone
+    // Modal heading is gone (the top-level "+ New custom demand" button still
+    // matches the text, so query by heading role specifically).
     await waitFor(() => {
-      expect(screen.queryByText(/New custom demand/i)).not.toBeInTheDocument()
+      expect(
+        screen.queryByRole('heading', { name: /New custom demand/i })
+      ).not.toBeInTheDocument()
     })
     expect(postCalls.length).toBe(0)
   })
