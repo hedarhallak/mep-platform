@@ -1,15 +1,13 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 30, 2026 ~17:00 UTC — **✅ Phase 6-D-6.5 SHIPPED.** SUPER_ADMIN login on `admin.constrai.ca` now requires PIN + 6-digit TOTP from an authenticator app. Migration 022 + 3 PRs (#277 initial + #278 window bump + #280 claim propagation fix). Browser-verified end-to-end on prod — login flow, setup wizard, code verification, CompaniesList render without `TOTP_REQUIRED` banner.
+> Last updated: May 30, 2026 ~20:00 UTC — **✅ Phase 6-D-6 PR 3 SHIPPED.** SUPER_ADMIN Custom Demands UI live at `admin.constrai.ca/custom-demands`. New `GET /api/super/custom-demands/quotes` endpoint + `CustomDemandsPage.jsx` with cross-company table + Create modal (Title / Scope of work / Subtotal / dynamic Milestones array). PR #282 merged, deployed, browser-smoked. First production `CUSTOM_DEMAND` invoice created (`CONS-2026-10000`, $1500 + QST/GST = $1724.63 CAD, status DRAFT).
 >
-> **4 new pitfalls captured this session — #52, #53, #54, #55:**
-> - **#52** — Jest can't transform `@scure/base` (otplib ESM transitive dep); use a self-contained `node:crypto` TOTP impl instead.
-> - **#53** — Semgrep `gcm-no-tag-length` blocks AES-GCM cipher construction without `authTagLength`; always pin to 16.
-> - **#54** — TOTP `window=1` (±30s) is too tight in the field; `window=2` (±60s) is standard practice.
-> - **#55** — `middleware/auth.js` rebuilds `req.user` field-by-field; any new JWT claim (here, `totp_verified`) must be added explicitly to the constructor or it drops silently and downstream middleware sees `undefined`.
+> **2 new pitfalls captured this session — #57, #58:**
+> - **#57** — Vitest `getByText` matches both a toolbar button AND a modal heading when their text overlaps; always disambiguate modal-open assertions with `getByRole('heading', { name: ... })`.
+> - **#58** — Prod deploy block must use `HUSKY=0 npm ci --omit=dev` (or `--ignore-scripts`); bare `npm ci --omit=dev` exits 127 at the husky postinstall step. Reaffirms + expands the earlier pitfall #6.
 >
-> **Next code task: Phase 6-D-6 PR 3** — Custom Demands UI at `admin.constrai.ca/custom-demands`. Wraps existing `POST /api/super/custom-demands/quotes` (Phase 6-D-4 PR 5) with list + create form, mirroring the Training Quotes UI pattern from PR 2. Estimated 2-3 days.
+> **Next code task: Phase 6-D-6 PR 4** — Payments UI at `admin.constrai.ca/payments`. Wraps existing `POST /api/super/payments/record` (Phase 6-D-4 PR 5) with cross-tenant payments list + Record Payment modal (invoice picker / amount / method / external_ref). Server auto-transitions invoice to PARTIAL_PAID / PAID. After PR 4 ships, Phase 6-D-6 closes and Phase 6-D-7 (monthly invoice cron + email automation) opens.
 
 ---
 
@@ -57,7 +55,9 @@
 
 9. **(Section 121) Confirm TOTP_ENFORCE is on** — `grep '^TOTP_' /var/www/mep/.env` should show `TOTP_ENCRYPTION_KEY=...`, `TOTP_ENFORCE=true`, `TOTP_ISSUER=Constrai Admin`. If `TOTP_ENFORCE=false`, the SA portal is unprotected — flip via `sed -i 's/TOTP_ENFORCE=false/TOTP_ENFORCE=true/' .env && pm2 restart mep-backend --update-env`.
 
-10. **Only after all nine are green**, continue with the regular task list below.
+10. **(Section 122) Smoke admin.constrai.ca/custom-demands** — after TOTP login, click "Custom demands" in CompaniesList toolbar (between "Training quotes" and "+ New company"). Page should render with header "Custom demands" + subtitle "Section 115.5 · Ad-hoc work (custom integrations, reports, migrations)." and the table row for `CONS-2026-10000` (MEP Construction / Test custom demand / DRAFT / $1724.63 CAD / $0.00 / 2026-05-30). If 401 — backend restart took longer than expected, re-check pm2 status.
+
+11. **Only after all ten are green**, continue with the regular task list below.
 
 ---
 
@@ -73,8 +73,9 @@
 | **May 28 (AM)** | Customer Subscription page (PR 1 of Phase 6-D-5) | ✅ **Phase 6-D-5 PR 1 SHIPPED (Section 119.1)** — Subscription page with 3 request forms live on mep.constrai.ca |
 | **May 28 (PM)** | Customer Invoices page (PR 2 of Phase 6-D-5) | ✅ **Phase 6-D-5 PR 2 SHIPPED (Section 119.6)** — Invoices list with type filter live; cross-PR e2e proven with CONS-2026-0001 |
 | **May 28 (evening)** | SUPER_ADMIN apply UI PR 1+2 | ✅ **Phase 6-D-6 PR 1+2 SHIPPED (Section 120)** — Subscription Request Inbox + Training Quotes UI + AdminLogoutButton on all admin pages |
-| **May 30** | TOTP 2FA pulled forward from Phase 7 | ✅ **Phase 6-D-6.5 SHIPPED (Section 121)** — TOTP 2FA live on `admin.constrai.ca` |
-| **Early June 2026** | SUPER_ADMIN apply UI PR 3+4 | ⏳ **Phase 6-D-6 PR 3 (NEXT)** — Custom Demands UI + then PR 4 (Payments UI) |
+| **May 30 (afternoon)** | TOTP 2FA pulled forward from Phase 7 | ✅ **Phase 6-D-6.5 SHIPPED (Section 121)** — TOTP 2FA live on `admin.constrai.ca` |
+| **May 30 (evening)** | SUPER_ADMIN apply UI PR 3 | ✅ **Phase 6-D-6 PR 3 SHIPPED (Section 122)** — Custom Demands UI live on `admin.constrai.ca/custom-demands` |
+| **Early June 2026** | SUPER_ADMIN apply UI PR 4 | ⏳ **Phase 6-D-6 PR 4 (NEXT)** — Payments UI (Record Payment + history) |
 | **July 2026** | Invoice email automation + cron | ⏳ **Phase 6-D-7** — Monthly invoice cron, trial expiry emails, HTML email invoices (PDF deferred per scope-cut option) (~1-2 weeks) |
 | **July-August 2026** | Marketing + reference tenant + training materials | ⏳ **Phase 6-D-8** — Marketing site refresh, ToS legal review, reference tenant data, **modular training materials** (per Section 117.6 design guidance) (~2 weeks parallel) |
 | **August** | Pre-conference dry-run + code freeze | E2E rehearsal, bug fix only, 2-week freeze |
@@ -109,44 +110,49 @@
    - `RECOVERY.md` Section 2.4 only if relevant
 3. **Echo this exact line** as the first line of your reply:
    ```
-   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 121, Phase 6-D-6.5 TOTP 2FA deployed and verified, next code task is Phase 6-D-6 PR 3 Custom Demands UI)
+   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 122, Phase 6-D-6 PR 3 Custom Demands UI deployed and verified, next code task is Phase 6-D-6 PR 4 Payments UI)
    ```
-4. **Open with Phase 6-D-6 PR 3 as the active priority.** Scope:
-   - **Backend:** new `GET /api/super/custom-demands/quotes` (cross-tenant list of CUSTOM_DEMAND-type invoices). Mirror the GET endpoint added to `routes/super_training_quotes.js` (Section 120.3 / Phase 6-D-6 PR 2). Filter by `?status=`, limit default 50/max 200, joined with company name + code.
-   - **Frontend:** new `mep-frontend/src/admin/CustomDemandsPage.jsx` at `/custom-demands`. Mirror `TrainingQuotesPage.jsx`: cross-company table (invoice # / company / status / total / paid / issued / actions) + Create form modal wrapping `POST /api/super/custom-demands/quotes`. Per DRAFT row, a Send action (when we add `POST /api/super/custom-demands/quotes/:id/send`).
-   - **Sidebar nav:** add "Custom demands" link in CompaniesList toolbar beside "Training quotes".
+4. **Open with Phase 6-D-6 PR 4 as the active priority.** Scope:
+   - **No new backend endpoint** — `POST /api/super/payments/record` already exists (Phase 6-D-4 PR 5 / Section 118.4). Server transitions invoice status to PARTIAL_PAID / PAID automatically when sum of payments meets the total.
+   - **New endpoint to ADD:** `GET /api/super/payments` — cross-tenant payments list with invoice + company joined. Mirror the `GET /custom-demands/quotes` shape from Section 122.1 (status optional, limit default 50/max 200, ORDER BY paid_at DESC).
+   - **Frontend:** new `mep-frontend/src/admin/PaymentsPage.jsx` at `/payments`. Cross-company table (Payment date / Invoice # / Company / Method / Amount / External ref) + `+ Record payment` modal wrapping `POST /api/super/payments/record`. Modal pickers: invoice (any type — query `GET /super/invoices` if it exists, else add it), amount (CAD), method (BANK_TRANSFER / CHEQUE / E-TRANSFER / CARD enum from `payments.method` check constraint), external_ref (optional, max 200 chars), paid_at (date, default today).
+   - **Sidebar nav:** add "Payments" link in CompaniesList toolbar between "Custom demands" and "+ New company".
    - **Logout button** already in `AdminLogoutButton`; reuse.
    - **EN-only** (SUPER_ADMIN portal).
-   - **Tests:** integration for GET endpoint + Vitest smoke for CustomDemandsPage.
-   - **Estimated:** 2-3 days.
+   - **Tests:** integration for GET endpoint + Vitest smoke for PaymentsPage.
+   - **Pitfall #57 (NEW):** When asserting the Record Payment modal opened, use `getByRole('heading', { name: /Record payment/i })` — the "+ Record payment" button shares the same text. Same lesson learned from PR 3 Custom Demands modal.
+   - **Pitfall #58 (NEW):** Prod deploy block MUST use `HUSKY=0 npm ci --omit=dev` on the backend step.
+   - **Estimated:** 1-2 days (smaller than PR 3 — single new endpoint, payments are simpler than custom demands).
 
    Then ask Hedar one of:
-   - "Start Phase 6-D-6 PR 3 by adding the GET endpoint to super_custom_demands.js?" — recommended first step
-   - "Or do you want to revisit the Training Quotes UX first based on what we learned during 6.5 deploy?"
+   - "Start Phase 6-D-6 PR 4 by adding the GET endpoint to super_payments.js?" — recommended first step
+   - "Or, before PR 4, revisit the Custom Demands UX (e.g. add a Send action / per-invoice detail page)?"
 
 ---
 
 ## Pending tasks at session start (NEXT MAJOR CODE TASK)
 
-### 🎯 Phase 6-D-6 PR 3 — Custom Demands UI
+### 🎯 Phase 6-D-6 PR 4 — Payments UI
 
 **Scope:**
-- Backend: new `GET /api/super/custom-demands/quotes` (cross-tenant list).
-- Frontend: `mep-frontend/src/admin/CustomDemandsPage.jsx` at `/custom-demands` with table + Create modal.
-- Sidebar: add "Custom demands" link in CompaniesList toolbar.
-- Tests: integration + Vitest smoke.
+- Backend: new `GET /api/super/payments` (cross-tenant list, joins invoice + company). `POST /api/super/payments/record` already exists.
+- Frontend: `mep-frontend/src/admin/PaymentsPage.jsx` at `/payments` with table + Record Payment modal.
+- Sidebar: add "Payments" link in CompaniesList toolbar between "Custom demands" and "+ New company".
+- Tests: integration for GET endpoint + Vitest smoke for PaymentsPage.
 
 **Critical references:**
-- Section 120.3 (Training Quotes UI pattern to mirror)
-- Section 116.5 (custom demand schema — milestones array in JSONB)
+- Section 122.1 (Custom Demands UI pattern to mirror)
+- Section 118.4 (existing `POST /payments/record` endpoint + auto state transitions)
+- Section 116.4 (payments table schema — method enum BANK_TRANSFER / CHEQUE / E-TRANSFER / CARD)
 - `API.md` Section 14 (existing endpoint contracts)
 
 **Critical pitfalls to avoid:**
-- Pitfall #38, #44, #46, #50, #51, #52, #55 (per Section 120/121 notes)
-- Pitfall #52 (Vitest vi.hoisted for shared mock state)
-- Pitfall #55 (any new JWT claim must also be added to middleware/auth.js — no new claims expected in this PR, but worth re-checking if scope expands)
+- Pitfall #38, #44, #46, #50, #51, #52, #55 (per Section 120/121/122 notes)
+- Pitfall #52 (Vitest vi.hoisted for shared mock state — only matters if PaymentsPage needs hoisted shared state)
+- **Pitfall #57 (NEW)** — Modal-open assertions MUST use `getByRole('heading', { name: ... })` to avoid colliding with the toolbar button's text. Already proven on PR 3.
+- **Pitfall #58 (NEW)** — Prod backend deploy step must be `HUSKY=0 npm ci --omit=dev`.
 
-### After Phase 6-D-6 PR 3: PR 4 (Payments UI) → Phase 6-D-7 (monthly invoice cron + email automation)
+### After Phase 6-D-6 PR 4: Phase 6-D-7 (monthly invoice cron + email automation) closes Phase 6-D-6.
 
 ---
 
@@ -161,9 +167,9 @@
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04) |
 | Backend | Node.js + Express + Postgres 16, pm2 at `/var/www/mep`. invite-employee reads from `subscriptions.subscribed_seats`. GET /super/companies/:id LEFT JOINs subscriptions. 6 new SUPER_ADMIN billing endpoints live (training quotes / custom demands / payments / extend-trial / apply-change). |
 | Frontend | React + Vite + Tailwind v4. CompanyBranding.jsx shows bracket + per-seat price (Section 117 refactor). Customer-facing subscription UI = Phase 6-D-5 (next). |
-| Latest deployed to prod | **Phase 6-D-6.5 — TOTP 2FA for SUPER_ADMIN** — PRs #277/#278/#280, May 30. Backend restart only (lib + middleware changes). Migration 022 applied. |
-| Last merged to main | **PR #280** (Phase 6-D-6.5 fix — totp_verified claim propagation, May 30). |
-| Active program | **Phase 6-D-6.5 SHIPPED.** Next is Phase 6-D-6 PR 3 (Custom Demands UI). |
+| Latest deployed to prod | **Phase 6-D-6 PR 3 — Custom Demands UI** — PR #282, May 30 evening. Frontend rebuild + backend restart (new GET endpoint added). |
+| Last merged to main | **PR #282** (Phase 6-D-6 PR 3 — SUPER_ADMIN Custom Demands UI + GET endpoint, May 30 evening). |
+| Active program | **Phase 6-D-6 PR 3 SHIPPED.** Next is Phase 6-D-6 PR 4 (Payments UI). |
 | Mobile app | Still on Bearer-token + PIN. Phase 7 (Q1 2027). |
 
 ### Multi-tenant migration progress
@@ -189,9 +195,10 @@
 | **Phase 6-D-6 PR 2 — Training Quotes UI + AdminLogoutButton** | ✅ **Deployed (PR #275, May 28 evening)** |
 | **Section 120 — Phase 6-D-6 PR 1+2 closeout + 2FA decision** | ✅ **Recorded** |
 | **Phase 6-D-6.5 — TOTP 2FA for SUPER_ADMIN** | ✅ **Deployed (PRs #277/#278/#280, May 30)** |
-| **Section 121 — Phase 6-D-6.5 closeout + Pitfalls #52-#55** | ✅ **Recorded (this session)** |
-| **Phase 6-D-6 PR 3 — Custom Demands UI** | ⏳ **NEXT (next session)** |
-| **Phase 6-D-6 PR 4 — Payments UI** | ⏳ After PR 3 |
+| **Section 121 — Phase 6-D-6.5 closeout + Pitfalls #52-#56** | ✅ **Recorded** |
+| **Phase 6-D-6 PR 3 — Custom Demands UI** | ✅ **Deployed (PR #282, May 30 evening)** |
+| **Section 122 — Phase 6-D-6 PR 3 closeout + Pitfalls #57, #58** | ✅ **Recorded (this session)** |
+| **Phase 6-D-6 PR 4 — Payments UI** | ⏳ **NEXT (next session)** |
 | Phase 6-D-6 — SUPER_ADMIN UI (Subscription detail with Apply Change, Training Quotes, etc.) | ⏳ June-July 2026 |
 | Phase 6-D-7 — Invoice email automation + monthly cron + trial expiry warnings | ⏳ July 2026 |
 | Phase 6-D-8 — Marketing site refresh + ToS legal review + reference tenant + training materials | ⏳ July-Aug 2026 |
@@ -205,7 +212,7 @@
 
 ## Backlog items still open (lower priority)
 
-- **⏳ Phase 6-D-6 PR 3** (next code task) — Custom Demands UI.
+- **⏳ Phase 6-D-6 PR 4** (next code task) — Payments UI.
 - **⏳ MEP Construction demo posture** — Now achievable via SUPER_ADMIN Apply Change endpoint (`POST /api/super/subscriptions/:id/apply-change` with `change_type='PLAN_CHANGE'`). Recommended: bump MEP to ENTERPRISE plan with subscribed_seats=100, removes the over-cap amber warning. Can do now via curl; UI will come in Phase 6-D-6.
 - **⏳ Modular training materials** (Section 117.6) — design materials by topic (concepts, workflows, UI walkthroughs) with versioning.
 - **⏳ DO Spaces bucket activation** (Section 112.2). Trigger: first paying tenant OR August dry-run.
@@ -334,6 +341,39 @@ Prod `/var/www/mep/.env` is in sync. `DO_SPACES_*` env vars not yet set (deferre
 55. **(NEW — Section 121) `middleware/auth.js` rebuilds `req.user` field-by-field; any new JWT claim must be added explicitly to the constructor.** When `routes/auth.js` adds a new JWT claim (e.g. Section 121's `totp_verified`), the middleware decoder has to be updated separately. It does NOT `Object.assign(req.user, payload)` — every field is explicit. Forgetting to copy a new claim means downstream middleware sees `undefined`. This broke PR #277 (TOTP returned `TOTP_REQUIRED` on every `/api/super/*` call even after a successful 2FA login); fixed in PR #280. **Rule:** when adding a new JWT claim, update *both* the token-build site in `routes/auth.js` *and* the `req.user = {...}` constructor in `middleware/auth.js` in the same PR. Code-search safety net: `grep "req.user = {" -R` lists every materialization site.
 
 56. **(NEW — Section 121) Jest's default transform pipeline cannot handle ESM-only deps like `@scure/base` (transitive of `otplib`).** Most tests in this repo require `app.js` which transitively pulls in the auth/totp libs. Adding `otplib` broke ~100+ test suites with `SyntaxError: Unexpected token 'export'` because Jest skips `node_modules` transformation and we have no babel-jest preset. The `transformIgnorePatterns: ['/node_modules/(?!@scure|...)']` whitelist *requires* a babel preset (`@babel/preset-env`) to do the actual transform — without one, Jest still chokes. **Rule:** before adding any crypto/auth library, try `node -e "require('lib-name')"` from a Jest test file context — if it fails on ESM syntax, either (a) configure babel-jest + preset, OR (b) write the algorithm directly against `node:crypto`. For RFC 6238 TOTP, the algorithm is ~30 lines (base32 + HMAC-SHA1 + dynamic truncation); we did (b) and it works perfectly. Worth the 30-min implementation vs the days of CI debugging.
+
+57. **(NEW — Section 122) `screen.getByText(/Modal title/)` matches BOTH the toolbar button that opens the modal AND the modal's heading.** Discovered in PR #282 (`CustomDemandsPage.test.jsx`). The page has a `+ New custom demand` button on the toolbar and a `<h3>New custom demand</h3>` inside the modal — both match `/New custom demand/i`, so `getByText` throws `TestingLibraryElementError: Found multiple elements`. **Rule:** when asserting "the modal opened", always disambiguate by role:
+
+    ```jsx
+    // ❌ Brittle — collides with the open-modal button
+    expect(screen.getByText(/New custom demand/i)).toBeInTheDocument()
+
+    // ✅ Scoped to heading element only
+    expect(
+      screen.getByRole('heading', { name: /New custom demand/i })
+    ).toBeInTheDocument()
+    ```
+
+    Symmetric for the close assertion — use `queryByRole('heading', ...)` not `queryByText`. Applies to every Create/Edit modal in the admin UI. Next time a similarly-named button+modal pair is added (e.g. "+ Record payment" / `<h3>Record payment</h3>`), apply the heading-role pattern from the first commit, not after CI fails.
+
+58. **(NEW — Section 122) Prod deploy MUST use `HUSKY=0 npm ci --omit=dev` for the backend step.** Reaffirms + expands the earlier pitfall #6. Bare `npm ci --omit=dev` exits 127 at the `husky` postinstall script (husky is a devDep and is not installed with `--omit=dev`):
+
+    ```
+    > mep-site-backend@1.0.0 prepare
+    > husky
+    sh: 1: husky: not found
+    npm error code 127
+    ```
+
+    **Today (PR #282) the failure was cosmetic** — no new backend deps, so node_modules stayed intact. **Risk:** if a future PR adds a backend prod dep and the same bare command is used, the new package WILL be installed (packages install before scripts) but the exit 127 may confuse CI-driven deploy automation. **Canonical deploy line for backend:**
+
+    ```bash
+    HUSKY=0 npm ci --omit=dev          # preferred — husky postinstall no-ops cleanly
+    # OR
+    npm ci --omit=dev --ignore-scripts # safer fallback if other devDep scripts appear
+    ```
+
+    Stop pasting bare `npm ci --omit=dev` in any future deploy command set.
 
 ---
 
