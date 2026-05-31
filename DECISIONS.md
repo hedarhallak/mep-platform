@@ -15030,6 +15030,109 @@ Next login triggers the setup wizard fresh. The encryption key is **not** invali
 
 **Next session opening priority:** Phase 6-D-6 PR 3 — Custom Demands UI. Wraps `POST /api/super/custom-demands/quotes` (Phase 6-D-4 PR 5) with a SUPER_ADMIN management table at `admin.constrai.ca/custom-demands`. After PR 3, Phase 6-D-6 PR 4 (Payments UI) closes Phase 6-D-6. Then Phase 6-D-7 (monthly invoice cron + email automation).
 
+---
 
+## 122. Section 122 — May 30, 2026 (evening) — Phase 6-D-6 PR 3 SHIPPED — SUPER_ADMIN Custom Demands UI + GET endpoint + Pitfalls #57, #58
+
+**Status:** PR #282 merged, deployed, browser-smoked end-to-end on `admin.constrai.ca/custom-demands`. First production `CUSTOM_DEMAND` invoice created (`CONS-2026-10000`, $1500 + QST/GST = $1724.63 CAD, status DRAFT). Phase 6-D-6 PR 4 (Payments UI) is next.
+
+### 122.1 — What shipped
+
+**Backend** (`routes/super_custom_demands.js`):
+- New `GET /api/super/custom-demands/quotes` endpoint — cross-tenant list of `CUSTOM_DEMAND`-type invoices. Mirrors `GET /api/super/training/quotes` from Section 120.3 (same shape, same query-param contract). Optional `status` filter, `limit` default 50, max 200. Joins `companies` for `company_name` + `company_code`. Returns `{ ok, quotes: [...] }`.
+- The pre-existing `POST /api/super/custom-demands/quotes` from Phase 6-D-4 PR 5 (Section 118.4) is unchanged.
+
+**Frontend** (`mep-frontend/src/admin/CustomDemandsPage.jsx` — NEW):
+- Cross-company table — columns: Invoice # / Company (name + code) / Title / Status (color-coded badge) / Total / Paid / Issued.
+- Header includes `+ New custom demand` button, `← Back to companies` link, and `AdminLogoutButton`.
+- Empty state + error state + loading state — same chrome as `TrainingQuotesPage.jsx`.
+- **Create modal** with: Company picker, Title (required), Description, Scope of work, Subtotal (CAD), Estimated completion date, **dynamic Milestones array** (description + amount, add/remove rows), Customer notes. Cancel + Create draft buttons. Flash banner on success.
+- POST submits to `/super/custom-demands/quotes` with `milestones` shaped as `[{ description, amount_cents }]` — matches Section 116.4 CUSTOM_DEMAND schema.
+
+**Wiring** (`mep-frontend/src/AdminApp.jsx` + `mep-frontend/src/admin/CompaniesList.jsx`):
+- Route `/custom-demands` added.
+- Toolbar link "Custom demands" added to CompaniesList between "Training quotes" and "+ New company".
+
+**Tests:**
+- Integration tests in `tests/admin/super_training_payments.test.js` — 3 new `describeIfDb` cases for `GET /api/super/custom-demands/quotes` (list across tenants + type filter, status filter, 401 unauthenticated).
+- Vitest smoke in `mep-frontend/src/admin/CustomDemandsPage.test.jsx` — render lifecycle (loading / error / empty / populated) + Create modal POST + Cancel + dynamic milestones.
+
+### 122.2 — Pitfalls captured
+
+**Pitfall #57 — Vitest `getByText` matches BOTH a toolbar button AND a modal heading when both share text.**
+
+The first commit of the Vitest smoke used `screen.getByText(/New custom demand/i)` to assert the modal opened. CI failed with `TestingLibraryElementError: Found multiple elements with the text: /New custom demand/i` because the **toolbar button** `+ New custom demand` and the **modal `<h3>`** `New custom demand` both match the same regex.
+
+**Rule:** When two elements share text content but differ in role (button vs heading), always disambiguate by role:
+
+```jsx
+// ❌ Brittle — matches whichever Tailwind chrome is added later
+expect(screen.getByText(/New custom demand/i)).toBeInTheDocument()
+
+// ✅ Scoped to the heading element (h1/h2/h3) only
+expect(
+  screen.getByRole('heading', { name: /New custom demand/i })
+).toBeInTheDocument()
+```
+
+This applies to every modal that exposes a button-to-open whose label matches the modal's title. Future Create/Edit modals in the admin UI MUST use `getByRole('heading', ...)` for the assertion that the modal opened, never `getByText`.
+
+Fixed in the second commit of PR #282 (`deab5a4`). Backend job stayed green throughout — only Frontend (Node 20) flipped red → green after the fix.
+
+**Pitfall #58 — `npm ci --omit=dev` aborts at the `husky` postinstall step on prod.**
+
+Re-discovered during the PR #282 deploy block. `npm ci --omit=dev` finishes installing all production packages, then fails because `package.json`'s `prepare` script runs `husky` — which is a `devDependency`, not installed with `--omit=dev`:
+
+```
+> mep-site-backend@1.0.0 prepare
+> husky
+sh: 1: husky: not found
+npm error code 127
+```
+
+**Impact today:** Cosmetic — no new backend deps in PR #282, so the existing `node_modules/` were left intact and the `pm2 restart` ran the fresh frontend bundle + unchanged backend code without issue. **Future risk:** if a PR adds a new backend production dep and the deploy is run the same way, the new package WILL be installed (packages install before scripts), but the exit code 127 may confuse future deploy automation or be misread as a hard failure that aborts later steps in a CI-driven deploy.
+
+**Rule going forward:** every prod backend `npm ci --omit=dev` MUST be invoked with one of:
+
+```bash
+# Preferred — explicit, lets husky postinstall no-op cleanly
+HUSKY=0 npm ci --omit=dev
+
+# Alternative — skips ALL postinstall scripts, safer if other devDep scripts get added
+npm ci --omit=dev --ignore-scripts
+```
+
+The deploy block in CLAUDE.md / `HANDOFF.md` deploy snippets should reflect `HUSKY=0 npm ci --omit=dev` as the canonical form. Stop pasting bare `npm ci --omit=dev` in any future deploy command set.
+
+### 122.3 — Deploy + verification
+
+**Deploy steps (production, May 30, 2026 ~19:50–19:54 UTC):**
+1. `cd /var/www/mep && git pull origin main` → "Already up to date" (PR auto-merged via `gh pr merge --auto --squash --delete-branch` before SSH).
+2. `npm ci --omit=dev` → aborted at husky (Pitfall #58 above), no backend dep changes anyway.
+3. `cd mep-frontend && npm ci && npm run build` → ✓ 1868 modules transformed in 6.04s; new `admin-BeQvXaKd.js` (66.16 KB / 15.01 KB gzip) replaced previous bundle.
+4. `pm2 restart mep-backend` → online, 17.6 MB memory, `[sentry] initialized — env=production`, `Server running on http://localhost:3000` confirmed in OUT log.
+5. `curl -s http://localhost:3000/api/health` → `{"ok":true,...}` ✓.
+
+**Browser smoke (`https://admin.constrai.ca/custom-demands`):**
+- TOTP login + PIN passed (Section 121 path).
+- New toolbar link "Custom demands" present on CompaniesList between Training quotes and + New company.
+- `/custom-demands` route loads empty state copy on first hit.
+- `+ New custom demand` opens modal; Company picker auto-populated from `/super/companies/overview`.
+- Created test draft: Title `Test custom demand`, Subtotal $1500.00 → POST returned invoice `CONS-2026-10000` (status `DRAFT`, $1724.63 CAD = $1500 + 9.975% QST + 5% GST, $0.00 paid, issued 2026-05-30).
+- Flash banner with invoice number rendered, then table re-rendered with the new row.
+
+### 122.4 — Next session opening priority
+
+**Phase 6-D-6 PR 4 — Payments UI** (`mep-frontend/src/admin/PaymentsPage.jsx`).
+
+Wraps the existing `POST /api/super/payments/record` endpoint (Phase 6-D-4 PR 5 / Section 118.4). Likely shape:
+- Toolbar link on CompaniesList: "Payments".
+- Page lists recent payments cross-tenant.
+- `+ Record payment` modal picks an invoice (any type — SUBSCRIPTION / TRAINING / CUSTOM_DEMAND), enters amount, method (BANK_TRANSFER / CHEQUE / E-TRANSFER / CARD), external_ref. POST recordsay the payment, server transitions the invoice to PARTIAL_PAID / PAID automatically.
+- Per-invoice view (drill-down from Custom Demands / Training Quotes / Subscription Requests pages) showing payment history table.
+
+**After PR 4 ships, Phase 6-D-6 closes.** Then Phase 6-D-7 (monthly invoice cron + email automation) opens — that's the cron that auto-generates monthly SUBSCRIPTION invoices on day-1 of each month and sends them to COMPANY_ADMIN via SendGrid.
+
+**Phase 6-D-6.7 (backlog, sales-trust signal):** Extend TOTP 2FA to COMPANY_ADMIN as opt-in. Reuses `lib/totp.js` + most of `middleware/super_admin.js` enforcement pattern from Section 121. Not on critical path — schedule after Phase 6-D-7.
 
 
