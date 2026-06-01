@@ -1,11 +1,15 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: May 30, 2026 ~20:00 UTC — **✅ Phase 6-D-6 PR 3 SHIPPED.** SUPER_ADMIN Custom Demands UI live at `admin.constrai.ca/custom-demands`. New `GET /api/super/custom-demands/quotes` endpoint + `CustomDemandsPage.jsx` with cross-company table + Create modal (Title / Scope of work / Subtotal / dynamic Milestones array). PR #282 merged, deployed, browser-smoked. First production `CUSTOM_DEMAND` invoice created (`CONS-2026-10000`, $1500 + QST/GST = $1724.63 CAD, status DRAFT).
+> Last updated: June 1, 2026 ~09:50 UTC — **✅ URGENT FIRST CHECK all 10 green + fixed a production TOTP bug + rotated `TOTP_ENCRYPTION_KEY`.** This session opened on the health-check pass and uncovered that SUPER_ADMIN TOTP enrollment **never persisted** — the setup QR re-appeared on every login. Root cause: `POST /auth/totp/confirm-setup` wrote `app_users` through the RLS-enforced regular `pool` (zero-row silent no-op before tenant context exists) instead of `authPool`. Fixed via `authPool` + a `rowCount !== 1` guard. PR #284 merged + deployed + verified (scan once → verify-only thereafter). Documented in **Section 123** + **Pitfall #59**.
 >
-> **2 new pitfalls captured this session — #57, #58:**
-> - **#57** — Vitest `getByText` matches both a toolbar button AND a modal heading when their text overlaps; always disambiguate modal-open assertions with `getByRole('heading', { name: ... })`.
-> - **#58** — Prod deploy block must use `HUSKY=0 npm ci --omit=dev` (or `--ignore-scripts`); bare `npm ci --omit=dev` exits 127 at the husky postinstall step. Reaffirms + expands the earlier pitfall #6.
+> **Key rotation:** `TOTP_ENCRYPTION_KEY` was accidentally printed unmasked into chat during Check 9, so it was rotated immediately (new key in OneDrive `Constrai Keys`, `.env` updated, Hedar's TOTP secret reset + re-enrolled, `pm2 restart --update-env`). The exposed key is dead.
+>
+> **State note:** MEP Construction subscription is now **BASIC · Bracket 6-10 · $25.00/seat/mo · 50/8 seats (at capacity)** — Hedar tested an 8-seat change since the last handoff (was 5 / bracket 1-5 / $27). Billing page shows 3 invoices (Custom $1724.63 Draft, Subscription $155.22 Approved, Training $1092.26 Draft).
+>
+> **New pitfall this session — #59:** Pre-tenant writes to RLS-strict tables (`app_users`, `refresh_tokens`) from `/api/auth/*` MUST use `authPool`, never `pool` — a regular-`pool` write under strict RLS matches zero rows and no-ops *silently*. Also: every state-changing pre-tenant query must check `rowCount` and fail loudly on 0.
+>
+> **Watch item:** `mep-backend-error.log` tail still shows an old `Cannot find module '@sentry/core'` stack, but the current boot logs `[sentry] initialized` and Health is 200 — the error is stale residue (likely from the Section 104 incident), not the running process. Optional cleanup: `npm ci` on the backend to ensure `@sentry/*` are fully present, then `pm2 restart`.
 >
 > **Next code task: Phase 6-D-6 PR 4** — Payments UI at `admin.constrai.ca/payments`. Wraps existing `POST /api/super/payments/record` (Phase 6-D-4 PR 5) with cross-tenant payments list + Record Payment modal (invoice picker / amount / method / external_ref). Server auto-transitions invoice to PARTIAL_PAID / PAID. After PR 4 ships, Phase 6-D-6 closes and Phase 6-D-7 (monthly invoice cron + email automation) opens.
 
@@ -25,9 +29,9 @@
 
 2. **Browser smoke test (Pattern B end-to-end):** Open `https://app.constrai.ca` in incognito → login with `seed.worker6@meptest.com` / `1234` → should cross-origin-hop to `mep.constrai.ca/dashboard`. If browser shows DNS NXDOMAIN — see Pitfall #40.
 
-3. **Admin Branding page smoke (Sections 114 + 117 + 118):** `admin.constrai.ca/login` → login `hedar.hallak@gmail.com` / PIN `hedar2026` → CompaniesList → click `Branding →` on MEP Construction. Should see:
-   - Seat counter `50 / 5` amber
-   - **Plan line:** `Plan: BASIC · Bracket 1-5 ($27.00/seat/mo) · At capacity — new invites will be rejected with HTTP 402.`
+3. **Admin Branding page smoke (Sections 114 + 117 + 118):** `admin.constrai.ca/login` → login `hedar.hallak@gmail.com` / PIN `hedar2026`. **TOTP step appears after PIN** (PIN → 6-digit code, no QR — enrollment is now sticky after the Section 123 fix). Then CompaniesList → click `Branding →` on MEP Construction. Should see:
+   - Seat counter `50 / 8` amber (was 5; Hedar tested an 8-seat change)
+   - **Plan line:** `Plan: BASIC · Bracket 6-10 ($25.00/seat/mo) · At capacity — new invites will be rejected with HTTP 402.`
    - The bracket label + per-seat price prove PR #261 subscription LEFT JOIN refactor is live.
 
 4. **(Section 118) Verify tax_rates scale + GRANTs survive any DB restore:**
@@ -47,7 +51,7 @@
    ```
    Expected: `{"default_workflow_permissions":"write","can_approve_pull_request_reviews":true}`. If `read`, re-apply via the PUT command in Section 118.5.
 
-6. **(Section 119) Smoke the Subscription page in incognito** — open `https://mep.constrai.ca/subscription` → login as `admin@mep.constrai.app` / PIN `1234`. Should see Plan card (Monthly + Bracket 1-5 + $27.00/seat/month + Active badge), Seat usage 50/5 amber, three Request action buttons. Sidebar shows "Subscription" between User Management and Permissions with Receipt icon.
+6. **(Section 119) Smoke the Subscription page in incognito** — open `https://mep.constrai.ca/subscription` → login as `admin@mep.constrai.app` / PIN `1234`. Should see Plan card (Monthly + Bracket 6-10 + $25.00/seat/month + Active badge + Next billing date), Seat usage 50/8 amber, three Request action buttons. Sidebar shows "Subscription" between User Management and Permissions with Receipt icon.
 
 7. **(Section 119.6) Smoke the Billing page** — same login → click "Billing" in sidebar (CreditCard icon below Subscription). Should show 2 invoices (CONS-2026-9999 Subscription Approved $155.22 + CONS-2026-0001 Training Draft $1092.26). If they're missing, the data may have been cleaned — re-seed via SQL (Section 119.7) or call `POST /api/super/training/quotes`.
 
@@ -108,9 +112,10 @@
    - `CLAUDE.md` (working rules)
    - `DECISIONS.md` — read ONLY the latest 2-3 sections (the file is now 14,700+ lines). Latest section is **118** (Phase 6-D-4 COMPLETE — all 5 PRs shipped + Pitfalls #50/#51). Also relevant: 117 (PR 1+2 closeout + 3 strategic revisions to S115 + Pitfall #49), 116 (schema design), 115 (pricing model lock — note 115.3 brackets + 115.7 training mandatory + 115.3 self-serve all REVISED in 117).
    - `RECOVERY.md` Section 2.4 only if relevant
+   - Latest section is now **123** (TOTP enrollment RLS-pool fix + key rotation + Pitfall #59). 122 = Custom Demands UI (PR 3). 121 = TOTP 2FA.
 3. **Echo this exact line** as the first line of your reply:
    ```
-   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 122, Phase 6-D-6 PR 3 Custom Demands UI deployed and verified, next code task is Phase 6-D-6 PR 4 Payments UI)
+   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 123, prod healthy + TOTP enrollment bug fixed/deployed, next code task is Phase 6-D-6 PR 4 Payments UI)
    ```
 4. **Open with Phase 6-D-6 PR 4 as the active priority.** Scope:
    - **No new backend endpoint** — `POST /api/super/payments/record` already exists (Phase 6-D-4 PR 5 / Section 118.4). Server transitions invoice status to PARTIAL_PAID / PAID automatically when sum of payments meets the total.
@@ -167,9 +172,10 @@
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04) |
 | Backend | Node.js + Express + Postgres 16, pm2 at `/var/www/mep`. invite-employee reads from `subscriptions.subscribed_seats`. GET /super/companies/:id LEFT JOINs subscriptions. 6 new SUPER_ADMIN billing endpoints live (training quotes / custom demands / payments / extend-trial / apply-change). |
 | Frontend | React + Vite + Tailwind v4. CompanyBranding.jsx shows bracket + per-seat price (Section 117 refactor). Customer-facing subscription UI = Phase 6-D-5 (next). |
-| Latest deployed to prod | **Phase 6-D-6 PR 3 — Custom Demands UI** — PR #282, May 30 evening. Frontend rebuild + backend restart (new GET endpoint added). |
-| Last merged to main | **PR #282** (Phase 6-D-6 PR 3 — SUPER_ADMIN Custom Demands UI + GET endpoint, May 30 evening). |
-| Active program | **Phase 6-D-6 PR 3 SHIPPED.** Next is Phase 6-D-6 PR 4 (Payments UI). |
+| Latest deployed to prod | **Section 123 — TOTP enrollment RLS-pool fix** — PR #284, June 1. Backend-only (`routes/auth.js`), `git pull` + `pm2 restart` (no migration / no frontend). |
+| Last merged to main | **PR #284** (fix(totp): persist enrollment via authPool + rowCount guard, June 1). Previous: PR #282 (Custom Demands UI). |
+| TOTP secret | Re-enrolled June 1 under the rotated `TOTP_ENCRYPTION_KEY`. Login = PIN → 6-digit code (no QR). Recovery (lost phone): Section 121.6 SQL reset. |
+| Active program | **Prod verified healthy + TOTP bug fixed.** Next code task is Phase 6-D-6 PR 4 (Payments UI). |
 | Mobile app | Still on Bearer-token + PIN. Phase 7 (Q1 2027). |
 
 ### Multi-tenant migration progress
@@ -197,8 +203,9 @@
 | **Phase 6-D-6.5 — TOTP 2FA for SUPER_ADMIN** | ✅ **Deployed (PRs #277/#278/#280, May 30)** |
 | **Section 121 — Phase 6-D-6.5 closeout + Pitfalls #52-#56** | ✅ **Recorded** |
 | **Phase 6-D-6 PR 3 — Custom Demands UI** | ✅ **Deployed (PR #282, May 30 evening)** |
-| **Section 122 — Phase 6-D-6 PR 3 closeout + Pitfalls #57, #58** | ✅ **Recorded (this session)** |
-| **Phase 6-D-6 PR 4 — Payments UI** | ⏳ **NEXT (next session)** |
+| **Section 122 — Phase 6-D-6 PR 3 closeout + Pitfalls #57, #58** | ✅ **Recorded** |
+| **Section 123 — TOTP enrollment RLS-pool fix + key rotation + Pitfall #59** | ✅ **Deployed (PR #284, June 1) + verified** |
+| **Phase 6-D-6 PR 4 — Payments UI** | ⏳ **NEXT** |
 | Phase 6-D-6 — SUPER_ADMIN UI (Subscription detail with Apply Change, Training Quotes, etc.) | ⏳ June-July 2026 |
 | Phase 6-D-7 — Invoice email automation + monthly cron + trial expiry warnings | ⏳ July 2026 |
 | Phase 6-D-8 — Marketing site refresh + ToS legal review + reference tenant + training materials | ⏳ July-Aug 2026 |
@@ -374,6 +381,8 @@ Prod `/var/www/mep/.env` is in sync. `DO_SPACES_*` env vars not yet set (deferre
     ```
 
     Stop pasting bare `npm ci --omit=dev` in any future deploy command set.
+
+59. **(NEW — Section 123) Pre-tenant writes to RLS-strict tables from `/api/auth/*` MUST use `authPool`, never `pool`.** `/api/auth/*` is mounted via `mountPublicRoutes` and runs BEFORE any `tenantDb` middleware sets `app.company_id`. The regular `pool` connects as `mepuser` under strict RLS (migration 013), so a write with no GUC set matches **zero rows and no-ops silently** — no error thrown. This is exactly why TOTP enrollment never persisted: `POST /auth/totp/confirm-setup` did its `UPDATE public.app_users SET totp_* ...` through `pool`, the update hit 0 rows, but the endpoint returned `ok:true` and issued the JWT, so `totp_enabled_at` stayed NULL and every later login re-showed the setup QR. Reads were already correct (`authPool` for the login SELECT and change-pin); only this one write slipped through. **Rules:** (a) any pre-tenant `app_users`/`refresh_tokens` query in `routes/auth.js` uses `authPool` (= `superPool` / BYPASSRLS); (b) every state-changing pre-tenant query checks `rowCount` and returns an error on 0 — a silent 0-row write is worse than an error. Code-search net: `grep -n "pool.query" routes/auth.js` and confirm each write targets `authPool`. Fixed in PR #284.
 
 ---
 
