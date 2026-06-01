@@ -631,6 +631,131 @@ describeIfDb('POST /api/super/payments/record', () => {
 });
 
 // =============================================================================
+// GET /api/super/payments  +  GET /api/super/payments/invoices
+// (Phase 6-D-6 PR 4 / Section 123)
+// =============================================================================
+
+describeIfDb('GET /api/super/payments', () => {
+  let sa, saToken;
+  beforeEach(async () => {
+    sa = await seedUser({ role: 'SUPER_ADMIN', pin: 'sa-pin-1234' });
+    saToken = buildSuperAdminToken(sa);
+  });
+
+  afterAll(async () => {
+    await cleanupTestRows();
+    await closePool();
+  });
+
+  async function seedInvoice(companyId, num, total, status = 'APPROVED', paid = 0) {
+    const pool = getPool();
+    const { rows } = await pool.query(
+      `INSERT INTO public.invoices
+         (company_id, type, invoice_number, status, subtotal_cents,
+          qst_cents, gst_cents, total_cents, amount_paid_cents, issue_date)
+       VALUES ($1, 'TRAINING', $2, $3, $4, 0, 0, $4, $5, CURRENT_DATE)
+       RETURNING id`,
+      [companyId, num, status, total, paid]
+    );
+    return rows[0].id;
+  }
+
+  async function seedPayment(invoiceId, amount, method = 'BANK_TRANSFER', ref = null) {
+    const pool = getPool();
+    const { rows } = await pool.query(
+      `INSERT INTO public.payments
+         (invoice_id, amount_cents, currency, method, status, paid_at, external_ref)
+       VALUES ($1, $2, 'CAD', $3, 'SUCCEEDED', NOW(), $4)
+       RETURNING id`,
+      [invoiceId, amount, method, ref]
+    );
+    return rows[0].id;
+  }
+
+  test('SUPER_ADMIN sees payments across all tenants with joined invoice + company', async () => {
+    const c1 = await seedCompany();
+    const c2 = await seedCompany();
+    const stamp = Date.now();
+    const inv1 = await seedInvoice(c1.company_id, `PINV1-${stamp}`, 100000);
+    const inv2 = await seedInvoice(c2.company_id, `PINV2-${stamp}`, 200000);
+    await seedPayment(inv1, 100000, 'BANK_TRANSFER', `REF1-${stamp}`);
+    await seedPayment(inv2, 50000, 'CHEQUE', `REF2-${stamp}`);
+
+    const res = await request(app)
+      .get('/api/super/payments')
+      .set('Host', 'admin.constrai.ca')
+      .set('Authorization', `Bearer ${saToken}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+    const refs = res.body.payments.map((p) => p.external_ref);
+    expect(refs).toContain(`REF1-${stamp}`);
+    expect(refs).toContain(`REF2-${stamp}`);
+    const sample = res.body.payments.find((p) => p.external_ref === `REF1-${stamp}`);
+    expect(sample.invoice_number).toBe(`PINV1-${stamp}`);
+    expect(sample.company_name).toBe(c1.name);
+    expect(sample.amount_cents).toBe(100000);
+  });
+
+  test('method filter limits results', async () => {
+    const c = await seedCompany();
+    const stamp = Date.now();
+    const inv = await seedInvoice(c.company_id, `PMINV-${stamp}`, 300000);
+    await seedPayment(inv, 1000, 'BANK_TRANSFER', `M-BT-${stamp}`);
+    await seedPayment(inv, 2000, 'CHEQUE', `M-CHQ-${stamp}`);
+
+    const res = await request(app)
+      .get('/api/super/payments?method=CHEQUE')
+      .set('Host', 'admin.constrai.ca')
+      .set('Authorization', `Bearer ${saToken}`);
+
+    expect(res.statusCode).toBe(200);
+    const refs = res.body.payments.map((p) => p.external_ref);
+    expect(refs).toContain(`M-CHQ-${stamp}`);
+    expect(refs).not.toContain(`M-BT-${stamp}`);
+  });
+
+  test('400 INVALID_METHOD on bad method filter', async () => {
+    const res = await request(app)
+      .get('/api/super/payments?method=CRYPTO')
+      .set('Host', 'admin.constrai.ca')
+      .set('Authorization', `Bearer ${saToken}`);
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error).toBe('INVALID_METHOD');
+  });
+
+  test('rejects unauthenticated with 401', async () => {
+    const res = await request(app).get('/api/super/payments').set('Host', 'admin.constrai.ca');
+    expect(res.statusCode).toBe(401);
+  });
+
+  test('GET /payments/invoices lists only payable invoices', async () => {
+    const c = await seedCompany();
+    const stamp = Date.now();
+    const payable = await seedInvoice(c.company_id, `INVPAY-${stamp}`, 100000, 'APPROVED', 0);
+    const paid = await seedInvoice(c.company_id, `INVPAID-${stamp}`, 100000, 'PAID', 100000);
+    const voided = await seedInvoice(c.company_id, `INVVOID-${stamp}`, 100000, 'VOID', 0);
+
+    const res = await request(app)
+      .get('/api/super/payments/invoices')
+      .set('Host', 'admin.constrai.ca')
+      .set('Authorization', `Bearer ${saToken}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+    const nums = res.body.invoices.map((i) => i.invoice_number);
+    expect(nums).toContain(`INVPAY-${stamp}`);
+    expect(nums).not.toContain(`INVPAID-${stamp}`);
+    expect(nums).not.toContain(`INVVOID-${stamp}`);
+    const sample = res.body.invoices.find((i) => i.invoice_number === `INVPAY-${stamp}`);
+    expect(sample.balance_cents).toBe(100000);
+    void payable;
+    void paid;
+    void voided;
+  });
+});
+
+// =============================================================================
 // POST /api/super/subscriptions/:id/extend-trial
 // =============================================================================
 
