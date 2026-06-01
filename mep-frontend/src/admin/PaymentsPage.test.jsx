@@ -14,7 +14,7 @@
 // name so it never collides with the toolbar button.
 
 import { describe, test, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import PaymentsPage from './PaymentsPage.jsx'
@@ -142,11 +142,13 @@ describe('PaymentsPage — render lifecycle', () => {
     expect(screen.getByText('CONS-2026-0001')).toBeInTheDocument()
     expect(screen.getByText('BANK-REF-001')).toBeInTheDocument()
     expect(screen.getByText('CHQ-204')).toBeInTheDocument()
-    // method labels render
-    expect(screen.getByText(/Bank transfer/i)).toBeInTheDocument()
-    expect(screen.getByText(/Cheque/i)).toBeInTheDocument()
+    // method labels render — scope to the table because the page subtitle also
+    // contains the words "bank transfer, cheque, cash" (collision like #57).
+    const table = screen.getByRole('table')
+    expect(within(table).getByText(/Bank transfer/i)).toBeInTheDocument()
+    expect(within(table).getByText(/Cheque/i)).toBeInTheDocument()
     // partial badge on the second payment
-    expect(screen.getByText(/\(partial\)/i)).toBeInTheDocument()
+    expect(within(table).getByText(/\(partial\)/i)).toBeInTheDocument()
   })
 
   test('shows error banner when the payments API rejects', async () => {
