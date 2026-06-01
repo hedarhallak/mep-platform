@@ -15135,4 +15135,49 @@ Wraps the existing `POST /api/super/payments/record` endpoint (Phase 6-D-4 PR 5 
 
 **Phase 6-D-6.7 (backlog, sales-trust signal):** Extend TOTP 2FA to COMPANY_ADMIN as opt-in. Reuses `lib/totp.js` + most of `middleware/super_admin.js` enforcement pattern from Section 121. Not on critical path — schedule after Phase 6-D-7.
 
+---
+
+## 123. Section 123 — June 1, 2026 — TOTP enrollment never persisted (RLS pool bug) + emergency key rotation + Pitfall #59
+
+**Status:** Session opened on the URGENT FIRST CHECK. Found two issues; both fixed.
+
+### 123.1 — Emergency `TOTP_ENCRYPTION_KEY` rotation
+
+During Check 9 a bare `grep '^TOTP_' /var/www/mep/.env` printed the full `TOTP_ENCRYPTION_KEY` value into chat (my mistake — should have masked per Pitfall #31). Treated the key as compromised and rotated it the same turn:
+
+1. `openssl rand -hex 32` → new key, saved to OneDrive `Constrai Keys`.
+2. Updated `.env` on prod via `read -rs NEWKEY` + `sed` (kept the value out of shell history + chat), verified with a masked grep.
+3. Reset Hedar's TOTP secret to NULL (`UPDATE app_users SET totp_*=NULL WHERE username='hedar'`) since the old secret was encrypted under the retired key.
+4. `pm2 restart mep-backend --update-env`.
+
+**Lesson reaffirmed:** never `grep` secret-bearing `.env` lines unmasked. Always pipe through `sed -E 's/=.*/=***MASKED***/'`. Pitfall #31 extended to cover read/inspection, not just sed-mask writes.
+
+### 123.2 — Root cause: `confirm-setup` wrote `app_users` through the RLS-enforced `pool`
+
+After the reset, the TOTP setup wizard re-showed a **new QR on every login** — enrollment never stuck. Hedar correctly flagged the UX expectation: scan once, then verify-only forever.
+
+Investigation (all verified, not assumed):
+- `lib/totp.js` algorithm validated against three RFC 6238 SHA1 test vectors (287082 / 081804 / 005924) — all exact. Algorithm is sound.
+- Prod server clock: `timedatectl` → synchronized yes, NTP active, matches real UTC. Not a clock-skew issue.
+- `mep-frontend/src/admin/AdminLogin.jsx`: stores `setupToken` + `secretBase32` from the same response and submits both — no displayed-secret/token mismatch. The per-login QR change is expected *while* `totp_enabled_at IS NULL`.
+- **The bug:** `routes/auth.js` `POST /auth/totp/confirm-setup` ran its `UPDATE public.app_users SET totp_* ...` through the **regular `pool`** (mepuser, strict RLS per migration 013). `/api/auth/*` is mounted via `mountPublicRoutes` and runs BEFORE any `tenantDb` middleware sets `app.company_id`, so the write matched **zero rows** and silently no-opped. The endpoint never checked `rowCount`, returned `ok:true`, issued the JWT (user "logged in"), but `totp_enabled_at` stayed NULL → next login re-entered the setup branch. `db.js` itself documents this exact 0-row-under-strict-RLS behavior; the login SELECT and the change-pin UPDATE both correctly use `authPool` (`superPool` / BYPASSRLS).
+
+### 123.3 — Fix
+
+`routes/auth.js` confirm-setup:
+- `pool.query(...)` → `authPool.query(...)` for the enrollment UPDATE (mirrors the change-pin pre-tenant UPDATE pattern, lines ~847-861).
+- Added a `rowCount !== 1` guard that logs and returns `500 TOTP_ENROLLMENT_NOT_PERSISTED` instead of issuing a token for an enrollment that didn't persist — fail loud, never silent again.
+
+Backend-only change. No migration, no package.json change, no frontend rebuild → deploy = `git pull` + `pm2 restart mep-backend`.
+
+### 123.4 — Pitfall #59
+
+**#59 — Pre-tenant writes to RLS-strict tables (`app_users`, `refresh_tokens`, etc.) from `/api/auth/*` MUST use `authPool`, never `pool`.** `/api/auth/*` runs before `tenantDb` sets `app.company_id`, so a regular-`pool` write under strict RLS (migration 013) matches **zero rows** and no-ops *silently* — no error thrown. Reads were already correctly on `authPool` (login SELECT, change-pin); the TOTP `confirm-setup` UPDATE was the one place that slipped through on the write side, which is why TOTP enrollment never persisted (every login re-showed the setup QR). **Rules:** (a) any pre-tenant `app_users`/`refresh_tokens` query in `routes/auth.js` uses `authPool`; (b) every state-changing pre-tenant query checks `rowCount` and fails loudly on 0 — a silent 0-row write is worse than an error because the caller thinks it succeeded. Code-search net: `grep -n "pool.query" routes/auth.js` and confirm each write targets `authPool`.
+
+### 123.5 — Follow-ups
+
+- ⏳ Add an integration test for `POST /auth/totp/confirm-setup` asserting `totp_enabled_at` is set + a subsequent login returns `TOTP_REQUIRED` (verify), not `TOTP_SETUP_REQUIRED`. Route+DB category (needs token plumbing + seeded SUPER_ADMIN).
+- ⏳ Resume the URGENT FIRST CHECK (checks 2/3/5/6/7/8/10 still pending) after the fix deploys and TOTP enrollment is confirmed sticky.
+- Then Phase 6-D-6 PR 4 (Payments UI) as originally planned.
+
 

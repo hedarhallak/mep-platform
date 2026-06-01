@@ -520,8 +520,15 @@ router.post('/totp/confirm-setup', async (req, res) => {
     const role = String(user.role || '').toUpperCase();
 
     // Persist the encrypted secret + mark enrollment complete.
+    //
+    // MUST use authPool (superPool / BYPASSRLS): app_users is under strict
+    // RLS (migration 013) and /api/auth/* runs BEFORE any tenantDb middleware
+    // sets app.company_id, so a write through the regular `pool` matches ZERO
+    // rows and silently no-ops — the user appears to enroll (JWT issued) but
+    // totp_enabled_at stays NULL, so every later login re-shows the setup QR.
+    // This mirrors the change-pin handler's pre-tenant app_users UPDATE.
     const { encrypted, iv, authTag } = totpLib.encryptSecret(setupPayload.secret);
-    await pool.query(
+    const upd = await authPool.query(
       `UPDATE public.app_users
           SET totp_secret_encrypted = $1,
               totp_iv = $2,
@@ -530,6 +537,15 @@ router.post('/totp/confirm-setup', async (req, res) => {
         WHERE id = $4`,
       [encrypted, iv, authTag, user.id]
     );
+    // Guard: never report success on a 0-row write. If RLS or a bad id ever
+    // filters the UPDATE again, fail loudly instead of issuing a token for an
+    // enrollment that didn't persist.
+    if (upd.rowCount !== 1) {
+      console.error(
+        `POST /auth/totp/confirm-setup: UPDATE affected ${upd.rowCount} rows for user id=${user.id}`
+      );
+      return res.status(500).json({ ok: false, error: 'TOTP_ENROLLMENT_NOT_PERSISTED' });
+    }
     return await finishLoginAfterTotp(req, res, user, role);
   } catch (err) {
     console.error('POST /auth/totp/confirm-setup error:', err);
