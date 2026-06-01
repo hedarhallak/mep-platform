@@ -1,17 +1,20 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: June 1, 2026 ~09:50 UTC — **✅ URGENT FIRST CHECK all 10 green + fixed a production TOTP bug + rotated `TOTP_ENCRYPTION_KEY`.** This session opened on the health-check pass and uncovered that SUPER_ADMIN TOTP enrollment **never persisted** — the setup QR re-appeared on every login. Root cause: `POST /auth/totp/confirm-setup` wrote `app_users` through the RLS-enforced regular `pool` (zero-row silent no-op before tenant context exists) instead of `authPool`. Fixed via `authPool` + a `rowCount !== 1` guard. PR #284 merged + deployed + verified (scan once → verify-only thereafter). Documented in **Section 123** + **Pitfall #59**.
+> Last updated: June 1, 2026 ~21:30 UTC — **Big session. Two things shipped + one reverted:**
+> 1. **✅ TOTP enrollment bug FIXED (Section 123, PR #284, deployed + verified).** SUPER_ADMIN TOTP enrollment never persisted (setup QR re-appeared every login) because `POST /auth/totp/confirm-setup` wrote `app_users` via the RLS-enforced regular `pool` (zero-row silent no-op) instead of `authPool`. Fixed with `authPool` + `rowCount` guard. Scan once → verify-only thereafter. Pitfall #59.
+> 2. **✅ `TOTP_ENCRYPTION_KEY` ROTATED** (accidentally printed unmasked in chat → treated as compromised → rotated; new key in OneDrive `Constrai Keys`, Hedar re-enrolled TOTP). Exposed key is dead.
+> 3. **⚠️ Phase 6-D-6 PR 4 (Payments UI) SHIPPED then REVERTED (Section 124).** PR #286 caused a production incident: the Payments endpoints **leaked `mepuser_super` superPool clients** ("idle in transaction"), exhausting the max-10 pool and taking down the ENTIRE admin portal (all super pages hung/502; nginx `no live upstreams`; Better Stack + Sentry fired). Reverted via **PR #287 (`003ea8d`), deployed, portal verified stable.** Pitfall #60.
 >
-> **Key rotation:** `TOTP_ENCRYPTION_KEY` was accidentally printed unmasked into chat during Check 9, so it was rotated immediately (new key in OneDrive `Constrai Keys`, `.env` updated, Hedar's TOTP secret reset + re-enrolled, `pm2 restart --update-env`). The exposed key is dead.
+> **Prod safety net applied (persists):** `ALTER ROLE mepuser_super/mepuser SET idle_in_transaction_session_timeout = '30s';` — leaked transactions now self-reap in 30s. (Does NOT fully fix the borrow-leak — only a node restart repairs the pool's phantom checked-out count — but stops idle-in-tx accumulation.)
 >
-> **State note:** MEP Construction subscription is now **BASIC · Bracket 6-10 · $25.00/seat/mo · 50/8 seats (at capacity)** — Hedar tested an 8-seat change since the last handoff (was 5 / bracket 1-5 / $27). Billing page shows 3 invoices (Custom $1724.63 Draft, Subscription $155.22 Approved, Training $1092.26 Draft).
+> **🎯 NEXT CODE TASK — root-cause the superPool client leak OFFLINE (Section 124.6), then re-apply Payments.** Do NOT re-deploy Payments to prod until the leak is reproduced + fixed + proven non-leaking on staging. Reproduce locally with `TEST_DATABASE_URL`: hit `GET /super/payments` + `/payments/invoices` ~12× while logging `tenantDb` connect/commit/rollback and watching `pg_stat_activity`. Compare the (leaking) Payments path vs the (clean) custom-demands path — identical middleware, so the diff is subtle. Re-apply Payments with `git revert 003ea8d` once fixed.
 >
-> **New pitfall this session — #59:** Pre-tenant writes to RLS-strict tables (`app_users`, `refresh_tokens`) from `/api/auth/*` MUST use `authPool`, never `pool` — a regular-`pool` write under strict RLS matches zero rows and no-ops *silently*. Also: every state-changing pre-tenant query must check `rowCount` and fail loudly on 0.
+> **State note:** MEP Construction subscription = **BASIC · Bracket 6-10 · $25.00/seat/mo · 50/8 seats (at capacity)** (Hedar tested an 8-seat change). Billing shows 3 invoices (Custom $1724.63 Draft, Subscription $155.22 Approved, Training $1092.26 Draft).
 >
-> **Watch item:** `mep-backend-error.log` tail still shows an old `Cannot find module '@sentry/core'` stack, but the current boot logs `[sentry] initialized` and Health is 200 — the error is stale residue (likely from the Section 104 incident), not the running process. Optional cleanup: `npm ci` on the backend to ensure `@sentry/*` are fully present, then `pm2 restart`.
+> **Cleanup nit:** an untracked `commit-msg.txt` may sit in the laptop repo root + a stale local `revert/pr4-payments-ui` branch — delete both.
 >
-> **Next code task: Phase 6-D-6 PR 4** — Payments UI at `admin.constrai.ca/payments`. Wraps existing `POST /api/super/payments/record` (Phase 6-D-4 PR 5) with cross-tenant payments list + Record Payment modal (invoice picker / amount / method / external_ref). Server auto-transitions invoice to PARTIAL_PAID / PAID. After PR 4 ships, Phase 6-D-6 closes and Phase 6-D-7 (monthly invoice cron + email automation) opens.
+> **New pitfalls this session — #59 (auth pre-tenant writes need `authPool`) + #60 (one leaked `tenantDb` client kills the whole admin portal; superPool max is 10).**
 
 ---
 
@@ -112,10 +115,10 @@
    - `CLAUDE.md` (working rules)
    - `DECISIONS.md` — read ONLY the latest 2-3 sections (the file is now 14,700+ lines). Latest section is **118** (Phase 6-D-4 COMPLETE — all 5 PRs shipped + Pitfalls #50/#51). Also relevant: 117 (PR 1+2 closeout + 3 strategic revisions to S115 + Pitfall #49), 116 (schema design), 115 (pricing model lock — note 115.3 brackets + 115.7 training mandatory + 115.3 self-serve all REVISED in 117).
    - `RECOVERY.md` Section 2.4 only if relevant
-   - Latest section is now **123** (TOTP enrollment RLS-pool fix + key rotation + Pitfall #59). 122 = Custom Demands UI (PR 3). 121 = TOTP 2FA.
+   - Latest section is now **124** (Payments UI shipped→reverted, superPool leak incident + Pitfall #60). 123 = TOTP enrollment fix + key rotation (#59). 122 = Custom Demands UI. 121 = TOTP 2FA.
 3. **Echo this exact line** as the first line of your reply:
    ```
-   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 123, prod healthy + TOTP enrollment bug fixed/deployed, next code task is Phase 6-D-6 PR 4 Payments UI)
+   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 124, prod stable, Payments UI reverted after superPool leak, next task is to root-cause the leak offline before re-shipping Payments)
    ```
 4. **Open with Phase 6-D-6 PR 4 as the active priority.** Scope:
    - **No new backend endpoint** — `POST /api/super/payments/record` already exists (Phase 6-D-4 PR 5 / Section 118.4). Server transitions invoice status to PARTIAL_PAID / PAID automatically when sum of payments meets the total.
@@ -137,27 +140,21 @@
 
 ## Pending tasks at session start (NEXT MAJOR CODE TASK)
 
-### 🎯 Phase 6-D-6 PR 4 — Payments UI
+### 🎯 Root-cause the superPool client leak (OFFLINE), then re-ship Payments UI
 
-**Scope:**
-- Backend: new `GET /api/super/payments` (cross-tenant list, joins invoice + company). `POST /api/super/payments/record` already exists.
-- Frontend: `mep-frontend/src/admin/PaymentsPage.jsx` at `/payments` with table + Record Payment modal.
-- Sidebar: add "Payments" link in CompaniesList toolbar between "Custom demands" and "+ New company".
-- Tests: integration for GET endpoint + Vitest smoke for PaymentsPage.
+Phase 6-D-6 PR 4 (Payments UI) was fully built + CI-green + deployed (PR #286), but it **leaked `mepuser_super` superPool clients** and took down the admin portal — so it was **reverted (PR #287, `003ea8d`)**. The code is recoverable from git at commit `83fafce`.
 
-**Critical references:**
-- Section 122.1 (Custom Demands UI pattern to mirror)
-- Section 118.4 (existing `POST /payments/record` endpoint + auto state transitions)
-- Section 116.4 (payments table schema — method enum BANK_TRANSFER / CHEQUE / E-TRANSFER / CARD)
-- `API.md` Section 14 (existing endpoint contracts)
+**Do this BEFORE touching prod again:**
+1. **Reproduce locally** (`TEST_DATABASE_URL`): start the app, log in as SUPER_ADMIN, hit `GET /api/super/payments` + `GET /api/super/payments/invoices` ~12×, and watch `SELECT usename,state,count(*) FROM pg_stat_activity GROUP BY 1,2` — confirm `mepuser_super | idle in transaction` climbs (it should, reproducing the leak).
+2. **Instrument** `middleware/tenant_db.js` — log each `connect` / `COMMIT` / `ROLLBACK` / `client.release()` with the request path. Find why the Payments path doesn't release while the custom-demands path does (identical middleware → subtle diff; suspects: `res 'close'` rollback racing an in-flight query, or the two-parallel-request `Promise.all` pattern against a max-10 pool).
+3. **Fix** (likely in `tenant_db.js`, possibly also raise superPool `max`), prove non-leaking on staging.
+4. **Re-apply Payments:** `git revert 003ea8d` → redeploy → re-run the 12× leak smoke on prod (`idle in transaction` must stay ~0).
 
-**Critical pitfalls to avoid:**
-- Pitfall #38, #44, #46, #50, #51, #52, #55 (per Section 120/121/122 notes)
-- Pitfall #52 (Vitest vi.hoisted for shared mock state — only matters if PaymentsPage needs hoisted shared state)
-- **Pitfall #57 (NEW)** — Modal-open assertions MUST use `getByRole('heading', { name: ... })` to avoid colliding with the toolbar button's text. Already proven on PR 3.
-- **Pitfall #58 (NEW)** — Prod backend deploy step must be `HUSKY=0 npm ci --omit=dev`.
+**Critical references:** Section 124 (the incident + Pitfall #60), Section 122.1 (Custom Demands UI pattern — the clean sibling), `middleware/tenant_db.js`, `db.js` (superPool def).
 
-### After Phase 6-D-6 PR 4: Phase 6-D-7 (monthly invoice cron + email automation) closes Phase 6-D-6.
+**Critical pitfalls:** **#60** (one leaked client kills the portal; recovery = terminate idle-in-tx **+** `pm2 restart`), #57 (modal-open assert via `getByRole('heading')` — already applied), #58 (`HUSKY=0 npm ci --omit=dev`), #38/#41 (deploy = backend restart + frontend rebuild).
+
+### After Payments re-ships: Phase 6-D-7 (monthly invoice cron + email automation) closes Phase 6-D-6.
 
 ---
 
@@ -172,10 +169,11 @@
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04) |
 | Backend | Node.js + Express + Postgres 16, pm2 at `/var/www/mep`. invite-employee reads from `subscriptions.subscribed_seats`. GET /super/companies/:id LEFT JOINs subscriptions. 6 new SUPER_ADMIN billing endpoints live (training quotes / custom demands / payments / extend-trial / apply-change). |
 | Frontend | React + Vite + Tailwind v4. CompanyBranding.jsx shows bracket + per-seat price (Section 117 refactor). Customer-facing subscription UI = Phase 6-D-5 (next). |
-| Latest deployed to prod | **Section 123 — TOTP enrollment RLS-pool fix** — PR #284, June 1. Backend-only (`routes/auth.js`), `git pull` + `pm2 restart` (no migration / no frontend). |
-| Last merged to main | **PR #284** (fix(totp): persist enrollment via authPool + rowCount guard, June 1). Previous: PR #282 (Custom Demands UI). |
+| Latest deployed to prod | **PR #287 — revert of Payments UI (`003ea8d`)** — June 1 evening (frontend rebuild + backend restart). Payments page + `/api/super/payments*` removed. |
+| Last merged to main | **PR #287** (revert Payments UI). Earlier today: #286 (Payments UI, reverted), #285 (HANDOFF docs), #284 (TOTP fix). |
+| Prod DB safety net | `idle_in_transaction_session_timeout = '30s'` on `mepuser_super` + `mepuser` (ALTER ROLE, persists). Added during the Section 124 incident. |
 | TOTP secret | Re-enrolled June 1 under the rotated `TOTP_ENCRYPTION_KEY`. Login = PIN → 6-digit code (no QR). Recovery (lost phone): Section 121.6 SQL reset. |
-| Active program | **Prod verified healthy + TOTP bug fixed.** Next code task is Phase 6-D-6 PR 4 (Payments UI). |
+| Active program | **Prod stable; Payments UI reverted.** Next code task = root-cause the superPool client leak OFFLINE (Section 124.6), then re-apply Payments (`git revert 003ea8d`). |
 | Mobile app | Still on Bearer-token + PIN. Phase 7 (Q1 2027). |
 
 ### Multi-tenant migration progress
@@ -205,7 +203,9 @@
 | **Phase 6-D-6 PR 3 — Custom Demands UI** | ✅ **Deployed (PR #282, May 30 evening)** |
 | **Section 122 — Phase 6-D-6 PR 3 closeout + Pitfalls #57, #58** | ✅ **Recorded** |
 | **Section 123 — TOTP enrollment RLS-pool fix + key rotation + Pitfall #59** | ✅ **Deployed (PR #284, June 1) + verified** |
-| **Phase 6-D-6 PR 4 — Payments UI** | ⏳ **NEXT** |
+| **Phase 6-D-6 PR 4 — Payments UI** | ⚠️ **SHIPPED then REVERTED (PR #286 → revert PR #287, Section 124)** — superPool client leak. Re-apply after offline root-cause. |
+| **Section 124 — Payments leak incident + safety net + Pitfall #60** | ✅ **Recorded; revert deployed; prod stable** |
+| **Root-cause superPool client leak (offline) + re-ship Payments** | ⏳ **NEXT** |
 | Phase 6-D-6 — SUPER_ADMIN UI (Subscription detail with Apply Change, Training Quotes, etc.) | ⏳ June-July 2026 |
 | Phase 6-D-7 — Invoice email automation + monthly cron + trial expiry warnings | ⏳ July 2026 |
 | Phase 6-D-8 — Marketing site refresh + ToS legal review + reference tenant + training materials | ⏳ July-Aug 2026 |
@@ -383,6 +383,8 @@ Prod `/var/www/mep/.env` is in sync. `DO_SPACES_*` env vars not yet set (deferre
     Stop pasting bare `npm ci --omit=dev` in any future deploy command set.
 
 59. **(NEW — Section 123) Pre-tenant writes to RLS-strict tables from `/api/auth/*` MUST use `authPool`, never `pool`.** `/api/auth/*` is mounted via `mountPublicRoutes` and runs BEFORE any `tenantDb` middleware sets `app.company_id`. The regular `pool` connects as `mepuser` under strict RLS (migration 013), so a write with no GUC set matches **zero rows and no-ops silently** — no error thrown. This is exactly why TOTP enrollment never persisted: `POST /auth/totp/confirm-setup` did its `UPDATE public.app_users SET totp_* ...` through `pool`, the update hit 0 rows, but the endpoint returned `ok:true` and issued the JWT, so `totp_enabled_at` stayed NULL and every later login re-showed the setup QR. Reads were already correct (`authPool` for the login SELECT and change-pin); only this one write slipped through. **Rules:** (a) any pre-tenant `app_users`/`refresh_tokens` query in `routes/auth.js` uses `authPool` (= `superPool` / BYPASSRLS); (b) every state-changing pre-tenant query checks `rowCount` and returns an error on 0 — a silent 0-row write is worse than an error. Code-search net: `grep -n "pool.query" routes/auth.js` and confirm each write targets `authPool`. Fixed in PR #284.
+
+60. **(NEW — Section 124) One SUPER_ADMIN route that leaks a single `tenantDb` client takes down the WHOLE admin portal — superPool `max` is only 10.** Discovered shipping Payments UI (PR #286, reverted in #287). Symptoms: admin pages hang then 502; nginx `error.log` shows `upstream timed out ... reading response header` then `no live upstreams` (which makes even `/api/health` 502 → Better Stack/Sentry fire); `SELECT usename,state,count(*) FROM pg_stat_activity GROUP BY 1,2` shows `mepuser_super | idle in transaction` climbing toward 10, OR "phantom exhaustion" (requests stuck at pool checkout with ZERO live mepuser_super connections). **The route's SQL can be fast in isolation** — run it directly as `postgres` to prove it (Payments query was 4.6 ms); the hang is at pool checkout, not in the query. **Recovery:** `SELECT pg_terminate_backend(pid) ... WHERE usename='mepuser_super' AND state='idle in transaction';` **AND** `pm2 restart mep-backend` (BOTH — terminate alone leaves the node pool's phantom checked-out count; only a restart rebuilds the pool). **Prevention (done):** `idle_in_transaction_session_timeout='30s'` on the app roles. **Before shipping any new SUPER_ADMIN route:** load it ~12× and confirm `idle in transaction` for `mepuser_super` stays ~0. Consider raising superPool `max`.
 
 ---
 
