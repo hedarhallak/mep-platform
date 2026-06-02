@@ -15227,4 +15227,21 @@ All of this is in git history at `83fafce`; re-apply with `git revert 003ea8d` o
 - ⏳ Consider raising superPool `max` (e.g. 10 → 20) as defense-in-depth.
 - ⏳ Keep the integration-test follow-up for TOTP confirm-setup (from Section 123.5).
 
+### 124.7 — ROOT CAUSE FOUND + FIX (June 1, 2026, later) — tenantDb acquired one client per mount-traversal
+
+**Root cause (from code analysis, not prod experimentation):** `middleware/tenant_db.js` acquires a pool client + opens a transaction **every time it runs**, and `app.js` mounts it **once per `/api/super` router** — `app.use('/api/super', auth, superAdmin, tenantDb, <router>)` × 8 routers. Express runs each mount's middleware stack in order; when a router doesn't match it calls `next()`, advancing to the next `app.use(...)`, which **re-runs `auth`, `superAdmin`, AND `tenantDb`**. So a request handled by the Nth-mounted router traverses N tenantDb invocations and borrows **N superPool clients concurrently** (each `BEGIN`-ned; all released only when the chained `res.end` finally fires).
+
+Mount order (the relevant ones): super_admin(1) · branding(2) · subscription_apply(3) · subscription_requests(4) · training_quotes(5) · custom_demands(6) · **payments(7)** · subscription_lifecycle(8).
+
+The Payments page was the unique trigger because **both** of its parallel requests hit the deepest router:
+- `GET /payments` → router 7 → 7 clients
+- `GET /payments/invoices` → router 7 → 7 clients
+- `Promise.all([...])` → up to **14 concurrent checkouts** vs superPool `max = 10` → deadlock + "idle in transaction" pile-up.
+
+Why the other pages were fine: custom-demands = `/custom-demands/quotes`(router 6) + `/companies/overview`(router 1) = 6+1 = 7 ≤ 10; training = 5 + 1 = 6; etc. Only Payments put both requests in the 7th router. This also explains the empirical signature exactly: the hang was at `acquirePool.connect()` (pool checkout), so `pg_stat_activity` showed **zero active queries** while the standalone SQL ran in 4 ms.
+
+**Fix:** idempotency guard at the top of `tenantDb` — `if (req.db) return next();`. One client + one transaction per request, regardless of how many `/api/super` mounts the request traverses. Strict improvement app-wide (the same multiplication affected tenant routes too, just under the larger `pool`). The first tenantDb invocation owns the full lifecycle (acquire → BEGIN → SET LOCAL → req.db → res.end-override → 'close'); every later mount short-circuits.
+
+**Validation plan (no prod experiments):** ship the tenantDb fix as its own PR, deploy (backend-only: `git pull` + `pm2 restart`), regression-check the existing super pages, then re-apply Payments (`git revert 003ea8d`) and run the leak smoke (load `/payments` ~12×, confirm `mepuser_super | idle in transaction` stays ~0).
+
 

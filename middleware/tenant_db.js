@@ -75,6 +75,24 @@ module.exports = async function tenantDb(req, res, next) {
     return next();
   }
 
+  // Idempotency guard (Section 124 incident fix). This middleware is mounted on
+  // EVERY `/api/super` router — app.js registers it once per router via
+  //   app.use('/api/super', auth, superAdmin, tenantDb, <router>)
+  // (8 of them). When a request is handled by a deeply-mounted router, it
+  // first passes through every earlier mount via next(), and WITHOUT this guard
+  // tenantDb would acquire one pool client + open one transaction PER mount it
+  // traverses. The 7th-mounted route (super_payments) therefore borrowed 7
+  // superPool clients per request; the Payments page fires two such requests in
+  // parallel (Promise.all of GET /payments + GET /payments/invoices) → up to 14
+  // concurrent checkouts against a superPool whose max is 10 → deadlock /
+  // "idle in transaction" pile-up that took the whole admin portal down
+  // (DECISIONS.md Section 124 / Pitfall #60). One client + one transaction per
+  // request is the correct model, so if we've already attached a client for
+  // this request, just continue.
+  if (req.db) {
+    return next();
+  }
+
   const isSuper = req.user.role === SUPER_ADMIN_ROLE;
   const usingSuperPool = isSuper && superPool != null;
   const acquirePool = usingSuperPool ? superPool : pool;
