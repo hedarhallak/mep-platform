@@ -15381,3 +15381,26 @@ So the feature was "missing from the menus" only because the **frontend was neve
 
 **Lesson:** before building a "missing" feature, grep the routes/migrations — backend may already exist (it did here). Next functional menus to surface (web, page-by-page): **Tool Request (§126.1)**, **Emergency Purchase (§126.2)**, **Smart Assignment (§10)** — each: first check what backend exists, then build the page. Then the planned **full mobile app update**.
 
+---
+
+## 128. Section 128 — June 2026 — Tool Request + asset tracking, Slice A (backend)
+
+> Feature #2 (§126.1). Hedar's choices: **full asset tracking** + **global ready-made catalog** + **reuse `materials` permissions** (no new permission module). Checked first (per §127.3 lesson): NO tool backend existed → this is net-new.
+
+### 128.1 — Slice A (backend) shipped
+
+- `migrations/024_tool_tracking.sql`:
+  - `tool_catalog` — GLOBAL reference (no company_id, no RLS), seeded with the §126.1 starter list (~52 tools tagged GENERAL/ELECTRICAL/PLUMBING/MECHANICAL/LAYOUT). SELECT-granted to app roles.
+  - `tool_assets` (company-scoped, RLS) — physical units; `current_project_id` = current location (NULL = warehouse); status AVAILABLE/ASSIGNED/MAINTENANCE/RETIRED; `UNIQUE(company_id, asset_tag)`.
+  - `tool_requests` (company-scoped, RLS) — foreman requests a tool type for a project; status REQUESTED/APPROVED/ISSUED/RETURNED/REJECTED.
+  - `tool_asset_movements` (company-scoped, RLS) — history of unit moves between projects/warehouse.
+  - Strict `tenant_isolation` RLS (per migration 013) on the 3 company tables + GRANTs (Pitfall #49) to mepuser/mepuser_super.
+- `routes/tools.js` (mounted `/api/tools`, auth + tenantDb): `GET /catalog?trade=&q=`, `POST /requests`, `GET /requests`, `GET /assets?status=&project_id=`, `POST /assets`, `POST /assets/:id/move` (updates location + records a movement). Permissions reuse `materials` (request_submit for catalog/request/view, surplus_view for assets list, surplus_declare for asset register/move).
+- `tests/integration/tools.test.js` — full flow (catalog→request→asset→move + movement row), duplicate asset_tag 409, invalid trade 400.
+
+**Deploy note:** migration 024 must be applied on prod BEFORE the code (`sudo -u postgres psql mepdb -f migrations/024_tool_tracking.sql`), then `pm2 restart`.
+
+### 128.2 — Slice B (next): the Tools web page
+
+`/tools` page (nav + i18n EN/FR) mirroring the design system: tabs for **Request** (catalog picker filtered by trade + project + qty), **My Requests**, and **Assets** (units + current location). Then Emergency Purchase (§126.2), then Smart Assignment (§10), then the full mobile update.
+
