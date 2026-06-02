@@ -1,30 +1,30 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: June 1, 2026 ~23:30 UTC — **Big session, all resolved. Three things shipped + Phase 6-D-6 PR 4 DONE:**
-> 1. **✅ TOTP enrollment bug FIXED (Section 123, PR #284).** Enrollment never persisted (QR re-appeared every login) because `POST /auth/totp/confirm-setup` wrote `app_users` via the RLS-enforced `pool` instead of `authPool`. Fixed with `authPool` + `rowCount` guard. Pitfall #59.
-> 2. **✅ `TOTP_ENCRYPTION_KEY` ROTATED** (accidentally printed in chat → rotated; new key in OneDrive `Constrai Keys`; Hedar re-enrolled). Exposed key is dead.
-> 3. **✅ Phase 6-D-6 PR 4 (Payments UI) — shipped, caused an incident, ROOT-CAUSED, fixed, and re-shipped LIVE + verified stable.** Full arc in Section 124:
->    - PR #286 deployed Payments → admin portal went down: `mepuser_super` superPool (max 10) exhausted by "idle in transaction" pile-up. Reverted (PR #287).
->    - **Root cause (Section 124.7):** `tenantDb` acquired one pool client **per `/api/super` mount the request traversed** (app.js mounts it 8×, once per router). The 7th-mounted `super_payments` route borrowed 7 clients/request; the Payments page fires **two** parallel requests both in that router → up to 14 concurrent checkouts > 10 → deadlock. (Other pages were fine because their two requests hit shallower mounts: e.g. custom-demands = router 6 + router 1 = 7 ≤ 10.) The hang was at pool checkout, not the SQL (which ran in 4 ms).
->    - **Fix:** idempotency guard in `middleware/tenant_db.js` — `if (req.db) return next();` → one client + one transaction per request, app-wide. Shipped + deployed.
->    - **Re-shipped Payments** (`git revert 003ea8d`, PR #290) → **leak smoke PASSED**: `/payments` loaded 12× with `mepuser_super | idle in transaction` staying at **0**. Payments is now LIVE at `admin.constrai.ca/payments` and stable. **Phase 6-D-6 is COMPLETE.**
+> Last updated: June 2, 2026 — **Functional-menus session. Hedar reset the priority order (see below). Two field-workflow menus shipped WEB-FIRST + LIVE:**
 >
-> **Prod safety net (kept):** `ALTER ROLE mepuser_super/mepuser SET idle_in_transaction_session_timeout = '30s';` — defense-in-depth against any future leak.
+> **🔁 NEW PRIORITY ORDER (Hedar, June 2 — this overrides the old conference roadmap sequencing):**
+> 1. **Add ALL un-built side menus as real, designed pages matching the program (NOT placeholders), page by page, WEB FIRST.** Mobile is a separate full update later (long neglected — done after web).
+> 2. Then Hedar does a full program overview/walkthrough.
+> 3. Then security.
+> 4. Then infra / hygiene / tech debt.
+> 5. **Billing finished LAST** (it's already automated + live, so it's parked).
 >
-> 4. **✅ Phase 6-D-7 PR1 (monthly subscription invoice cron) SHIPPED + verified (Section 125).** `jobs/monthlyInvoiceJob.js` — 1st-of-month 14:00 UTC, generates + auto-approves `SUBSCRIPTION_RECURRING` invoices for ACTIVE monthly subs (idempotent, superPool, reuses `lib/invoice_numbering`). Hedar chose **full automation** (generate + approve + email); PR1 = generate+approve (no email), PR2 = email, PR3 = trial-expiry. Prod smoke created MEP's June invoice **CONS-2026-10001 = $229.95** (8 seats × $25 + QST/GST) — math correct, idempotent.
-> 5. **✅ Invoice-numbering bug fixed (Section 125.3, Pitfall #61).** The shared `generateInvoiceNumber` used a **string** `ORDER BY` to find the latest sequence → `'CONS-2026-9999' > 'CONS-2026-10000'` lexically → next computed 10000 → UNIQUE collision. Fixed to numeric `MAX(suffix::int)`. Caught by the PR1 prod smoke (the integration test never crossed 10000; real data did). Benefits training + custom-demand numbering too.
+> **Shipped this session (both LIVE on prod):**
+> 1. **✅ Surplus / Material-Return page (Section 127, frontend only).** `mep-frontend/src/pages/materials/SurplusPage.jsx` (Declare / Available tabs) over the **pre-existing** `material_returns` backend (`/materials/returns` + `/materials/surplus`). Backend already existed — only the page was missing. Sidebar nav (Recycle icon) + `/surplus` route (anyOf surplus_view/surplus_declare) + EN/FR i18n. Verified live.
+> 2. **✅ Tool Request + asset tracking (Sections 126.1 / 128, FULL feature — backend + frontend).** Hedar's choices: **full asset tracking** + **global catalog + reuse `materials` permission**.
+>    - **Backend Slice A (PR #307):** migration **024_tool_tracking.sql** — GLOBAL `tool_catalog` (no RLS, seeded ~52 tools tagged GENERAL/ELECTRICAL/PLUMBING/MECHANICAL/LAYOUT) + company-scoped RLS tables `tool_assets`, `tool_requests`, `tool_asset_movements`. `routes/tools.js` (`/api/tools`): GET /catalog (trade filter), POST/GET /requests, GET/POST /assets, POST /assets/:id/move. Applied on prod (catalog: ELECTRICAL 9 / GENERAL 19 / LAYOUT 6 / MECHANICAL 8 / PLUMBING 10).
+>    - **Frontend Slice B (PR #308):** `ToolsPage.jsx` — Request tab (trade-filter chips → catalog dropdown reloads on trade change + project/qty) + Assets tab (status badge + location). Wrench nav + `/tools` route + EN/FR i18n. **Deployed (frontend rebuild) + verified live** (both Surplus + Tools menus render and work; tested as FOREMAN `seed.worker6@meptest.com`).
 >
-> **Prod safety net (kept):** `ALTER ROLE mepuser_super/mepuser SET idle_in_transaction_session_timeout = '30s';` — defense-in-depth against any future leak.
+> **Lesson this session → Pitfall #62:** before building a "missing" menu, `grep` `routes/` + `migrations/` first — Surplus's backend already existed (almost built duplicate tables). A `024_material_surplus.sql` duplicate was written then discarded; never committed.
 >
-> 6. **✅ Phase 6-D-7 PR2 + PR2.1 (invoice email + PDF) SHIPPED + LIVE — full automation ON (Sections 125.4/125.5).** The cron now generates + approves + **emails** each `SUBSCRIPTION_RECURRING` invoice to the company's COMPANY_ADMIN: a branded (table-layout) notification email + an attached **A4 PDF invoice** (Constrai `#041b76`, line items, QST/GST, payment instructions) via puppeteer/Resend. `INVOICE_EMAIL_ENABLED=true` is set in prod `/var/www/mep/.env`. Required installing Chrome system libs on prod (`libatk1.0-0t64` etc.) for puppeteer — done. Verified by one-off sends to Hedar (clean email + PDF). Logo on the PDF deferred to final stages (backlog).
-> 7. **✅ Phase 6-D-7 PR3 (trial-expiry warnings) SHIPPED + LIVE (Section 125.6) — Phase 6-D-7 COMPLETE.** `jobs/trialExpiryJob.js` runs daily (13:00 UTC), warns the COMPANY_ADMIN `TRIAL_WARN_DAYS` (default 3) before `trial_ends_at`, idempotent via new `subscriptions.trial_warned_at` (migration 023, applied on prod). Branded email via `lib/email` `sendTrialExpiryWarning`. No prod smoke (no real TRIAL subs; logic covered by tests). **All billing automation is now live: monthly invoice → auto-email+PDF → trial warnings.**
+> **Billing (parked, all still LIVE from the June 1 session):** Phase 6-D-7 COMPLETE — monthly invoice cron → auto-email + A4 PDF (`INVOICE_EMAIL_ENABLED=true`) → trial-expiry warnings. `INVOICE_EMAIL_ENABLED=true` on prod; next real auto-run = July 1 cron (June's MEP invoice CONS-2026-10001 $229.95 already exists → skipped, idempotent). TOTP fix (Section 123) + Payments incident root-cause/fix (Section 124, tenantDb one-client-per-request guard) also still live.
 >
-> **🎯 NEXT CODE TASK: Phase 6-D-8** — marketing site refresh + ToS legal review + reference tenant data + modular training materials (per Section 117.6). OR pick from backlog (logo/bank on invoice PDF, MEP→ENTERPRISE demo posture, Dependabot triage). Phase 6-D-7 is done.
+> **🎯 NEXT TASK: Emergency / petty material purchase menu (DECISIONS §126.2)** — next un-built functional menu per the new priority order. After that: Smart Assignment (§10). THEN the full mobile-app update. (Old Phase 6-D-8 marketing/ToS work is deprioritized below the menu build-out.)
 >
-> **State note:** MEP Construction = **BASIC · Bracket 6-10 · $25.00/seat/mo · 50/8 seats (at capacity)**. Billing shows the June subscription **CONS-2026-10001 $229.95 APPROVED** + the 3 prior invoices. Payments page empty. `INVOICE_EMAIL_ENABLED=true` on prod — next real auto-run is the July 1 cron (June's MEP invoice already exists, so it'll be skipped — idempotent).
+> **Prod safety net (kept):** `ALTER ROLE mepuser_super/mepuser SET idle_in_transaction_session_timeout = '30s';`
 >
-> **New pitfalls this session — #59 (auth pre-tenant writes need `authPool`), #60 (one leaked `tenantDb` client kills the whole admin portal; superPool max=10; per-mount client multiplication, now fixed), #61 (numeric MAX for sequences, never string ORDER BY on zero-padded keys).**
+> **Live pitfalls — #59 (auth pre-tenant writes need `authPool`), #60 (one leaked `tenantDb` client kills the admin portal; superPool max=10), #61 (numeric MAX for sequences), #62 (grep routes/migrations before building a "missing" menu — the backend may already exist).**
 
 ---
 
@@ -125,26 +125,18 @@
    - `CLAUDE.md` (working rules)
    - `DECISIONS.md` — read ONLY the latest 2-3 sections (the file is now 14,700+ lines). Latest section is **118** (Phase 6-D-4 COMPLETE — all 5 PRs shipped + Pitfalls #50/#51). Also relevant: 117 (PR 1+2 closeout + 3 strategic revisions to S115 + Pitfall #49), 116 (schema design), 115 (pricing model lock — note 115.3 brackets + 115.7 training mandatory + 115.3 self-serve all REVISED in 117).
    - `RECOVERY.md` Section 2.4 only if relevant
-   - Latest section is **125** (Phase 6-D-7 COMPLETE: PR1 cron 125.1-2, numbering fix 125.3/#61, PR2 email 125.4, PR2.1 PDF 125.5, PR3 trial-warnings 125.6). 124 = Payments leak → tenantDb fix (124.7)/#60. 123 = TOTP fix + key rotation (#59).
+   - Latest section is **128** (Tool Request — backend Slice A §128 + frontend Slice B §128.2). 127 = Surplus frontend (backend pre-existed). 126 = new feature specs (§126.1 Tool Request, §126.2 Emergency Purchase) + starter tool catalog. 125 = Phase 6-D-7 billing automation COMPLETE. 124 = Payments leak → tenantDb fix (#60). 123 = TOTP fix (#59).
 3. **Echo this exact line** as the first line of your reply:
    ```
-   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 125, prod stable, Phase 6-D-7 billing automation COMPLETE (invoice cron + auto-email/PDF + trial warnings all live), next task is Phase 6-D-8)
+   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 128, prod stable, Surplus + Tools menus LIVE, next task = Emergency Purchase menu §126.2 per the new functional-menus priority order)
    ```
-4. **Open with Phase 6-D-6 PR 4 as the active priority.** Scope:
-   - **No new backend endpoint** — `POST /api/super/payments/record` already exists (Phase 6-D-4 PR 5 / Section 118.4). Server transitions invoice status to PARTIAL_PAID / PAID automatically when sum of payments meets the total.
-   - **New endpoint to ADD:** `GET /api/super/payments` — cross-tenant payments list with invoice + company joined. Mirror the `GET /custom-demands/quotes` shape from Section 122.1 (status optional, limit default 50/max 200, ORDER BY paid_at DESC).
-   - **Frontend:** new `mep-frontend/src/admin/PaymentsPage.jsx` at `/payments`. Cross-company table (Payment date / Invoice # / Company / Method / Amount / External ref) + `+ Record payment` modal wrapping `POST /api/super/payments/record`. Modal pickers: invoice (any type — query `GET /super/invoices` if it exists, else add it), amount (CAD), method (BANK_TRANSFER / CHEQUE / E-TRANSFER / CARD enum from `payments.method` check constraint), external_ref (optional, max 200 chars), paid_at (date, default today).
-   - **Sidebar nav:** add "Payments" link in CompaniesList toolbar between "Custom demands" and "+ New company".
-   - **Logout button** already in `AdminLogoutButton`; reuse.
-   - **EN-only** (SUPER_ADMIN portal).
-   - **Tests:** integration for GET endpoint + Vitest smoke for PaymentsPage.
-   - **Pitfall #57 (NEW):** When asserting the Record Payment modal opened, use `getByRole('heading', { name: /Record payment/i })` — the "+ Record payment" button shares the same text. Same lesson learned from PR 3 Custom Demands modal.
-   - **Pitfall #58 (NEW):** Prod deploy block MUST use `HUSKY=0 npm ci --omit=dev` on the backend step.
-   - **Estimated:** 1-2 days (smaller than PR 3 — single new endpoint, payments are simpler than custom demands).
+4. **Open with the Emergency / petty material purchase menu (DECISIONS §126.2) as the active priority** — it's the next un-built functional side menu under Hedar's June 2 priority order (build all menus web-first). Before designing it:
+   - **First `grep routes/ migrations/` for any pre-existing backend** (Pitfall #62 — Surplus already had one). Likely candidates: `material`, `expense`, `purchase`, `petty`, `receipt`.
+   - **Read DECISIONS §126.2** for the full spec. Summary: foreman buys urgent/small-value materials direct for the project (can't wait for supplier/warehouse, or item not carried) → receipt capture + threshold approval + expense tie-in.
+   - **Open with ONE architectural question** (per CLAUDE.md §8.9 — one decision at a time): asset/expense model — does this reuse an existing expenses concept or get its own `emergency_purchases` table? Propose 2-3 options via AskUserQuestion, then slice backend-first (migration + route + tests = Slice A) → frontend page (Slice B), same shape as the Tools feature.
+   - **Pattern to mirror:** the Tools feature this session (`migrations/024`, `routes/tools.js`, `tests/integration/tools.test.js`, `ToolsPage.jsx` + test, App.jsx route, AppLayout nav, en/fr i18n). Reuse the `materials` permission module unless Hedar wants a new one.
 
-   Then ask Hedar one of:
-   - "Start Phase 6-D-6 PR 4 by adding the GET endpoint to super_payments.js?" — recommended first step
-   - "Or, before PR 4, revisit the Custom Demands UX (e.g. add a Send action / per-invoice detail page)?"
+   After Emergency Purchase: **Smart Assignment (§10)**, then the **full mobile-app update**.
 
 ---
 
@@ -173,12 +165,12 @@ Or pick a backlog item (logo + bank details on the invoice PDF; MEP→ENTERPRISE
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04) |
 | Backend | Node.js + Express + Postgres 16, pm2 at `/var/www/mep`. invite-employee reads from `subscriptions.subscribed_seats`. GET /super/companies/:id LEFT JOINs subscriptions. 6 new SUPER_ADMIN billing endpoints live (training quotes / custom demands / payments / extend-trial / apply-change). |
 | Frontend | React + Vite + Tailwind v4. CompanyBranding.jsx shows bracket + per-seat price (Section 117 refactor). Customer-facing subscription UI = Phase 6-D-5 (next). |
-| Latest deployed to prod | **Payments UI re-applied (PR #290) on top of the tenantDb one-client-per-request fix** — June 1 night (frontend rebuild + backend restart). `/payments` live + leak-smoke-verified (idle-in-tx = 0 after 12× load). |
-| Last merged to main | **PR #290** (reapply Payments). Earlier today: tenantDb fix PR, #288 (Section 124 docs), #287 (revert), #286 (Payments), #285, #284 (TOTP fix). |
+| Latest deployed to prod | **Tools page (PR #308) — frontend rebuild June 2.** Surplus + Tools menus both LIVE + verified. Backend (Tools, PR #307 + migration 024) deployed earlier with catalog seeded (52 tools). |
+| Last merged to main | **PR #308** (Tools frontend). Earlier: #307 (Tools backend + migration 024), Surplus page PR. June 1: #290 (Payments), tenantDb fix, billing automation PRs. |
 | Prod DB safety net | `idle_in_transaction_session_timeout = '30s'` on `mepuser_super` + `mepuser` (ALTER ROLE, persists) — defense-in-depth from the Section 124 incident. |
-| Prod env / ops (this session) | `INVOICE_EMAIL_ENABLED=true` + `TRIAL_WARN_DAYS=3` (default) in `/var/www/mep/.env`. Chrome system libs installed (`apt-get install libatk1.0-0t64 ...`) for puppeteer PDF. Migration **023** (`subscriptions.trial_warned_at`) applied. Latest migration = 023. |
+| Prod env / ops | `INVOICE_EMAIL_ENABLED=true` + `TRIAL_WARN_DAYS=3` in `/var/www/mep/.env`. Chrome system libs installed for puppeteer PDF. **Latest migration = 024** (`tool_catalog` + `tool_assets` + `tool_requests` + `tool_asset_movements`, applied on prod, catalog seeded). |
 | TOTP secret | Re-enrolled June 1 under the rotated `TOTP_ENCRYPTION_KEY`. Login = PIN → 6-digit code (no QR). Recovery (lost phone): Section 121.6 SQL reset. |
-| Active program | **Phase 6-D-6 COMPLETE** (all SUPER_ADMIN billing UI shipped; Payments live + stable). Next = Phase 6-D-7 (invoice cron + email automation). |
+| Active program | **Functional menus build-out (web-first).** Surplus + Tool Request DONE + LIVE. Next = Emergency Purchase (§126.2), then Smart Assignment (§10), then full mobile update. Billing parked (done). |
 | Mobile app | Still on Bearer-token + PIN. Phase 7 (Q1 2027). |
 
 ### Multi-tenant migration progress
@@ -215,7 +207,11 @@ Or pick a backlog item (logo + bank details on the invoice PDF; MEP→ENTERPRISE
 | **Section 125.3 — invoice-numbering numeric-MAX fix (Pitfall #61)** | ✅ **Deployed (PR #294)** — was string-ordering, collided at 10000. |
 | **Section 125.4/125.5 — Phase 6-D-7 PR2/PR2.1 auto-email + PDF invoice** | ✅ **LIVE** — branded email + A4 PDF; `INVOICE_EMAIL_ENABLED=true` on prod; Chrome libs installed for puppeteer. |
 | **Section 125.6 — Phase 6-D-7 PR3 trial-expiry warnings** | ✅ **LIVE** — daily job + migration 023 (`trial_warned_at`) applied on prod. **Phase 6-D-7 COMPLETE.** |
-| **Phase 6-D-8 — marketing + ToS + reference tenant + training** | ⏳ **NEXT** |
+| **Section 126 — Feature specs: §126.1 Tool Request, §126.2 Emergency Purchase + starter tool catalog** | ✅ **Recorded** |
+| **Section 127 — Surplus / Material-Return page (frontend; backend pre-existed)** | ✅ **LIVE** — SurplusPage.jsx over `/materials/returns`+`/materials/surplus`. |
+| **Section 128 — Tool Request + asset tracking (backend §128 + frontend §128.2)** | ✅ **LIVE** — migration 024 + routes/tools.js (PR #307) + ToolsPage.jsx (PR #308), deployed + verified. |
+| **Emergency / petty material purchase menu (§126.2)** | ⏳ **NEXT** |
+| **Phase 6-D-8 — marketing + ToS + reference tenant + training** | ⏳ Deprioritized below functional menus |
 | Phase 6-D-6 — SUPER_ADMIN UI (Subscription detail with Apply Change, Training Quotes, etc.) | ⏳ June-July 2026 |
 | Phase 6-D-7 — Invoice email automation + monthly cron + trial expiry warnings | ⏳ July 2026 |
 | Phase 6-D-8 — Marketing site refresh + ToS legal review + reference tenant + training materials | ⏳ July-Aug 2026 |
@@ -229,11 +225,12 @@ Or pick a backlog item (logo + bank details on the invoice PDF; MEP→ENTERPRISE
 
 ## Backlog items still open (lower priority)
 
-### Functional feature backlog (app menus / field workflows — 🔵 Planned, need design sessions)
-- **⏳ Material Return / Surplus System** (DECISIONS §8) — foreman declares surplus → 3-day hold → cross-site claim → driver transfer → supplier/warehouse fallback → surplus-check on new PO.
-- **⏳ Tool Request System** (DECISIONS §126.1) — foreman requests warehouse tools (drill, impact, etc.) for a project; tool catalog tagged by trade for smart filtering; checkout/return + asset tracking.
-- **⏳ Emergency / petty material purchase** (DECISIONS §126.2) — foreman buys urgent/small-value materials direct for the project (can't wait for supplier/warehouse, or not carried); receipt capture + threshold approval + expense tie-in.
+### Functional feature backlog (app menus / field workflows — building these WEB-FIRST per Hedar's June 2 priority order)
+- **✅ DONE — Material Return / Surplus page** (DECISIONS §8 / §127) — SurplusPage.jsx (Declare/Available) over the pre-existing `material_returns` backend. LIVE. (Advanced flow — 3-day hold / cross-site claim / driver transfer / surplus-check on new PO — still backlog as enhancements.)
+- **✅ DONE — Tool Request + asset tracking** (DECISIONS §126.1 / §128) — full feature, backend (migration 024 + routes/tools.js) + ToolsPage.jsx. LIVE.
+- **⏳ NEXT — Emergency / petty material purchase** (DECISIONS §126.2) — foreman buys urgent/small-value materials direct for the project (can't wait for supplier/warehouse, or not carried); receipt capture + threshold approval + expense tie-in. **grep routes/migrations first (Pitfall #62).**
 - **⏳ Smart Assignment System** (DECISIONS §10) — auto-suggest assignments by proximity/trade/workload + driver routing for transfers.
+- **⏳ Full mobile-app update** — long neglected; happens AFTER all web menus are built (Hedar's explicit sequencing).
 - **⏳ CCQ Labor Marketplace** (DECISIONS §9, 💡 future/large) — company job posts + worker availability, CCQ-verified.
 - **⏳ Web app i18n** (CLAUDE.md — still TODO; mobile already i18n'd).
 
@@ -409,6 +406,8 @@ Prod `/var/www/mep/.env` is in sync. `DO_SPACES_*` env vars not yet set (deferre
 60. **(NEW — Section 124) One SUPER_ADMIN route that leaks a single `tenantDb` client takes down the WHOLE admin portal — superPool `max` is only 10.** Discovered shipping Payments UI (PR #286, reverted in #287). Symptoms: admin pages hang then 502; nginx `error.log` shows `upstream timed out ... reading response header` then `no live upstreams` (which makes even `/api/health` 502 → Better Stack/Sentry fire); `SELECT usename,state,count(*) FROM pg_stat_activity GROUP BY 1,2` shows `mepuser_super | idle in transaction` climbing toward 10, OR "phantom exhaustion" (requests stuck at pool checkout with ZERO live mepuser_super connections). **The route's SQL can be fast in isolation** — run it directly as `postgres` to prove it (Payments query was 4.6 ms); the hang is at pool checkout, not in the query. **Recovery:** `SELECT pg_terminate_backend(pid) ... WHERE usename='mepuser_super' AND state='idle in transaction';` **AND** `pm2 restart mep-backend` (BOTH — terminate alone leaves the node pool's phantom checked-out count; only a restart rebuilds the pool). **Prevention (done):** `idle_in_transaction_session_timeout='30s'` on the app roles. **Before shipping any new SUPER_ADMIN route:** load it ~12× and confirm `idle in transaction` for `mepuser_super` stays ~0. Consider raising superPool `max`.
 
 61. **(NEW — Section 125.3) Never derive a numeric sequence via a STRING `ORDER BY` on a zero-padded text key.** `lib/invoice_numbering.js` found the latest invoice via `ORDER BY invoice_number DESC` (string). Once the sequence crossed the 4-digit pad width, `'CONS-2026-9999'` sorted ABOVE `'CONS-2026-10000'` (`'9' > '1'`), so the computed "next" was 10000 → `uq_invoice_number` collision. Fixed to `MAX((substring(invoice_number FROM '-([0-9]+)$'))::int)`. **Two lessons:** (a) cast the numeric part and MAX it, never lexical-sort padded sequences; (b) **a prod smoke before trusting an automated job pays off** — the integration test passed because its seeded data never crossed 10000, but real prod data did. Run new billing/sequence jobs once manually on prod and read the result before relying on the cron.
+
+62. **(NEW — Section 127/128) Before building a "missing" side menu, `grep routes/ migrations/` first — the backend may already exist.** While starting the Surplus menu this session, the page was missing but the **entire backend already existed** (`material_returns` table + `/materials/returns` + `/materials/surplus` routes from a prior phase). A duplicate `024_material_surplus.sql` migration was written before catching this, then discarded (never committed). Wasted a few turns. **Rule:** for every functional-menu task, FIRST run `grep -ri "<feature>" routes/ migrations/ services/` (e.g. `surplus`, `return`, `tool`, `emergency`, `petty`, `expense`). If a backend exists → frontend-only task. If not → backend-first slice. This is the field-workflow analogue of "read before write". (Contrast: Tool Request had NO backend → full backend+frontend build was correct.)
 
 ---
 
