@@ -40,6 +40,7 @@ export default {
     materialRequest: 'Demande de matériel',
     purchaseOrders: "Bons d'achat",
     surplus: 'Surplus',
+    tools: 'Outils',
     myHub: 'Mon Hub',
     bi: "Intelligence d'affaires",
     workforcePlanner: "Planificateur d'effectifs",
@@ -50,6 +51,42 @@ export default {
     billing: 'Facturation',
     logout: 'Déconnexion',
     companyFallback: 'Entreprise',
+  },
+
+  tools: {
+    title: 'Outils',
+    subtitle: 'Demandez des outils du dépôt et suivez où se trouve chacun',
+    tabs: { request: 'Demander', assets: 'Inventaire' },
+    trades: {
+      GENERAL: 'Général', ELECTRICAL: 'Électricité', PLUMBING: 'Plomberie',
+      MECHANICAL: 'Mécanique', LAYOUT: 'Traçage',
+    },
+    assetStatus: {
+      AVAILABLE: 'Disponible', ASSIGNED: 'Sur le chantier', MAINTENANCE: 'Entretien', RETIRED: 'Retiré',
+    },
+    request: {
+      project: 'Projet',
+      selectProject: 'Sélectionnez un projet',
+      trade: 'Filtrer par métier',
+      allTrades: 'Tous',
+      tool: 'Outil',
+      noTools: 'Aucun outil dans ce métier',
+      qty: 'Qté',
+      note: 'Note (optionnel)',
+      notePlaceholder: 'Ce que le dépôt devrait savoir…',
+      submit: "Demander l'outil",
+      success: 'Outil demandé — le dépôt sera notifié.',
+      errors: {
+        selectProject: 'Veuillez sélectionner un projet',
+        selectTool: 'Veuillez sélectionner un outil',
+      },
+    },
+    assets: {
+      count: '{{count}} unité(s) d\'outil',
+      empty: 'Aucune unité d\'outil enregistrée',
+      warehouse: 'Dépôt',
+      th: { tool: 'Outil', tag: 'Étiquette', status: 'Statut', location: 'Emplacement' },
+    },
   },
 
   surplus: {
