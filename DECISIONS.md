@@ -15303,5 +15303,15 @@ The first email leg shipped a plain HTML table. Hedar's feedback: "at minimum it
 - The notification email itself is now branded (the shared `STYLES` wrapper + `#041b76` header + totals info-box) and notes the attached PDF.
 - Verified on prod by a one-off send of MEP's `CONS-2026-10001` to Hedar (`sent: true`, email received, data correct $229.95).
 
-**Note for Phase 9-B / future:** the PDF currently embeds Constrai's name only; once the "Constrai bank/remittance details on invoice" backlog item lands, add the business bank info to the PDF payment block.
+**Note for Phase 9-B / future:** the PDF currently embeds Constrai's name only; once the "Constrai bank/remittance details on invoice" backlog item lands, add the business bank info to the PDF payment block. Hedar also asked for the **company logo** on the PDF in the final stages (backlog).
+
+### 125.6 — PR3: trial-expiry warning emails (closes Phase 6-D-7)
+
+- `migrations/023_trial_warned_at.sql` — adds `subscriptions.trial_warned_at TIMESTAMPTZ` (idempotency marker) + partial index `idx_subscriptions_trial_unwarned` (status='TRIAL' AND trial_warned_at IS NULL). No new GRANTs (column inherits table grants from migration 020). **Apply on prod BEFORE deploying the code** (`sudo -u postgres psql mepdb -f migrations/023_trial_warned_at.sql`), else the job errors on the missing column.
+- `jobs/trialExpiryJob.js` — daily cron (13:00 UTC). `warnExpiringTrials(pool?, now?)`: finds TRIAL subs with `trial_warned_at IS NULL` and `now < trial_ends_at <= now + TRIAL_WARN_DAYS` (default 3), emails the COMPANY_ADMIN, stamps `trial_warned_at` **only on a successful send** (transient mail failure retries next day; no-admin tenant logged + left unwarned). superPool, cross-tenant.
+- `lib/email.js` — `sendTrialExpiryWarning({ to, companyName, trialEndsAt, daysLeft })` (branded `STYLES` reminder).
+- `index.js` — registers the job at boot. `.env.example` documents `TRIAL_WARN_DAYS`.
+- Tests: `tests/integration/trialExpiryJob.test.js` — warns in-window + stamps + idempotent; skips far-future trials; skips ACTIVE subs.
+
+**Phase 6-D-7 COMPLETE** after this: monthly invoice cron (PR1) → auto-email + PDF (PR2/PR2.1) → trial-expiry warnings (PR3). Next: Phase 6-D-8 (marketing + ToS + reference tenant + training materials).
 

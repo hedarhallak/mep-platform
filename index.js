@@ -33,4 +33,8 @@ app.listen(PORT, () => {
   // 14:00 UTC). Generates + auto-approves SUBSCRIPTION_RECURRING invoices for
   // ACTIVE monthly subscriptions. Uses superPool internally (cross-tenant).
   require('./jobs/monthlyInvoiceJob')();
+
+  // Phase 6-D-7 PR3: trial-expiry warning emails (daily 13:00 UTC). Warns
+  // COMPANY_ADMINs whose trial ends within TRIAL_WARN_DAYS (default 3).
+  require('./jobs/trialExpiryJob')();
 });
