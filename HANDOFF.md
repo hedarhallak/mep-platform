@@ -17,11 +17,13 @@
 >
 > **Prod safety net (kept):** `ALTER ROLE mepuser_super/mepuser SET idle_in_transaction_session_timeout = '30s';` — defense-in-depth against any future leak.
 >
-> **🎯 NEXT CODE TASK: Phase 6-D-7 PR2 — invoice email automation.** Wire HTML invoice email (Resend) onto the APPROVED `SUBSCRIPTION_RECURRING` invoices `monthlyInvoiceJob` produces (env flag to toggle), reaching the full-auto end state. Then PR3 = trial-expiry warning emails. Reuse `lib/email_training_quote.js` (HTML email pattern) + `lib/email.js`.
+> 6. **✅ Phase 6-D-7 PR2 + PR2.1 (invoice email + PDF) SHIPPED + LIVE — full automation ON (Sections 125.4/125.5).** The cron now generates + approves + **emails** each `SUBSCRIPTION_RECURRING` invoice to the company's COMPANY_ADMIN: a branded (table-layout) notification email + an attached **A4 PDF invoice** (Constrai `#041b76`, line items, QST/GST, payment instructions) via puppeteer/Resend. `INVOICE_EMAIL_ENABLED=true` is set in prod `/var/www/mep/.env`. Required installing Chrome system libs on prod (`libatk1.0-0t64` etc.) for puppeteer — done. Verified by one-off sends to Hedar (clean email + PDF). Logo on the PDF deferred to final stages (backlog).
 >
-> **State note:** MEP Construction = **BASIC · Bracket 6-10 · $25.00/seat/mo · 50/8 seats (at capacity)**. Billing now shows **4** invoices (the 3 prior + the new June subscription **CONS-2026-10001 $229.95 APPROVED** from the PR1 smoke). Payments page empty (no payment recorded yet).
+> **🎯 NEXT CODE TASK: Phase 6-D-7 PR3 — trial-expiry warning emails.** Add a job/leg that warns COMPANY_ADMIN N days before `subscriptions.trial_ends_at` (reuse `lib/email`'s pattern + the `idx_subscriptions_trial_ends` index). After PR3, Phase 6-D-7 closes → Phase 6-D-8 (marketing + ToS + reference tenant + training materials).
 >
-> **New pitfalls this session — #59 (auth pre-tenant writes need `authPool`), #60 (one leaked `tenantDb` client kills the whole admin portal; superPool max=10; root cause was the per-mount client multiplication, now fixed).**
+> **State note:** MEP Construction = **BASIC · Bracket 6-10 · $25.00/seat/mo · 50/8 seats (at capacity)**. Billing shows the June subscription **CONS-2026-10001 $229.95 APPROVED** + the 3 prior invoices. Payments page empty. `INVOICE_EMAIL_ENABLED=true` on prod — next real auto-run is the July 1 cron (June's MEP invoice already exists, so it'll be skipped — idempotent).
+>
+> **New pitfalls this session — #59 (auth pre-tenant writes need `authPool`), #60 (one leaked `tenantDb` client kills the whole admin portal; superPool max=10; per-mount client multiplication, now fixed), #61 (numeric MAX for sequences, never string ORDER BY on zero-padded keys).**
 
 ---
 
@@ -122,10 +124,10 @@
    - `CLAUDE.md` (working rules)
    - `DECISIONS.md` — read ONLY the latest 2-3 sections (the file is now 14,700+ lines). Latest section is **118** (Phase 6-D-4 COMPLETE — all 5 PRs shipped + Pitfalls #50/#51). Also relevant: 117 (PR 1+2 closeout + 3 strategic revisions to S115 + Pitfall #49), 116 (schema design), 115 (pricing model lock — note 115.3 brackets + 115.7 training mandatory + 115.3 self-serve all REVISED in 117).
    - `RECOVERY.md` Section 2.4 only if relevant
-   - Latest section is **125** (Phase 6-D-7 PR1 monthly invoice cron + **125.3** invoice-numbering numeric-MAX fix / Pitfall #61). 124 = Payments leak → tenantDb per-mount fix (124.7) / Pitfall #60. 123 = TOTP fix + key rotation (#59).
+   - Latest section is **125** (Phase 6-D-7: PR1 cron 125.1-2, numbering fix 125.3/Pitfall #61, PR2 email 125.4, PR2.1 PDF+design 125.5). 124 = Payments leak → tenantDb fix (124.7)/Pitfall #60. 123 = TOTP fix + key rotation (#59).
 3. **Echo this exact line** as the first line of your reply:
    ```
-   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 125, prod stable, Payments live + monthly invoice cron shipped/verified, next task is Phase 6-D-7 PR2 invoice email automation)
+   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 125, prod stable, monthly invoice cron live with auto-email + PDF (INVOICE_EMAIL_ENABLED=true), next task is Phase 6-D-7 PR3 trial-expiry warnings)
    ```
 4. **Open with Phase 6-D-6 PR 4 as the active priority.** Scope:
    - **No new backend endpoint** — `POST /api/super/payments/record` already exists (Phase 6-D-4 PR 5 / Section 118.4). Server transitions invoice status to PARTIAL_PAID / PAID automatically when sum of payments meets the total.
@@ -147,19 +149,16 @@
 
 ## Pending tasks at session start (NEXT MAJOR CODE TASK)
 
-### 🎯 Phase 6-D-7 PR2 — invoice email automation (Resend)
+### 🎯 Phase 6-D-7 PR3 — trial-expiry warning emails
 
-Phase 6-D-6 COMPLETE. **Phase 6-D-7 PR1 (monthly invoice cron) is DONE** — `jobs/monthlyInvoiceJob.js` generates + auto-approves `SUBSCRIPTION_RECURRING` invoices on the 1st of the month, deployed + prod-smoked (MEP June invoice CONS-2026-10001 $229.95). Hedar chose **full automation** (generate + approve + email). PR2 adds the email leg:
+Phase 6-D-6 COMPLETE. **Phase 6-D-7 PR1 (cron generate+approve) + PR2/PR2.1 (auto-email + PDF) are DONE and LIVE** — the monthly cron now generates + approves + emails a branded notification + attached A4 PDF invoice to each COMPANY_ADMIN; `INVOICE_EMAIL_ENABLED=true` on prod. Only PR3 remains to close Phase 6-D-7:
 
-**Scope (PR2):**
-- Send an **HTML invoice email (Resend)** to the COMPANY_ADMIN for each APPROVED `SUBSCRIPTION_RECURRING` invoice the cron produces. Wire it into `monthlyInvoiceJob` after the COMMIT (per invoice), and/or expose a sender so failed sends can be retried.
-- **Env flag** (e.g. `INVOICE_EMAIL_ENABLED`) to toggle auto-send — keep it OFF until verified, then flip ON.
-- Reuse `lib/email_training_quote.js` (HTML email builder pattern) + `lib/email.js` (`getMailClient()` / Resend wrapper, as in `jobs/ccqRatesReminderJob.js`).
-- Tests: assert the cron calls the mailer once per created invoice (mock `lib/email`).
+**Scope (PR3):**
+- A job/leg that warns the COMPANY_ADMIN **N days before `subscriptions.trial_ends_at`** (e.g. 3 days). Use the partial index `idx_subscriptions_trial_ends` (status='TRIAL'). Idempotent (don't re-warn the same trial daily — track a `trial_warned_at` or check a sent-marker).
+- Reuse `lib/email` (`sendEmail` / branded `STYLES`) for the warning email.
+- Schedule via `node-cron` (daily) in `jobs/` + register in `index.js`. Tests mock `lib/email`.
 
-**Then PR3:** trial-expiry warning emails (read `trial_ends_at`, warn N days before).
-
-**Pitfalls still live:** #60 (load any new `/api/super` route ~12× → `idle in transaction` stays ~0), **#61** (numeric MAX for sequences, never string sort), #58 (`HUSKY=0 npm ci --omit=dev`), #38/#41 (deploy = backend restart + frontend rebuild).
+**Pitfalls still live:** #60 (load any new `/api/super` route ~12× → `idle in transaction` stays ~0), #61 (numeric MAX for sequences), #58 (`HUSKY=0 npm ci --omit=dev`), #38/#41 (deploy = backend restart + frontend rebuild). Also: **puppeteer needs Chrome system libs on prod** (installed this session — `libatk1.0-0t64` etc.); any new PDF feature relies on them.
 
 ### After Phase 6-D-7: Phase 6-D-8 (marketing refresh + ToS + reference tenant + training materials).
 
@@ -179,6 +178,7 @@ Phase 6-D-6 COMPLETE. **Phase 6-D-7 PR1 (monthly invoice cron) is DONE** — `jo
 | Latest deployed to prod | **Payments UI re-applied (PR #290) on top of the tenantDb one-client-per-request fix** — June 1 night (frontend rebuild + backend restart). `/payments` live + leak-smoke-verified (idle-in-tx = 0 after 12× load). |
 | Last merged to main | **PR #290** (reapply Payments). Earlier today: tenantDb fix PR, #288 (Section 124 docs), #287 (revert), #286 (Payments), #285, #284 (TOTP fix). |
 | Prod DB safety net | `idle_in_transaction_session_timeout = '30s'` on `mepuser_super` + `mepuser` (ALTER ROLE, persists) — defense-in-depth from the Section 124 incident. |
+| Prod env / ops (this session) | `INVOICE_EMAIL_ENABLED=true` in `/var/www/mep/.env` (auto-email invoices ON). Chrome system libs installed (`apt-get install libatk1.0-0t64 ...`) so puppeteer PDF generation works. |
 | TOTP secret | Re-enrolled June 1 under the rotated `TOTP_ENCRYPTION_KEY`. Login = PIN → 6-digit code (no QR). Recovery (lost phone): Section 121.6 SQL reset. |
 | Active program | **Phase 6-D-6 COMPLETE** (all SUPER_ADMIN billing UI shipped; Payments live + stable). Next = Phase 6-D-7 (invoice cron + email automation). |
 | Mobile app | Still on Bearer-token + PIN. Phase 7 (Q1 2027). |
@@ -215,8 +215,8 @@ Phase 6-D-6 COMPLETE. **Phase 6-D-7 PR1 (monthly invoice cron) is DONE** — `jo
 | **tenantDb one-client-per-request fix** | ✅ **Deployed** — `if (req.db) return next()` guard; app-wide improvement. |
 | **Section 125 — Phase 6-D-7 PR1 monthly invoice cron** | ✅ **Shipped + deployed + prod-smoked** (MEP June invoice CONS-2026-10001 $229.95). |
 | **Section 125.3 — invoice-numbering numeric-MAX fix (Pitfall #61)** | ✅ **Deployed (PR #294)** — was string-ordering, collided at 10000. |
-| **Phase 6-D-7 PR2 — invoice email automation (Resend)** | ⏳ **NEXT** |
-| **Phase 6-D-7 PR3 — trial-expiry warning emails** | ⏳ after PR2 |
+| **Section 125.4/125.5 — Phase 6-D-7 PR2/PR2.1 auto-email + PDF invoice** | ✅ **LIVE** — branded email + A4 PDF; `INVOICE_EMAIL_ENABLED=true` on prod; Chrome libs installed for puppeteer. |
+| **Phase 6-D-7 PR3 — trial-expiry warning emails** | ⏳ **NEXT** (closes Phase 6-D-7) |
 | Phase 6-D-6 — SUPER_ADMIN UI (Subscription detail with Apply Change, Training Quotes, etc.) | ⏳ June-July 2026 |
 | Phase 6-D-7 — Invoice email automation + monthly cron + trial expiry warnings | ⏳ July 2026 |
 | Phase 6-D-8 — Marketing site refresh + ToS legal review + reference tenant + training materials | ⏳ July-Aug 2026 |
@@ -230,6 +230,7 @@ Phase 6-D-6 COMPLETE. **Phase 6-D-7 PR1 (monthly invoice cron) is DONE** — `jo
 
 ## Backlog items still open (lower priority)
 
+- **⏳ Company logo + final design polish on the invoice PDF** (final stages, Hedar June 1). The PDF invoice (`lib/email.js` `sendSubscriptionInvoice`) currently uses a text wordmark header (`#041b76`). Add the Constrai logo image + any final design refinements before launch. Same place to add the bank/remittance details below.
 - **⏳ Constrai bank / remittance details on the invoice** (near-term, fits Phase 6-D-7/8). The manual payment flow needs the invoice to show *where customers send the bank transfer / cheque* — a Settings field for Constrai's **business** bank account + render it as payment instructions on invoices + emails. Not present today. (Hedar flagged June 1.)
 - **⏳ Business structure + dedicated business bank account — DECIDE BEFORE FIRST REAL REVENUE** (business/legal/accounting, not a code task). All payments must land in a **separate company account, never Hedar's personal account** (liability separation, clean bookkeeping, QST/GST, professional trust, and Stripe payouts require a business account in Phase 9-B). Confirm sole-prop vs incorporation with an accountant; likely incorporate before taking real money. Ties to the $30K Revenu Québec QST/GST threshold item below. (Hedar raised June 1.)
 - **⏳ Subscription auto-charge (telecom-style)** — the professional end-state Hedar wants: stored payment method + recurring auto-charge (card via Stripe Billing, OR PAD/pre-authorized debit from the customer's bank account). Deliberately deferred to **Phase 9-B** (the schema is already forward-compatible: `STRIPE_CARD` method enum + `external_ref` for `payment_intent_id`). Strategy: manual now → fully automated later, layered on top of the existing system-of-record (no rewrite). Sensitive parts (PCI, PAD mandates, dunning, refunds) are handled by Stripe.
