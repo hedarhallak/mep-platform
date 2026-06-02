@@ -9,7 +9,7 @@ import {
   LayoutDashboard, FolderKanban, Users, ClipboardList,
   Settings, LogOut, Building2, BarChart2, Brain,
   ChevronDown, ChevronRight, CalendarCheck, Inbox, Package, Truck, FileText, Shield, Send,
-  Download, WifiOff, RefreshCw, Receipt, CreditCard
+  Download, WifiOff, RefreshCw, Receipt, CreditCard, Recycle
 } from 'lucide-react'
 
 // Section 50: nav items reference i18n keys instead of inline EN strings.
@@ -26,6 +26,7 @@ const mainNav = [
   { to: '/task-request',     icon: Send,            labelKey: 'nav.taskRequest',      permission: { module: 'hub',             action: 'send_tasks'     } },
   { to: '/material-request', icon: Package,         labelKey: 'nav.materialRequest',  permission: { module: 'materials',       action: 'request_submit' } },
   { to: '/purchase-orders',  icon: FileText,        labelKey: 'nav.purchaseOrders',   permission: { module: 'purchase_orders', action: 'view'           } },
+  { to: '/surplus',          icon: Recycle,         labelKey: 'nav.surplus',          permission: { module: 'materials',       action: 'surplus_view'   } },
   { to: '/my-hub',           icon: Inbox,           labelKey: 'nav.myHub',            permission: null, badge: true },
 ]
 
@@ -105,6 +106,10 @@ export default function AppLayout() {
     can('purchase_orders', 'view_own') ||
     can('purchase_orders', 'view_own_trade')
   )
+  const canSeeSurplus = !permsLoading && (
+    can('materials', 'surplus_view') ||
+    can('materials', 'surplus_declare')
+  )
 
   const visibleMain = mainNav.filter(item => {
     if (!item.permission) return true
@@ -113,6 +118,7 @@ export default function AppLayout() {
     if (item.to === '/attendance')       return canSeeAttendance
     if (item.to === '/material-request') return canSeeMaterials
     if (item.to === '/purchase-orders')  return canSeePurchaseOrders
+    if (item.to === '/surplus')          return canSeeSurplus
     return can(item.permission.module, item.permission.action)
   })
 

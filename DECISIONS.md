@@ -15354,3 +15354,30 @@ The first email leg shipped a plain HTML table. Hedar's feedback: "at minimum it
 
 Both 🔵 Planned. Added to the HANDOFF "Functional feature backlog". Priority + design session timing to be set by Hedar.
 
+---
+
+## 127. Section 127 — June 2026 — Surfacing unimplemented side-menu features (web first); Material Return/Surplus FRONTEND shipped
+
+> Hedar's priority: add the not-yet-implemented side menus so they're visible in the program — **real designed pages matching the app, built page by page, web first** (mobile is a separate full update later, long neglected). Order he set: (1) menus → (2) his full program overview → (3) security → (4) infra/hygiene/debt → (5) finish billing.
+
+### 127.1 — Key finding: the Material Return/Surplus BACKEND already exists
+
+Before building, investigation showed the surplus backend was **already implemented** (would have duplicated it):
+- Tables `material_returns` + `material_return_items` (in migration 013's strict RLS list).
+- `routes/material_requests.js`: `POST /materials/returns` (declare surplus), `GET /materials/returns` (my declarations), `GET /materials/surplus` (available company-wide), and the `PATCH /requests/:id/review` flow already consumes surplus (`qty_from_surplus` + `surplus_source_project_id` reduces `qty_available`).
+- Permissions `materials.surplus_view` + `materials.surplus_declare` already seeded.
+
+So the feature was "missing from the menus" only because the **frontend was never built**. (A draft migration 024 creating duplicate surplus tables was written then discarded — do NOT re-add it. The existing `material_returns` model is the source of truth.)
+
+### 127.2 — What shipped (frontend only)
+
+- `mep-frontend/src/pages/materials/SurplusPage.jsx` — header + tabs (Declare / Available) matching `MaterialRequestPage`'s design system. Declare → `POST /materials/returns`; Available → `GET /materials/surplus`. Declare tab is gated/hidden by `materials.surplus_declare`.
+- `AppLayout.jsx` — "Surplus" nav item (Recycle icon) gated by `surplus_view` OR `surplus_declare`.
+- `App.jsx` — `/surplus` route (anyOf surplus_view/surplus_declare).
+- i18n: `nav.surplus` + `surplus.*` namespace in `en.js` + `fr.js`.
+- `SurplusPage.test.jsx` — RTL smoke (renders tabs; hides Declare without permission).
+
+### 127.3 — Lesson + next
+
+**Lesson:** before building a "missing" feature, grep the routes/migrations — backend may already exist (it did here). Next functional menus to surface (web, page-by-page): **Tool Request (§126.1)**, **Emergency Purchase (§126.2)**, **Smart Assignment (§10)** — each: first check what backend exists, then build the page. Then the planned **full mobile app update**.
+

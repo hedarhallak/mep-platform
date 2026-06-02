@@ -39,6 +39,7 @@ export default {
     taskRequest: 'Task Request',
     materialRequest: 'Material Request',
     purchaseOrders: 'Purchase Orders',
+    surplus: 'Surplus',
     myHub: 'My Hub',
     bi: 'Business Intelligence',
     workforcePlanner: 'Workforce Planner',
@@ -49,6 +50,40 @@ export default {
     billing: 'Billing',
     logout: 'Logout',
     companyFallback: 'Company',
+  },
+
+  surplus: {
+    title: 'Surplus Materials',
+    subtitle: 'Declare leftover materials and find what other sites have spare',
+    tabs: {
+      declare: 'Declare',
+      available: 'Available',
+    },
+    declare: {
+      project: 'Project',
+      selectProject: 'Select a project',
+      items: 'Surplus items',
+      itemNamePlaceholder: 'Item name',
+      qtyPlaceholder: 'Qty',
+      addItem: 'Add item',
+      note: 'Note (optional)',
+      notePlaceholder: 'Anything the receiving site should know…',
+      submit: 'Declare surplus',
+      success: 'Surplus declared — it is now visible to other sites.',
+      errors: {
+        selectProject: 'Please select a project',
+        addItem: 'Add at least one item with a quantity',
+      },
+    },
+    available: {
+      count: '{{count}} item(s) available',
+      empty: 'No surplus available right now',
+      th: {
+        item: 'Item',
+        qty: 'Available',
+        source: 'From project',
+      },
+    },
   },
 
   billing: {
