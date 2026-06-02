@@ -15294,3 +15294,14 @@ Reaches the full-automation end state Hedar chose (generate + approve + **email*
 
 **Deploy note:** ship with `INVOICE_EMAIL_ENABLED` absent/false; after verifying generated invoices look right, set `INVOICE_EMAIL_ENABLED=true` in `/var/www/mep/.env` + `pm2 restart --update-env`. PR3 (trial-expiry warnings) is the last Phase 6-D-7 piece.
 
+### 125.5 — PR2.1: professional PDF invoice + branded email (Hedar feedback)
+
+The first email leg shipped a plain HTML table. Hedar's feedback: "at minimum it should be a PDF, organized, with a simple design." Enhanced:
+
+- Moved the implementation into `lib/email.js` as `sendSubscriptionInvoice({ to, invoice })` so it reuses the existing puppeteer `getBrowser()`, `STYLES`, `FROM`, and `getMailClient()` (the same proven pattern as `sendPurchaseOrder`). `lib/email_invoice.js` is now a thin re-export of it under `sendSubscriptionInvoiceEmail` — so `jobs/monthlyInvoiceJob.js` and the email test are unchanged.
+- Generates a clean **A4 PDF invoice** (Constrai brand `#041b76` header, invoice #/issue/due, Bill-to, a line-items table with seats × unit price, Subtotal/QST/GST/Total, payment instructions) via puppeteer, base64-attached to the email. **Graceful degradation:** if the browser can't launch (e.g. CI with `PUPPETEER_SKIP_DOWNLOAD=true`), it logs and sends email-only (mirrors `sendPurchaseOrder`).
+- The notification email itself is now branded (the shared `STYLES` wrapper + `#041b76` header + totals info-box) and notes the attached PDF.
+- Verified on prod by a one-off send of MEP's `CONS-2026-10001` to Hedar (`sent: true`, email received, data correct $229.95).
+
+**Note for Phase 9-B / future:** the PDF currently embeds Constrai's name only; once the "Constrai bank/remittance details on invoice" backlog item lands, add the business bank info to the PDF payment block.
+
