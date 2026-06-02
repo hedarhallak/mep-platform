@@ -12,9 +12,14 @@
 >
 > **Prod safety net (kept):** `ALTER ROLE mepuser_super/mepuser SET idle_in_transaction_session_timeout = '30s';` — defense-in-depth against any future leak.
 >
-> **🎯 NEXT CODE TASK: Phase 6-D-7** — monthly SUBSCRIPTION invoice cron + email automation (HTML invoices via Resend, trial-expiry warnings). Phase 6-D-6 (all SUPER_ADMIN billing UI) is done.
+> 4. **✅ Phase 6-D-7 PR1 (monthly subscription invoice cron) SHIPPED + verified (Section 125).** `jobs/monthlyInvoiceJob.js` — 1st-of-month 14:00 UTC, generates + auto-approves `SUBSCRIPTION_RECURRING` invoices for ACTIVE monthly subs (idempotent, superPool, reuses `lib/invoice_numbering`). Hedar chose **full automation** (generate + approve + email); PR1 = generate+approve (no email), PR2 = email, PR3 = trial-expiry. Prod smoke created MEP's June invoice **CONS-2026-10001 = $229.95** (8 seats × $25 + QST/GST) — math correct, idempotent.
+> 5. **✅ Invoice-numbering bug fixed (Section 125.3, Pitfall #61).** The shared `generateInvoiceNumber` used a **string** `ORDER BY` to find the latest sequence → `'CONS-2026-9999' > 'CONS-2026-10000'` lexically → next computed 10000 → UNIQUE collision. Fixed to numeric `MAX(suffix::int)`. Caught by the PR1 prod smoke (the integration test never crossed 10000; real data did). Benefits training + custom-demand numbering too.
 >
-> **State note:** MEP Construction = **BASIC · Bracket 6-10 · $25.00/seat/mo · 50/8 seats (at capacity)**. Billing shows 3 invoices (Custom $1724.63 Draft, Subscription $155.22 Approved, Training $1092.26 Draft). Payments page currently empty (no payment recorded yet).
+> **Prod safety net (kept):** `ALTER ROLE mepuser_super/mepuser SET idle_in_transaction_session_timeout = '30s';` — defense-in-depth against any future leak.
+>
+> **🎯 NEXT CODE TASK: Phase 6-D-7 PR2 — invoice email automation.** Wire HTML invoice email (Resend) onto the APPROVED `SUBSCRIPTION_RECURRING` invoices `monthlyInvoiceJob` produces (env flag to toggle), reaching the full-auto end state. Then PR3 = trial-expiry warning emails. Reuse `lib/email_training_quote.js` (HTML email pattern) + `lib/email.js`.
+>
+> **State note:** MEP Construction = **BASIC · Bracket 6-10 · $25.00/seat/mo · 50/8 seats (at capacity)**. Billing now shows **4** invoices (the 3 prior + the new June subscription **CONS-2026-10001 $229.95 APPROVED** from the PR1 smoke). Payments page empty (no payment recorded yet).
 >
 > **New pitfalls this session — #59 (auth pre-tenant writes need `authPool`), #60 (one leaked `tenantDb` client kills the whole admin portal; superPool max=10; root cause was the per-mount client multiplication, now fixed).**
 
@@ -117,10 +122,10 @@
    - `CLAUDE.md` (working rules)
    - `DECISIONS.md` — read ONLY the latest 2-3 sections (the file is now 14,700+ lines). Latest section is **118** (Phase 6-D-4 COMPLETE — all 5 PRs shipped + Pitfalls #50/#51). Also relevant: 117 (PR 1+2 closeout + 3 strategic revisions to S115 + Pitfall #49), 116 (schema design), 115 (pricing model lock — note 115.3 brackets + 115.7 training mandatory + 115.3 self-serve all REVISED in 117).
    - `RECOVERY.md` Section 2.4 only if relevant
-   - Latest section is now **124** (Payments leak incident → root cause in **124.7** = tenantDb per-mount client multiplication → fixed → Payments re-shipped LIVE + Pitfall #60). 123 = TOTP enrollment fix + key rotation (#59). 122 = Custom Demands UI.
+   - Latest section is **125** (Phase 6-D-7 PR1 monthly invoice cron + **125.3** invoice-numbering numeric-MAX fix / Pitfall #61). 124 = Payments leak → tenantDb per-mount fix (124.7) / Pitfall #60. 123 = TOTP fix + key rotation (#59).
 3. **Echo this exact line** as the first line of your reply:
    ```
-   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 124, prod stable, Payments UI live after tenantDb one-client-per-request fix, Phase 6-D-6 complete, next task is Phase 6-D-7 invoice cron + email automation)
+   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 125, prod stable, Payments live + monthly invoice cron shipped/verified, next task is Phase 6-D-7 PR2 invoice email automation)
    ```
 4. **Open with Phase 6-D-6 PR 4 as the active priority.** Scope:
    - **No new backend endpoint** — `POST /api/super/payments/record` already exists (Phase 6-D-4 PR 5 / Section 118.4). Server transitions invoice status to PARTIAL_PAID / PAID automatically when sum of payments meets the total.
@@ -142,18 +147,19 @@
 
 ## Pending tasks at session start (NEXT MAJOR CODE TASK)
 
-### 🎯 Phase 6-D-7 — Monthly invoice cron + email automation
+### 🎯 Phase 6-D-7 PR2 — invoice email automation (Resend)
 
-Phase 6-D-6 is **COMPLETE** — all SUPER_ADMIN billing UI shipped (Subscription Requests, Training Quotes, Custom Demands, Payments) and Payments is live + leak-verified after the tenantDb fix. Next:
+Phase 6-D-6 COMPLETE. **Phase 6-D-7 PR1 (monthly invoice cron) is DONE** — `jobs/monthlyInvoiceJob.js` generates + auto-approves `SUBSCRIPTION_RECURRING` invoices on the 1st of the month, deployed + prod-smoked (MEP June invoice CONS-2026-10001 $229.95). Hedar chose **full automation** (generate + approve + email). PR2 adds the email leg:
 
-**Scope (Phase 6-D-7):**
-- **Monthly invoice cron** — on day-1 of each month, auto-generate the SUBSCRIPTION invoice for each ACTIVE subscription (seats × bracket per-seat price + QST/GST via `lib/invoice_numbering`), status DRAFT → APPROVED.
-- **Email automation (Resend)** — send HTML invoices to COMPANY_ADMIN; trial-expiry warning emails. (PDF deferred per earlier scope-cut.)
-- **Trial-expiry job** — warn N days before `trial_ends_at`.
+**Scope (PR2):**
+- Send an **HTML invoice email (Resend)** to the COMPANY_ADMIN for each APPROVED `SUBSCRIPTION_RECURRING` invoice the cron produces. Wire it into `monthlyInvoiceJob` after the COMMIT (per invoice), and/or expose a sender so failed sends can be retried.
+- **Env flag** (e.g. `INVOICE_EMAIL_ENABLED`) to toggle auto-send — keep it OFF until verified, then flip ON.
+- Reuse `lib/email_training_quote.js` (HTML email builder pattern) + `lib/email.js` (`getMailClient()` / Resend wrapper, as in `jobs/ccqRatesReminderJob.js`).
+- Tests: assert the cron calls the mailer once per created invoice (mock `lib/email`).
 
-**References:** `jobs/` (existing scheduled-job pattern), `lib/invoice_numbering.js`, `lib/email_training_quote.js` (HTML email pattern), Section 116 (billing schema), Section 115 (pricing brackets).
+**Then PR3:** trial-expiry warning emails (read `trial_ends_at`, warn N days before).
 
-**Pitfalls still live:** **#60** (any NEW `/api/super` route: load it ~12× and confirm `mepuser_super | idle in transaction` stays ~0 — the tenantDb fix should keep it at 1 client/request, but verify), #57 (modal-open assert via `getByRole('heading')`), #58 (`HUSKY=0 npm ci --omit=dev`), #38/#41 (deploy = backend restart + frontend rebuild).
+**Pitfalls still live:** #60 (load any new `/api/super` route ~12× → `idle in transaction` stays ~0), **#61** (numeric MAX for sequences, never string sort), #58 (`HUSKY=0 npm ci --omit=dev`), #38/#41 (deploy = backend restart + frontend rebuild).
 
 ### After Phase 6-D-7: Phase 6-D-8 (marketing refresh + ToS + reference tenant + training materials).
 
@@ -207,7 +213,10 @@ Phase 6-D-6 is **COMPLETE** — all SUPER_ADMIN billing UI shipped (Subscription
 | **Phase 6-D-6 PR 4 — Payments UI** | ✅ **LIVE** — shipped (#286) → incident → reverted (#287) → root-caused (124.7) → tenantDb fix → re-shipped (#290), leak-smoke verified. |
 | **Section 124 — Payments leak: incident + root cause (tenantDb per-mount client multiplication) + fix + Pitfall #60** | ✅ **Recorded; fix deployed; Payments live + stable** |
 | **tenantDb one-client-per-request fix** | ✅ **Deployed** — `if (req.db) return next()` guard; app-wide improvement. |
-| **Phase 6-D-7 — invoice cron + email automation** | ⏳ **NEXT** |
+| **Section 125 — Phase 6-D-7 PR1 monthly invoice cron** | ✅ **Shipped + deployed + prod-smoked** (MEP June invoice CONS-2026-10001 $229.95). |
+| **Section 125.3 — invoice-numbering numeric-MAX fix (Pitfall #61)** | ✅ **Deployed (PR #294)** — was string-ordering, collided at 10000. |
+| **Phase 6-D-7 PR2 — invoice email automation (Resend)** | ⏳ **NEXT** |
+| **Phase 6-D-7 PR3 — trial-expiry warning emails** | ⏳ after PR2 |
 | Phase 6-D-6 — SUPER_ADMIN UI (Subscription detail with Apply Change, Training Quotes, etc.) | ⏳ June-July 2026 |
 | Phase 6-D-7 — Invoice email automation + monthly cron + trial expiry warnings | ⏳ July 2026 |
 | Phase 6-D-8 — Marketing site refresh + ToS legal review + reference tenant + training materials | ⏳ July-Aug 2026 |
@@ -389,6 +398,8 @@ Prod `/var/www/mep/.env` is in sync. `DO_SPACES_*` env vars not yet set (deferre
 59. **(NEW — Section 123) Pre-tenant writes to RLS-strict tables from `/api/auth/*` MUST use `authPool`, never `pool`.** `/api/auth/*` is mounted via `mountPublicRoutes` and runs BEFORE any `tenantDb` middleware sets `app.company_id`. The regular `pool` connects as `mepuser` under strict RLS (migration 013), so a write with no GUC set matches **zero rows and no-ops silently** — no error thrown. This is exactly why TOTP enrollment never persisted: `POST /auth/totp/confirm-setup` did its `UPDATE public.app_users SET totp_* ...` through `pool`, the update hit 0 rows, but the endpoint returned `ok:true` and issued the JWT, so `totp_enabled_at` stayed NULL and every later login re-showed the setup QR. Reads were already correct (`authPool` for the login SELECT and change-pin); only this one write slipped through. **Rules:** (a) any pre-tenant `app_users`/`refresh_tokens` query in `routes/auth.js` uses `authPool` (= `superPool` / BYPASSRLS); (b) every state-changing pre-tenant query checks `rowCount` and returns an error on 0 — a silent 0-row write is worse than an error. Code-search net: `grep -n "pool.query" routes/auth.js` and confirm each write targets `authPool`. Fixed in PR #284.
 
 60. **(NEW — Section 124) One SUPER_ADMIN route that leaks a single `tenantDb` client takes down the WHOLE admin portal — superPool `max` is only 10.** Discovered shipping Payments UI (PR #286, reverted in #287). Symptoms: admin pages hang then 502; nginx `error.log` shows `upstream timed out ... reading response header` then `no live upstreams` (which makes even `/api/health` 502 → Better Stack/Sentry fire); `SELECT usename,state,count(*) FROM pg_stat_activity GROUP BY 1,2` shows `mepuser_super | idle in transaction` climbing toward 10, OR "phantom exhaustion" (requests stuck at pool checkout with ZERO live mepuser_super connections). **The route's SQL can be fast in isolation** — run it directly as `postgres` to prove it (Payments query was 4.6 ms); the hang is at pool checkout, not in the query. **Recovery:** `SELECT pg_terminate_backend(pid) ... WHERE usename='mepuser_super' AND state='idle in transaction';` **AND** `pm2 restart mep-backend` (BOTH — terminate alone leaves the node pool's phantom checked-out count; only a restart rebuilds the pool). **Prevention (done):** `idle_in_transaction_session_timeout='30s'` on the app roles. **Before shipping any new SUPER_ADMIN route:** load it ~12× and confirm `idle in transaction` for `mepuser_super` stays ~0. Consider raising superPool `max`.
+
+61. **(NEW — Section 125.3) Never derive a numeric sequence via a STRING `ORDER BY` on a zero-padded text key.** `lib/invoice_numbering.js` found the latest invoice via `ORDER BY invoice_number DESC` (string). Once the sequence crossed the 4-digit pad width, `'CONS-2026-9999'` sorted ABOVE `'CONS-2026-10000'` (`'9' > '1'`), so the computed "next" was 10000 → `uq_invoice_number` collision. Fixed to `MAX((substring(invoice_number FROM '-([0-9]+)$'))::int)`. **Two lessons:** (a) cast the numeric part and MAX it, never lexical-sort padded sequences; (b) **a prod smoke before trusting an automated job pays off** — the integration test passed because its seeded data never crossed 10000, but real prod data did. Run new billing/sequence jobs once manually on prod and read the result before relying on the cron.
 
 ---
 
