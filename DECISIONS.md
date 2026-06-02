@@ -15400,7 +15400,12 @@ So the feature was "missing from the menus" only because the **frontend was neve
 
 **Deploy note:** migration 024 must be applied on prod BEFORE the code (`sudo -u postgres psql mepdb -f migrations/024_tool_tracking.sql`), then `pm2 restart`.
 
-### 128.2 — Slice B (next): the Tools web page
+### 128.2 — Slice B (frontend) shipped
 
-`/tools` page (nav + i18n EN/FR) mirroring the design system: tabs for **Request** (catalog picker filtered by trade + project + qty), **My Requests**, and **Assets** (units + current location). Then Emergency Purchase (§126.2), then Smart Assignment (§10), then the full mobile update.
+`mep-frontend/src/pages/materials/ToolsPage.jsx` — `/tools` page mirroring the design system, tabs:
+- **Request** — project select + **trade filter chips** (smart filter by specialty) → catalog dropdown (reloads `GET /tools/catalog?trade=`) + qty + note → `POST /tools/requests`.
+- **Assets** — `GET /tools/assets` table: tool / asset tag / status badge / location (project or Warehouse).
+Tabs gated by permission (Request = request_submit, Assets = surplus_view). Wired: `AppLayout` nav (Wrench), `App.jsx` `/tools` route, `nav.tools` + `tools.*` i18n (en+fr), `ToolsPage.test.jsx` smoke.
+
+**Tool Request feature COMPLETE (backend + frontend).** Next functional menus: Emergency Purchase (§126.2), then Smart Assignment (§10), then the full mobile update.
 

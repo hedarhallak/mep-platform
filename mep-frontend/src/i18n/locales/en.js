@@ -40,6 +40,7 @@ export default {
     materialRequest: 'Material Request',
     purchaseOrders: 'Purchase Orders',
     surplus: 'Surplus',
+    tools: 'Tools',
     myHub: 'My Hub',
     bi: 'Business Intelligence',
     workforcePlanner: 'Workforce Planner',
@@ -50,6 +51,42 @@ export default {
     billing: 'Billing',
     logout: 'Logout',
     companyFallback: 'Company',
+  },
+
+  tools: {
+    title: 'Tools',
+    subtitle: 'Request tools from the warehouse and track where each one is',
+    tabs: { request: 'Request', assets: 'Assets' },
+    trades: {
+      GENERAL: 'General', ELECTRICAL: 'Electrical', PLUMBING: 'Plumbing',
+      MECHANICAL: 'Mechanical', LAYOUT: 'Layout',
+    },
+    assetStatus: {
+      AVAILABLE: 'Available', ASSIGNED: 'On site', MAINTENANCE: 'Maintenance', RETIRED: 'Retired',
+    },
+    request: {
+      project: 'Project',
+      selectProject: 'Select a project',
+      trade: 'Filter by trade',
+      allTrades: 'All',
+      tool: 'Tool',
+      noTools: 'No tools in this trade',
+      qty: 'Qty',
+      note: 'Note (optional)',
+      notePlaceholder: 'Anything the warehouse should know…',
+      submit: 'Request tool',
+      success: 'Tool requested — the warehouse will be notified.',
+      errors: {
+        selectProject: 'Please select a project',
+        selectTool: 'Please select a tool',
+      },
+    },
+    assets: {
+      count: '{{count}} tool unit(s)',
+      empty: 'No tool units registered yet',
+      warehouse: 'Warehouse',
+      th: { tool: 'Tool', tag: 'Asset tag', status: 'Status', location: 'Location' },
+    },
   },
 
   surplus: {
