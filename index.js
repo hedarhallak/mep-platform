@@ -28,4 +28,9 @@ app.listen(PORT, () => {
 
   // Monthly CCQ travel rates expiry reminder (1st of month, 09:00 Quebec)
   require('./jobs/ccqRatesReminderJob')(pool);
+
+  // Phase 6-D-7 PR1: monthly subscription invoice generation (1st of month,
+  // 14:00 UTC). Generates + auto-approves SUBSCRIPTION_RECURRING invoices for
+  // ACTIVE monthly subscriptions. Uses superPool internally (cross-tenant).
+  require('./jobs/monthlyInvoiceJob')();
 });

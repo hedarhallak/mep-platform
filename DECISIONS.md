@@ -15244,4 +15244,31 @@ Why the other pages were fine: custom-demands = `/custom-demands/quotes`(router 
 
 **Validation plan (no prod experiments):** ship the tenantDb fix as its own PR, deploy (backend-only: `git pull` + `pm2 restart`), regression-check the existing super pages, then re-apply Payments (`git revert 003ea8d`) and run the leak smoke (load `/payments` ~12×, confirm `mepuser_super | idle in transaction` stays ~0).
 
+**Outcome (same day):** tenantDb fix shipped + deployed; existing super pages regression-checked clean (idle-in-tx = 0). Payments re-applied (PR #290), leak smoke PASSED (`/payments` loaded 12× → idle-in-tx stayed 0). **Payments is LIVE + stable. Phase 6-D-6 COMPLETE.**
+
+---
+
+## 125. Section 125 — June 1, 2026 (night) — Phase 6-D-7 PR1: monthly subscription invoice cron
+
+**Status:** PR1 of Phase 6-D-7. Decision (Hedar, June 1): subscription invoicing goes **full-auto** — generate + approve + email. PR1 ships the generate+approve cron (NO email yet); PR2 adds the Resend email; PR3 adds trial-expiry warnings. Sequenced so the invoice math is verified before any auto-email reaches a real customer.
+
+### 125.1 — What PR1 adds
+
+- `jobs/monthlyInvoiceJob.js` — `node-cron` job, **1st of month 14:00 UTC**. `generateMonthlyInvoices(poolOverride?, now?)`:
+  - Reads ACTIVE + MONTHLY subscriptions across all tenants via **superPool (BYPASSRLS)** — it's a cross-tenant system job with no request context (same reasoning as Pitfall #59 / authPool).
+  - Per subscription: `subtotal = max(subscribed_seats, minimum_seats_billed) × current_unit_price_cents`; QST/GST + sequential `CONS-YYYY-NNNN` via the existing `lib/invoice_numbering` (reused from training/custom-demand quotes). Inserts a `SUBSCRIPTION_RECURRING` invoice with status **APPROVED**, `approved_by = 'system'` (customer pre-approved at signup — matches migration 018's invoices.status note), net-30 due date, and a `details` JSONB capturing the billing period + seat/price snapshot. Advances `last_billed_at` + `next_billing_at`.
+  - **Idempotent (no double-billing):** skips a subscription if `last_billed_at` is already in the current month OR a `SUBSCRIPTION_RECURRING` invoice already exists for the company with an `issue_date` this month. Both guards run.
+  - Per-subscription transaction (the advisory-lock invoice numbering must run inside one); a failure on one sub doesn't abort the others.
+  - Exports `generateMonthlyInvoices` for tests + a future manual "run now" endpoint.
+- `index.js` — registers the job at boot (alongside weeklyReportJob + ccqRatesReminderJob).
+- `tests/integration/monthlyInvoiceJob.test.js` — seat math + Quebec taxes ($135 → $155.22 for 5 seats), APPROVED/approved_by=system, anchors advanced, idempotency (second run no duplicate), TRIAL skipped.
+
+No migration — all columns (`last_billed_at`, `next_billing_at`, `billing_anchor_day`, invoices.*) already exist from migration 018.
+
+### 125.2 — Next
+
+- PR2: HTML invoice email via Resend on the APPROVED invoices (env flag to toggle), reaching the full-auto end state Hedar chose.
+- PR3: trial-expiry warning emails (read `trial_ends_at`).
+- Future: a SUPER_ADMIN "run invoices now" button wrapping `generateMonthlyInvoices` for manual/off-cycle runs.
+
 
