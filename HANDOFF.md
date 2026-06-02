@@ -18,8 +18,9 @@
 > **Prod safety net (kept):** `ALTER ROLE mepuser_super/mepuser SET idle_in_transaction_session_timeout = '30s';` — defense-in-depth against any future leak.
 >
 > 6. **✅ Phase 6-D-7 PR2 + PR2.1 (invoice email + PDF) SHIPPED + LIVE — full automation ON (Sections 125.4/125.5).** The cron now generates + approves + **emails** each `SUBSCRIPTION_RECURRING` invoice to the company's COMPANY_ADMIN: a branded (table-layout) notification email + an attached **A4 PDF invoice** (Constrai `#041b76`, line items, QST/GST, payment instructions) via puppeteer/Resend. `INVOICE_EMAIL_ENABLED=true` is set in prod `/var/www/mep/.env`. Required installing Chrome system libs on prod (`libatk1.0-0t64` etc.) for puppeteer — done. Verified by one-off sends to Hedar (clean email + PDF). Logo on the PDF deferred to final stages (backlog).
+> 7. **✅ Phase 6-D-7 PR3 (trial-expiry warnings) SHIPPED + LIVE (Section 125.6) — Phase 6-D-7 COMPLETE.** `jobs/trialExpiryJob.js` runs daily (13:00 UTC), warns the COMPANY_ADMIN `TRIAL_WARN_DAYS` (default 3) before `trial_ends_at`, idempotent via new `subscriptions.trial_warned_at` (migration 023, applied on prod). Branded email via `lib/email` `sendTrialExpiryWarning`. No prod smoke (no real TRIAL subs; logic covered by tests). **All billing automation is now live: monthly invoice → auto-email+PDF → trial warnings.**
 >
-> **🎯 NEXT CODE TASK: Phase 6-D-7 PR3 — trial-expiry warning emails.** Add a job/leg that warns COMPANY_ADMIN N days before `subscriptions.trial_ends_at` (reuse `lib/email`'s pattern + the `idx_subscriptions_trial_ends` index). After PR3, Phase 6-D-7 closes → Phase 6-D-8 (marketing + ToS + reference tenant + training materials).
+> **🎯 NEXT CODE TASK: Phase 6-D-8** — marketing site refresh + ToS legal review + reference tenant data + modular training materials (per Section 117.6). OR pick from backlog (logo/bank on invoice PDF, MEP→ENTERPRISE demo posture, Dependabot triage). Phase 6-D-7 is done.
 >
 > **State note:** MEP Construction = **BASIC · Bracket 6-10 · $25.00/seat/mo · 50/8 seats (at capacity)**. Billing shows the June subscription **CONS-2026-10001 $229.95 APPROVED** + the 3 prior invoices. Payments page empty. `INVOICE_EMAIL_ENABLED=true` on prod — next real auto-run is the July 1 cron (June's MEP invoice already exists, so it'll be skipped — idempotent).
 >
@@ -124,10 +125,10 @@
    - `CLAUDE.md` (working rules)
    - `DECISIONS.md` — read ONLY the latest 2-3 sections (the file is now 14,700+ lines). Latest section is **118** (Phase 6-D-4 COMPLETE — all 5 PRs shipped + Pitfalls #50/#51). Also relevant: 117 (PR 1+2 closeout + 3 strategic revisions to S115 + Pitfall #49), 116 (schema design), 115 (pricing model lock — note 115.3 brackets + 115.7 training mandatory + 115.3 self-serve all REVISED in 117).
    - `RECOVERY.md` Section 2.4 only if relevant
-   - Latest section is **125** (Phase 6-D-7: PR1 cron 125.1-2, numbering fix 125.3/Pitfall #61, PR2 email 125.4, PR2.1 PDF+design 125.5). 124 = Payments leak → tenantDb fix (124.7)/Pitfall #60. 123 = TOTP fix + key rotation (#59).
+   - Latest section is **125** (Phase 6-D-7 COMPLETE: PR1 cron 125.1-2, numbering fix 125.3/#61, PR2 email 125.4, PR2.1 PDF 125.5, PR3 trial-warnings 125.6). 124 = Payments leak → tenantDb fix (124.7)/#60. 123 = TOTP fix + key rotation (#59).
 3. **Echo this exact line** as the first line of your reply:
    ```
-   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 125, prod stable, monthly invoice cron live with auto-email + PDF (INVOICE_EMAIL_ENABLED=true), next task is Phase 6-D-7 PR3 trial-expiry warnings)
+   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 125, prod stable, Phase 6-D-7 billing automation COMPLETE (invoice cron + auto-email/PDF + trial warnings all live), next task is Phase 6-D-8)
    ```
 4. **Open with Phase 6-D-6 PR 4 as the active priority.** Scope:
    - **No new backend endpoint** — `POST /api/super/payments/record` already exists (Phase 6-D-4 PR 5 / Section 118.4). Server transitions invoice status to PARTIAL_PAID / PAID automatically when sum of payments meets the total.
@@ -149,18 +150,15 @@
 
 ## Pending tasks at session start (NEXT MAJOR CODE TASK)
 
-### 🎯 Phase 6-D-7 PR3 — trial-expiry warning emails
+### 🎯 Phase 6-D-8 — marketing + ToS + reference tenant + training materials
 
-Phase 6-D-6 COMPLETE. **Phase 6-D-7 PR1 (cron generate+approve) + PR2/PR2.1 (auto-email + PDF) are DONE and LIVE** — the monthly cron now generates + approves + emails a branded notification + attached A4 PDF invoice to each COMPANY_ADMIN; `INVOICE_EMAIL_ENABLED=true` on prod. Only PR3 remains to close Phase 6-D-7:
+**Phase 6-D-7 is COMPLETE and LIVE** — full billing automation: monthly invoice cron (PR1) → auto-email + A4 PDF (PR2/PR2.1, `INVOICE_EMAIL_ENABLED=true`) → trial-expiry warnings (PR3, daily). All deployed + verified.
 
-**Scope (PR3):**
-- A job/leg that warns the COMPANY_ADMIN **N days before `subscriptions.trial_ends_at`** (e.g. 3 days). Use the partial index `idx_subscriptions_trial_ends` (status='TRIAL'). Idempotent (don't re-warn the same trial daily — track a `trial_warned_at` or check a sent-marker).
-- Reuse `lib/email` (`sendEmail` / branded `STYLES`) for the warning email.
-- Schedule via `node-cron` (daily) in `jobs/` + register in `index.js`. Tests mock `lib/email`.
+Next major area is **Phase 6-D-8** (per the roadmap): marketing site refresh, ToS legal review (mandatory training + Quebec consumer protection + audit-trail evidence policy), reference tenant data, and **modular training materials** anchored on concepts + workflows (Section 117.6), not screen-by-screen (product evolves fast). This is largely non-code / content + parallelizable.
 
-**Pitfalls still live:** #60 (load any new `/api/super` route ~12× → `idle in transaction` stays ~0), #61 (numeric MAX for sequences), #58 (`HUSKY=0 npm ci --omit=dev`), #38/#41 (deploy = backend restart + frontend rebuild). Also: **puppeteer needs Chrome system libs on prod** (installed this session — `libatk1.0-0t64` etc.); any new PDF feature relies on them.
+Or pick a backlog item (logo + bank details on the invoice PDF; MEP→ENTERPRISE demo posture; Dependabot triage; integration test for TOTP confirm-setup).
 
-### After Phase 6-D-7: Phase 6-D-8 (marketing refresh + ToS + reference tenant + training materials).
+**Pitfalls still live:** #60 (load any new `/api/super` route ~12× → `idle in transaction` stays ~0), #61 (numeric MAX for sequences), #58 (`HUSKY=0 npm ci --omit=dev`), #38/#41 (deploy = backend restart + frontend rebuild), #46 (migrations are manual on prod — `sudo -u postgres psql mepdb -f migrations/NNN.sql` BEFORE `pm2 restart`). **puppeteer needs Chrome system libs on prod** (installed this session); any new PDF feature relies on them.
 
 ---
 
@@ -178,7 +176,7 @@ Phase 6-D-6 COMPLETE. **Phase 6-D-7 PR1 (cron generate+approve) + PR2/PR2.1 (aut
 | Latest deployed to prod | **Payments UI re-applied (PR #290) on top of the tenantDb one-client-per-request fix** — June 1 night (frontend rebuild + backend restart). `/payments` live + leak-smoke-verified (idle-in-tx = 0 after 12× load). |
 | Last merged to main | **PR #290** (reapply Payments). Earlier today: tenantDb fix PR, #288 (Section 124 docs), #287 (revert), #286 (Payments), #285, #284 (TOTP fix). |
 | Prod DB safety net | `idle_in_transaction_session_timeout = '30s'` on `mepuser_super` + `mepuser` (ALTER ROLE, persists) — defense-in-depth from the Section 124 incident. |
-| Prod env / ops (this session) | `INVOICE_EMAIL_ENABLED=true` in `/var/www/mep/.env` (auto-email invoices ON). Chrome system libs installed (`apt-get install libatk1.0-0t64 ...`) so puppeteer PDF generation works. |
+| Prod env / ops (this session) | `INVOICE_EMAIL_ENABLED=true` + `TRIAL_WARN_DAYS=3` (default) in `/var/www/mep/.env`. Chrome system libs installed (`apt-get install libatk1.0-0t64 ...`) for puppeteer PDF. Migration **023** (`subscriptions.trial_warned_at`) applied. Latest migration = 023. |
 | TOTP secret | Re-enrolled June 1 under the rotated `TOTP_ENCRYPTION_KEY`. Login = PIN → 6-digit code (no QR). Recovery (lost phone): Section 121.6 SQL reset. |
 | Active program | **Phase 6-D-6 COMPLETE** (all SUPER_ADMIN billing UI shipped; Payments live + stable). Next = Phase 6-D-7 (invoice cron + email automation). |
 | Mobile app | Still on Bearer-token + PIN. Phase 7 (Q1 2027). |
@@ -216,7 +214,8 @@ Phase 6-D-6 COMPLETE. **Phase 6-D-7 PR1 (cron generate+approve) + PR2/PR2.1 (aut
 | **Section 125 — Phase 6-D-7 PR1 monthly invoice cron** | ✅ **Shipped + deployed + prod-smoked** (MEP June invoice CONS-2026-10001 $229.95). |
 | **Section 125.3 — invoice-numbering numeric-MAX fix (Pitfall #61)** | ✅ **Deployed (PR #294)** — was string-ordering, collided at 10000. |
 | **Section 125.4/125.5 — Phase 6-D-7 PR2/PR2.1 auto-email + PDF invoice** | ✅ **LIVE** — branded email + A4 PDF; `INVOICE_EMAIL_ENABLED=true` on prod; Chrome libs installed for puppeteer. |
-| **Phase 6-D-7 PR3 — trial-expiry warning emails** | ⏳ **NEXT** (closes Phase 6-D-7) |
+| **Section 125.6 — Phase 6-D-7 PR3 trial-expiry warnings** | ✅ **LIVE** — daily job + migration 023 (`trial_warned_at`) applied on prod. **Phase 6-D-7 COMPLETE.** |
+| **Phase 6-D-8 — marketing + ToS + reference tenant + training** | ⏳ **NEXT** |
 | Phase 6-D-6 — SUPER_ADMIN UI (Subscription detail with Apply Change, Training Quotes, etc.) | ⏳ June-July 2026 |
 | Phase 6-D-7 — Invoice email automation + monthly cron + trial expiry warnings | ⏳ July 2026 |
 | Phase 6-D-8 — Marketing site refresh + ToS legal review + reference tenant + training materials | ⏳ July-Aug 2026 |
