@@ -317,6 +317,8 @@ function mountTenantRoutes(app) {
   // ── Materials & Purchase Orders ─────────────────────────────
   // Section 89-C/10: material_requests migrated to req.db (RLS-enforced).
   app.use('/api/materials', auth, tenantDb, require('./routes/material_requests'));
+  // Phase 6-D-9 / §126.1: tool request + asset tracking (RLS-enforced via req.db).
+  app.use('/api/tools', auth, tenantDb, require('./routes/tools'));
 
   // ── Expense claims (Section 94.5 starter) ───────────────────
   // Emergency-purchase claims submitted by workers, approved by admin.
