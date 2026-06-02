@@ -25,6 +25,7 @@ import AdminLogin from './admin/AdminLogin.jsx'
 import SubscriptionRequestsPage from './admin/SubscriptionRequestsPage.jsx'
 import TrainingQuotesPage from './admin/TrainingQuotesPage.jsx'
 import CustomDemandsPage from './admin/CustomDemandsPage.jsx'
+import PaymentsPage from './admin/PaymentsPage.jsx'
 
 function NotFound() {
   const { pathname } = useLocation()
@@ -57,6 +58,8 @@ export default function AdminApp() {
         <Route path="/training-quotes" element={<TrainingQuotesPage />} />
         {/* Section 122 / Phase 6-D-6 PR 3 — cross-company custom demand management. */}
         <Route path="/custom-demands" element={<CustomDemandsPage />} />
+        {/* Section 123 / Phase 6-D-6 PR 4 — cross-company payments management. */}
+        <Route path="/payments" element={<PaymentsPage />} />
         <Route path="/login" element={<AdminLogin />} />
         <Route path="*" element={<NotFound />} />
       </Routes>

@@ -180,6 +180,12 @@ export default function CompaniesList() {
             Custom demands
           </Link>
           <Link
+            to="/payments"
+            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-slate-100 text-sm font-medium"
+          >
+            Payments
+          </Link>
+          <Link
             to="/companies/new"
             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded text-white text-sm font-medium"
           >
