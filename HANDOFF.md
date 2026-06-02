@@ -229,6 +229,15 @@ Or pick a backlog item (logo + bank details on the invoice PDF; MEP→ENTERPRISE
 
 ## Backlog items still open (lower priority)
 
+### Functional feature backlog (app menus / field workflows — 🔵 Planned, need design sessions)
+- **⏳ Material Return / Surplus System** (DECISIONS §8) — foreman declares surplus → 3-day hold → cross-site claim → driver transfer → supplier/warehouse fallback → surplus-check on new PO.
+- **⏳ Tool Request System** (DECISIONS §126.1) — foreman requests warehouse tools (drill, impact, etc.) for a project; tool catalog tagged by trade for smart filtering; checkout/return + asset tracking.
+- **⏳ Emergency / petty material purchase** (DECISIONS §126.2) — foreman buys urgent/small-value materials direct for the project (can't wait for supplier/warehouse, or not carried); receipt capture + threshold approval + expense tie-in.
+- **⏳ Smart Assignment System** (DECISIONS §10) — auto-suggest assignments by proximity/trade/workload + driver routing for transfers.
+- **⏳ CCQ Labor Marketplace** (DECISIONS §9, 💡 future/large) — company job posts + worker availability, CCQ-verified.
+- **⏳ Web app i18n** (CLAUDE.md — still TODO; mobile already i18n'd).
+
+### Billing / ops / infra backlog
 - **⏳ Company logo + final design polish on the invoice PDF** (final stages, Hedar June 1). The PDF invoice (`lib/email.js` `sendSubscriptionInvoice`) currently uses a text wordmark header (`#041b76`). Add the Constrai logo image + any final design refinements before launch. Same place to add the bank/remittance details below.
 - **⏳ Constrai bank / remittance details on the invoice** (near-term, fits Phase 6-D-7/8). The manual payment flow needs the invoice to show *where customers send the bank transfer / cheque* — a Settings field for Constrai's **business** bank account + render it as payment instructions on invoices + emails. Not present today. (Hedar flagged June 1.)
 - **⏳ Business structure + dedicated business bank account — DECIDE BEFORE FIRST REAL REVENUE** (business/legal/accounting, not a code task). All payments must land in a **separate company account, never Hedar's personal account** (liability separation, clean bookkeeping, QST/GST, professional trust, and Stripe payouts require a business account in Phase 9-B). Confirm sole-prop vs incorporation with an accountant; likely incorporate before taking real money. Ties to the $30K Revenu Québec QST/GST threshold item below. (Hedar raised June 1.)

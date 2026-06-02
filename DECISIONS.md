@@ -15315,3 +15315,42 @@ The first email leg shipped a plain HTML table. Hedar's feedback: "at minimum it
 
 **Phase 6-D-7 COMPLETE** after this: monthly invoice cron (PR1) → auto-email + PDF (PR2/PR2.1) → trial-expiry warnings (PR3). Next: Phase 6-D-8 (marketing + ToS + reference tenant + training materials).
 
+---
+
+## 126. Section 126 — June 2026 — Functional feature ideas: Tool Request + Emergency Material Purchase (🔵 Planned, captured from Hedar)
+
+> Two new field-workflow features Hedar described. 🔵 **Planned — need a design session.** Documented here so they're not lost. Not scheduled yet (priority TBD by Hedar).
+
+### 126.1 — Tool Request System (warehouse tools → project)
+
+**Idea:** a FOREMAN requests **tools/equipment** from the company warehouse for a project (drill, impact driver, etc.) — distinct from the existing **Material Request** (consumable materials). The request is fulfilled from the warehouse (assign + dispatch), tracked as checked-out to the project, and returned when done.
+
+**Notes / open design:**
+- A **tool catalog** of common construction tools, **tagged by trade** so the request UI can do **smart internal filtering by specialty** (a plumber sees plumbing tools first, electrician sees electrical, etc.).
+- Likely needs: a `tools` catalog table (name, category, trade, asset tag?), and a `tool_requests` / `tool_assignments` table (tool, project, foreman, checked_out_at, returned_at, status). Could mirror the Material Return/Surplus pattern (§8) for transfer/return between sites.
+- Dashboard → "Tools" icon (FOREMAN+): Request tool / My checked-out tools / Available in warehouse.
+- Ties into asset tracking (which project currently holds each physical tool).
+
+**Starter tool catalog (to refine), grouped by trade tag:**
+- **GENERAL / power:** cordless drill, impact driver, hammer drill, rotary hammer (SDS), angle grinder, reciprocating saw, circular saw, jigsaw, oscillating multi-tool, heat gun.
+- **GENERAL / hand:** hammer, screwdriver set, wrench/socket set, pliers (lineman / needle-nose / channel-lock), utility knife, hacksaw, pry bar, clamps, files.
+- **ELECTRICAL:** wire strippers, crimping tool, multimeter, voltage tester, fish tape, conduit bender, cable cutter, knockout punch, megohmmeter.
+- **PLUMBING:** pipe wrench, tubing cutter, PEX crimp/expansion tool, press tool (ProPress), propane torch, basin wrench, drain auger/snake, flaring tool, pipe reamer.
+- **MECHANICAL / HVAC:** manifold gauge set, vacuum pump, refrigerant recovery machine, swaging tool, fin comb, nitrogen regulator, torque wrench, anemometer.
+- **LAYOUT / MEASURE:** laser level, rotary laser, plumb bob, framing square, stud finder, laser distance meter.
+- (Access/heavy — ladders, scaffolding, scissor lift — likely a separate "equipment rental" track; decide in design.)
+
+### 126.2 — Emergency / petty material purchase
+
+**Idea:** a FOREMAN buys materials **directly for the project** in urgent cases — when an item (a) is needed immediately and can't wait for supplier or warehouse delivery, or (b) isn't carried by the supplier or in the warehouse. Typically **emergency, small-value** purchases.
+
+**Notes / open design:**
+- A lightweight "petty / emergency purchase" record (project, foreman, items, amount, receipt photo, paid_by) — separate from the formal Purchase Order flow.
+- Approval/threshold: small value → maybe auto-allowed up to a cap; above cap → needs admin approval.
+- Reimbursement / expense tie-in (foreman paid out of pocket?) — relates to the existing expense-claims area.
+- Receipt capture (photo upload) for the audit trail.
+
+### 126.3 — Status
+
+Both 🔵 Planned. Added to the HANDOFF "Functional feature backlog". Priority + design session timing to be set by Hedar.
+
