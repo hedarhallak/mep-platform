@@ -15271,4 +15271,16 @@ No migration — all columns (`last_billed_at`, `next_billing_at`, `billing_anch
 - PR3: trial-expiry warning emails (read `trial_ends_at`).
 - Future: a SUPER_ADMIN "run invoices now" button wrapping `generateMonthlyInvoices` for manual/off-cycle runs.
 
+### 125.3 — Bug found by the PR1 prod smoke: invoice numbering used STRING ordering + Pitfall #61
+
+Running the worker manually on prod (the smoke before trusting the cron) surfaced:
+`duplicate key value violates unique constraint "uq_invoice_number"`.
+
+**Root cause:** `lib/invoice_numbering.js`'s `generateInvoiceNumber` found the latest sequence via `ORDER BY invoice_number DESC` — a **string** sort. Prod had `CONS-2026-0001`, `CONS-2026-9999`, `CONS-2026-10000`. Lexicographically `'CONS-2026-9999' > 'CONS-2026-10000'` (because `'9' > '1'` at the 11th char), so the string-max was `9999` → next computed `10000` → collided with the existing `CONS-2026-10000`. This is a latent bug in the **shared** helper used by training + custom-demand quotes too; the monthly job was simply the first caller to run after the data crossed 10000.
+
+**Fix:** compute the max of the **numeric** suffix instead:
+`SELECT COALESCE(MAX((substring(invoice_number FROM '-([0-9]+)$'))::int), 0) ...`. Order-correct regardless of zero-pad width. Regression test in `tests/integration/invoice_numbering.test.js` (9999 + 10000 present → next is 10001). The advisory-lock serialization is unchanged.
+
+**Pitfall #61 — never derive a numeric sequence via string ORDER BY on a zero-padded text key.** Once values exceed the pad width (`9999` → `10000`), lexical order diverges from numeric order and you get collisions / gaps. Cast the numeric part and `MAX` it. Also: this is exactly why a **prod smoke before trusting an automated job pays off** — the integration test passed (its seeded data never crossed 10000), but real data did.
+
 
