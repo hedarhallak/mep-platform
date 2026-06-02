@@ -15283,4 +15283,14 @@ Running the worker manually on prod (the smoke before trusting the cron) surface
 
 **Pitfall #61 — never derive a numeric sequence via string ORDER BY on a zero-padded text key.** Once values exceed the pad width (`9999` → `10000`), lexical order diverges from numeric order and you get collisions / gaps. Cast the numeric part and `MAX` it. Also: this is exactly why a **prod smoke before trusting an automated job pays off** — the integration test passed (its seeded data never crossed 10000), but real data did.
 
+### 125.4 — Phase 6-D-7 PR2: invoice email automation (Resend)
+
+Reaches the full-automation end state Hedar chose (generate + approve + **email**).
+
+- `lib/email_invoice.js` — `sendSubscriptionInvoiceEmail({ to, invoice })` builds an HTML + text monthly-invoice email, mirroring `lib/email_training_quote.js` (all interpolations through `escapeHtml`, single-token pre-computed vars for Semgrep). Sends via `lib/email`'s provider-agnostic `sendEmail`.
+- `jobs/monthlyInvoiceJob.js` — after each invoice COMMIT, if `INVOICE_EMAIL_ENABLED === 'true'`, looks up the company's active `COMPANY_ADMIN` email (via superPool) and sends the invoice. The send is **after COMMIT** and in its **own try/catch** so a mail failure never rolls back or fails a created invoice; tracked separately as `summary.emailed` / `summary.emailErrors`. The flag is read **per-run inside the function** (not at module load) — testable + no env leakage between Jest files. Ships OFF; flip on prod once verified.
+- `.env.example` documents `INVOICE_EMAIL_ENABLED` (default false).
+- Tests: `tests/integration/monthlyInvoiceJob.email.test.js` (mocks `lib/email_invoice`) — emails once per created invoice for the COMPANY_ADMIN when enabled, none when off.
+
+**Deploy note:** ship with `INVOICE_EMAIL_ENABLED` absent/false; after verifying generated invoices look right, set `INVOICE_EMAIL_ENABLED=true` in `/var/www/mep/.env` + `pm2 restart --update-env`. PR3 (trial-expiry warnings) is the last Phase 6-D-7 piece.
 

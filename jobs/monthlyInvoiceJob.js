@@ -27,8 +27,11 @@
  * tenant's subscription and write invoices. (Same reason routes/auth.js uses
  * authPool — Pitfall #59.)
  *
- * Email: NOT sent here. Phase 6-D-7 PR2 wires the HTML invoice email (Resend)
- * onto the APPROVED invoices this job produces.
+ * Email (Phase 6-D-7 PR2): when INVOICE_EMAIL_ENABLED=true, each created +
+ * approved invoice is emailed (HTML, Resend) to the company's COMPANY_ADMIN
+ * AFTER the COMMIT, in its own try/catch (a mail failure never rolls back or
+ * fails the invoice). When the flag is off, invoices are still generated +
+ * approved — just not emailed.
  */
 
 const cron = require('node-cron');
@@ -38,6 +41,7 @@ const {
   getActiveTaxRates,
   calculateTaxes,
 } = require('../lib/invoice_numbering');
+const { sendSubscriptionInvoiceEmail } = require('../lib/email_invoice');
 
 function startOfMonthUTC(d) {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
@@ -59,9 +63,22 @@ function ymd(date) {
  */
 async function generateMonthlyInvoices(poolOverride, now = new Date()) {
   const dbPool = poolOverride || superPool || pool;
+  // Phase 6-D-7 PR2: auto-email toggle, read per-run (not at module load) so it
+  // ships OFF and can be flipped via INVOICE_EMAIL_ENABLED=true once verified —
+  // reaching full automation (generate + approve + email). When off, invoices
+  // are still generated + approved; they're just not emailed.
+  const emailEnabled = process.env.INVOICE_EMAIL_ENABLED === 'true';
   const periodStart = startOfMonthUTC(now);
   const nextPeriod = startOfNextMonthUTC(now);
-  const summary = { considered: 0, created: 0, skipped: 0, errors: 0, invoices: [] };
+  const summary = {
+    considered: 0,
+    created: 0,
+    skipped: 0,
+    errors: 0,
+    emailed: 0,
+    emailErrors: 0,
+    invoices: [],
+  };
 
   const { rows: subs } = await dbPool.query(
     `SELECT s.id, s.company_id, s.subscribed_seats, s.minimum_seats_billed,
@@ -171,6 +188,55 @@ async function generateMonthlyInvoices(poolOverride, now = new Date()) {
         `[monthlyInvoice] Created ${invRows[0].invoice_number} for ${sub.company_name} ` +
           `(${billedSeats} seats, $${(Number(invRows[0].total_cents) / 100).toFixed(2)} CAD)`
       );
+
+      // Phase 6-D-7 PR2: email the invoice. AFTER COMMIT (a mail failure must
+      // never roll back a created invoice) and in its own try/catch so it can't
+      // touch the job's error count. Guarded by INVOICE_EMAIL_ENABLED.
+      if (emailEnabled) {
+        try {
+          const { rows: admins } = await dbPool.query(
+            `SELECT email FROM public.app_users
+              WHERE company_id = $1 AND role = 'COMPANY_ADMIN' AND is_active = true
+              ORDER BY id LIMIT 1`,
+            [sub.company_id]
+          );
+          const to = admins[0] && admins[0].email;
+          if (!to) {
+            console.warn(
+              `[monthlyInvoice] ${invRows[0].invoice_number}: no active COMPANY_ADMIN email ` +
+                `for company ${sub.company_id} — invoice created but not emailed`
+            );
+          } else {
+            const sent = await sendSubscriptionInvoiceEmail({
+              to,
+              invoice: {
+                invoice_number: invRows[0].invoice_number,
+                company_name: sub.company_name,
+                issue_date: issueDate,
+                due_date: dueDate,
+                seats_billed: billedSeats,
+                unit_price_cents: Number(sub.current_unit_price_cents),
+                subtotal_cents: subtotalCents,
+                qst_cents,
+                gst_cents,
+                total_cents,
+              },
+            });
+            if (sent) {
+              summary.emailed++;
+              console.log(`[monthlyInvoice] Emailed ${invRows[0].invoice_number} to ${to}`);
+            } else {
+              summary.emailErrors++;
+            }
+          }
+        } catch (mailErr) {
+          summary.emailErrors++;
+          console.error(
+            `[monthlyInvoice] email failed for ${invRows[0].invoice_number}:`,
+            mailErr.message
+          );
+        }
+      }
     } catch (err) {
       try {
         await client.query('ROLLBACK');
@@ -186,7 +252,8 @@ async function generateMonthlyInvoices(poolOverride, now = new Date()) {
 
   console.log(
     `[monthlyInvoice] Run complete: ${summary.created} created, ${summary.skipped} skipped, ` +
-      `${summary.errors} errors (of ${summary.considered} considered).`
+      `${summary.errors} errors, ${summary.emailed} emailed, ${summary.emailErrors} email-errors ` +
+      `(of ${summary.considered} considered).`
   );
   return summary;
 }
