@@ -21,6 +21,7 @@ const AttendancePage       = lazy(() => import('@/pages/attendance/AttendancePag
 const MyHubPage            = lazy(() => import('@/pages/hub/MyHubPage'))
 const MaterialRequestPage  = lazy(() => import('@/pages/materials/MaterialRequestPage'))
 const PurchaseOrdersPage   = lazy(() => import('@/pages/materials/PurchaseOrdersPage'))
+const SurplusPage          = lazy(() => import('@/pages/materials/SurplusPage'))
 const SuppliersPage        = lazy(() => import('@/pages/suppliers/SuppliersPage'))
 const WorkforcePlannerPage = lazy(() => import('@/pages/bi/WorkforcePlannerPage'))
 const PermissionsPage      = lazy(() => import('@/pages/PermissionsPage'))
@@ -179,6 +180,14 @@ function AppRoutes() {
               { module: 'purchase_orders', action: 'view_own_trade'  },
             ]}>
               <PurchaseOrdersPage />
+            </RequirePermission>
+          }/>
+          <Route path="surplus" element={
+            <RequirePermission anyOf={[
+              { module: 'materials', action: 'surplus_view'    },
+              { module: 'materials', action: 'surplus_declare' },
+            ]}>
+              <SurplusPage />
             </RequirePermission>
           }/>
 

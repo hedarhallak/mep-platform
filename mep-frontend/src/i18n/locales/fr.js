@@ -39,6 +39,7 @@ export default {
     taskRequest: 'Demande de tâche',
     materialRequest: 'Demande de matériel',
     purchaseOrders: "Bons d'achat",
+    surplus: 'Surplus',
     myHub: 'Mon Hub',
     bi: "Intelligence d'affaires",
     workforcePlanner: "Planificateur d'effectifs",
@@ -49,6 +50,40 @@ export default {
     billing: 'Facturation',
     logout: 'Déconnexion',
     companyFallback: 'Entreprise',
+  },
+
+  surplus: {
+    title: 'Matériel en surplus',
+    subtitle: 'Déclarez le matériel restant et trouvez ce que les autres chantiers ont en trop',
+    tabs: {
+      declare: 'Déclarer',
+      available: 'Disponible',
+    },
+    declare: {
+      project: 'Projet',
+      selectProject: 'Sélectionnez un projet',
+      items: 'Articles en surplus',
+      itemNamePlaceholder: "Nom de l'article",
+      qtyPlaceholder: 'Qté',
+      addItem: 'Ajouter un article',
+      note: 'Note (optionnel)',
+      notePlaceholder: 'Ce que le chantier receveur devrait savoir…',
+      submit: 'Déclarer le surplus',
+      success: 'Surplus déclaré — il est maintenant visible aux autres chantiers.',
+      errors: {
+        selectProject: 'Veuillez sélectionner un projet',
+        addItem: 'Ajoutez au moins un article avec une quantité',
+      },
+    },
+    available: {
+      count: '{{count}} article(s) disponible(s)',
+      empty: 'Aucun surplus disponible pour le moment',
+      th: {
+        item: 'Article',
+        qty: 'Disponible',
+        source: 'Du projet',
+      },
+    },
   },
 
   billing: {
