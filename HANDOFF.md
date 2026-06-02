@@ -1,20 +1,22 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: June 1, 2026 ~21:30 UTC — **Big session. Two things shipped + one reverted:**
-> 1. **✅ TOTP enrollment bug FIXED (Section 123, PR #284, deployed + verified).** SUPER_ADMIN TOTP enrollment never persisted (setup QR re-appeared every login) because `POST /auth/totp/confirm-setup` wrote `app_users` via the RLS-enforced regular `pool` (zero-row silent no-op) instead of `authPool`. Fixed with `authPool` + `rowCount` guard. Scan once → verify-only thereafter. Pitfall #59.
-> 2. **✅ `TOTP_ENCRYPTION_KEY` ROTATED** (accidentally printed unmasked in chat → treated as compromised → rotated; new key in OneDrive `Constrai Keys`, Hedar re-enrolled TOTP). Exposed key is dead.
-> 3. **⚠️ Phase 6-D-6 PR 4 (Payments UI) SHIPPED then REVERTED (Section 124).** PR #286 caused a production incident: the Payments endpoints **leaked `mepuser_super` superPool clients** ("idle in transaction"), exhausting the max-10 pool and taking down the ENTIRE admin portal (all super pages hung/502; nginx `no live upstreams`; Better Stack + Sentry fired). Reverted via **PR #287 (`003ea8d`), deployed, portal verified stable.** Pitfall #60.
+> Last updated: June 1, 2026 ~23:30 UTC — **Big session, all resolved. Three things shipped + Phase 6-D-6 PR 4 DONE:**
+> 1. **✅ TOTP enrollment bug FIXED (Section 123, PR #284).** Enrollment never persisted (QR re-appeared every login) because `POST /auth/totp/confirm-setup` wrote `app_users` via the RLS-enforced `pool` instead of `authPool`. Fixed with `authPool` + `rowCount` guard. Pitfall #59.
+> 2. **✅ `TOTP_ENCRYPTION_KEY` ROTATED** (accidentally printed in chat → rotated; new key in OneDrive `Constrai Keys`; Hedar re-enrolled). Exposed key is dead.
+> 3. **✅ Phase 6-D-6 PR 4 (Payments UI) — shipped, caused an incident, ROOT-CAUSED, fixed, and re-shipped LIVE + verified stable.** Full arc in Section 124:
+>    - PR #286 deployed Payments → admin portal went down: `mepuser_super` superPool (max 10) exhausted by "idle in transaction" pile-up. Reverted (PR #287).
+>    - **Root cause (Section 124.7):** `tenantDb` acquired one pool client **per `/api/super` mount the request traversed** (app.js mounts it 8×, once per router). The 7th-mounted `super_payments` route borrowed 7 clients/request; the Payments page fires **two** parallel requests both in that router → up to 14 concurrent checkouts > 10 → deadlock. (Other pages were fine because their two requests hit shallower mounts: e.g. custom-demands = router 6 + router 1 = 7 ≤ 10.) The hang was at pool checkout, not the SQL (which ran in 4 ms).
+>    - **Fix:** idempotency guard in `middleware/tenant_db.js` — `if (req.db) return next();` → one client + one transaction per request, app-wide. Shipped + deployed.
+>    - **Re-shipped Payments** (`git revert 003ea8d`, PR #290) → **leak smoke PASSED**: `/payments` loaded 12× with `mepuser_super | idle in transaction` staying at **0**. Payments is now LIVE at `admin.constrai.ca/payments` and stable. **Phase 6-D-6 is COMPLETE.**
 >
-> **Prod safety net applied (persists):** `ALTER ROLE mepuser_super/mepuser SET idle_in_transaction_session_timeout = '30s';` — leaked transactions now self-reap in 30s. (Does NOT fully fix the borrow-leak — only a node restart repairs the pool's phantom checked-out count — but stops idle-in-tx accumulation.)
+> **Prod safety net (kept):** `ALTER ROLE mepuser_super/mepuser SET idle_in_transaction_session_timeout = '30s';` — defense-in-depth against any future leak.
 >
-> **🎯 NEXT CODE TASK — root-cause the superPool client leak OFFLINE (Section 124.6), then re-apply Payments.** Do NOT re-deploy Payments to prod until the leak is reproduced + fixed + proven non-leaking on staging. Reproduce locally with `TEST_DATABASE_URL`: hit `GET /super/payments` + `/payments/invoices` ~12× while logging `tenantDb` connect/commit/rollback and watching `pg_stat_activity`. Compare the (leaking) Payments path vs the (clean) custom-demands path — identical middleware, so the diff is subtle. Re-apply Payments with `git revert 003ea8d` once fixed.
+> **🎯 NEXT CODE TASK: Phase 6-D-7** — monthly SUBSCRIPTION invoice cron + email automation (HTML invoices via Resend, trial-expiry warnings). Phase 6-D-6 (all SUPER_ADMIN billing UI) is done.
 >
-> **State note:** MEP Construction subscription = **BASIC · Bracket 6-10 · $25.00/seat/mo · 50/8 seats (at capacity)** (Hedar tested an 8-seat change). Billing shows 3 invoices (Custom $1724.63 Draft, Subscription $155.22 Approved, Training $1092.26 Draft).
+> **State note:** MEP Construction = **BASIC · Bracket 6-10 · $25.00/seat/mo · 50/8 seats (at capacity)**. Billing shows 3 invoices (Custom $1724.63 Draft, Subscription $155.22 Approved, Training $1092.26 Draft). Payments page currently empty (no payment recorded yet).
 >
-> **Cleanup nit:** an untracked `commit-msg.txt` may sit in the laptop repo root + a stale local `revert/pr4-payments-ui` branch — delete both.
->
-> **New pitfalls this session — #59 (auth pre-tenant writes need `authPool`) + #60 (one leaked `tenantDb` client kills the whole admin portal; superPool max is 10).**
+> **New pitfalls this session — #59 (auth pre-tenant writes need `authPool`), #60 (one leaked `tenantDb` client kills the whole admin portal; superPool max=10; root cause was the per-mount client multiplication, now fixed).**
 
 ---
 
@@ -115,10 +117,10 @@
    - `CLAUDE.md` (working rules)
    - `DECISIONS.md` — read ONLY the latest 2-3 sections (the file is now 14,700+ lines). Latest section is **118** (Phase 6-D-4 COMPLETE — all 5 PRs shipped + Pitfalls #50/#51). Also relevant: 117 (PR 1+2 closeout + 3 strategic revisions to S115 + Pitfall #49), 116 (schema design), 115 (pricing model lock — note 115.3 brackets + 115.7 training mandatory + 115.3 self-serve all REVISED in 117).
    - `RECOVERY.md` Section 2.4 only if relevant
-   - Latest section is now **124** (Payments UI shipped→reverted, superPool leak incident + Pitfall #60). 123 = TOTP enrollment fix + key rotation (#59). 122 = Custom Demands UI. 121 = TOTP 2FA.
+   - Latest section is now **124** (Payments leak incident → root cause in **124.7** = tenantDb per-mount client multiplication → fixed → Payments re-shipped LIVE + Pitfall #60). 123 = TOTP enrollment fix + key rotation (#59). 122 = Custom Demands UI.
 3. **Echo this exact line** as the first line of your reply:
    ```
-   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 124, prod stable, Payments UI reverted after superPool leak, next task is to root-cause the leak offline before re-shipping Payments)
+   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 124, prod stable, Payments UI live after tenantDb one-client-per-request fix, Phase 6-D-6 complete, next task is Phase 6-D-7 invoice cron + email automation)
    ```
 4. **Open with Phase 6-D-6 PR 4 as the active priority.** Scope:
    - **No new backend endpoint** — `POST /api/super/payments/record` already exists (Phase 6-D-4 PR 5 / Section 118.4). Server transitions invoice status to PARTIAL_PAID / PAID automatically when sum of payments meets the total.
@@ -140,21 +142,20 @@
 
 ## Pending tasks at session start (NEXT MAJOR CODE TASK)
 
-### 🎯 Root-cause the superPool client leak (OFFLINE), then re-ship Payments UI
+### 🎯 Phase 6-D-7 — Monthly invoice cron + email automation
 
-Phase 6-D-6 PR 4 (Payments UI) was fully built + CI-green + deployed (PR #286), but it **leaked `mepuser_super` superPool clients** and took down the admin portal — so it was **reverted (PR #287, `003ea8d`)**. The code is recoverable from git at commit `83fafce`.
+Phase 6-D-6 is **COMPLETE** — all SUPER_ADMIN billing UI shipped (Subscription Requests, Training Quotes, Custom Demands, Payments) and Payments is live + leak-verified after the tenantDb fix. Next:
 
-**Do this BEFORE touching prod again:**
-1. **Reproduce locally** (`TEST_DATABASE_URL`): start the app, log in as SUPER_ADMIN, hit `GET /api/super/payments` + `GET /api/super/payments/invoices` ~12×, and watch `SELECT usename,state,count(*) FROM pg_stat_activity GROUP BY 1,2` — confirm `mepuser_super | idle in transaction` climbs (it should, reproducing the leak).
-2. **Instrument** `middleware/tenant_db.js` — log each `connect` / `COMMIT` / `ROLLBACK` / `client.release()` with the request path. Find why the Payments path doesn't release while the custom-demands path does (identical middleware → subtle diff; suspects: `res 'close'` rollback racing an in-flight query, or the two-parallel-request `Promise.all` pattern against a max-10 pool).
-3. **Fix** (likely in `tenant_db.js`, possibly also raise superPool `max`), prove non-leaking on staging.
-4. **Re-apply Payments:** `git revert 003ea8d` → redeploy → re-run the 12× leak smoke on prod (`idle in transaction` must stay ~0).
+**Scope (Phase 6-D-7):**
+- **Monthly invoice cron** — on day-1 of each month, auto-generate the SUBSCRIPTION invoice for each ACTIVE subscription (seats × bracket per-seat price + QST/GST via `lib/invoice_numbering`), status DRAFT → APPROVED.
+- **Email automation (Resend)** — send HTML invoices to COMPANY_ADMIN; trial-expiry warning emails. (PDF deferred per earlier scope-cut.)
+- **Trial-expiry job** — warn N days before `trial_ends_at`.
 
-**Critical references:** Section 124 (the incident + Pitfall #60), Section 122.1 (Custom Demands UI pattern — the clean sibling), `middleware/tenant_db.js`, `db.js` (superPool def).
+**References:** `jobs/` (existing scheduled-job pattern), `lib/invoice_numbering.js`, `lib/email_training_quote.js` (HTML email pattern), Section 116 (billing schema), Section 115 (pricing brackets).
 
-**Critical pitfalls:** **#60** (one leaked client kills the portal; recovery = terminate idle-in-tx **+** `pm2 restart`), #57 (modal-open assert via `getByRole('heading')` — already applied), #58 (`HUSKY=0 npm ci --omit=dev`), #38/#41 (deploy = backend restart + frontend rebuild).
+**Pitfalls still live:** **#60** (any NEW `/api/super` route: load it ~12× and confirm `mepuser_super | idle in transaction` stays ~0 — the tenantDb fix should keep it at 1 client/request, but verify), #57 (modal-open assert via `getByRole('heading')`), #58 (`HUSKY=0 npm ci --omit=dev`), #38/#41 (deploy = backend restart + frontend rebuild).
 
-### After Payments re-ships: Phase 6-D-7 (monthly invoice cron + email automation) closes Phase 6-D-6.
+### After Phase 6-D-7: Phase 6-D-8 (marketing refresh + ToS + reference tenant + training materials).
 
 ---
 
@@ -169,11 +170,11 @@ Phase 6-D-6 PR 4 (Payments UI) was fully built + CI-green + deployed (PR #286), 
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04) |
 | Backend | Node.js + Express + Postgres 16, pm2 at `/var/www/mep`. invite-employee reads from `subscriptions.subscribed_seats`. GET /super/companies/:id LEFT JOINs subscriptions. 6 new SUPER_ADMIN billing endpoints live (training quotes / custom demands / payments / extend-trial / apply-change). |
 | Frontend | React + Vite + Tailwind v4. CompanyBranding.jsx shows bracket + per-seat price (Section 117 refactor). Customer-facing subscription UI = Phase 6-D-5 (next). |
-| Latest deployed to prod | **PR #287 — revert of Payments UI (`003ea8d`)** — June 1 evening (frontend rebuild + backend restart). Payments page + `/api/super/payments*` removed. |
-| Last merged to main | **PR #287** (revert Payments UI). Earlier today: #286 (Payments UI, reverted), #285 (HANDOFF docs), #284 (TOTP fix). |
-| Prod DB safety net | `idle_in_transaction_session_timeout = '30s'` on `mepuser_super` + `mepuser` (ALTER ROLE, persists). Added during the Section 124 incident. |
+| Latest deployed to prod | **Payments UI re-applied (PR #290) on top of the tenantDb one-client-per-request fix** — June 1 night (frontend rebuild + backend restart). `/payments` live + leak-smoke-verified (idle-in-tx = 0 after 12× load). |
+| Last merged to main | **PR #290** (reapply Payments). Earlier today: tenantDb fix PR, #288 (Section 124 docs), #287 (revert), #286 (Payments), #285, #284 (TOTP fix). |
+| Prod DB safety net | `idle_in_transaction_session_timeout = '30s'` on `mepuser_super` + `mepuser` (ALTER ROLE, persists) — defense-in-depth from the Section 124 incident. |
 | TOTP secret | Re-enrolled June 1 under the rotated `TOTP_ENCRYPTION_KEY`. Login = PIN → 6-digit code (no QR). Recovery (lost phone): Section 121.6 SQL reset. |
-| Active program | **Prod stable; Payments UI reverted.** Next code task = root-cause the superPool client leak OFFLINE (Section 124.6), then re-apply Payments (`git revert 003ea8d`). |
+| Active program | **Phase 6-D-6 COMPLETE** (all SUPER_ADMIN billing UI shipped; Payments live + stable). Next = Phase 6-D-7 (invoice cron + email automation). |
 | Mobile app | Still on Bearer-token + PIN. Phase 7 (Q1 2027). |
 
 ### Multi-tenant migration progress
@@ -203,9 +204,10 @@ Phase 6-D-6 PR 4 (Payments UI) was fully built + CI-green + deployed (PR #286), 
 | **Phase 6-D-6 PR 3 — Custom Demands UI** | ✅ **Deployed (PR #282, May 30 evening)** |
 | **Section 122 — Phase 6-D-6 PR 3 closeout + Pitfalls #57, #58** | ✅ **Recorded** |
 | **Section 123 — TOTP enrollment RLS-pool fix + key rotation + Pitfall #59** | ✅ **Deployed (PR #284, June 1) + verified** |
-| **Phase 6-D-6 PR 4 — Payments UI** | ⚠️ **SHIPPED then REVERTED (PR #286 → revert PR #287, Section 124)** — superPool client leak. Re-apply after offline root-cause. |
-| **Section 124 — Payments leak incident + safety net + Pitfall #60** | ✅ **Recorded; revert deployed; prod stable** |
-| **Root-cause superPool client leak (offline) + re-ship Payments** | ⏳ **NEXT** |
+| **Phase 6-D-6 PR 4 — Payments UI** | ✅ **LIVE** — shipped (#286) → incident → reverted (#287) → root-caused (124.7) → tenantDb fix → re-shipped (#290), leak-smoke verified. |
+| **Section 124 — Payments leak: incident + root cause (tenantDb per-mount client multiplication) + fix + Pitfall #60** | ✅ **Recorded; fix deployed; Payments live + stable** |
+| **tenantDb one-client-per-request fix** | ✅ **Deployed** — `if (req.db) return next()` guard; app-wide improvement. |
+| **Phase 6-D-7 — invoice cron + email automation** | ⏳ **NEXT** |
 | Phase 6-D-6 — SUPER_ADMIN UI (Subscription detail with Apply Change, Training Quotes, etc.) | ⏳ June-July 2026 |
 | Phase 6-D-7 — Invoice email automation + monthly cron + trial expiry warnings | ⏳ July 2026 |
 | Phase 6-D-8 — Marketing site refresh + ToS legal review + reference tenant + training materials | ⏳ July-Aug 2026 |
