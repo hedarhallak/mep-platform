@@ -220,6 +220,19 @@ describeIfDb('Expense claims — review + receipt upload (/api/expense-claims)',
     expect(outMeta.format).toBe('jpeg');
   });
 
+  test('vendors endpoint returns previously used vendors, most recent first', async () => {
+    const { project, auth } = await actor();
+    await submitClaim(auth, project, { vendor: 'Rona' });
+    await submitClaim(auth, project, { vendor: 'Home Depot' });
+
+    const res = await request(app).get('/api/expense-claims/vendors').set('Authorization', auth);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.vendors).toContain('Rona');
+    expect(res.body.vendors).toContain('Home Depot');
+    // Most recently used first.
+    expect(res.body.vendors.indexOf('Home Depot')).toBeLessThan(res.body.vendors.indexOf('Rona'));
+  });
+
   test('receipt upload rejects a tiny/invalid image with 400', async () => {
     const { auth } = await actor();
     const tiny = await makePhoto(50, 50); // below RECEIPT_MIN_DIMENSION

@@ -41,12 +41,16 @@ describe('ExpensesPage', () => {
     apiGet.mockResolvedValue({ data: { projects: [], claims: [] } })
   })
 
-  test('renders both tabs and loads projects when the user can submit', async () => {
+  test('renders both tabs and resolves the project from today assignment', async () => {
     render(<MemoryRouter><ExpensesPage /></MemoryRouter>)
     expect(screen.getByText('expenses.title')).toBeInTheDocument()
     expect(screen.getByText('expenses.tabs.submit')).toBeInTheDocument()
     expect(screen.getByText('expenses.tabs.claims')).toBeInTheDocument()
+    // my-today is primary (foreman flow, no projects.view needed)…
+    await waitFor(() => expect(apiGet).toHaveBeenCalledWith('/assignments/my-today'))
+    // …with /projects fallback when no assignment, + smart vendor recall.
     await waitFor(() => expect(apiGet).toHaveBeenCalledWith('/projects?status=ACTIVE'))
+    await waitFor(() => expect(apiGet).toHaveBeenCalledWith('/expense-claims/vendors'))
   })
 
   test('hides Submit and defaults to Claims when the user can only view', async () => {
