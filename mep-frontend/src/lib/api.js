@@ -193,7 +193,19 @@ async function apiFetch(method, url, body, options = {}) {
     credentials: 'include',
   }
   if (body !== undefined && body !== null) {
-    init.body = typeof body === 'string' ? body : JSON.stringify(body)
+    // Section 129.6: FormData bodies must pass through untouched — the
+    // browser sets Content-Type to multipart/form-data WITH the boundary.
+    // JSON.stringify(FormData) silently produces '{}' and any manually
+    // set 'multipart/form-data' header lacks the boundary, so busboy
+    // fails with "Boundary not found" (surfaced as UPLOAD_FAILED).
+    // Before this fix, upload callers had to bypass lib/api with raw
+    // fetch (see the old note in CompanyBranding.jsx).
+    if (typeof FormData !== 'undefined' && body instanceof FormData) {
+      delete headers['Content-Type']
+      init.body = body
+    } else {
+      init.body = typeof body === 'string' ? body : JSON.stringify(body)
+    }
   }
 
   let res
