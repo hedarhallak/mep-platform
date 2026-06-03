@@ -15444,3 +15444,12 @@ Receipt photos need durable storage → Hedar chose activating Spaces now (also 
 **No migration needed** — table + permissions exist since 015 (already applied on prod long ago). Deploy = code only (`git pull` + `HUSKY=0 npm ci --omit=dev` if deps changed [none] + `pm2 restart`).
 
 **Slice B (next): `ExpensesPage.jsx`** — Submit tab (project/vendor/amount/receipt photo/note) + Claims tab (status badges; review actions for `expense_claims.approve` holders), `/expenses` route, nav, EN/FR i18n, Vitest smoke. Mirrors the Tools/Surplus page design.
+
+### 129.4 — Slice B (frontend) shipped
+
+`mep-frontend/src/pages/materials/ExpensesPage.jsx` — `/expenses` page mirroring the Tools/Surplus design, tabs gated by permission:
+- **Submit** (`expense_claims.submit`) — project select + vendor + amount (dollars → cents client-side) + **receipt photo attach** (uploads to `POST /expense-claims/receipt` first, then submits the claim with `receipt_url`) + description.
+- **Claims** (`expense_claims.view`) — table: date / vendor(+description, +rejection reason when rejected) / project (client-side id→code map via GET /projects) / amount / status badge (PENDING amber, APPROVED emerald, REJECTED red, PAID blue) / receipt link (opens the CDN URL). For `expense_claims.approve` holders: **Approve**, **Reject** (inline reason input, required), **Mark reimbursed** (on APPROVED).
+Wired: `AppLayout` nav (ReceiptText icon, `canSeeExpenses` = submit||view), `App.jsx` lazy + `/expenses` route (anyOf submit/view), `nav.expenses` + `expenses.*` i18n (EN+FR), `ExpensesPage.test.jsx` Vitest smoke (both-tabs + view-only-defaults-to-Claims).
+
+**Emergency Purchase feature COMPLETE (backend + frontend).** Deploy = backend restart (Slice A merged earlier) + frontend rebuild, one deploy for both. Next functional menu: **Smart Assignment (§10)**, then the full mobile update.

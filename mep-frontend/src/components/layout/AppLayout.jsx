@@ -9,7 +9,7 @@ import {
   LayoutDashboard, FolderKanban, Users, ClipboardList,
   Settings, LogOut, Building2, BarChart2, Brain,
   ChevronDown, ChevronRight, CalendarCheck, Inbox, Package, Truck, FileText, Shield, Send,
-  Download, WifiOff, RefreshCw, Receipt, CreditCard, Recycle, Wrench
+  Download, WifiOff, RefreshCw, Receipt, CreditCard, Recycle, Wrench, ReceiptText
 } from 'lucide-react'
 
 // Section 50: nav items reference i18n keys instead of inline EN strings.
@@ -28,6 +28,7 @@ const mainNav = [
   { to: '/purchase-orders',  icon: FileText,        labelKey: 'nav.purchaseOrders',   permission: { module: 'purchase_orders', action: 'view'           } },
   { to: '/surplus',          icon: Recycle,         labelKey: 'nav.surplus',          permission: { module: 'materials',       action: 'surplus_view'   } },
   { to: '/tools',            icon: Wrench,          labelKey: 'nav.tools',            permission: { module: 'materials',       action: 'request_submit' } },
+  { to: '/expenses',         icon: ReceiptText,     labelKey: 'nav.expenses',         permission: { module: 'expense_claims',  action: 'submit'         } },
   { to: '/my-hub',           icon: Inbox,           labelKey: 'nav.myHub',            permission: null, badge: true },
 ]
 
@@ -115,6 +116,10 @@ export default function AppLayout() {
     can('materials', 'request_submit') ||
     can('materials', 'surplus_view')
   )
+  const canSeeExpenses = !permsLoading && (
+    can('expense_claims', 'submit') ||
+    can('expense_claims', 'view')
+  )
 
   const visibleMain = mainNav.filter(item => {
     if (!item.permission) return true
@@ -125,6 +130,7 @@ export default function AppLayout() {
     if (item.to === '/purchase-orders')  return canSeePurchaseOrders
     if (item.to === '/surplus')          return canSeeSurplus
     if (item.to === '/tools')            return canSeeTools
+    if (item.to === '/expenses')         return canSeeExpenses
     return can(item.permission.module, item.permission.action)
   })
 
