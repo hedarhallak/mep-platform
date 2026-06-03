@@ -690,6 +690,16 @@ async function cleanupTestRows() {
      WHERE company_id IN (SELECT company_id FROM public.companies WHERE name LIKE $1)`,
     [`${TEST_PREFIX}%`]
   );
+  // Section 129 (June 2026) — expense_claims (migration 015) references
+  // app_users/projects/companies with bare RESTRICT FKs (unlike the tool
+  // tables from 024, which CASCADE / SET NULL). Delete claims for test
+  // companies BEFORE app_users or the user delete below 23503s — and the
+  // leftover rows then break cleanup for EVERY other suite sharing the DB.
+  await pool.query(
+    `DELETE FROM public.expense_claims
+     WHERE company_id IN (SELECT company_id FROM public.companies WHERE name LIKE $1)`,
+    [`${TEST_PREFIX}%`]
+  );
   await pool.query(`DELETE FROM public.app_users WHERE username LIKE $1`, [`${TEST_PREFIX}%`]);
   await pool.query(`DELETE FROM public.employees WHERE employee_code LIKE $1`, [`${TEST_PREFIX}%`]);
   await pool.query(`DELETE FROM public.projects WHERE project_code LIKE $1`, [`${TEST_PREFIX}%`]);
