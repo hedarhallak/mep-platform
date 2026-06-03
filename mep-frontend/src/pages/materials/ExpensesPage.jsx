@@ -81,9 +81,9 @@ function SubmitTab({ onSubmitted }) {
       if (receiptFile) {
         const form = new FormData()
         form.append('receipt', receiptFile)
-        const up = await api.post('/expense-claims/receipt', form, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        })
+        // lib/api detects FormData and lets the browser set the multipart
+        // boundary (Section 129.6) — do NOT set Content-Type manually.
+        const up = await api.post('/expense-claims/receipt', form)
         receiptUrl = up.data.receipt_url
       }
       // 2. Submit the claim.
