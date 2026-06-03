@@ -5,25 +5,41 @@
  *
  * Section 94.5 — Emergency purchase / invoice submission workflow.
  *
- * Starter scope: POST (submit) + GET (list own + project-scoped).
- * Admin approve/reject (PATCH) + payment-marked (PATCH status=PAID) +
- * tests come in follow-up PRs.
- *
  * Endpoints:
  *   POST   /api/expense-claims                — submit a new claim
+ *   POST   /api/expense-claims/receipt        — upload a receipt photo →
+ *                                                { receipt_url } (Section 129)
  *   GET    /api/expense-claims                — list (filtered by ?status,
  *                                                ?project_id, ?mine=1)
  *   GET    /api/expense-claims/:id            — view a single claim
+ *   PATCH  /api/expense-claims/:id/status     — accounting review:
+ *                                                APPROVED / REJECTED / PAID
+ *                                                (Section 129)
  *
  * All routes mount under `auth + tenantDb` (see app.js). Permission
- * gates: `expense_claims.submit` / `expense_claims.view`. The
- * `expense_claims.approve` permission lands when the PATCH endpoint
- * ships in the next PR.
+ * gates: `expense_claims.submit` (submit + receipt upload) /
+ * `expense_claims.view` / `expense_claims.approve` (status changes).
+ *
+ * Workflow note (Hedar, June 2 — Section 129): this is NOT a
+ * pre-approval flow. The foreman buys first, then uploads the receipt
+ * as documentation. Accounting reviews after the fact: APPROVED =
+ * reviewed/acknowledged, REJECTED = objection (contact the employee,
+ * reason required), PAID = reimbursed.
  */
 
+const crypto = require('crypto');
+const multer = require('multer');
 const router = require('express').Router();
 const { can } = require('../middleware/permissions');
 const { audit } = require('../lib/audit');
+const { processReceiptUpload, RECEIPT_MAX_FILE_SIZE_BYTES } = require('../lib/image_upload');
+const { putPublicObject } = require('../lib/spaces_client');
+
+// Memory storage — sharp processes a Buffer; limits guard against OOM.
+const receiptUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: RECEIPT_MAX_FILE_SIZE_BYTES, files: 1 },
+});
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -116,6 +132,65 @@ router.post('/', can('expense_claims.submit'), async (req, res) => {
   }
 });
 
+// ── POST /api/expense-claims/receipt ─────────────────────────────────
+//
+// Multipart upload (field name 'receipt'). Validates + auto-orients +
+// downscales the photo (lib/image_upload.processReceiptUpload), uploads
+// to DO Spaces under receipts/<company>/, returns { receipt_url } for
+// the client to include in the subsequent POST /api/expense-claims.
+router.post(
+  '/receipt',
+  can('expense_claims.submit'),
+  (req, res, next) => {
+    receiptUpload.single('receipt')(req, res, (err) => {
+      if (err) {
+        // Multer LIMIT_FILE_SIZE → stable 400, mirroring lib error codes.
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return res.status(400).json({ ok: false, error: 'FILE_TOO_LARGE' });
+        }
+        console.error('POST /api/expense-claims/receipt multer error:', err);
+        return res.status(400).json({ ok: false, error: 'UPLOAD_FAILED' });
+      }
+      return next();
+    });
+  },
+  async (req, res) => {
+    try {
+      const companyId = req.user.company_id;
+
+      let processed;
+      try {
+        processed = await processReceiptUpload(req.file || null);
+      } catch (e) {
+        const code = e && e.code ? e.code : 'IMAGE_UNREADABLE';
+        return res.status(400).json({
+          ok: false,
+          error: code,
+          message: e && e.message ? e.message : 'Image processing failed',
+        });
+      }
+
+      const key = `receipts/${companyId}/${Date.now()}-${crypto.randomBytes(4).toString('hex')}.jpg`;
+      let url;
+      try {
+        url = await putPublicObject(key, processed.buffer, processed.contentType);
+      } catch (e) {
+        if (e && e.code === 'SPACES_NOT_CONFIGURED') {
+          console.error('Spaces upload failed: client not configured');
+          return res.status(500).json({ ok: false, error: 'SPACES_NOT_CONFIGURED' });
+        }
+        console.error('Spaces upload failed:', e && e.message ? e.message : e);
+        return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
+      }
+
+      return res.status(201).json({ ok: true, receipt_url: url });
+    } catch (err) {
+      console.error('POST /api/expense-claims/receipt error:', err);
+      return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
+    }
+  }
+);
+
 // ── GET /api/expense-claims ──────────────────────────────────────────
 //
 // Query params:
@@ -194,6 +269,102 @@ router.get('/:id', can('expense_claims.view'), async (req, res) => {
     return res.json({ ok: true, claim: rows[0] });
   } catch (err) {
     console.error('GET /api/expense-claims/:id error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
+  }
+});
+
+// ── PATCH /api/expense-claims/:id/status ─────────────────────────────
+//
+// Accounting review (Section 129). Allowed transitions:
+//   PENDING  → APPROVED  (reviewed / acknowledged)
+//   PENDING  → REJECTED  (objection — rejection_reason REQUIRED;
+//                          accounting contacts the employee outside the app)
+//   APPROVED → PAID      (reimbursed externally)
+//
+// The UPDATE is conditional on the required current status, so two
+// concurrent reviewers can't double-transition: rowCount 0 + row exists
+// → 409 INVALID_TRANSITION; row missing → 404 (RLS also hides other
+// tenants' claims, which surfaces as the same 404).
+router.patch('/:id/status', can('expense_claims.approve'), async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) {
+      return res.status(400).json({ ok: false, error: 'INVALID_ID' });
+    }
+
+    const userId = Number(req.user.user_id);
+    const status = req.body && req.body.status ? String(req.body.status).toUpperCase() : null;
+    const reason =
+      req.body && req.body.rejection_reason
+        ? String(req.body.rejection_reason).trim().slice(0, 2000)
+        : null;
+
+    if (!['APPROVED', 'REJECTED', 'PAID'].includes(status)) {
+      return res.status(400).json({
+        ok: false,
+        error: 'INVALID_STATUS',
+        allowed: ['APPROVED', 'REJECTED', 'PAID'],
+      });
+    }
+    if (status === 'REJECTED' && !reason) {
+      return res.status(400).json({ ok: false, error: 'REJECTION_REASON_REQUIRED' });
+    }
+
+    const requiredCurrent = status === 'PAID' ? 'APPROVED' : 'PENDING';
+
+    // APPROVED / REJECTED stamp the reviewer; PAID keeps the original
+    // approval stamp and only flips the status.
+    const { rows } =
+      status === 'PAID'
+        ? await req.db.query(
+            `UPDATE public.expense_claims
+                SET status = 'PAID', updated_at = NOW()
+              WHERE id = $1 AND status = $2
+              RETURNING *`,
+            [id, requiredCurrent]
+          )
+        : await req.db.query(
+            `UPDATE public.expense_claims
+                SET status = $3,
+                    approved_by_user_id = $4,
+                    approved_at = NOW(),
+                    rejection_reason = $5,
+                    updated_at = NOW()
+              WHERE id = $1 AND status = $2
+              RETURNING *`,
+            [id, requiredCurrent, status, userId, status === 'REJECTED' ? reason : null]
+          );
+
+    if (!rows.length) {
+      // Distinguish "wrong state" from "not found / not visible".
+      const { rows: existing } = await req.db.query(
+        `SELECT id, status FROM public.expense_claims WHERE id = $1 LIMIT 1`,
+        [id]
+      );
+      if (!existing.length) {
+        return res.status(404).json({ ok: false, error: 'NOT_FOUND' });
+      }
+      return res.status(409).json({
+        ok: false,
+        error: 'INVALID_TRANSITION',
+        current_status: existing[0].status,
+        required_current_status: requiredCurrent,
+      });
+    }
+
+    await audit(req.db, req, {
+      action: `EXPENSE_CLAIM_${status}`,
+      entity_type: 'expense_claim',
+      entity_id: rows[0].id,
+      new_values: {
+        status,
+        rejection_reason: status === 'REJECTED' ? reason : undefined,
+      },
+    });
+
+    return res.json({ ok: true, claim: rows[0] });
+  } catch (err) {
+    console.error('PATCH /api/expense-claims/:id/status error:', err);
     return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
 });
