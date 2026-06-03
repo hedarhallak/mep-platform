@@ -11,29 +11,49 @@
 --
 -- CI never caught it because the test DB role is postgres (Pitfall #14).
 --
+-- Role-existence convention (matches migration 020): mepuser exists in
+-- every environment (incl. the CI drift DB); mepuser_super only exists
+-- on prod, so its grants are wrapped in a DO block that skips silently.
+--
 -- RLS note: tenant_isolation (from 015) still applies to mepuser;
 -- mepuser_super has BYPASSRLS. GRANTs and RLS are independent layers.
 -- ============================================================================
 
 BEGIN;
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.expense_claims TO mepuser, mepuser_super;
-GRANT USAGE, SELECT ON SEQUENCE public.expense_claims_id_seq TO mepuser, mepuser_super;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.expense_claims TO mepuser;
+GRANT USAGE, SELECT ON SEQUENCE public.expense_claims_id_seq TO mepuser;
 
--- Sanity check: both roles must end up with the 4 table privileges.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'mepuser_super') THEN
+    GRANT SELECT, INSERT, UPDATE, DELETE ON public.expense_claims TO mepuser_super;
+    GRANT USAGE, SELECT ON SEQUENCE public.expense_claims_id_seq TO mepuser_super;
+  END IF;
+END $$;
+
+-- Sanity check: 4 table privileges per present role.
 DO $$
 DECLARE
-  n int;
+  has_super BOOLEAN;
+  expected  INTEGER;
+  n         INTEGER;
 BEGIN
+  SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'mepuser_super') INTO has_super;
+  expected := CASE WHEN has_super THEN 8 ELSE 4 END;
+
   SELECT COUNT(*) INTO n
     FROM information_schema.role_table_grants
    WHERE table_schema = 'public'
      AND table_name = 'expense_claims'
      AND grantee IN ('mepuser', 'mepuser_super')
      AND privilege_type IN ('SELECT', 'INSERT', 'UPDATE', 'DELETE');
-  IF n <> 8 THEN
-    RAISE EXCEPTION 'Migration 025 abort: expected 8 expense_claims grants, found %', n;
+
+  IF n < expected THEN
+    RAISE EXCEPTION 'Migration 025 abort: expected % expense_claims grants, found %', expected, n;
   END IF;
+
+  RAISE NOTICE 'Migration 025 OK: % GRANT rows confirmed on expense_claims', n;
 END $$;
 
 COMMIT;
