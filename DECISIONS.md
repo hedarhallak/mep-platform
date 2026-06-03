@@ -15409,3 +15409,38 @@ Tabs gated by permission (Request = request_submit, Assets = surplus_view). Wire
 
 **Tool Request feature COMPLETE (backend + frontend).** Next functional menus: Emergency Purchase (§126.2), then Smart Assignment (§10), then the full mobile update.
 
+---
+
+## 129. Section 129 — June 2, 2026 — Emergency Purchase (§126.2): DO Spaces activation + expense_claims completion (Slice A backend)
+
+> Feature #3 (per the §127.3 lesson, grep'd first): **most of the backend already existed** — Section 94.5 shipped `expense_claims` (migration 015: full table w/ PENDING/APPROVED/REJECTED/PAID, RLS, `expense_claims.submit/view/approve` permissions seeded) + `routes/expense_claims.js` (POST submit / GET list / GET :id), mounted on `/api/expense-claims`. Missing: the review PATCH (the route header literally said "follow-up PR" — never shipped), receipt photo upload, tests, and the entire web page.
+
+### 129.1 — Workflow decision (Hedar)
+
+**NOT a pre-approval flow.** The foreman (or whoever holds the permission) buys first and uploads the receipt as documentation; accounting reviews after the fact and contacts the employee directly if there's an objection. No auto-approval threshold in v1. Status semantics: PENDING = submitted, APPROVED = accounting acknowledged, REJECTED = objection (reason required), PAID = reimbursed externally.
+
+### 129.2 — DO Spaces ACTIVATED on prod (ops, closes the Section 112.2 deferral)
+
+Receipt photos need durable storage → Hedar chose activating Spaces now (also unblocks tenant logo upload, which had been returning SPACES_NOT_CONFIGURED since Phase 6-D-3).
+
+- Bucket **`constrai-tenant-assets`** created (TOR1, Standard, **CDN enabled**, file listing restricted).
+- Access key `constrai-app-2026-06`, **scoped to the bucket with Read/Write/Delete** (NOT full-account — blast-radius control). Stored in OneDrive `Constrai Keys/DO Spaces tenant-assets 2026-06.txt`.
+- Prod `/var/www/mep/.env`: all 6 `DO_SPACES_*` vars set (values per `.env.example`); `pm2 restart --update-env`.
+- Verified end-to-end: `putPublicObject` via the app's own `lib/spaces_client` → UPLOAD-OK, CDN public read 200, Health 200. **No code change was needed** (the existing client config incl. `region: tor1` works fine against DO).
+
+**Debugging trail (encoded as Pitfall #63):** three failures before green, all credential-side, none code-side:
+1. `InvalidArgument` / HTTP 400 on EVERY call (even LIST) = **malformed credentials in .env** — the Secret had been pasted as the Key, and the Secret line got the value pasted twice (silent `read -rs` prompt → double paste; lengths 43/86 instead of ~20/43). Diagnose by printing LENGTHS, never values.
+2. After fixing keys: LIST OK but PUT `AccessDenied` 403 = **access key created Read-only**. Edit the key's bucket permission to Read/Write/Delete in the dashboard (no new key needed).
+3. The logo-upload smoke surfaced everything (generic `SERVER_ERROR` in UI; real error only in `pm2 logs`). Test storage with a 5-line `node -r dotenv/config -e` probe (LIST → PUT → lib `putPublicObject`), each step isolates one layer.
+
+### 129.3 — Slice A (backend) shipped
+
+- `lib/image_upload.js` — added **`processReceiptUpload`**: receipts are phone photos, NOT logos — 10 MB cap, 200–8000 px input, `.rotate()` (EXIF auto-orient) then resize `fit:'inside'` ≤1600×1600 `withoutEnlargement`, output JPEG q80 (readable, not a 256px thumbnail). Same error-code contract as the logo pipeline.
+- `routes/expense_claims.js` — added:
+  - **`POST /api/expense-claims/receipt`** (`expense_claims.submit`) — multipart field `receipt`, multer memory (10 MB / 1 file), pipeline → `putPublicObject('receipts/<companyId>/<ts>-<rand>.jpg')` → `{ receipt_url }`. Client includes the URL in the subsequent claim POST. Multer `LIMIT_FILE_SIZE` mapped to stable 400 `FILE_TOO_LARGE`.
+  - **`PATCH /api/expense-claims/:id/status`** (`expense_claims.approve`) — APPROVED/REJECTED (require current PENDING; REJECTED requires `rejection_reason`; stamps reviewer + `approved_at`) and PAID (requires current APPROVED; keeps the original approval stamp). Conditional UPDATE so concurrent reviewers can't double-transition: rowCount 0 → 404 vs 409 `INVALID_TRANSITION` (with `current_status`). Audited as `EXPENSE_CLAIM_<STATUS>`.
+- `tests/integration/expense_claims.test.js` — full flow (submit→list→approve→paid), reject-requires-reason, 409 invalid transitions + 400 bogus status + 404 missing, receipt upload (mocked Spaces; asserts `receipts/<company>/` key, JPEG output ≤1600px), tiny-image + no-file 400s.
+
+**No migration needed** — table + permissions exist since 015 (already applied on prod long ago). Deploy = code only (`git pull` + `HUSKY=0 npm ci --omit=dev` if deps changed [none] + `pm2 restart`).
+
+**Slice B (next): `ExpensesPage.jsx`** — Submit tab (project/vendor/amount/receipt photo/note) + Claims tab (status badges; review actions for `expense_claims.approve` holders), `/expenses` route, nav, EN/FR i18n, Vitest smoke. Mirrors the Tools/Surplus page design.
