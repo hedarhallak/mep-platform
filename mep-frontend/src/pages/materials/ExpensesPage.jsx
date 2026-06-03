@@ -99,6 +99,11 @@ function SubmitTab({ onSubmitted }) {
       setDescription('')
       setReceiptFile(null)
       if (fileInput.current) fileInput.current.value = ''
+      // Refresh vendor suggestions — the just-submitted vendor should be
+      // suggested immediately on the next claim (Section 129.7).
+      api.get('/expense-claims/vendors')
+        .then(r => setVendorSuggestions(r.data.vendors || []))
+        .catch(() => {})
       onSubmitted()
     } catch (e) {
       setError(e.response?.data?.error || e.message)
