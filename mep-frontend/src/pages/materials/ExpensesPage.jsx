@@ -27,9 +27,11 @@ function formatAmount(cents, currency) {
 // ── Submit tab ────────────────────────────────────────────────
 function SubmitTab({ onSubmitted }) {
   const { t } = useTranslation()
+  const [todayAssignment, setTodayAssignment] = useState(null)
   const [projects, setProjects] = useState([])
   const [selectedProj, setSelectedProj] = useState('')
   const [vendor, setVendor] = useState('')
+  const [vendorSuggestions, setVendorSuggestions] = useState([])
   const [amount, setAmount] = useState('')
   const [description, setDescription] = useState('')
   const [receiptFile, setReceiptFile] = useState(null)
@@ -38,13 +40,31 @@ function SubmitTab({ onSubmitted }) {
   const fileInput = useRef(null)
 
   useEffect(() => {
-    api.get('/projects?status=ACTIVE')
+    // Same pattern as MaterialRequestPage: a foreman usually has a
+    // today-assignment → that project is used directly (no dropdown,
+    // and no projects.view permission needed). Fallback for manager
+    // roles: load the active projects list.
+    api.get('/assignments/my-today')
       .then(r => {
-        const list = r.data.projects || r.data.rows || []
-        setProjects(list)
-        if (list.length) setSelectedProj(String(list[0].id))
+        const asgn = r.data.assignment
+        if (asgn) {
+          setTodayAssignment(asgn)
+          setSelectedProj(String(asgn.project_id))
+        } else {
+          api.get('/projects?status=ACTIVE')
+            .then(pr => {
+              const list = pr.data.projects || pr.data.rows || []
+              setProjects(list)
+              if (list.length) setSelectedProj(String(list[0].id))
+            })
+            .catch(e => console.error('Failed to load projects:', e))
+        }
       })
-      .catch(e => console.error('Failed to load projects:', e))
+      .catch(e => console.error('Failed to load today assignment:', e))
+    // Smart vendor recall — previously used vendors as <datalist> suggestions.
+    api.get('/expense-claims/vendors')
+      .then(r => setVendorSuggestions(r.data.vendors || []))
+      .catch(() => {})
   }, [])
 
   const handleSubmit = async () => {
@@ -89,16 +109,28 @@ function SubmitTab({ onSubmitted }) {
 
   return (
     <div className="space-y-5 max-w-xl">
-      {/* Project */}
+      {/* Project — today's assignment when present, else dropdown */}
       <div>
         <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">{t('expenses.submit.project')}</label>
-        <select value={selectedProj} onChange={e => setSelectedProj(e.target.value)}
-          className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-light">
-          <option value="">{t('expenses.submit.selectProject')}</option>
-          {projects.map(p => (
-            <option key={p.id} value={p.id}>{p.project_code}{p.project_name ? ` — ${p.project_name}` : ''}</option>
-          ))}
-        </select>
+        {todayAssignment ? (
+          <div className="flex items-center gap-3 px-4 py-3 bg-primary-pale border border-primary-pale rounded-xl max-w-sm">
+            <div className="w-2 h-2 rounded-full bg-primary-light flex-shrink-0" />
+            <div>
+              <div className="text-sm font-bold text-primary-dark">
+                {todayAssignment.project_code}{todayAssignment.project_name ? ` — ${todayAssignment.project_name}` : ''}
+              </div>
+              <div className="text-[10px] text-primary-light mt-0.5">{t('expenses.submit.todayAssignment')}</div>
+            </div>
+          </div>
+        ) : (
+          <select value={selectedProj} onChange={e => setSelectedProj(e.target.value)}
+            className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-light">
+            <option value="">{t('expenses.submit.selectProject')}</option>
+            {projects.map(p => (
+              <option key={p.id} value={p.id}>{p.project_code}{p.project_name ? ` — ${p.project_name}` : ''}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       {/* Vendor + amount */}
@@ -106,8 +138,12 @@ function SubmitTab({ onSubmitted }) {
         <div>
           <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">{t('expenses.submit.vendor')}</label>
           <input type="text" value={vendor} onChange={e => setVendor(e.target.value)}
+            list="vendor-suggestions"
             placeholder={t('expenses.submit.vendorPlaceholder')}
             className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-light placeholder:text-slate-300" />
+          <datalist id="vendor-suggestions">
+            {vendorSuggestions.map(v => <option key={v} value={v} />)}
+          </datalist>
         </div>
         <div>
           <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">{t('expenses.submit.amount')}</label>

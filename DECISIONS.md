@@ -15453,3 +15453,9 @@ Receipt photos need durable storage → Hedar chose activating Spaces now (also 
 Wired: `AppLayout` nav (ReceiptText icon, `canSeeExpenses` = submit||view), `App.jsx` lazy + `/expenses` route (anyOf submit/view), `nav.expenses` + `expenses.*` i18n (EN+FR), `ExpensesPage.test.jsx` Vitest smoke (both-tabs + view-only-defaults-to-Claims).
 
 **Emergency Purchase feature COMPLETE (backend + frontend).** Deploy = backend restart (Slice A merged earlier) + frontend rebuild, one deploy for both. Next functional menu: **Smart Assignment (§10)**, then the full mobile update.
+
+### 129.5 — Post-smoke fixes (Hedar's browser test as FOREMAN)
+
+Two findings from the live smoke:
+1. **Project dropdown was empty for foremen** — `GET /projects` is gated by `projects.view`, which FOREMAN doesn't hold. Fixed by mirroring MaterialRequestPage's proven pattern: `GET /assignments/my-today` first → today's project shown as a fixed card (no dropdown, no projects.view needed); `/projects?status=ACTIVE` only as fallback for manager roles. ⚠️ NOTE: ToolsPage + SurplusPage have the SAME latent bug (their project dropdowns also read /projects) — backlogged to apply the same pattern there.
+2. **Smart vendor recall** (Hedar chose suggestions over free-text-only): new `GET /api/expense-claims/vendors` (gated `expense_claims.submit`, RLS-scoped, distinct vendors most-recently-used first, LIMIT 20; defined BEFORE `/:id` so the literal path isn't swallowed by the id param) + `<datalist>` autocomplete on the vendor input — suggests previous vendors while typing, free text still allowed. Integration test added.

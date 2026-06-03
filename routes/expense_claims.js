@@ -243,6 +243,30 @@ router.get('/', can('expense_claims.view'), async (req, res) => {
   }
 });
 
+// ── GET /api/expense-claims/vendors ──────────────────────────────────
+//
+// Smart vendor recall (Section 129.5): distinct vendor names previously
+// used by THIS company (RLS scopes the rows), most recently used first.
+// Powers the <datalist> autocomplete on the submit form — suggestions,
+// not a closed list; free text stays allowed.
+//
+// NOTE: defined BEFORE /:id so 'vendors' isn't swallowed by the id param.
+router.get('/vendors', can('expense_claims.submit'), async (req, res) => {
+  try {
+    const { rows } = await req.db.query(
+      `SELECT vendor, MAX(created_at) AS last_used
+         FROM public.expense_claims
+        GROUP BY vendor
+        ORDER BY last_used DESC
+        LIMIT 20`
+    );
+    return res.json({ ok: true, vendors: rows.map((r) => r.vendor) });
+  } catch (err) {
+    console.error('GET /api/expense-claims/vendors error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
+  }
+});
+
 // ── GET /api/expense-claims/:id ──────────────────────────────────────
 router.get('/:id', can('expense_claims.view'), async (req, res) => {
   try {

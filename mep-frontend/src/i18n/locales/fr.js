@@ -100,6 +100,7 @@ export default {
     submit: {
       project: 'Projet',
       selectProject: 'Sélectionnez un projet',
+      todayAssignment: 'Affectation du jour',
       vendor: 'Fournisseur / magasin',
       vendorPlaceholder: 'p. ex. Home Depot',
       amount: 'Montant (CAD)',
