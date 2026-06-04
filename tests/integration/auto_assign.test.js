@@ -64,6 +64,47 @@ describeIfDb('Auto-assign — /api/assignments/auto-suggest', () => {
     expect(res.body.suggestions).toEqual([]);
   });
 
+  // Section 131 — wizard parameters.
+  test('POST /auto-suggest PROJECT mode without project_id returns 400', async () => {
+    const company = await seedCompany();
+    const admin = await seedUser({ company_id: company.company_id, role: 'COMPANY_ADMIN' });
+    const { token } = await loginUser(admin);
+
+    const res = await request(app)
+      .post('/api/assignments/auto-suggest')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ target_date: '2027-06-15', mode: 'PROJECT' });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error).toBe('PROJECT_ID_REQUIRED');
+  });
+
+  test('POST /auto-suggest returns wizard echo fields + allowance totals', async () => {
+    const company = await seedCompany();
+    const admin = await seedUser({ company_id: company.company_id, role: 'COMPANY_ADMIN' });
+    await seedProject({ company_id: company.company_id });
+    const { token } = await loginUser(admin);
+
+    const res = await request(app)
+      .post('/api/assignments/auto-suggest')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ target_date: '2027-06-15', mode: 'FULL', optimize_distance: true, fill_gaps: false });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.mode).toBe('FULL');
+    expect(res.body.fill_gaps).toBe(false);
+    expect(res.body.totals).toBeDefined();
+    expect(typeof res.body.totals.allowance_total_cents).toBe('number');
+    // Per-project totals + per-row annotation keys exist.
+    for (const p of res.body.suggestions) {
+      expect(typeof p.allowance_total_cents).toBe('number');
+      for (const e of p.employees) {
+        expect(e).toHaveProperty('distance_km');
+        expect(e).toHaveProperty('allowance_cents');
+      }
+    }
+  });
+
   test('POST /auto-suggest without assignments.smart_assign returns 403', async () => {
     const company = await seedCompany();
     const worker = await seedUser({ company_id: company.company_id, role: 'WORKER' });

@@ -15521,3 +15521,31 @@ Hedar asked what overlaps between the two surfaces. Analysis found 3 overlaps:
 **Shipped:** RepeatTodayModal removed from AssignmentsPage (+ its i18n keys EN/FR); toolbar button replaced with "Plan a day" (Sparkles) → navigates to /workforce-planner, gated by assignments.smart_assign. Backend repeat-preview/repeat-confirm endpoints LEFT IN PLACE for now (no UI calls them; candidates for removal in a later hygiene pass — check mobile first).
 
 Hedar's verdict pending his hands-on test ("خليني شوف كيف رح تصير الامور وبعدها منجرب ومنقيم").
+---
+
+## 131. Section 131 — June 4, 2026 — Assignments redesign (Hedar's verdict) + Phase 1 backend
+
+### 131.1 — Hedar REJECTED the two-menu split after hands-on testing
+
+Verbatim direction: as a user he refuses the scatter ("وجود قائمتين جانبيتين فاشل وخصوصا انك حطيت بالقائمة الاولى التخطيط ليوم اللي بياخدك للقائمة التانية"). Assignments must be SIMPLE: ONE sidebar entry, TWO actions only — (1) individual assignment, (2) bulk assignment driven by sequential QUESTIONS (wizard), e.g. "70 employees at once → choose method(s): repeat + distance optimization".
+
+Industry research confirmed his instinct (Bridgit Bench / Assignar / Procore patterns): one planning surface, smart suggestions embedded as assists (never separate pages), bulk ops as copy/template wizards, crew-based assignment for scale.
+
+**Financial clarification (Hedar):** "التحسين المالي" = geographic optimization to MINIMIZE CCQ TRAVEL ALLOWANCES (بدل المواصلات). CCQ 2025-2028 industrial rates: >90 km = $53.89/day, >105 km = $69.51/day; room+board $175/day; residential heavy $0.64/km beyond 40 km. CCQ's official distance reference is Google Maps ROAD distance. One worker misplaced ≈ $1,100/month. No competitor does CCQ-specific allowance optimization → September conference differentiator.
+
+### 131.2 — Locked end-state + phases (Hedar approved)
+
+All methods COEXIST in one Assignments surface; admin picks per situation:
+- **Phase 1 (now):** one menu; wizard (date → basis: repeat-today / specific-project / from-scratch → toggles: ☑ distance/allowance optimization with $ display, ☑ fill gaps → editable preview with plan allowance totals → confirm+emails); Optimize suggestions become an in-context banner/panel INSIDE Assignments; **Workforce Planner menu deleted**.
+- **Phase 2:** Crew concept (crews table: foreman + members; wizard asks crews-or-individuals; individual = exceptions).
+- **Phase 3 (post-conference):** Board/Gantt screen (people × days, drag-drop, conflict/distance warnings) on top of the wizard+crew foundations.
+
+### 131.3 — Phase 1 Slice A (backend) shipped
+
+- **`lib/ccq_travel.js`** — CCQ industrial allowance estimation: `road_km ≈ haversine × 1.3` (clearly an ESTIMATE; CCQ reference is Google Maps road distance — Mapbox Matrix API backlogged before payroll use), brackets >90km=5389¢/day, >105km=6951¢/day. Integer cents.
+- **`POST /auto-suggest` extended** (back-compatible defaults): `mode` FULL/REPEAT/PROJECT (REPEAT never opens new fronts; PROJECT plans one project, validates project_id), `optimize_distance` (ranks replacement + new candidates by proximity; off = stable name order), `fill_gaps` (off = busy workers become explicit gaps). Every suggestion row now carries `{ distance_km, allowance_cents }`; per-project `allowance_total_cents`; response `totals { headcount, allowance_total_cents }`. Empty-projects early return aligned.
+- Tests: `tests/smoke/ccq_travel.test.js` (brackets incl. the strict >90 boundary) + integration (PROJECT without id 400; echo fields + totals + per-row annotation keys).
+
+### 131.4 — CORRECTION (Hedar caught it): rates come from the EXISTING ccq_travel_rates table
+
+131.3 initially hardcoded the 2025 industrial brackets — WRONG: the platform already has a full CCQ travel-rates system (global `ccq_travel_rates` table: trade_code / sector IC-I-RESIDENTIAL / min_km / rate_cad / effective_from-to, SUPER_ADMIN CRUD via routes/ccq_rates.js, expiry reminders via jobs/ccqRatesReminderJob.js). lib/ccq_travel.js rewritten: `loadRateTable(db, date, sector='IC')` (one query per request) + `allowanceCentsFor(rates, trade, road_km)` (strictly "more than min_km", highest bracket wins, GENERAL-trade fallback, 0 when unconfigured). auto-suggest annotates per employee TRADE now. Nothing hardcoded; admins manage rates as agreements change. **Pitfall #62 applies to LIBRARIES too, not just menus — grep before writing any "new" helper.**
