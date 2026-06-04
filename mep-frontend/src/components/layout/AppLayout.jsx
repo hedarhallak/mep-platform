@@ -8,7 +8,7 @@ import api from '@/lib/api'
 import {
   LayoutDashboard, FolderKanban, Users, ClipboardList,
   Settings, LogOut, Building2, BarChart2, Brain,
-  ChevronDown, ChevronRight, CalendarCheck, Inbox, Package, Truck, FileText, Shield, Send,
+  CalendarCheck, Inbox, Package, Truck, FileText, Shield, Send,
   Download, WifiOff, RefreshCw, Receipt, CreditCard, Recycle, Wrench, ReceiptText
 } from 'lucide-react'
 
@@ -20,6 +20,9 @@ const mainNav = [
   { to: '/projects',         icon: FolderKanban,    labelKey: 'nav.projects',         permission: { module: 'projects',        action: 'view'           } },
   { to: '/suppliers',        icon: Truck,           labelKey: 'nav.suppliers',        permission: { module: 'suppliers',       action: 'view'           } },
   { to: '/assignments',      icon: ClipboardList,   labelKey: 'nav.assignments',      permission: { module: 'assignments',     action: 'view'           } },
+  // Section 130: unified Workforce Planner (Plan = smart_assign, Optimize =
+  // the old BI page). Custom filter case below (either permission shows it).
+  { to: '/workforce-planner', icon: Brain,          labelKey: 'nav.workforcePlanner', permission: { module: 'bi',              action: 'workforce_planner' } },
   { to: '/attendance',       icon: CalendarCheck,   labelKey: 'nav.attendance',       permission: { module: 'attendance',      action: 'view_self'      } },
   { to: '/reports',          icon: BarChart2,       labelKey: 'nav.reports',          permission: { module: 'reports', action: 'view_self' } },
   { to: '/standup',          icon: ClipboardList,   labelKey: 'nav.standup',          permission: { module: 'standup',         action: 'manage'         } },
@@ -32,9 +35,6 @@ const mainNav = [
   { to: '/my-hub',           icon: Inbox,           labelKey: 'nav.myHub',            permission: null, badge: true },
 ]
 
-const biNav = [
-  { to: '/bi/workforce-planner', icon: Brain, labelKey: 'nav.workforcePlanner', permission: { module: 'bi', action: 'workforce_planner' } },
-]
 
 export default function AppLayout() {
   const { t } = useTranslation()
@@ -43,7 +43,6 @@ export default function AppLayout() {
   const { installPrompt, isOnline, updateAvailable, promptInstall, applyUpdate } = usePWA()
   const navigate  = useNavigate()
   const location  = useLocation()
-  const [biOpen, setBiOpen] = useState(location.pathname.startsWith('/bi'))
   const [hubCount, setHubCount] = useState(0)
 
   const canMaterialsInbox  = !permsLoading && can('hub', 'materials_inbox')
@@ -86,7 +85,6 @@ export default function AppLayout() {
   const totalHubCount = hubCount + attendancePending
 
   const handleLogout = () => { logout(); navigate('/login') }
-  const isBiActive = location.pathname.startsWith('/bi')
 
   const canSeeReports = !permsLoading && (
     can('reports', 'view') ||
@@ -120,6 +118,10 @@ export default function AppLayout() {
     can('expense_claims', 'submit') ||
     can('expense_claims', 'view')
   )
+  const canSeePlanner = !permsLoading && (
+    can('bi', 'workforce_planner') ||
+    can('assignments', 'smart_assign')
+  )
 
   const visibleMain = mainNav.filter(item => {
     if (!item.permission) return true
@@ -128,15 +130,12 @@ export default function AppLayout() {
     if (item.to === '/attendance')       return canSeeAttendance
     if (item.to === '/material-request') return canSeeMaterials
     if (item.to === '/purchase-orders')  return canSeePurchaseOrders
-    if (item.to === '/surplus')          return canSeeSurplus
-    if (item.to === '/tools')            return canSeeTools
-    if (item.to === '/expenses')         return canSeeExpenses
+    if (item.to === '/surplus')           return canSeeSurplus
+    if (item.to === '/tools')             return canSeeTools
+    if (item.to === '/expenses')          return canSeeExpenses
+    if (item.to === '/workforce-planner') return canSeePlanner
     return can(item.permission.module, item.permission.action)
   })
-
-  const visibleBi = biNav.filter(item =>
-    !item.permission || permsLoading || can(item.permission.module, item.permission.action)
-  )
 
   const showUserMgmt    = !permsLoading && can('settings', 'user_management')
   const showPermissions = !permsLoading && can('settings', 'permissions')
@@ -182,46 +181,6 @@ export default function AppLayout() {
             <div className="pt-2 pb-1">
               <div className="border-t border-slate-800" />
             </div>
-
-            {/* BI Section */}
-            {visibleBi.length > 0 && (
-              <>
-                <button onClick={() => setBiOpen(v => !v)}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    isBiActive ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <BarChart2 size={16} />
-                    <span>{t('nav.bi')}</span>
-                  </div>
-                  {biOpen
-                    ? <ChevronDown size={13} className="text-slate-500" />
-                    : <ChevronRight size={13} className="text-slate-500" />
-                  }
-                </button>
-
-                {biOpen && (
-                  <div className="ml-3 pl-3 border-l border-slate-700 space-y-0.5">
-                    {visibleBi.map(({ to, icon: Icon, labelKey }) => (
-                      <NavLink key={to} to={to}
-                        className={({ isActive }) =>
-                          `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                            isActive ? 'bg-primary text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                          }`
-                        }
-                      >
-                        <Icon size={15} />{t(labelKey)}
-                      </NavLink>
-                    ))}
-                  </div>
-                )}
-
-                <div className="pt-2 pb-1">
-                  <div className="border-t border-slate-800" />
-                </div>
-              </>
-            )}
 
             {/* User Management */}
             {showUserMgmt && (

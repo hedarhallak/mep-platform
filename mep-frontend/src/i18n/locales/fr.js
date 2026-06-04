@@ -1551,8 +1551,32 @@ export default {
   bi: {
     workforcePlanner: {
       title: "Planificateur d'effectifs",
-      subtitle: "Optimisation des affectations géographiques · Effectif actif aujourd'hui",
+      subtitle: "Planifiez les équipes de demain et optimisez les affectations d'aujourd'hui",
       refresh: 'Actualiser',
+
+      tabs: { plan: 'Planifier', optimize: 'Optimiser' },
+
+      plan: {
+        targetDate: 'Date cible',
+        generate: 'Générer le plan',
+        emptyTitle: 'Choisissez une date et générez un plan',
+        emptySubtitle: "Le système reconduit les équipes du jour, comble les manques et dote les nouveaux chantiers selon la distance",
+        noProjects: 'Aucun projet actif à planifier',
+        noSuggestions: 'Aucune suggestion pour ce projet',
+        todayCount: "{{count}} au travail aujourd'hui",
+        gap: 'Personne de disponible',
+        replacing: 'remplace {{name}}',
+        remove: 'Retirer du plan',
+        restore: 'Rétablir',
+        confirm: 'Confirmer le plan ({{count}})',
+        confirmed: '{{count}} affectation(s) créée(s) — {{emails}} courriel(s) envoyé(s).',
+        type: {
+          carry_over: 'Reconduit',
+          replacement: 'Remplacement',
+          new: 'Nouveau',
+          gap: 'Manque',
+        },
+      },
 
       summary: {
         activeToday: "Actifs aujourd'hui",
