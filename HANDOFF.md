@@ -1,8 +1,8 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: June 5, 2026 — **Functional-menus program, sessions 2+3 (June 3-5). Emergency Purchase + DO Spaces + full ASSIGNMENTS REDESIGN Phase 1 — all COMPLETE + LIVE.**
-> ⚠️ NOTE: the June 4 closeout PR (#316) was never merged (Pitfall #66) — this update covers BOTH sessions (Sections 129-131, PRs #310-#326).
+> Last updated: June 4, 2026 (evening, session 4) — **§131.12 wizard silent-skip fix SHIPPED + DEPLOYED (PR #328). NEW OPEN ISSUE §131.13: Assignments List under-reports (8 shown vs 51 in DB, PROJ-22 absent) — FIRST task next session.**
+> ⚠️ NOTE: the June 4 closeout PR (#316) was never merged (Pitfall #66) — Sections 129-131 (PRs #310-#326) were re-recorded in the June 5 update; sections 131.12-131.13 added June 4 session 4 (PR #328).
 >
 > **🔁 PRIORITY ORDER (Hedar, June 2 — still governs):**
 > 1. **Add ALL un-built side menus as real, designed pages matching the program (NOT placeholders), page by page, WEB FIRST.** Mobile is a separate full update later (long neglected — done after web). ← **the original menu list is now DONE** (Surplus, Tools, Expenses, Smart Assignment).
@@ -27,9 +27,10 @@
 >
 > **Earlier sessions still LIVE:** Tools + Surplus menus (S127-128, June 2; Pitfall #62 lesson). Billing automation parked (S125): next real cron = July 1 (June invoice CONS-2026-10001 exists → idempotent skip).
 >
-> **🎯 NEXT TASK — Hedar picks one of two:**
-> (a) **Assignments Phase 2 — CREW concept** (§131.2): crews table (foreman + members), wizard asks "crews or individuals", individual = exceptions. Backend-first slices like everything else.
-> (b) **Hedar's full program overview/walkthrough** (priority item 2 — the menu list is done). The approver-role revisit (§129.9) belongs to this.
+> **🎯 NEXT TASK — FIRST code task is LOCKED (June 4 session 4, §131.13):**
+> **Investigate the Assignments List under-reporting:** the list tab shows only 8 assignments while the DB has 51 APPROVED covering the next day, and PROJ-22 (the wizard's own project) is entirely absent. `GET /assignments` has no date filter / LIMIT — suspect the INNER JOINs (employee_profiles / app_users requester). Hedar saw it live and stopped there (tired).
+> **June 4 session 4 also shipped:** PR #328 (§131.12) — wizard silent-skip fixed: `already_assigned` rows (gray badge, excluded from counts/totals/confirm) + `assignments_skipped` in the done screen. Deployed + smoked ✅. CI lesson: Pitfall #37 strikes again (BIGINT-as-string vs int4-as-number in a Set).
+> **Session order agreed June 4 (still governs after the fix):** finish remaining URGENT FIRST CHECK browser smokes (Hedar only did prod-health/SQL/gh checks + the wizard one) → (2) Hedar's full program overview/walkthrough (approver-role revisit §129.9 belongs here) → (3) Assignments Phase 2 — CREW concept (§131.2).
 > Also queued: employee_code beside same-name employees in wizard preview (§131.8 note); Mapbox Matrix road distances before payroll use; mobile full update (after web).
 >
 > **Prod safety net (kept):** `ALTER ROLE mepuser_super/mepuser SET idle_in_transaction_session_timeout = '30s';` **Server pending reboot** (kernel updates — check `pm2-root.service` enabled first, Pitfall #32).
@@ -138,9 +139,9 @@
    - Latest section is **131** (assignments redesign Phase 1: 131.1 verdict + CCQ allowance economics, 131.2 phases, 131.3-4 backend + rates-table correction, 131.5 wizard frontend, 131.6 tab restructure, 131.7 REPEAT skips Q3, 131.8 pinned footer, 131.9 no unsolicited banners, 131.10 viewport cap, 131.11 session close + Pitfalls #66/#67). 130 = merge decision + auto-confirm fixes. 129 = Emergency Purchase + DO Spaces. 128/127 = Tools/Surplus.
 3. **Echo this exact line** as the first line of your reply:
    ```
-   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 131, prod stable, assignments redesign Phase 1 LIVE (wizard + CCQ allowances), next = Hedar picks: Crews Phase 2 أو النظرة العامة الشاملة)
+   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md §131.13, prod stable, §131.12 silent-skip fix LIVE, أول مهمة = تحقيق نقص قائمة التعيينات §131.13)
    ```
-4. **Open by asking Hedar to pick the next track** (one question): (a) Assignments Phase 2 — CREW concept (§131.2: crews table, foreman+members, wizard asks crews-or-individuals; backend-first slices), or (b) his full program overview/walkthrough (priority item 2 — the original menu list is done; the §129.9 approver-role revisit belongs here). If (a): grep first (Pitfall #62), one architectural question at a time (crew membership model: fixed crews vs per-day composition).
+4. **Open with the §131.13 investigation** (FIRST code task, no need to ask): Assignments List shows 8 rows while the DB has 51 APPROVED covering the next day; PROJ-22 absent entirely. `GET /assignments` (routes/assignments.js ~line 798) has no date filter/LIMIT — check the INNER JOINs (employee_profiles missing rows? app_users requester?) by comparing the 8 visible vs the 51 in SQL. After it's fixed, the agreed order: remaining URGENT FIRST CHECK browser smokes → Hedar's full program overview (§129.9 approver revisit) → Assignments Phase 2 CREWS (§131.2 — grep first, Pitfall #62, one architectural question at a time).
 
 ---
 
@@ -169,8 +170,8 @@ Or pick a backlog item (logo + bank details on the invoice PDF; MEP→ENTERPRISE
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04) |
 | Backend | Node.js + Express + Postgres 16, pm2 at `/var/www/mep`. invite-employee reads from `subscriptions.subscribed_seats`. GET /super/companies/:id LEFT JOINs subscriptions. 6 new SUPER_ADMIN billing endpoints live (training quotes / custom demands / payments / extend-trial / apply-change). |
 | Frontend | React + Vite + Tailwind v4. CompanyBranding.jsx shows bracket + per-seat price (Section 117 refactor). Customer-facing subscription UI = Phase 6-D-5 (next). |
-| Latest deployed to prod | **Assignments redesign Phase 1 (PRs #317-#326) — June 5.** 4-tab Assignments + bulk wizard + CCQ allowances LIVE. Also LIVE: Expenses menu + DO Spaces (June 3-4), Tools + Surplus (June 2). |
-| Last merged to main | **PR #326** (banner removal + pinned footer, rebuilt from main after the #325 conflict). Session arc: #317 (auto-confirm fixes), #318 (unified planner, later superseded), #319 (de-dup), #321 (wizard backend + CCQ), #322 (wizard frontend), #323 (tab restructure), #324 (footer), #326. June 3-4: #310-#315 (Expenses). OPEN: Dependabot #297/#298/#299 (parked, green). |
+| Latest deployed to prod | **§131.12 silent-skip fix (PR #328) — June 4 evening, smoked ✅.** Before it: Assignments redesign Phase 1 (PRs #317-#326), Expenses menu + DO Spaces (June 3-4), Tools + Surplus (June 2). |
+| Last merged to main | **PR #328** (already_assigned rows + assignments_skipped, §131.12 + docs). Before: #326 (banner removal + pinned footer). Session arc: #317-#326. OPEN: Dependabot #297/#298/#299 (parked, green). |
 | Prod DB safety net | `idle_in_transaction_session_timeout = '30s'` on `mepuser_super` + `mepuser` (ALTER ROLE, persists). **Server pending kernel reboot** — verify `pm2-root.service` first (Pitfall #32). |
 | Prod env / ops | `INVOICE_EMAIL_ENABLED=true`, `TRIAL_WARN_DAYS=3`, **6 `DO_SPACES_*` vars (Spaces ACTIVE: `constrai-tenant-assets` TOR1+CDN)** in `/var/www/mep/.env`. Chrome libs for puppeteer. **Latest migration = 026** (025 = expense_claims grants, 026 = approval COMPANY_ADMIN-only, 024 = tool tracking — all applied). `git config --global core.editor notepad` on Hedar's machine (vim trap closed). |
 | TOTP secret | Re-enrolled June 1 under the rotated `TOTP_ENCRYPTION_KEY`. Login = PIN → 6-digit code (no QR). Recovery (lost phone): Section 121.6 SQL reset. |
