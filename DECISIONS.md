@@ -15479,3 +15479,21 @@ After the grant, the full e2e flow worked: submit + receipt photo → Spaces CDN
 **Backlog (Hedar):** payroll tie-in — reimbursed claims should eventually flow into the hourly-pay run as a "purchases" line item. Bigger feature; "Mark reimbursed" covers it manually for now.
 
 Also: GET /expense-claims now LEFT JOINs projects (project_code/project_name in the response; filter columns ec.-prefixed — `status` alone became ambiguous) — submitters don't hold projects.view, so the Claims table was showing raw `#id`. Frontend prefers c.project_code.
+---
+
+## 130. Section 130 — June 4, 2026 — Smart Assignment (§10): merge decision + auto-confirm RLS fix (Slice A)
+
+> Next functional menu. Survey (Pitfall #62) found a SUBSTANTIAL existing backend: `routes/auto_assign.js` (Phase 38/52 era) — `POST /api/assignments/auto-suggest` (carry-over today's team to a target date, same-trade replacements for busy workers, top-3 by home↔site distance for new projects, haversine scoring) + `POST /api/assignments/auto-confirm` (creates APPROVED assignment_requests + branded emails to employees/foremen/admin). Permission `assignments.smart_assign` seeded on prod (SUPER_ADMIN/COMPANY_ADMIN/TRADE_ADMIN). Tests existed for validation+RBAC only. **No frontend ever existed.**
+
+### 130.1 — UX decision (Hedar): MERGE with the BI Workforce Planner
+
+Hedar: two similar workforce features in two places confuses users and doubles the explanation. Decision: **remove Workforce Planner from BI and merge everything into ONE sidebar item "Workforce Planner"** with two tabs:
+- **Plan** — pick a target date → auto-suggest plan (carry-over/replacement/gap/new + scores) → review/edit → one confirm (auto_assign endpoints).
+- **Optimize** — the existing BI proximity suggestions (move worker to a closer project; `GET /bi/workforce-suggestions` + apply-move).
+The BI sidebar section disappears (Workforce Planner was its only item). Old route `/bi/workforce-planner` redirects to the new page.
+
+### 130.2 — Slice A shipped: auto-confirm was DEAD under strict RLS
+
+The in-code Stage-3 TODO was real: `/auto-confirm` runs a MANUAL `pool.connect()` transaction (atomicity across INSERTs) but never set the `app.company_id` GUC on that client → under strict tenant_isolation (migration 013) every INSERT into assignment_requests violated RLS → the endpoint has been dead on prod since 013. **Fix (plan B from the TODO):** `SELECT set_config('app.company_id', $1, true)` immediately after BEGIN (SET LOCAL semantics). Happy-path integration test added pinning the INSERT under RLS (was previously "left to manual/e2e").
+
+**Ops note (June 4):** prod reports `*** System restart required ***` (kernel updates). Before any reboot: verify `pm2-root.service` enabled (Pitfall #32). Backlogged.
