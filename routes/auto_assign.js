@@ -406,12 +406,16 @@ router.post('/auto-suggest', can('assignments.smart_assign'), async (req, res) =
       [companyId, target_date]
     );
     const busyOnTarget = new Set(busyRes.rows.map((r) => r.requested_for_employee_id));
+    // Keys normalized via String() — pg returns BIGINT columns as strings
+    // while int4 columns come back as numbers (Pitfall #37); a raw Set.has()
+    // silently misses across the two representations.
     const busyProjectsByEmp = new Map();
     for (const r of busyRes.rows) {
-      if (!busyProjectsByEmp.has(r.requested_for_employee_id)) {
-        busyProjectsByEmp.set(r.requested_for_employee_id, new Set());
+      const empKey = String(r.requested_for_employee_id);
+      if (!busyProjectsByEmp.has(empKey)) {
+        busyProjectsByEmp.set(empKey, new Set());
       }
-      busyProjectsByEmp.get(r.requested_for_employee_id).add(r.project_id);
+      busyProjectsByEmp.get(empKey).add(String(r.project_id));
     }
 
     // 3b. Get foremen from today's assignments (assignment_role = 'FOREMAN')
@@ -485,7 +489,9 @@ router.post('/auto-suggest', can('assignments.smart_assign'), async (req, res) =
           // Section 131.12: already covered on THIS project for the target
           // date — surface it as an informational row instead of silently
           // suggesting a replacement that auto-confirm would skip anyway.
-          if ((busyProjectsByEmp.get(worker.employee_id) || new Set()).has(project.id)) {
+          if (
+            (busyProjectsByEmp.get(String(worker.employee_id)) || new Set()).has(String(project.id))
+          ) {
             usedInThisRound.add(worker.employee_id);
             const empRecord = allEmployees.find((e) => e.id === worker.employee_id) || {};
             projSuggestions.push({
