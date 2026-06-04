@@ -580,7 +580,7 @@ export default {
     subtitle: 'Manage workforce assignments across all projects',
 
     assignButton: 'Assign Employee',
-    repeatButton: 'Assign Tomorrow as Today',
+    planDayButton: 'Plan a day',
 
     tabs: {
       list: 'Assignments List',
@@ -590,7 +590,6 @@ export default {
     success: {
       assigned: 'Assigned successfully!',
       moved: 'Moved successfully!',
-      repeated: 'Repeated successfully!',
     },
 
     role: {
@@ -644,20 +643,6 @@ export default {
       selectProject: 'Select Project',
       dateStart: 'Start',
       dateEnd: 'End',
-    },
-
-    repeat: {
-      title: 'Repeat Today',
-      targetDate: 'Target Date',
-      preview: 'Preview',
-      willBeAssigned: 'Will be assigned',
-      alreadyAssigned: 'Already assigned — skipped',
-      allDone: 'All employees already have assignments for this date.',
-      willCreate: '{{count}} assignments will be created',
-      confirm: 'Confirm',
-      doneTitle: 'Done!',
-      doneBody: "Today's assignments repeated for {{date}}",
-      close: 'Close',
     },
 
     newModal: {

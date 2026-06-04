@@ -586,7 +586,7 @@ export default {
     subtitle: "Gérer les affectations de la main-d'œuvre sur tous les projets",
 
     assignButton: 'Affecter un employé',
-    repeatButton: "Répéter aujourd'hui sur demain",
+    planDayButton: 'Planifier une journée',
 
     tabs: {
       list: 'Liste des affectations',
@@ -596,7 +596,6 @@ export default {
     success: {
       assigned: 'Affectation réussie !',
       moved: 'Déplacement réussi !',
-      repeated: 'Répétition réussie !',
     },
 
     role: {
@@ -648,20 +647,6 @@ export default {
       selectProject: 'Sélectionner un projet',
       dateStart: 'Début',
       dateEnd: 'Fin',
-    },
-
-    repeat: {
-      title: "Répéter aujourd'hui",
-      targetDate: 'Date cible',
-      preview: 'Aperçu',
-      willBeAssigned: 'Sera affecté',
-      alreadyAssigned: 'Déjà affecté — ignoré',
-      allDone: 'Tous les employés ont déjà des affectations pour cette date.',
-      willCreate: '{{count}} affectations seront créées',
-      confirm: 'Confirmer',
-      doneTitle: 'Terminé !',
-      doneBody: "Affectations d'aujourd'hui répétées pour {{date}}",
-      close: 'Fermer',
     },
 
     newModal: {

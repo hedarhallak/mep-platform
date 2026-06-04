@@ -1,13 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import api from '@/lib/api'
 import WorkerPicker from '@/components/shared/WorkerPicker'
+import { usePermissions } from '@/hooks/usePermissions.jsx'
 import { todayStr, tomorrowStr, fmtTime } from '@/utils/formatters'
 import { trade } from '@/constants/trades'
 import {
   Briefcase, MapPin, User, Check, X, Loader2,
   ChevronRight, AlertCircle, Plus, Calendar, List,
-  Map as MapIcon, Search, RefreshCw, ArrowLeftRight
+  Map as MapIcon, Search, ArrowLeftRight, Sparkles
 } from 'lucide-react'
 
 function fmt(d, locale = 'en-CA', opts = { month: 'short', day: 'numeric' }) {
@@ -211,160 +213,6 @@ function MapTab({ selectedProj, form, onAssign, onModify, assigning, modifying, 
   )
 }
 
-
-// ─────────────────────────────────────────────────────────────
-// RepeatTodayModal
-// ─────────────────────────────────────────────────────────────
-function RepeatTodayModal({ onClose, onSaved }) {
-  const { t } = useTranslation()
-  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1)
-  const tomorrowStr = tomorrow.toISOString().split('T')[0]
-
-  const [targetDate, setTargetDate] = useState(tomorrowStr)
-  const [loading, setLoading]       = useState(false)
-  const [confirming, setConfirming] = useState(false)
-  const [preview, setPreview]       = useState(null) // { toAssign, alreadySet }
-  const [error, setError]           = useState('')
-  const [success, setSuccess]       = useState(false)
-
-  const handlePreview = async () => {
-    setError(''); setPreview(null)
-    setLoading(true)
-    try {
-      const r = await api.post('/assignments/repeat-preview', { target_date: targetDate })
-      setPreview(r.data)
-    } catch (e) { setError(e.response?.data?.message || e.message) }
-    finally { setLoading(false) }
-  }
-
-  const handleConfirm = async () => {
-    setError(''); setConfirming(true)
-    try {
-      await api.post('/assignments/repeat-confirm', { target_date: targetDate })
-      setSuccess(true)
-      onSaved()
-    } catch (e) { setError(e.response?.data?.message || e.message) }
-    finally { setConfirming(false) }
-  }
-
-  if (success) return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-8 text-center">
-        <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <Check className="w-6 h-6 text-emerald-600" />
-        </div>
-        <h3 className="text-base font-bold text-slate-800 mb-1">{t('assignments.repeat.doneTitle')}</h3>
-        <p className="text-xs text-slate-400 mb-6">{t('assignments.repeat.doneBody', { date: targetDate })}</p>
-        <button onClick={onClose} className="px-5 py-2 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary-dark transition-colors">{t('assignments.repeat.close')}</button>
-      </div>
-    </div>
-  )
-
-  return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <RefreshCw className="w-4 h-4 text-primary" />
-            <h3 className="text-sm font-bold text-slate-800">{t('assignments.repeat.title')}</h3>
-          </div>
-          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        <div className="px-6 py-4 space-y-4">
-          {/* Date */}
-          <div>
-            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">{t('assignments.repeat.targetDate')}</label>
-            <div className="flex gap-2">
-              <input type="date" value={targetDate} min={tomorrowStr}
-                onChange={e => { setTargetDate(e.target.value); setPreview(null) }}
-                className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-light" />
-              <button onClick={handlePreview} disabled={loading}
-                className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-200 transition-colors disabled:opacity-60">
-                {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : t('assignments.repeat.preview')}
-              </button>
-            </div>
-          </div>
-
-          {error && (
-            <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-100 rounded-xl text-xs text-red-600">
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />{error}
-            </div>
-          )}
-
-          {/* Preview results */}
-          {preview && (
-            <div className="space-y-3">
-              {/* To be assigned */}
-              {preview.to_assign?.length > 0 && (
-                <div>
-                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-                    {t('assignments.repeat.willBeAssigned')} ({preview.to_assign.length})
-                  </div>
-                  <div className="border border-slate-200 rounded-xl overflow-hidden max-h-48 overflow-y-auto divide-y divide-slate-50">
-                    {preview.to_assign.map((a, i) => {
-                      const c = trade(a.trade_code)
-                      return (
-                        <div key={a.employee_id || a.employee_name || i} className="flex items-center gap-2.5 px-3 py-2.5">
-                          <div className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white" style={{ background: c.dot }}>
-                            {(a.employee_name || '?')[0]}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="text-xs font-semibold text-slate-700 truncate">{a.employee_name}</div>
-                            <div className="text-[10px] text-slate-400">{a.project_code} · <RoleBadge role={a.assignment_role} /></div>
-                          </div>
-                          <Check className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Already assigned */}
-              {preview.already_set?.length > 0 && (
-                <div>
-                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-                    {t('assignments.repeat.alreadyAssigned')} ({preview.already_set.length})
-                  </div>
-                  <div className="border border-slate-100 rounded-xl overflow-hidden max-h-32 overflow-y-auto divide-y divide-slate-50 bg-slate-50/50">
-                    {preview.already_set.map((a, i) => (
-                      <div key={`skip-${a.employee_id || a.employee_name || i}`} className="flex items-center gap-2.5 px-3 py-2">
-                        <div className="w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-bold text-white bg-slate-300">
-                          {(a.employee_name || '?')[0]}
-                        </div>
-                        <span className="text-xs text-slate-400 truncate">{a.employee_name} — {a.project_code}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {preview.to_assign?.length === 0 && (
-                <p className="text-sm text-center text-slate-400 py-4">{t('assignments.repeat.allDone')}</p>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        {preview && preview.to_assign?.length > 0 && (
-          <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between gap-3">
-            <span className="text-xs text-slate-400">{t('assignments.repeat.willCreate', { count: preview.to_assign.length })}</span>
-            <button onClick={handleConfirm} disabled={confirming}
-              className="flex items-center gap-2 px-5 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition-colors disabled:opacity-60">
-              {confirming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><Check className="w-3.5 h-3.5" />{t('assignments.repeat.confirm')}</>}
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
 
 // Role keys at module scope; labels resolved at render time via t().
 const ROLE_KEYS = ['WORKER', 'FOREMAN', 'JOURNEYMAN']
@@ -758,7 +606,11 @@ export default function AssignmentsPage() {
   const [reassignModal,  setReassignModal]  = useState(null)
   const [modifying,    setModifying]    = useState(null)
   const [newAssignModal, setNewAssignModal] = useState(false)
-  const [repeatModal,    setRepeatModal]    = useState(false)
+  // Section 130.5: "Repeat today" removed — the Workforce Planner's Plan tab
+  // is a strict superset (carry-over + replacements + gaps + new + emails).
+  const navigate = useNavigate()
+  const { can, loading: permsLoading } = usePermissions()
+  const canSmartPlan = !permsLoading && can('assignments', 'smart_assign')
 
   useEffect(() => {
     api.get('/projects?status=ACTIVE')
@@ -821,10 +673,12 @@ export default function AssignmentsPage() {
             className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-xs font-bold rounded-lg hover:bg-primary-dark transition-colors shadow-sm">
             <Plus className="w-3.5 h-3.5" />{t('assignments.assignButton')}
           </button>
-          <button onClick={() => setRepeatModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-white text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-50 transition-colors border border-slate-200">
-            <RefreshCw className="w-3.5 h-3.5" />{t('assignments.repeatButton')}
-          </button>
+          {canSmartPlan && (
+            <button onClick={() => navigate('/workforce-planner')}
+              className="flex items-center gap-2 px-4 py-2 bg-white text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-50 transition-colors border border-slate-200">
+              <Sparkles className="w-3.5 h-3.5" />{t('assignments.planDayButton')}
+            </button>
+          )}
           <div className="w-px h-5 bg-slate-200 mx-1" />
           {[
             { id: 'list', icon: List,    labelKey: 'assignments.tabs.list' },
@@ -891,12 +745,6 @@ export default function AssignmentsPage() {
         )}
 
       </div>
-      {repeatModal && (
-        <RepeatTodayModal
-          onClose={() => setRepeatModal(false)}
-          onSaved={() => { fetchAssignments(); setSuccessMsg(t('assignments.success.repeated')); setTimeout(() => setSuccessMsg(''), 4000) }}
-        />
-      )}
       {newAssignModal && (
         <NewAssignmentModal
           projects={projects}
@@ -947,8 +795,7 @@ export default function AssignmentsPage() {
                         ? <Loader2 className="w-4 h-4 animate-spin text-primary-light flex-shrink-0" />
                         : <ArrowLeftRight className="w-4 h-4 text-slate-300 flex-shrink-0" />}
                     </button>
-                  ))
-              }
+                  ))}
             </div>
           </div>
         </div>

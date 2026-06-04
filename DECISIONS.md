@@ -15508,3 +15508,16 @@ The new happy-path test (good thing it exists) failed in CI: `column "notes" of 
 - **Plan tab** (`assignments.smart_assign`): date picker (default tomorrow) → Generate → per-project cards with employee rows typed carry_over (blue) / replacement (amber, shows "replaces X") / new (emerald) / gap (red, UserX icon) + remove/restore per row → "Confirm plan (N)" → `POST /auto-confirm` → success banner (created + emails counts). Lazy — no fetch on mount.
 - **Optimize tab** (`bi.workforce_planner`): the original BI page body unchanged (summary cards / filters / apply-move).
 Wiring: `App.jsx` `/workforce-planner` route (anyOf both permissions) + old `/bi/workforce-planner` → Navigate replace (bookmarks keep working); `AppLayout` — **BI section REMOVED entirely** (Workforce Planner was its only item; biNav/biOpen/visibleBi all deleted), Brain item added to mainNav after Assignments with `canSeePlanner` (either permission); i18n EN/FR `bi.workforcePlanner.tabs.* + plan.*` (existing `bi.workforcePlanner.*` keys reused for Optimize); Vitest smoke (default-Plan + lazy-generate, view-only defaults to Optimize).
+
+### 130.5 — De-duplication: Assignments vs Workforce Planner (Hedar's "deep analysis" request)
+
+Hedar asked what overlaps between the two surfaces. Analysis found 3 overlaps:
+1. **Repeat ("Assign Tomorrow as Today") ⊂ Plan tab** — the REAL duplicate. repeat-preview/confirm is a dumb carry-over (no busy-check intelligence, no gap-filling, no new-project staffing, no replacement suggestions); Plan does all of that plus emails. Two buttons, two pages, same job → user confusion.
+2. Manual Move (Assignments) vs Optimize Apply (Planner) — same endpoint, different intent ("I know where" vs "suggest closest"). Complementary, KEPT both.
+3. Legacy `GET /assignments/suggest/:project_id` — third suggestion concept; not user-facing as its own button; left for later cleanup.
+
+**Mental model locked:** Assignments = the REGISTRY (view / single manual create / move / cancel / map). Workforce Planner = the INTELLIGENCE (bulk day planning + optimization). One sentence to explain to users.
+
+**Shipped:** RepeatTodayModal removed from AssignmentsPage (+ its i18n keys EN/FR); toolbar button replaced with "Plan a day" (Sparkles) → navigates to /workforce-planner, gated by assignments.smart_assign. Backend repeat-preview/repeat-confirm endpoints LEFT IN PLACE for now (no UI calls them; candidates for removal in a later hygiene pass — check mobile first).
+
+Hedar's verdict pending his hands-on test ("خليني شوف كيف رح تصير الامور وبعدها منجرب ومنقيم").
