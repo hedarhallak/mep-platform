@@ -211,27 +211,33 @@ router.get('/', can('expense_claims.view'), async (req, res) => {
         return res.status(400).json({ ok: false, error: 'INVALID_STATUS' });
       }
       params.push(status);
-      conditions.push(`status = $${params.length}`);
+      // ec.-prefixed: `status` alone is ambiguous since the projects JOIN
+      // (projects has its own status column).
+      conditions.push(`ec.status = $${params.length}`);
     }
     if (project_id) {
       params.push(Number(project_id));
-      conditions.push(`project_id = $${params.length}`);
+      conditions.push(`ec.project_id = $${params.length}`);
     }
     if (mine === '1' || mine === 'true') {
       params.push(userId);
-      conditions.push(`submitted_by_user_id = $${params.length}`);
+      conditions.push(`ec.submitted_by_user_id = $${params.length}`);
     }
 
     const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
+    // JOIN projects for display (Section 129.8) — submitters (foremen)
+    // don't hold projects.view, so the client can't resolve codes itself.
     const { rows } = await req.db.query(
-      `SELECT id, project_id, employee_id, submitted_by_user_id,
-              vendor, amount_cents, currency, receipt_url, description,
-              status, approved_by_user_id, approved_at, rejection_reason,
-              created_at, updated_at
-         FROM public.expense_claims
+      `SELECT ec.id, ec.project_id, ec.employee_id, ec.submitted_by_user_id,
+              ec.vendor, ec.amount_cents, ec.currency, ec.receipt_url, ec.description,
+              ec.status, ec.approved_by_user_id, ec.approved_at, ec.rejection_reason,
+              ec.created_at, ec.updated_at,
+              p.project_code, p.project_name
+         FROM public.expense_claims ec
+         LEFT JOIN public.projects p ON p.id = ec.project_id
          ${whereClause}
-         ORDER BY created_at DESC
+         ORDER BY ec.created_at DESC
          LIMIT 200`,
       params
     );
