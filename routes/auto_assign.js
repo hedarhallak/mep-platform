@@ -389,9 +389,15 @@ router.post('/auto-suggest', can('assignments.smart_assign'), async (req, res) =
       todayByProject[row.project_id].push(row);
     }
 
-    // 3. Get who is already assigned on target_date (busy)
+    // 3. Get who is already assigned on target_date (busy) AND on which
+    //    project. Section 131.12: coverage on the SAME project means
+    //    "already assigned" (a ranged assignment already spans the target
+    //    date — nothing to create); coverage on a DIFFERENT project means
+    //    "busy elsewhere" (replacement logic applies). Before this split,
+    //    same-project-covered workers got silent replacement suggestions
+    //    that auto-confirm then skipped — a confusing 0-created plan.
     const busyRes = await req.db.query(
-      `SELECT DISTINCT requested_for_employee_id
+      `SELECT DISTINCT requested_for_employee_id, project_id
        FROM public.assignment_requests
        WHERE company_id = $1
          AND status IN ('APPROVED', 'PENDING')
@@ -400,6 +406,13 @@ router.post('/auto-suggest', can('assignments.smart_assign'), async (req, res) =
       [companyId, target_date]
     );
     const busyOnTarget = new Set(busyRes.rows.map((r) => r.requested_for_employee_id));
+    const busyProjectsByEmp = new Map();
+    for (const r of busyRes.rows) {
+      if (!busyProjectsByEmp.has(r.requested_for_employee_id)) {
+        busyProjectsByEmp.set(r.requested_for_employee_id, new Set());
+      }
+      busyProjectsByEmp.get(r.requested_for_employee_id).add(r.project_id);
+    }
 
     // 3b. Get foremen from today's assignments (assignment_role = 'FOREMAN')
     const foremenRes = await req.db.query(
@@ -469,7 +482,26 @@ router.post('/auto-suggest', can('assignments.smart_assign'), async (req, res) =
       // --- Step A: Try to carry over today's team ---
       for (const worker of todayTeam) {
         if (busyOnTarget.has(worker.employee_id)) {
-          // Busy — when fill_gaps is on, find the best available
+          // Section 131.12: already covered on THIS project for the target
+          // date — surface it as an informational row instead of silently
+          // suggesting a replacement that auto-confirm would skip anyway.
+          if ((busyProjectsByEmp.get(worker.employee_id) || new Set()).has(project.id)) {
+            usedInThisRound.add(worker.employee_id);
+            const empRecord = allEmployees.find((e) => e.id === worker.employee_id) || {};
+            projSuggestions.push({
+              employee_id: worker.employee_id,
+              employee_name: worker.employee_name,
+              trade_code: worker.trade_code,
+              contact_email: null, // nothing is created — no email
+              assignment_role: worker.assignment_role || 'WORKER',
+              type: 'already_assigned',
+              replacing: null,
+              score: 0,
+              ...annotate(empRecord, worker.trade_code, project),
+            });
+            continue;
+          }
+          // Busy elsewhere — when fill_gaps is on, find the best available
           // replacement (same trade first; nearest first when distance
           // optimization is on, otherwise stable name order).
           let replacement = null;
@@ -556,12 +588,17 @@ router.post('/auto-suggest', can('assignments.smart_assign'), async (req, res) =
         }
       }
 
+      // Section 131.12: already_assigned rows are informational — they
+      // create nothing, so they don't count toward the plan's headcount
+      // or allowance totals (their per-row annotation stays for context).
       const projectAllowanceCents = projSuggestions.reduce(
-        (n, s) => n + (s.allowance_cents || 0),
+        (n, s) => n + (s.type === 'already_assigned' ? 0 : s.allowance_cents || 0),
         0
       );
       planAllowanceCents += projectAllowanceCents;
-      planHeadcount += projSuggestions.filter((s) => s.employee_id).length;
+      planHeadcount += projSuggestions.filter(
+        (s) => s.employee_id && s.type !== 'already_assigned'
+      ).length;
 
       suggestions.push({
         project_id: project.id,
@@ -651,6 +688,7 @@ router.post('/auto-confirm', can('assignments.smart_assign'), async (req, res) =
     await client.query(`SELECT set_config('app.company_id', $1, true)`, [String(companyId)]);
 
     const allCreated = [];
+    let skippedCount = 0; // overlap-skipped rows — reported, not silent (131.12)
     const emailQueue = []; // collect after commit
 
     for (const proj of confirmed) {
@@ -678,7 +716,10 @@ router.post('/auto-confirm', can('assignments.smart_assign'), async (req, res) =
              AND start_date<=$3 AND end_date>=$3`,
           [emp.employee_id, companyId, target_date]
         );
-        if (overlap.rows.length) continue; // skip, already assigned
+        if (overlap.rows.length) {
+          skippedCount += 1; // already assigned for that date — counted, surfaced in the response (131.12)
+          continue;
+        }
 
         // Section 130.3: column is `decision_note` (matches assignments.js) —
         // the original code said `notes`, which doesn't exist (schema drift;
@@ -813,6 +854,7 @@ router.post('/auto-confirm', can('assignments.smart_assign'), async (req, res) =
     return res.json({
       ok: true,
       assignments_created: allCreated.length,
+      assignments_skipped: skippedCount,
       emails_sent: emailsSent,
       emails_failed: emailsFailed,
     });

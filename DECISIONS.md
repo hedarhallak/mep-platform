@@ -15599,3 +15599,15 @@ Incognito (fresh bundle, no SW cache) still required scrolling to reach Confirm 
 **Deferred:** Dependabot #297 (frontend×6) / #298 (backend×4) / #299 (mobile×16), all green — parked for the hygiene/tech-debt phase per the priority order; mobile bumps are moot until the mobile-update phase anyway.
 
 **Assignments redesign Phase 1 = COMPLETE + LIVE** (PRs #317-#324, #326): one Assignments surface, 4 tabs in Hedar's order, sequential-question wizard with REPEAT short-circuit + CCQ allowance costing from ccq_travel_rates, viewport-pinned confirm, no unsolicited suggestions. Next: Phase 2 (crews) and Phase 3 (board) per §131.2 — or Hedar's full program overview first.
+
+### 131.12 — June 4 (session 4): silent overlap-skip fixed (already_assigned rows + skipped count)
+
+**Bug found by Hedar during the URGENT FIRST CHECK session:** he ran the wizard for tomorrow, confirmed a 51-row plan, and nothing appeared in the Assignments List. DB check showed ZERO rows created. Root cause chain: the seeded prod assignments are RANGED (Jan→2026-06-30), so every worker was already "covered" for tomorrow; `/auto-confirm`'s overlap check silently `continue`d on all 51; the done screen said success with no explanation. Worse, `/auto-suggest` treated same-project-covered workers as "busy" and proposed replacements for them — suggestions that confirm would then skip.
+
+**Fix (Hedar picked the full option over the cheap result-screen-only patch):**
+- `/auto-suggest`: the busy query now also returns `project_id`. A today-team worker whose existing assignment covers the target date **on the SAME project** becomes `type: 'already_assigned'` (informational row, no replacement search); busy **elsewhere** keeps the replacement/gap logic. `already_assigned` rows are excluded from `totals.headcount` and all allowance totals (per-row annotation kept for context).
+- `/auto-confirm`: overlap skips are counted and returned as `assignments_skipped` (no longer silent).
+- Wizard: `already_assigned` badge (slate, muted row, no remove button); rows excluded from the kept count, the allowance banner, and the confirm payload; done screen shows an amber "{n} skipped — already assigned" line when applicable.
+- i18n EN/FR (`type.already_assigned`, `doneSkipped`); integration tests (suggest annotation + totals exclusion; confirm skipped count) + 2 Vitest wizard tests.
+
+**Why the prod data hit this:** seed assignments span months (start Jan-Apr → end June 30), so "plan tomorrow" finds everyone already assigned. Real daily usage creates 1-day rows and would rarely mass-trigger it — but the wizard must never report a 0-created plan as a plain success.

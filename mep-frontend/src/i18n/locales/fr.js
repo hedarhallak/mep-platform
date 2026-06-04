@@ -624,6 +624,7 @@ export default {
       confirm: 'Confirmer ({{count}})',
       doneTitle: 'Plan confirmé !',
       doneBody: '{{count}} affectation(s) créée(s) — {{emails}} courriel(s) envoyé(s).',
+      doneSkipped: '{{count}} ignorée(s) — déjà affecté(s) à cette date.',
       close: 'Fermer',
       newPlan: 'Nouveau plan',
       type: {
@@ -631,6 +632,7 @@ export default {
         replacement: 'Remplacement',
         new: 'Nouveau',
         gap: 'Manque',
+        already_assigned: 'Déjà affecté',
       },
     },
 

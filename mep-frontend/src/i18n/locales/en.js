@@ -618,6 +618,7 @@ export default {
       confirm: 'Confirm ({{count}})',
       doneTitle: 'Plan confirmed!',
       doneBody: '{{count}} assignment(s) created — {{emails}} email(s) sent.',
+      doneSkipped: '{{count}} skipped — already assigned for that date.',
       close: 'Close',
       newPlan: 'New plan',
       type: {
@@ -625,6 +626,7 @@ export default {
         replacement: 'Replacement',
         new: 'New',
         gap: 'Gap',
+        already_assigned: 'Already assigned',
       },
     },
 

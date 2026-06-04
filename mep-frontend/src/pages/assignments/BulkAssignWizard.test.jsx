@@ -94,6 +94,77 @@ describe('BulkAssignWizard', () => {
     expect(screen.getByText('assignments.wizard.generate')).toBeInTheDocument()
   })
 
+  // Section 131.12 — already_assigned rows are informational: badge shown,
+  // no remove button, excluded from the kept count and the confirm payload.
+  test('already_assigned rows are excluded from count and confirm payload', async () => {
+    apiPost.mockResolvedValueOnce({
+      data: {
+        target_date: '2027-06-15',
+        suggestions: [
+          {
+            project_id: 7, project_code: 'PROJ-7', project_name: 'Tower',
+            shift_start: '06:00', shift_end: '14:30', today_count: 2,
+            allowance_total_cents: 0,
+            foremen: {},
+            employees: [
+              { employee_id: 1, employee_name: 'Sam', trade_code: 'ELECTRICAL', type: 'already_assigned', distance_km: 120, allowance_cents: 5389 },
+              { employee_id: 2, employee_name: 'Lea', trade_code: 'PLUMBING', type: 'new', distance_km: 10, allowance_cents: 0 },
+            ],
+          },
+        ],
+        totals: { headcount: 1, allowance_total_cents: 0 },
+      },
+    })
+
+    renderWizard()
+    fireEvent.click(screen.getByText('assignments.wizard.next')) // → Q2
+    fireEvent.click(screen.getByText('assignments.wizard.basis.repeat'))
+    fireEvent.click(screen.getByText('assignments.wizard.generate'))
+
+    await waitFor(() => expect(screen.getByText('Sam')).toBeInTheDocument())
+    expect(screen.getByText('assignments.wizard.type.already_assigned')).toBeInTheDocument()
+    // Only Lea counts toward the plan.
+    expect(screen.getByText('assignments.wizard.keptCount:1')).toBeInTheDocument()
+    expect(screen.getByText('assignments.wizard.confirm:1')).toBeInTheDocument()
+
+    apiPost.mockResolvedValueOnce({ data: { assignments_created: 1, assignments_skipped: 0, emails_sent: 0 } })
+    fireEvent.click(screen.getByText('assignments.wizard.confirm:1'))
+    await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(2))
+    const [, confirmBody] = apiPost.mock.calls[1]
+    const sentEmployees = confirmBody.confirmed.flatMap(p => p.employees)
+    expect(sentEmployees.map(e => e.employee_id)).toEqual([2]) // Sam (already_assigned) excluded
+  })
+
+  // Section 131.12 — skipped count surfaces on the done screen.
+  test('done screen shows the skipped line when assignments_skipped > 0', async () => {
+    apiPost
+      .mockResolvedValueOnce({
+        data: {
+          target_date: '2027-06-15',
+          suggestions: [
+            {
+              project_id: 7, project_code: 'PROJ-7', project_name: 'Tower',
+              shift_start: '06:00', shift_end: '14:30', today_count: 1,
+              allowance_total_cents: 0, foremen: {},
+              employees: [
+                { employee_id: 3, employee_name: 'Zed', trade_code: 'ELECTRICAL', type: 'carry_over', distance_km: 5, allowance_cents: 0 },
+              ],
+            },
+          ],
+          totals: { headcount: 1, allowance_total_cents: 0 },
+        },
+      })
+      .mockResolvedValueOnce({ data: { assignments_created: 0, assignments_skipped: 1, emails_sent: 0 } })
+
+    renderWizard()
+    fireEvent.click(screen.getByText('assignments.wizard.next'))
+    fireEvent.click(screen.getByText('assignments.wizard.basis.repeat'))
+    fireEvent.click(screen.getByText('assignments.wizard.generate'))
+    await waitFor(() => expect(screen.getByText('Zed')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('assignments.wizard.confirm:1'))
+    await waitFor(() => expect(screen.getByText('assignments.wizard.doneSkipped:1')).toBeInTheDocument())
+  })
+
   test('PROJECT basis requires picking a project before Next enables', () => {
     renderWizard()
     fireEvent.click(screen.getByText('assignments.wizard.next')) // → Q2
