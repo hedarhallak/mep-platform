@@ -726,7 +726,7 @@ export default function AssignmentsPage() {
         )}
 
         {tab === 'bulk' && canSmartPlan && (
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 min-h-0">
             <BulkAssignWizard inline projects={projects}
               onClose={() => {}} onConfirmed={fetchAssignments} />
           </div>
