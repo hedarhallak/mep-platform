@@ -1,7 +1,15 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: June 2, 2026 — **Functional-menus session. Hedar reset the priority order (see below). Two field-workflow menus shipped WEB-FIRST + LIVE:**
+> Last updated: June 4, 2026 — **Functional-menus program, session 2. Emergency Purchase COMPLETE + DO Spaces ACTIVATED:**
+>
+> **Shipped June 3-4 (Section 129, all LIVE + verified e2e on prod):**
+> 1. **✅ DO Spaces ACTIVATED** (closes the Section 112.2 deferral) — bucket `constrai-tenant-assets` (TOR1, CDN enabled), bucket-scoped R/W/D key `constrai-app-2026-06` (OneDrive `Constrai Keys`), 6 `DO_SPACES_*` vars in prod `.env`. Verified: upload → CDN public read 200. NO code change needed (existing `lib/spaces_client` works incl. `region: tor1`). Also unblocks tenant logo upload. Debugging trail = Pitfall #63.
+> 2. **✅ Emergency Purchase menu (§126.2 / Section 129) COMPLETE** — backend mostly pre-existed (Section 94.5: `expense_claims` migration 015 + submit/list routes; Pitfall #62 paid off). Added: `PATCH /:id/status` (review: APPROVED/REJECTED+reason/PAID, 409-guarded transitions), `POST /receipt` (photo → sharp EXIF-rotate + ≤1600px JPEG → Spaces `receipts/<company>/`), `GET /vendors` (smart vendor autocomplete), projects JOIN in list. Frontend `ExpensesPage.jsx` (`/expenses`, ReceiptText nav): Submit tab (today-assignment project card like MaterialRequest + vendor datalist + amount + receipt photo) + Claims tab (status badges + Approve/Reject-with-reason/Mark-reimbursed for approve-holders + receipt View link). PRs #310-#315.
+> 3. **✅ Approval model locked (Hedar):** purchasing-function approval, single level, NO multi-level chain. Default approver = **COMPANY_ADMIN only** (migration 026 removed FOREMAN self-approve + TRADE_ADMIN); companies grant `expense_claims.approve` to purchasing staff via the Permissions page. **⚠️ TEMPORARY:** Hedar flagged that COMPANY_ADMIN is really a technical/permissions role — revisit the approver default (maybe a PURCHASING function) during the full program overview (§129.9).
+> 4. **Fixes that benefit the whole app:** `lib/api.js` now passes FormData through (multipart boundary — uploads work through the wrapper; Pitfall #64); migrations 025 (expense_claims GRANTs retrofit — Pitfall #49 on a pre-020 table, CI can't catch = Pitfall #65) + 026 (approval), both applied on prod.
+>
+> **Previous session (June 2) — first two menus, still LIVE:**
 >
 > **🔁 NEW PRIORITY ORDER (Hedar, June 2 — this overrides the old conference roadmap sequencing):**
 > 1. **Add ALL un-built side menus as real, designed pages matching the program (NOT placeholders), page by page, WEB FIRST.** Mobile is a separate full update later (long neglected — done after web).
@@ -20,11 +28,11 @@
 >
 > **Billing (parked, all still LIVE from the June 1 session):** Phase 6-D-7 COMPLETE — monthly invoice cron → auto-email + A4 PDF (`INVOICE_EMAIL_ENABLED=true`) → trial-expiry warnings. `INVOICE_EMAIL_ENABLED=true` on prod; next real auto-run = July 1 cron (June's MEP invoice CONS-2026-10001 $229.95 already exists → skipped, idempotent). TOTP fix (Section 123) + Payments incident root-cause/fix (Section 124, tenantDb one-client-per-request guard) also still live.
 >
-> **🎯 NEXT TASK: Emergency / petty material purchase menu (DECISIONS §126.2)** — next un-built functional menu per the new priority order. After that: Smart Assignment (§10). THEN the full mobile-app update. (Old Phase 6-D-8 marketing/ToS work is deprioritized below the menu build-out.)
+> **🎯 NEXT TASK: Smart Assignment (DECISIONS §10)** — next un-built functional menu per the priority order. Before designing: grep first (Pitfall #62 — `routes/auto_assign.js` EXISTS, check what it already covers). ALSO QUICK WIN waiting: **ToolsPage + SurplusPage project dropdowns have the same foreman bug ExpensesPage had** (they read `/projects` which needs projects.view → empty for foremen) — apply the §129.5 my-today pattern to both. THEN the full mobile-app update. (Old Phase 6-D-8 marketing/ToS work stays deprioritized below the menu build-out.)
 >
 > **Prod safety net (kept):** `ALTER ROLE mepuser_super/mepuser SET idle_in_transaction_session_timeout = '30s';`
 >
-> **Live pitfalls — #59 (auth pre-tenant writes need `authPool`), #60 (one leaked `tenantDb` client kills the admin portal; superPool max=10), #61 (numeric MAX for sequences), #62 (grep routes/migrations before building a "missing" menu — the backend may already exist).**
+> **Live pitfalls — #59 (authPool for pre-tenant writes), #60 (tenantDb client leak kills the admin portal; superPool max=10), #61 (numeric MAX for sequences), #62 (grep routes/migrations before building a "missing" menu), #63 (DO Spaces debugging: InvalidArgument 400 on EVERYTHING = malformed creds in .env — diagnose by printing LENGTHS never values; LIST ok but PUT 403 = key is Read-only; probe layer-by-layer with `node -r dotenv/config -e`), #64 (`@/lib/api` is a custom fetch wrapper NOT axios — FormData passthrough added in §129.6; NEVER set multipart Content-Type manually, the boundary goes missing), #65 (before wiring a page onto a pre-migration-020 table, check `role_table_grants` on prod FIRST — CI's test role is postgres so 42501 permission-denied NEVER shows in CI).**
 
 ---
 
@@ -125,18 +133,17 @@
    - `CLAUDE.md` (working rules)
    - `DECISIONS.md` — read ONLY the latest 2-3 sections (the file is now 14,700+ lines). Latest section is **118** (Phase 6-D-4 COMPLETE — all 5 PRs shipped + Pitfalls #50/#51). Also relevant: 117 (PR 1+2 closeout + 3 strategic revisions to S115 + Pitfall #49), 116 (schema design), 115 (pricing model lock — note 115.3 brackets + 115.7 training mandatory + 115.3 self-serve all REVISED in 117).
    - `RECOVERY.md` Section 2.4 only if relevant
-   - Latest section is **128** (Tool Request — backend Slice A §128 + frontend Slice B §128.2). 127 = Surplus frontend (backend pre-existed). 126 = new feature specs (§126.1 Tool Request, §126.2 Emergency Purchase) + starter tool catalog. 125 = Phase 6-D-7 billing automation COMPLETE. 124 = Payments leak → tenantDb fix (#60). 123 = TOTP fix (#59).
+   - Latest section is **129** (Emergency Purchase COMPLETE: 129.1 workflow decision, 129.2 DO Spaces activation + Pitfall #63, 129.3 backend, 129.4 frontend, 129.5 foreman-project + vendor recall, 129.6 lib/api FormData fix + Pitfall #64, 129.7 GRANTs retrofit migration 025 + Pitfall #65, 129.8 approval model + migration 026, 129.9 prod verify + approver-default flagged TEMPORARY). 128 = Tool Request. 127 = Surplus. 126 = feature specs. 125 = billing automation.
 3. **Echo this exact line** as the first line of your reply:
    ```
-   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 128, prod stable, Surplus + Tools menus LIVE, next task = Emergency Purchase menu §126.2 per the new functional-menus priority order)
+   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md Section 129, prod stable, Surplus + Tools + Expenses menus LIVE, DO Spaces active, next task = Smart Assignment §10 per the functional-menus priority order)
    ```
-4. **Open with the Emergency / petty material purchase menu (DECISIONS §126.2) as the active priority** — it's the next un-built functional side menu under Hedar's June 2 priority order (build all menus web-first). Before designing it:
-   - **First `grep routes/ migrations/` for any pre-existing backend** (Pitfall #62 — Surplus already had one). Likely candidates: `material`, `expense`, `purchase`, `petty`, `receipt`.
-   - **Read DECISIONS §126.2** for the full spec. Summary: foreman buys urgent/small-value materials direct for the project (can't wait for supplier/warehouse, or item not carried) → receipt capture + threshold approval + expense tie-in.
-   - **Open with ONE architectural question** (per CLAUDE.md §8.9 — one decision at a time): asset/expense model — does this reuse an existing expenses concept or get its own `emergency_purchases` table? Propose 2-3 options via AskUserQuestion, then slice backend-first (migration + route + tests = Slice A) → frontend page (Slice B), same shape as the Tools feature.
-   - **Pattern to mirror:** the Tools feature this session (`migrations/024`, `routes/tools.js`, `tests/integration/tools.test.js`, `ToolsPage.jsx` + test, App.jsx route, AppLayout nav, en/fr i18n). Reuse the `materials` permission module unless Hedar wants a new one.
+4. **Open with Smart Assignment (DECISIONS §10) as the active priority** — next un-built functional menu (web-first). Before designing it:
+   - **First `grep routes/ migrations/ services/`** (Pitfall #62): **`routes/auto_assign.js` ALREADY EXISTS** — read it first and report what it covers vs the §10 spec (auto-suggest by proximity/trade/workload + driver routing for transfers). Mapbox + PostGIS are available.
+   - **Read DECISIONS §10** for the spec, then ONE architectural question at a time (CLAUDE.md §2.9), slice backend-first → frontend, mirroring the Tools/Expenses shape.
+   - **Quick win to offer first** (small PR before the big feature): ToolsPage + SurplusPage project dropdowns are empty for foremen (read `/projects`, needs projects.view) — apply the §129.5 my-today pattern from ExpensesPage to both.
 
-   After Emergency Purchase: **Smart Assignment (§10)**, then the **full mobile-app update**.
+   After Smart Assignment: the **full mobile-app update**.
 
 ---
 
@@ -165,12 +172,12 @@ Or pick a backlog item (logo + bank details on the invoice PDF; MEP→ENTERPRISE
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04) |
 | Backend | Node.js + Express + Postgres 16, pm2 at `/var/www/mep`. invite-employee reads from `subscriptions.subscribed_seats`. GET /super/companies/:id LEFT JOINs subscriptions. 6 new SUPER_ADMIN billing endpoints live (training quotes / custom demands / payments / extend-trial / apply-change). |
 | Frontend | React + Vite + Tailwind v4. CompanyBranding.jsx shows bracket + per-seat price (Section 117 refactor). Customer-facing subscription UI = Phase 6-D-5 (next). |
-| Latest deployed to prod | **Tools page (PR #308) — frontend rebuild June 2.** Surplus + Tools menus both LIVE + verified. Backend (Tools, PR #307 + migration 024) deployed earlier with catalog seeded (52 tools). |
-| Last merged to main | **PR #308** (Tools frontend). Earlier: #307 (Tools backend + migration 024), Surplus page PR. June 1: #290 (Payments), tenantDb fix, billing automation PRs. |
+| Latest deployed to prod | **Emergency Purchase complete (PRs #310-#315) — June 4.** Surplus + Tools + Expenses menus all LIVE + verified e2e (incl. receipt photo → Spaces CDN). |
+| Last merged to main | **PR #315** (approval model + project join). Earlier this session: #314 (grants migration + vendor refresh), #313 (lib/api FormData), #312 (foreman project + vendor recall), #311 (ExpensesPage), #310 (review endpoint + receipt upload). June 2: #307-#309 (Tools/Surplus). |
 | Prod DB safety net | `idle_in_transaction_session_timeout = '30s'` on `mepuser_super` + `mepuser` (ALTER ROLE, persists) — defense-in-depth from the Section 124 incident. |
-| Prod env / ops | `INVOICE_EMAIL_ENABLED=true` + `TRIAL_WARN_DAYS=3` in `/var/www/mep/.env`. Chrome system libs installed for puppeteer PDF. **Latest migration = 024** (`tool_catalog` + `tool_assets` + `tool_requests` + `tool_asset_movements`, applied on prod, catalog seeded). |
+| Prod env / ops | `INVOICE_EMAIL_ENABLED=true` + `TRIAL_WARN_DAYS=3` + **6 `DO_SPACES_*` vars (Spaces ACTIVE: bucket `constrai-tenant-assets` TOR1 + CDN; key in OneDrive `Constrai Keys`)** in `/var/www/mep/.env`. Chrome libs for puppeteer. **Latest migration = 026** (025 = expense_claims grants, 026 = approval COMPANY_ADMIN-only; both applied on prod; 024 = tool tracking). |
 | TOTP secret | Re-enrolled June 1 under the rotated `TOTP_ENCRYPTION_KEY`. Login = PIN → 6-digit code (no QR). Recovery (lost phone): Section 121.6 SQL reset. |
-| Active program | **Functional menus build-out (web-first).** Surplus + Tool Request DONE + LIVE. Next = Emergency Purchase (§126.2), then Smart Assignment (§10), then full mobile update. Billing parked (done). |
+| Active program | **Functional menus build-out (web-first).** Surplus + Tools + Emergency Purchase DONE + LIVE. Next = Smart Assignment (§10) + the Tools/Surplus foreman-dropdown quick win, then full mobile update. Billing parked (done). |
 | Mobile app | Still on Bearer-token + PIN. Phase 7 (Q1 2027). |
 
 ### Multi-tenant migration progress
@@ -210,7 +217,10 @@ Or pick a backlog item (logo + bank details on the invoice PDF; MEP→ENTERPRISE
 | **Section 126 — Feature specs: §126.1 Tool Request, §126.2 Emergency Purchase + starter tool catalog** | ✅ **Recorded** |
 | **Section 127 — Surplus / Material-Return page (frontend; backend pre-existed)** | ✅ **LIVE** — SurplusPage.jsx over `/materials/returns`+`/materials/surplus`. |
 | **Section 128 — Tool Request + asset tracking (backend §128 + frontend §128.2)** | ✅ **LIVE** — migration 024 + routes/tools.js (PR #307) + ToolsPage.jsx (PR #308), deployed + verified. |
-| **Emergency / petty material purchase menu (§126.2)** | ⏳ **NEXT** |
+| **Section 129.2 — DO Spaces activation (bucket + CDN + key + env)** | ✅ **DONE on prod** — closes the 112.2 deferral; logo upload unblocked too. |
+| **Section 129 — Emergency Purchase (§126.2): review PATCH + receipt upload + ExpensesPage + approval model** | ✅ **LIVE + verified e2e** — PRs #310-#315, migrations 025+026 applied. Approver default = COMPANY_ADMIN (TEMPORARY per §129.9). |
+| **Smart Assignment menu (§10)** | ⏳ **NEXT** — `routes/auto_assign.js` exists, survey first. |
+| **Tools/Surplus foreman project-dropdown fix (§129.5 pattern)** | ⏳ Quick win, offer before Smart Assignment. |
 | **Phase 6-D-8 — marketing + ToS + reference tenant + training** | ⏳ Deprioritized below functional menus |
 | Phase 6-D-6 — SUPER_ADMIN UI (Subscription detail with Apply Change, Training Quotes, etc.) | ⏳ June-July 2026 |
 | Phase 6-D-7 — Invoice email automation + monthly cron + trial expiry warnings | ⏳ July 2026 |
@@ -228,8 +238,11 @@ Or pick a backlog item (logo + bank details on the invoice PDF; MEP→ENTERPRISE
 ### Functional feature backlog (app menus / field workflows — building these WEB-FIRST per Hedar's June 2 priority order)
 - **✅ DONE — Material Return / Surplus page** (DECISIONS §8 / §127) — SurplusPage.jsx (Declare/Available) over the pre-existing `material_returns` backend. LIVE. (Advanced flow — 3-day hold / cross-site claim / driver transfer / surplus-check on new PO — still backlog as enhancements.)
 - **✅ DONE — Tool Request + asset tracking** (DECISIONS §126.1 / §128) — full feature, backend (migration 024 + routes/tools.js) + ToolsPage.jsx. LIVE.
-- **⏳ NEXT — Emergency / petty material purchase** (DECISIONS §126.2) — foreman buys urgent/small-value materials direct for the project (can't wait for supplier/warehouse, or not carried); receipt capture + threshold approval + expense tie-in. **grep routes/migrations first (Pitfall #62).**
-- **⏳ Smart Assignment System** (DECISIONS §10) — auto-suggest assignments by proximity/trade/workload + driver routing for transfers.
+- **✅ DONE — Emergency / petty purchase** (DECISIONS §126.2 / §129) — full feature LIVE (receipt photo → Spaces, single-level purchasing approval, vendor recall). PRs #310-#315.
+- **⏳ NEXT — Smart Assignment System** (DECISIONS §10) — auto-suggest assignments by proximity/trade/workload + driver routing. **`routes/auto_assign.js` exists — survey first (Pitfall #62).**
+- **⏳ Quick win — Tools/Surplus foreman project-dropdown fix** — same bug ExpensesPage had (§129.5); apply the my-today pattern to both pages.
+- **⏳ Expense approver default — REVISIT during the program overview (§129.9, Hedar June 4)** — COMPANY_ADMIN-as-approver is TEMPORARY (his real role = technical admin + permission distribution); likely a dedicated PURCHASING function/role.
+- **⏳ Payroll tie-in for reimbursed claims (Hedar June 3)** — reimbursed expense claims should flow into the hourly-pay run as a "purchases" line item; today "Mark reimbursed" is manual.
 - **⏳ Full mobile-app update** — long neglected; happens AFTER all web menus are built (Hedar's explicit sequencing).
 - **⏳ CCQ Labor Marketplace** (DECISIONS §9, 💡 future/large) — company job posts + worker availability, CCQ-verified.
 - **⏳ Web app i18n** (CLAUDE.md — still TODO; mobile already i18n'd).
@@ -241,7 +254,8 @@ Or pick a backlog item (logo + bank details on the invoice PDF; MEP→ENTERPRISE
 - **⏳ Subscription auto-charge (telecom-style)** — the professional end-state Hedar wants: stored payment method + recurring auto-charge (card via Stripe Billing, OR PAD/pre-authorized debit from the customer's bank account). Deliberately deferred to **Phase 9-B** (the schema is already forward-compatible: `STRIPE_CARD` method enum + `external_ref` for `payment_intent_id`). Strategy: manual now → fully automated later, layered on top of the existing system-of-record (no rewrite). Sensitive parts (PCI, PAD mandates, dunning, refunds) are handled by Stripe.
 - **⏳ MEP Construction demo posture** — Now achievable via SUPER_ADMIN Apply Change endpoint (`POST /api/super/subscriptions/:id/apply-change` with `change_type='PLAN_CHANGE'`). Recommended: bump MEP to ENTERPRISE plan with subscribed_seats=100, removes the over-cap amber warning. Can do now via curl; UI will come in Phase 6-D-6.
 - **⏳ Modular training materials** (Section 117.6) — design materials by topic (concepts, workflows, UI walkthroughs) with versioning.
-- **⏳ DO Spaces bucket activation** (Section 112.2). Trigger: first paying tenant OR August dry-run.
+- **✅ DONE — DO Spaces activation** (Section 129.2, June 3) — bucket `constrai-tenant-assets` live with CDN; receipts + logos upload working.
+- **⏳ Migrate CompanyBranding.jsx off its raw-fetch bypass** — lib/api now supports FormData (§129.6); collapse the old workaround whenever that file is next touched. Low.
 - **⏳ Phase 9-B — Stripe integration** (Q4 2026). Full Stripe Billing + webhook + state machine + Customer Portal + dunning + QST/GST tax automation.
 - **⏳ Phase 9-A — Module/Plugin System** (Q4 2026, parallel with 9-B).
 - **⏳ Annual billing logic** — Schema ready (Section 116); cron logic deferred to Phase 6-D-7 or 9-B.

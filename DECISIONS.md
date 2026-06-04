@@ -15479,3 +15479,9 @@ After the grant, the full e2e flow worked: submit + receipt photo → Spaces CDN
 **Backlog (Hedar):** payroll tie-in — reimbursed claims should eventually flow into the hourly-pay run as a "purchases" line item. Bigger feature; "Mark reimbursed" covers it manually for now.
 
 Also: GET /expense-claims now LEFT JOINs projects (project_code/project_name in the response; filter columns ec.-prefixed — `status` alone became ambiguous) — submitters don't hold projects.view, so the Claims table was showing raw `#id`. Frontend prefers c.project_code.
+
+### 129.9 — Verified on prod + approval-default flagged for the program overview
+
+Verified live: FOREMAN no longer sees Approve/Reject (approval = COMPANY_ADMIN), project column shows the real code. **Emergency Purchase (§126.2) COMPLETE end-to-end.**
+
+**⚠️ Hedar's note (June 4, recorded for the full program overview):** COMPANY_ADMIN as default approver is TEMPORARY. His view: COMPANY_ADMIN's real job is technical administration + permission distribution, not financial approval. Revisit the approval-role model (possibly a dedicated PURCHASING role/function) during the planned full program walkthrough. Until then: current state stands; companies grant `expense_claims.approve` individually via the Permissions page.
