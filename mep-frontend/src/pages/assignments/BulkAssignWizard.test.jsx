@@ -62,9 +62,9 @@ describe('BulkAssignWizard', () => {
     // Q1 (date defaults to tomorrow) → next
     expect(screen.getByText('assignments.wizard.q1')).toBeInTheDocument()
     fireEvent.click(screen.getByText('assignments.wizard.next'))
-    // Q2 — pick REPEAT (default) → next
+    // Q2 — pick FULL → next
     expect(screen.getByText('assignments.wizard.q2')).toBeInTheDocument()
-    fireEvent.click(screen.getByText('assignments.wizard.basis.repeat'))
+    fireEvent.click(screen.getByText('assignments.wizard.basis.full'))
     fireEvent.click(screen.getByText('assignments.wizard.next'))
     // Q3 — toggle gaps OFF, generate
     expect(screen.getByText('assignments.wizard.q3')).toBeInTheDocument()
@@ -74,7 +74,7 @@ describe('BulkAssignWizard', () => {
     await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(1))
     const [url, body] = apiPost.mock.calls[0]
     expect(url).toBe('/assignments/auto-suggest')
-    expect(body.mode).toBe('REPEAT')
+    expect(body.mode).toBe('FULL')
     expect(body.optimize_distance).toBe(true)
     expect(body.fill_gaps).toBe(false)
 
@@ -82,6 +82,16 @@ describe('BulkAssignWizard', () => {
     await waitFor(() => expect(screen.getByText('Sam')).toBeInTheDocument())
     expect(screen.getByText('assignments.wizard.gap')).toBeInTheDocument()
     expect(screen.getByText('assignments.wizard.allowanceTotal:$53.89')).toBeInTheDocument()
+  })
+
+  test('REPEAT basis skips the optimizations question (S131.7)', () => {
+    apiPost.mockResolvedValue({ data: { target_date: 'x', suggestions: [], totals: { headcount: 0, allowance_total_cents: 0 } } })
+    renderWizard()
+    fireEvent.click(screen.getByText('assignments.wizard.next')) // → Q2
+    fireEvent.click(screen.getByText('assignments.wizard.basis.repeat'))
+    // No "Next" anymore — Generate appears directly at Q2.
+    expect(screen.queryByText('assignments.wizard.next')).not.toBeInTheDocument()
+    expect(screen.getByText('assignments.wizard.generate')).toBeInTheDocument()
   })
 
   test('PROJECT basis requires picking a project before Next enables', () => {

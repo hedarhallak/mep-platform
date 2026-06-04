@@ -230,12 +230,16 @@ function RoleBadge({ role }) {
   return <span className={`inline-flex text-[10px] font-bold px-2 py-0.5 rounded-full ${color}`}>{label}</span>
 }
 
-function NewAssignmentModal({ projects, onClose, onSaved }) {
+// Section 131.6: renders as a TAB PANEL (inline=true, Hedar's tab
+// restructure) or as the legacy modal. In inline mode there is no
+// close/cancel — saving resets employee+notes for fast repeat entry.
+function NewAssignmentModal({ projects, onClose, onSaved, inline = false }) {
   const { t } = useTranslation()
   const [employees, setEmployees] = useState([])
   const [loadingEmp, setLoadingEmp] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState(false)
 
   const [form, setForm] = useState({
     project_id:      '',
@@ -283,14 +287,19 @@ function NewAssignmentModal({ projects, onClose, onSaved }) {
         assignment_role: form.assignment_role,
         notes:           form.notes || undefined,
       })
+      if (inline) {
+        setForm(f => ({ ...f, employee_id: '', notes: '' }))
+        setSuccess(true)
+        setTimeout(() => setSuccess(false), 4000)
+      }
       onSaved()
     } catch (e) { setError(e.response?.data?.message || e.message) }
     finally { setSaving(false) }
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+    <div className={inline ? '' : 'fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4'}>
+      <div className={`bg-white w-full max-w-md overflow-hidden ${inline ? 'rounded-xl border border-slate-200' : 'rounded-2xl shadow-2xl'}`}>
 
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
@@ -298,9 +307,11 @@ function NewAssignmentModal({ projects, onClose, onSaved }) {
             <Plus className="w-4 h-4 text-primary" />
             <h3 className="text-sm font-bold text-slate-800">{t('assignments.newModal.title')}</h3>
           </div>
-          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
-            <X className="w-4 h-4" />
-          </button>
+          {!inline && (
+            <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
         <div className="px-6 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
@@ -403,13 +414,20 @@ function NewAssignmentModal({ projects, onClose, onSaved }) {
               <AlertCircle className="w-4 h-4 flex-shrink-0" />{error}
             </div>
           )}
+          {success && (
+            <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-xs text-emerald-700">
+              <Check className="w-4 h-4 flex-shrink-0" />{t('assignments.success.assigned')}
+            </div>
+          )}
         </div>
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-2 text-xs font-semibold text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors">
-            {t('assignments.newModal.cancel')}
-          </button>
+          {!inline && (
+            <button onClick={onClose} className="px-4 py-2 text-xs font-semibold text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors">
+              {t('assignments.newModal.cancel')}
+            </button>
+          )}
           <button onClick={handleSave} disabled={saving}
             className="flex items-center gap-2 px-5 py-2 bg-primary text-white text-xs font-bold rounded-xl hover:bg-primary-dark transition-colors disabled:opacity-60">
             {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><Check className="w-3.5 h-3.5" />{t('assignments.newModal.assign')}</>}
@@ -595,7 +613,9 @@ function ListTab({ projects, assignments, loadingAsgn, onModify, modifying, succ
 
 export default function AssignmentsPage() {
   const { t } = useTranslation()
-  const [tab, setTab] = useState('list')
+  // Section 131.6 (Hedar's tab restructure): ONE row of tabs, ONE active.
+  // Order: single (default) → bulk (all teams) → map → list.
+  const [tab, setTab] = useState('single')
   const [projects, setProjects] = useState([])
   const [assignments, setAssignments] = useState([])
   const [loadingProj, setLoadingProj] = useState(true)
@@ -606,13 +626,17 @@ export default function AssignmentsPage() {
   const [mapForm, setMapForm] = useState({ start_date: tomorrowStr(), end_date: tomorrowStr() })
   const [reassignModal,  setReassignModal]  = useState(null)
   const [modifying,    setModifying]    = useState(null)
-  const [newAssignModal, setNewAssignModal] = useState(false)
-  // Section 131 (Phase 1): ONE surface — bulk-assign WIZARD + in-context
-  // optimization panel live here; the separate Workforce Planner is gone.
-  const [bulkWizard, setBulkWizard] = useState(false)
   const { can, loading: permsLoading } = usePermissions()
+  const canCreate = !permsLoading && can('assignments', 'create')
   const canSmartPlan = !permsLoading && can('assignments', 'smart_assign')
   const canOptimize = !permsLoading && can('bi', 'workforce_planner')
+
+  // Default tab: single (when allowed) per Hedar's order; viewers land on list.
+  useEffect(() => {
+    if (permsLoading) return
+    if (!canCreate && tab === 'single') setTab('list')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [permsLoading, canCreate])
 
   useEffect(() => {
     api.get('/projects?status=ACTIVE')
@@ -648,6 +672,14 @@ export default function AssignmentsPage() {
     setReassignModal({ assignment, otherProjects })
   }
 
+  // Section 131.6: list ordered by NEAREST start_date to today (Hedar).
+  const nowMs = new Date(todayStr()).getTime()
+  const sortedAssignments = [...assignments].sort(
+    (a, b) =>
+      Math.abs(new Date(a.start_date).getTime() - nowMs) -
+      Math.abs(new Date(b.start_date).getTime() - nowMs)
+  )
+
   const handleModifyConfirm = async (newProjectId) => {
     const { assignment } = reassignModal
     setModifying(newProjectId)
@@ -671,21 +703,12 @@ export default function AssignmentsPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setNewAssignModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-xs font-bold rounded-lg hover:bg-primary-dark transition-colors shadow-sm">
-            <Plus className="w-3.5 h-3.5" />{t('assignments.assignButton')}
-          </button>
-          {canSmartPlan && (
-            <button onClick={() => setBulkWizard(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-white text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-50 transition-colors border border-slate-200">
-              <Sparkles className="w-3.5 h-3.5" />{t('assignments.bulkButton')}
-            </button>
-          )}
-          <div className="w-px h-5 bg-slate-200 mx-1" />
           {[
-            { id: 'list', icon: List,    labelKey: 'assignments.tabs.list' },
+            canCreate    && { id: 'single', icon: Plus,     labelKey: 'assignments.tabs.single' },
+            canSmartPlan && { id: 'bulk',   icon: Sparkles, labelKey: 'assignments.tabs.bulk'   },
             { id: 'map',  icon: MapIcon, labelKey: 'assignments.tabs.map'  },
-          ].map(tabItem => (
+            { id: 'list', icon: List,    labelKey: 'assignments.tabs.list' },
+          ].filter(Boolean).map(tabItem => (
             <button key={tabItem.id} onClick={() => setTab(tabItem.id)}
               className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${tab === tabItem.id ? 'bg-primary text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'}`}>
               <tabItem.icon className="w-3.5 h-3.5" />{t(tabItem.labelKey)}
@@ -695,10 +718,24 @@ export default function AssignmentsPage() {
       </div>
 
       <div className="flex-1 flex flex-col overflow-hidden p-4 gap-4 min-h-0">
+        {tab === 'single' && canCreate && (
+          <div className="flex-1 overflow-y-auto">
+            <NewAssignmentModal inline projects={projects}
+              onClose={() => {}} onSaved={fetchAssignments} />
+          </div>
+        )}
+
+        {tab === 'bulk' && canSmartPlan && (
+          <div className="flex-1 overflow-y-auto">
+            <BulkAssignWizard inline projects={projects}
+              onClose={() => {}} onConfirmed={fetchAssignments} />
+          </div>
+        )}
+
         {tab === 'list' && canOptimize && <OptimizePanel onApplied={fetchAssignments} />}
         {tab === 'list' && (
           <div className="flex-1 flex rounded-xl border border-slate-200 overflow-hidden bg-white min-h-0">
-            <ListTab projects={projects} assignments={assignments} loadingAsgn={loadingAsgn}
+            <ListTab projects={projects} assignments={sortedAssignments} loadingAsgn={loadingAsgn}
               onModify={handleReassign} modifying={modifying} successMsg={successMsg}
               onRefresh={fetchAssignments} />
           </div>
@@ -748,25 +785,6 @@ export default function AssignmentsPage() {
         )}
 
       </div>
-      {bulkWizard && (
-        <BulkAssignWizard
-          projects={projects}
-          onClose={() => setBulkWizard(false)}
-          onConfirmed={fetchAssignments}
-        />
-      )}
-      {newAssignModal && (
-        <NewAssignmentModal
-          projects={projects}
-          onClose={() => setNewAssignModal(false)}
-          onSaved={() => {
-            setNewAssignModal(false)
-            fetchAssignments()
-            setSuccessMsg(t('assignments.success.assigned'))
-            setTimeout(() => setSuccessMsg(''), 4000)
-          }}
-        />
-      )}
       {/* Move Modal */}
       {reassignModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">

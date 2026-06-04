@@ -33,7 +33,9 @@ function money(cents) {
   return `$${(Number(cents || 0) / 100).toFixed(2)}`
 }
 
-export default function BulkAssignWizard({ projects, onClose, onConfirmed }) {
+// Section 131.6: renders as a TAB PANEL (inline=true) or as a modal.
+// In inline mode there is no close X; finishing offers a reset instead.
+export default function BulkAssignWizard({ projects, onClose, onConfirmed, inline = false }) {
   const { t } = useTranslation()
   const [step, setStep] = useState(1)
 
@@ -115,9 +117,24 @@ export default function BulkAssignWizard({ projects, onClose, onConfirmed }) {
     step === 2 ? (mode !== 'PROJECT' || !!projectId) :
     true
 
+  // Section 131.7 (Hedar): REPEAT = "same as yesterday" — the
+  // optimizations question is meaningless there, so Q3 is SKIPPED and
+  // Q2 generates directly (defaults stay on: busy workers still get
+  // replacement suggestions, visible in the preview).
+  const skipQ3 = mode === 'REPEAT'
+  const wizardSteps = skipQ3 ? [1, 2] : [1, 2, 3]
+
+  const resetWizard = () => {
+    setStep(1)
+    setPlan(null)
+    setResult(null)
+    setRemoved(new Set())
+    setError('')
+  }
+
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[88vh] flex flex-col overflow-hidden">
+    <div className={inline ? '' : 'fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4'}>
+      <div className={`bg-white w-full max-w-2xl flex flex-col overflow-hidden ${inline ? 'rounded-xl border border-slate-200' : 'rounded-2xl shadow-2xl max-h-[88vh]'}`}>
 
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between flex-shrink-0">
@@ -128,14 +145,16 @@ export default function BulkAssignWizard({ projects, onClose, onConfirmed }) {
           <div className="flex items-center gap-3">
             {step <= 3 && (
               <div className="flex items-center gap-1.5">
-                {[1, 2, 3].map(s => (
+                {wizardSteps.map(s => (
                   <span key={s} className={`w-2 h-2 rounded-full ${s === step ? 'bg-primary' : s < step ? 'bg-primary-light' : 'bg-slate-200'}`} />
                 ))}
               </div>
             )}
-            <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
-              <X className="w-4 h-4" />
-            </button>
+            {!inline && (
+              <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -338,20 +357,26 @@ export default function BulkAssignWizard({ projects, onClose, onConfirmed }) {
         {/* Footer */}
         <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between flex-shrink-0">
           {step > 1 && step <= 4 ? (
-            <button onClick={() => setStep(s => (s === 4 ? 3 : s - 1))}
+            <button onClick={() => setStep(s => (s === 4 ? (skipQ3 ? 2 : 3) : s - 1))}
               className="flex items-center gap-1.5 px-4 py-2 text-slate-500 text-xs font-bold rounded-xl hover:bg-slate-100 transition-colors">
               <ChevronLeft className="w-3.5 h-3.5" />{t('assignments.wizard.back')}
             </button>
           ) : <span />}
 
-          {step < 3 && (
-            <button onClick={() => setStep(s => s + 1)} disabled={!stepValid}
+          {step === 1 && (
+            <button onClick={() => setStep(2)} disabled={!stepValid}
               className="px-5 py-2 bg-primary text-white text-xs font-bold rounded-xl hover:bg-primary-dark transition-colors disabled:opacity-50">
               {t('assignments.wizard.next')}
             </button>
           )}
-          {step === 3 && (
-            <button onClick={generate} disabled={loading}
+          {step === 2 && !skipQ3 && (
+            <button onClick={() => setStep(3)} disabled={!stepValid}
+              className="px-5 py-2 bg-primary text-white text-xs font-bold rounded-xl hover:bg-primary-dark transition-colors disabled:opacity-50">
+              {t('assignments.wizard.next')}
+            </button>
+          )}
+          {(step === 3 || (step === 2 && skipQ3)) && (
+            <button onClick={generate} disabled={loading || !stepValid}
               className="flex items-center gap-2 px-5 py-2 bg-primary text-white text-xs font-bold rounded-xl hover:bg-primary-dark transition-colors disabled:opacity-60">
               {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><Sparkles className="w-3.5 h-3.5" />{t('assignments.wizard.generate')}</>}
             </button>
@@ -363,9 +388,9 @@ export default function BulkAssignWizard({ projects, onClose, onConfirmed }) {
             </button>
           )}
           {step === 5 && (
-            <button onClick={onClose}
+            <button onClick={inline ? resetWizard : onClose}
               className="px-5 py-2 bg-primary text-white text-xs font-bold rounded-xl hover:bg-primary-dark transition-colors">
-              {t('assignments.wizard.close')}
+              {inline ? t('assignments.wizard.newPlan') : t('assignments.wizard.close')}
             </button>
           )}
         </div>

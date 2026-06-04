@@ -625,6 +625,7 @@ export default {
       doneTitle: 'Plan confirmé !',
       doneBody: '{{count}} affectation(s) créée(s) — {{emails}} courriel(s) envoyé(s).',
       close: 'Fermer',
+      newPlan: 'Nouveau plan',
       type: {
         carry_over: 'Reconduit',
         replacement: 'Remplacement',
@@ -641,8 +642,10 @@ export default {
     },
 
     tabs: {
-      list: 'Liste des affectations',
+      single: 'Affectation individuelle',
+      bulk: 'Affectation des équipes',
       map: 'Affectation géographique',
+      list: 'Liste des affectations',
     },
 
     success: {
