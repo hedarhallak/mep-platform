@@ -7,7 +7,7 @@ import { usePWA } from '@/hooks/usePWA.jsx'
 import api from '@/lib/api'
 import {
   LayoutDashboard, FolderKanban, Users, ClipboardList,
-  Settings, LogOut, Building2, BarChart2, Brain,
+  Settings, LogOut, Building2, BarChart2,
   CalendarCheck, Inbox, Package, Truck, FileText, Shield, Send,
   Download, WifiOff, RefreshCw, Receipt, CreditCard, Recycle, Wrench, ReceiptText
 } from 'lucide-react'
@@ -20,9 +20,6 @@ const mainNav = [
   { to: '/projects',         icon: FolderKanban,    labelKey: 'nav.projects',         permission: { module: 'projects',        action: 'view'           } },
   { to: '/suppliers',        icon: Truck,           labelKey: 'nav.suppliers',        permission: { module: 'suppliers',       action: 'view'           } },
   { to: '/assignments',      icon: ClipboardList,   labelKey: 'nav.assignments',      permission: { module: 'assignments',     action: 'view'           } },
-  // Section 130: unified Workforce Planner (Plan = smart_assign, Optimize =
-  // the old BI page). Custom filter case below (either permission shows it).
-  { to: '/workforce-planner', icon: Brain,          labelKey: 'nav.workforcePlanner', permission: { module: 'bi',              action: 'workforce_planner' } },
   { to: '/attendance',       icon: CalendarCheck,   labelKey: 'nav.attendance',       permission: { module: 'attendance',      action: 'view_self'      } },
   { to: '/reports',          icon: BarChart2,       labelKey: 'nav.reports',          permission: { module: 'reports', action: 'view_self' } },
   { to: '/standup',          icon: ClipboardList,   labelKey: 'nav.standup',          permission: { module: 'standup',         action: 'manage'         } },
@@ -118,10 +115,6 @@ export default function AppLayout() {
     can('expense_claims', 'submit') ||
     can('expense_claims', 'view')
   )
-  const canSeePlanner = !permsLoading && (
-    can('bi', 'workforce_planner') ||
-    can('assignments', 'smart_assign')
-  )
 
   const visibleMain = mainNav.filter(item => {
     if (!item.permission) return true
@@ -133,7 +126,6 @@ export default function AppLayout() {
     if (item.to === '/surplus')           return canSeeSurplus
     if (item.to === '/tools')             return canSeeTools
     if (item.to === '/expenses')          return canSeeExpenses
-    if (item.to === '/workforce-planner') return canSeePlanner
     return can(item.permission.module, item.permission.action)
   })
 
