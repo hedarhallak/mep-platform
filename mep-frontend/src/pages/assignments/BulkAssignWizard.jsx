@@ -133,10 +133,12 @@ export default function BulkAssignWizard({ projects, onClose, onConfirmed, inlin
   }
 
   return (
-    <div className={inline ? 'h-full flex' : 'fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4'}>
-      {/* Section 131.8 (Hedar): header + footer stay PINNED — long previews
-          scroll inside the card, so Confirm/Back are always reachable. */}
-      <div className={`bg-white w-full max-w-2xl flex flex-col overflow-hidden ${inline ? 'rounded-xl border border-slate-200 max-h-full' : 'rounded-2xl shadow-2xl max-h-[88vh]'}`}>
+    <div className={inline ? '' : 'fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4'}>
+      {/* Section 131.8/131.10 (Hedar): header + footer stay PINNED — long
+          previews scroll inside the card. Inline mode caps the BODY against
+          the viewport directly (calc) because the nested page/layout height
+          chain proved unreliable ("صفحة ضمن صفحة"). */}
+      <div className={`bg-white w-full max-w-2xl flex flex-col overflow-hidden ${inline ? 'rounded-xl border border-slate-200' : 'rounded-2xl shadow-2xl max-h-[88vh]'}`}>
 
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between flex-shrink-0">
@@ -160,8 +162,8 @@ export default function BulkAssignWizard({ projects, onClose, onConfirmed, inlin
           </div>
         </div>
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-5">
+        {/* Body — inline: viewport-capped so the footer never leaves the screen */}
+        <div className={`flex-1 overflow-y-auto px-6 py-5 ${inline ? 'max-h-[calc(100vh-360px)]' : ''}`}>
           {error && (
             <div className="mb-4 flex items-center gap-2 p-3 bg-red-50 border border-red-100 rounded-xl text-xs text-red-600">
               <AlertTriangle className="w-4 h-4 flex-shrink-0" />{error}
