@@ -15575,3 +15575,9 @@ Both old toolbar buttons removed; tabs permission-gated (single→assignments.cr
 ### 131.8 — Pinned wizard footer (Hedar) + same-name observation
 
 Live test with a 51-row plan: Confirm/Back sat below the list → user must scroll the whole preview to act. Fixed: inline wizard card now fills the tab height (`h-full` + `max-h-full`), header + footer pinned, ONLY the preview list scrolls internally. Also observed "X replaces X" rows — two seeded employees share a display name (engine can't self-replace, IDs differ); backlog: show employee_code beside names in the preview for disambiguation.
+
+### 131.9 — Optimize banner REMOVED (Hedar): no unsolicited suggestions
+
+Incognito review: the amber "N optimization suggestions" banner above the list contradicts the locked principle — THE ASSIGNER chooses optimizations (in the wizard), the system doesn't push them. OptimizePanel unmounted + file deleted. The optimize-existing-assignments capability can return LATER as a 4th wizard basis option ("optimize current assignments") if Hedar wants it — backend /bi/workforce-suggestions stays. (assignments.optimize.* i18n keys now dead — hygiene pass.)
+
+Also confirmed during this review: the "footer needs scrolling" report was the PWA service worker serving the stale bundle (Chrome showed "Finish update"; incognito had the new code) — NOT a layout bug. Reminder for all future frontend smokes: the tenant app is a PWA; after a deploy, verify in incognito or after the in-app update banner / closing all tabs.
