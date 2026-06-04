@@ -15471,3 +15471,11 @@ Note: empty vendor suggestions during the failed smoke were expected — no clai
 First real submit failed with 42501 `permission denied for table expense_claims`: migration 015 predates the GRANTs convention — the table was owned by postgres with ZERO app-role privileges, and nobody had ever hit those endpoints (no page existed). CI didn't catch it (test role = postgres, Pitfall #14). Fixed: **migration 025_expense_claims_grants.sql** (table CRUD + sequence USAGE/SELECT to mepuser + mepuser_super, with sanity check) — applied on prod manually, file committed for the record. **Rule reinforced: when wiring a page onto an OLD pre-020 table, check `role_table_grants` on prod BEFORE the smoke.**
 
 After the grant, the full e2e flow worked: submit + receipt photo → Spaces CDN → claim PENDING. Vendor autocomplete refinement: suggestions were only fetched on mount (empty at the time) — now also refreshed after each successful submit.
+
+### 129.8 — Approval model locked (Hedar) + project_code join
+
+**Decision (Hedar, June 3):** emergency-purchase approval = the company's PURCHASING function, single level, NO multi-level chain. Default approver = **COMPANY_ADMIN only**; companies grant `expense_claims.approve` to purchasing staff individually via the Permissions page (user_permissions override). FOREMAN could previously approve his own claim (015 default) — removed, along with TRADE_ADMIN. → **migration 026_expense_approve_company_admin_only.sql** (DELETE role_permissions rows + sanity; requires pm2 restart for the permission cache).
+
+**Backlog (Hedar):** payroll tie-in — reimbursed claims should eventually flow into the hourly-pay run as a "purchases" line item. Bigger feature; "Mark reimbursed" covers it manually for now.
+
+Also: GET /expense-claims now LEFT JOINs projects (project_code/project_name in the response; filter columns ec.-prefixed — `status` alone became ambiguous) — submitters don't hold projects.view, so the Claims table was showing raw `#id`. Frontend prefers c.project_code.

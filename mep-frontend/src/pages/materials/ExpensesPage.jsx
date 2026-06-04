@@ -298,7 +298,7 @@ function ClaimsTab({ canApprove }) {
                       <p className="text-[11px] text-red-500 font-normal mt-0.5 max-w-[220px]">{t('expenses.claims.reason')}: {c.rejection_reason}</p>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-xs text-slate-500">{projects[c.project_id] || `#${c.project_id}`}</td>
+                  <td className="px-4 py-3 text-xs text-slate-500">{c.project_code || projects[c.project_id] || `#${c.project_id}`}</td>
                   <td className="px-4 py-3 text-sm font-semibold text-slate-700 text-right whitespace-nowrap">{formatAmount(c.amount_cents, c.currency)}</td>
                   <td className="px-4 py-3">
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${STATUS_STYLE[c.status] || STATUS_STYLE.PENDING}`}>
