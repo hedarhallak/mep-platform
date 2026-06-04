@@ -619,6 +619,7 @@ export default {
       doneTitle: 'Plan confirmed!',
       doneBody: '{{count}} assignment(s) created — {{emails}} email(s) sent.',
       close: 'Close',
+      newPlan: 'New plan',
       type: {
         carry_over: 'Carry-over',
         replacement: 'Replacement',
@@ -634,9 +635,12 @@ export default {
       apply: 'Apply',
     },
 
+    // Section 131.6 — one tab row, Hedar's order: single → bulk → map → list
     tabs: {
-      list: 'Assignments List',
+      single: 'Single Assignment',
+      bulk: 'All Teams Assignment',
       map: 'Geographical Assignment',
+      list: 'Assignments List',
     },
 
     success: {

@@ -15558,3 +15558,16 @@ All methods COEXIST in one Assignments surface; admin picks per situation:
 - **DELETED:** WorkforcePlannerPage.jsx + its test (git rm); `/workforce-planner` + `/bi/workforce-planner` both redirect → `/assignments`; nav item + canSeePlanner + Brain icon removed from AppLayout. **Sidebar net effect of the whole arc: BI section gone, planner gone — Assignments is the single workforce surface** (Hedar's 131.1 verdict implemented).
 - i18n EN/FR: `assignments.wizard.* / assignments.optimize.* / bulkButton`. (Dead keys `bi.workforcePlanner.*`, `nav.workforcePlanner`, `nav.bi` left in the locale files — hygiene-pass cleanup later; removing 90-line blocks mid-session risks another file corruption like 130.5's.)
 - Vitest: BulkAssignWizard smoke (3-question walk → generate payload assertions → preview rows + allowance banner; PROJECT basis gating).
+
+### 131.6 — Hedar's UI review: action buttons → ONE tab row (4 tabs, his naming + order)
+
+Review finding: two blue elements in one row (primary action button + active tab) = broken logic; actions and views must be ONE tab row with ONE active tab. Implemented his exact spec:
+1. **Single Assignment** (default tab) — the create form now renders INLINE as a tab panel (NewAssignmentModal got an `inline` prop: no overlay/close/cancel; success banner in-form; saving resets employee+notes for fast repeated entry).
+2. **All Teams Assignment** — the bulk wizard inline as a tab panel (BulkAssignWizard `inline` prop; done-step button becomes "New plan" reset).
+3. **Geographical Assignment** — map tab unchanged.
+4. **Assignments List** — LAST, now sorted by NEAREST start_date to today (abs-distance sort before grouping); OptimizePanel stays mounted above it.
+Both old toolbar buttons removed; tabs permission-gated (single→assignments.create, bulk→smart_assign); viewers default to list. i18n EN/FR `assignments.tabs.{single,bulk,map,list}` + `wizard.newPlan`.
+
+### 131.7 — Wizard flow refinement (Hedar): REPEAT skips the optimizations question
+
+"متل مبارح يعني متل مبارح" — when the basis is Repeat-today, asking about optimization methods is meaningless (same people, same sites). Q3 is now SKIPPED for REPEAT: Q2 generates directly (2 progress dots instead of 3; Back from the preview returns to Q2). Defaults stay on under the hood, so a busy worker still gets a replacement suggestion — visible and removable in the preview. Test updated + a dedicated skip-Q3 test added.
