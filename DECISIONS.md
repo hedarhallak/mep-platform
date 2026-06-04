@@ -15497,3 +15497,14 @@ The BI sidebar section disappears (Workforce Planner was its only item). Old rou
 The in-code Stage-3 TODO was real: `/auto-confirm` runs a MANUAL `pool.connect()` transaction (atomicity across INSERTs) but never set the `app.company_id` GUC on that client → under strict tenant_isolation (migration 013) every INSERT into assignment_requests violated RLS → the endpoint has been dead on prod since 013. **Fix (plan B from the TODO):** `SELECT set_config('app.company_id', $1, true)` immediately after BEGIN (SET LOCAL semantics). Happy-path integration test added pinning the INSERT under RLS (was previously "left to manual/e2e").
 
 **Ops note (June 4):** prod reports `*** System restart required ***` (kernel updates). Before any reboot: verify `pm2-root.service` enabled (Pitfall #32). Backlogged.
+
+### 130.3 — Schema drift caught: auto-confirm INSERT used a nonexistent `notes` column
+
+The new happy-path test (good thing it exists) failed in CI: `column "notes" of relation "assignment_requests" does not exist`. The route predates the current schema — the column is **`decision_note`** (assignments.js uses it everywhere). Fixed. So auto-confirm had TWO independent fatal bugs (RLS GUC + wrong column) and nobody could have noticed — no UI ever called it. Lesson reinforced: when reviving an old endpoint, write the happy-path test FIRST.
+
+### 130.4 — Slice B shipped: unified Workforce Planner page
+
+`WorkforcePlannerPage.jsx` rewritten as the merged page (file stays at `pages/bi/`, cosmetic only):
+- **Plan tab** (`assignments.smart_assign`): date picker (default tomorrow) → Generate → per-project cards with employee rows typed carry_over (blue) / replacement (amber, shows "replaces X") / new (emerald) / gap (red, UserX icon) + remove/restore per row → "Confirm plan (N)" → `POST /auto-confirm` → success banner (created + emails counts). Lazy — no fetch on mount.
+- **Optimize tab** (`bi.workforce_planner`): the original BI page body unchanged (summary cards / filters / apply-move).
+Wiring: `App.jsx` `/workforce-planner` route (anyOf both permissions) + old `/bi/workforce-planner` → Navigate replace (bookmarks keep working); `AppLayout` — **BI section REMOVED entirely** (Workforce Planner was its only item; biNav/biOpen/visibleBi all deleted), Brain item added to mainNav after Assignments with `canSeePlanner` (either permission); i18n EN/FR `bi.workforcePlanner.tabs.* + plan.*` (existing `bi.workforcePlanner.*` keys reused for Optimize); Vitest smoke (default-Plan + lazy-generate, view-only defaults to Optimize).

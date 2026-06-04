@@ -1547,8 +1547,32 @@ export default {
   bi: {
     workforcePlanner: {
       title: 'Workforce Planner',
-      subtitle: "Geographical assignment optimization · Today's active workforce",
+      subtitle: 'Plan tomorrow’s crews and optimize today’s assignments',
       refresh: 'Refresh',
+
+      tabs: { plan: 'Plan', optimize: 'Optimize' },
+
+      plan: {
+        targetDate: 'Target date',
+        generate: 'Generate plan',
+        emptyTitle: 'Pick a date and generate a plan',
+        emptySubtitle: 'The system carries over today’s crews, fills gaps and staffs new projects by distance',
+        noProjects: 'No active projects to plan',
+        noSuggestions: 'No suggestions for this project',
+        todayCount: '{{count}} working today',
+        gap: 'No one available',
+        replacing: 'replaces {{name}}',
+        remove: 'Remove from plan',
+        restore: 'Restore',
+        confirm: 'Confirm plan ({{count}})',
+        confirmed: '{{count}} assignment(s) created — {{emails}} email(s) sent.',
+        type: {
+          carry_over: 'Carry-over',
+          replacement: 'Replacement',
+          new: 'New',
+          gap: 'Gap',
+        },
+      },
 
       summary: {
         activeToday: 'Active Today',

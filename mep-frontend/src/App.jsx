@@ -113,11 +113,17 @@ function AppRoutes() {
               <SuppliersPage />
             </RequirePermission>
           }/>
-          <Route path="bi/workforce-planner" element={
-            <RequirePermission module="bi" action="workforce_planner">
+          {/* Section 130: unified Workforce Planner (Plan + Optimize tabs).
+              Old BI route redirects so bookmarks keep working. */}
+          <Route path="workforce-planner" element={
+            <RequirePermission anyOf={[
+              { module: 'bi',          action: 'workforce_planner' },
+              { module: 'assignments', action: 'smart_assign'      },
+            ]}>
               <WorkforcePlannerPage />
             </RequirePermission>
           }/>
+          <Route path="bi/workforce-planner" element={<Navigate to="/workforce-planner" replace />} />
           <Route path="standup" element={
             <RequirePermission module="standup" action="manage">
               <StandupPage />
