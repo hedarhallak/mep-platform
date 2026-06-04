@@ -133,8 +133,10 @@ export default function BulkAssignWizard({ projects, onClose, onConfirmed, inlin
   }
 
   return (
-    <div className={inline ? '' : 'fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4'}>
-      <div className={`bg-white w-full max-w-2xl flex flex-col overflow-hidden ${inline ? 'rounded-xl border border-slate-200' : 'rounded-2xl shadow-2xl max-h-[88vh]'}`}>
+    <div className={inline ? 'h-full flex' : 'fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4'}>
+      {/* Section 131.8 (Hedar): header + footer stay PINNED — long previews
+          scroll inside the card, so Confirm/Back are always reachable. */}
+      <div className={`bg-white w-full max-w-2xl flex flex-col overflow-hidden ${inline ? 'rounded-xl border border-slate-200 max-h-full' : 'rounded-2xl shadow-2xl max-h-[88vh]'}`}>
 
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between flex-shrink-0">

@@ -15571,3 +15571,7 @@ Both old toolbar buttons removed; tabs permission-gated (single→assignments.cr
 ### 131.7 — Wizard flow refinement (Hedar): REPEAT skips the optimizations question
 
 "متل مبارح يعني متل مبارح" — when the basis is Repeat-today, asking about optimization methods is meaningless (same people, same sites). Q3 is now SKIPPED for REPEAT: Q2 generates directly (2 progress dots instead of 3; Back from the preview returns to Q2). Defaults stay on under the hood, so a busy worker still gets a replacement suggestion — visible and removable in the preview. Test updated + a dedicated skip-Q3 test added.
+
+### 131.8 — Pinned wizard footer (Hedar) + same-name observation
+
+Live test with a 51-row plan: Confirm/Back sat below the list → user must scroll the whole preview to act. Fixed: inline wizard card now fills the tab height (`h-full` + `max-h-full`), header + footer pinned, ONLY the preview list scrolls internally. Also observed "X replaces X" rows — two seeded employees share a display name (engine can't self-replace, IDs differ); backlog: show employee_code beside names in the preview for disambiguation.
