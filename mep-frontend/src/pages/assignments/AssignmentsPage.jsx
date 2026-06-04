@@ -795,4 +795,11 @@ export default function AssignmentsPage() {
                         ? <Loader2 className="w-4 h-4 animate-spin text-primary-light flex-shrink-0" />
                         : <ArrowLeftRight className="w-4 h-4 text-slate-300 flex-shrink-0" />}
                     </button>
-    
+                  ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
