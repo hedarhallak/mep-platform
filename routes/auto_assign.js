@@ -23,13 +23,11 @@ const { can } = require('../middleware/permissions');
 // error path made the cleanest migration to keep the manual transaction
 // as-is in this batch.
 //
-// TODO Stage 3 (Section 89-E): the manual transaction client doesn't have
-// `app.company_id` GUC set, so under strict RLS the INSERTs into
-// `assignment_requests` would fail. Refactor pattern: either (a) drop the
-// manual transaction and trust the per-request middleware transaction
-// (requires a route-error → middleware-rollback signal), or (b) call
-// `client.query("SET LOCAL app.company_id = ...")` immediately after BEGIN
-// inside the manual transaction. Plan B is the smaller delta.
+// Section 130 (June 2026): the old Stage-3 TODO is RESOLVED via plan (b) —
+// `set_config('app.company_id', ..., true)` (= SET LOCAL) runs immediately
+// after BEGIN inside the manual transaction, so the strict tenant_isolation
+// policy (migration 013) sees the GUC and the INSERTs pass. Without it,
+// every /auto-confirm INSERT violated RLS and the endpoint was dead on prod.
 //
 // WHERE company_id clauses are kept for defense-in-depth.
 
@@ -554,6 +552,10 @@ router.post('/auto-confirm', can('assignments.smart_assign'), async (req, res) =
     const adminEmail = companyRes.rows[0]?.admin_email || null;
 
     await client.query('BEGIN');
+    // Section 130: scope the manual transaction to the tenant — strict RLS
+    // (tenant_isolation, migration 013) requires the GUC on THIS client.
+    // is_local=true ⇒ SET LOCAL semantics (resets at COMMIT/ROLLBACK).
+    await client.query(`SELECT set_config('app.company_id', $1, true)`, [String(companyId)]);
 
     const allCreated = [];
     const emailQueue = []; // collect after commit
@@ -585,10 +587,13 @@ router.post('/auto-confirm', can('assignments.smart_assign'), async (req, res) =
         );
         if (overlap.rows.length) continue; // skip, already assigned
 
+        // Section 130.3: column is `decision_note` (matches assignments.js) —
+        // the original code said `notes`, which doesn't exist (schema drift;
+        // endpoint was never exercised end-to-end before this test).
         const { rows } = await client.query(
           `INSERT INTO public.assignment_requests
              (company_id, project_id, requested_for_employee_id, requested_by_user_id,
-              start_date, end_date, shift_start, shift_end, notes, assignment_role,
+              start_date, end_date, shift_start, shift_end, decision_note, assignment_role,
               status, request_type, payload_json,
               decision_by_user_id, decision_at, created_at, updated_at)
            VALUES ($1,$2,$3,$4,$5,$5,$6,$7,$8,$9,'APPROVED','CREATE_ASSIGNMENT','{}',

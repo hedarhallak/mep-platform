@@ -10,8 +10,11 @@ const app = require('../../app');
 const {
   describeIfDb,
   closePool,
+  getPool,
   seedCompany,
   seedUser,
+  seedProject,
+  seedEmployee,
   cleanupTestRows,
 } = require('../helpers/db');
 
@@ -130,5 +133,47 @@ describeIfDb('Auto-assign — /api/assignments/auto-confirm', () => {
 
     expect(res.statusCode).toBe(403);
     expect(res.body.permission).toBe('assignments.smart_assign');
+  });
+
+  // Section 130 — happy path. Previously "left to manual / e2e", but the
+  // RLS fix (set_config inside the manual transaction) needs a pin: the
+  // INSERT into assignment_requests must succeed under tenant_isolation.
+  // No contact_email is passed, so no emails are queued (pure DB path).
+  test('POST /auto-confirm creates an APPROVED assignment_request (RLS GUC set in manual tx)', async () => {
+    const company = await seedCompany();
+    const admin = await seedUser({ company_id: company.company_id, role: 'COMPANY_ADMIN' });
+    const project = await seedProject({ company_id: company.company_id });
+    const employee = await seedEmployee({ company_id: company.company_id });
+    const { token } = await loginUser(admin);
+
+    const res = await request(app)
+      .post('/api/assignments/auto-confirm')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        target_date: '2027-06-15',
+        confirmed: [
+          {
+            project_id: project.id,
+            shift_start: '06:00',
+            shift_end: '14:30',
+            employees: [{ employee_id: employee.id, trade_code: 'PLUMBING', type: 'new' }],
+          },
+        ],
+      });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.assignments_created).toBe(1);
+
+    const { rows } = await getPool().query(
+      `SELECT status, project_id, company_id
+         FROM public.assignment_requests
+        WHERE requested_for_employee_id = $1 AND start_date = '2027-06-15'`,
+      [employee.id]
+    );
+    expect(rows.length).toBe(1);
+    expect(rows[0].status).toBe('APPROVED');
+    expect(Number(rows[0].project_id)).toBe(Number(project.id));
+    expect(Number(rows[0].company_id)).toBe(Number(company.company_id));
   });
 });
