@@ -15575,3 +15575,13 @@ Both old toolbar buttons removed; tabs permission-gated (single→assignments.cr
 ### 131.8 — Pinned wizard footer (Hedar) + same-name observation
 
 Live test with a 51-row plan: Confirm/Back sat below the list → user must scroll the whole preview to act. Fixed: inline wizard card now fills the tab height (`h-full` + `max-h-full`), header + footer pinned, ONLY the preview list scrolls internally. Also observed "X replaces X" rows — two seeded employees share a display name (engine can't self-replace, IDs differ); backlog: show employee_code beside names in the preview for disambiguation.
+
+### 131.9 — Optimize banner REMOVED (Hedar): no unsolicited suggestions
+
+Incognito review: the amber "N optimization suggestions" banner above the list contradicts the locked principle — THE ASSIGNER chooses optimizations (in the wizard), the system doesn't push them. OptimizePanel unmounted + file deleted. The optimize-existing-assignments capability can return LATER as a 4th wizard basis option ("optimize current assignments") if Hedar wants it — backend /bi/workforce-suggestions stays. (assignments.optimize.* i18n keys now dead — hygiene pass.)
+
+Also confirmed during this review: the "footer needs scrolling" report was the PWA service worker serving the stale bundle (Chrome showed "Finish update"; incognito had the new code) — NOT a layout bug. Reminder for all future frontend smokes: the tenant app is a PWA; after a deploy, verify in incognito or after the in-app update banner / closing all tabs.
+
+### 131.10 — Pinned footer, second attempt: viewport-capped body
+
+Incognito (fresh bundle, no SW cache) still required scrolling to reach Confirm — Hedar's diagnosis "صفحة ضمن صفحة" was right: the percentage/flex height chain (AppLayout main → Outlet wrapper → page h-screen → tab container → wizard card) doesn't reliably constrain the card. Fix: stop depending on ancestors — inline wizard BODY is now capped against the viewport directly (`max-h-[calc(100vh-360px)]`), so the preview list scrolls internally and Back/Confirm always stay on screen. ("Finish update" in his toolbar turned out to be CHROME's own update pill, not our PWA — the 131.9 cache theory was wrong for this bug; PWA staleness remains true in general.)

@@ -4,7 +4,6 @@ import api from '@/lib/api'
 import WorkerPicker from '@/components/shared/WorkerPicker'
 import { usePermissions } from '@/hooks/usePermissions.jsx'
 import BulkAssignWizard from './BulkAssignWizard'
-import OptimizePanel from './OptimizePanel'
 import { todayStr, tomorrowStr, fmtTime } from '@/utils/formatters'
 import { trade } from '@/constants/trades'
 import {
@@ -629,7 +628,6 @@ export default function AssignmentsPage() {
   const { can, loading: permsLoading } = usePermissions()
   const canCreate = !permsLoading && can('assignments', 'create')
   const canSmartPlan = !permsLoading && can('assignments', 'smart_assign')
-  const canOptimize = !permsLoading && can('bi', 'workforce_planner')
 
   // Default tab: single (when allowed) per Hedar's order; viewers land on list.
   useEffect(() => {
@@ -732,7 +730,9 @@ export default function AssignmentsPage() {
           </div>
         )}
 
-        {tab === 'list' && canOptimize && <OptimizePanel onApplied={fetchAssignments} />}
+        {/* Section 131.9 (Hedar): no unsolicited optimization banner — the
+            assigner CHOOSES optimizations in the wizard. (OptimizePanel
+            removed; capability can return later as a wizard basis option.) */}
         {tab === 'list' && (
           <div className="flex-1 flex rounded-xl border border-slate-200 overflow-hidden bg-white min-h-0">
             <ListTab projects={projects} assignments={sortedAssignments} loadingAsgn={loadingAsgn}
