@@ -587,10 +587,13 @@ router.post('/auto-confirm', can('assignments.smart_assign'), async (req, res) =
         );
         if (overlap.rows.length) continue; // skip, already assigned
 
+        // Section 130.3: column is `decision_note` (matches assignments.js) —
+        // the original code said `notes`, which doesn't exist (schema drift;
+        // endpoint was never exercised end-to-end before this test).
         const { rows } = await client.query(
           `INSERT INTO public.assignment_requests
              (company_id, project_id, requested_for_employee_id, requested_by_user_id,
-              start_date, end_date, shift_start, shift_end, notes, assignment_role,
+              start_date, end_date, shift_start, shift_end, decision_note, assignment_role,
               status, request_type, payload_json,
               decision_by_user_id, decision_at, created_at, updated_at)
            VALUES ($1,$2,$3,$4,$5,$5,$6,$7,$8,$9,'APPROVED','CREATE_ASSIGNMENT','{}',
