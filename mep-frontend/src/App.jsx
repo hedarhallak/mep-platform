@@ -25,7 +25,6 @@ const SurplusPage          = lazy(() => import('@/pages/materials/SurplusPage'))
 const ToolsPage            = lazy(() => import('@/pages/materials/ToolsPage'))
 const ExpensesPage         = lazy(() => import('@/pages/materials/ExpensesPage'))
 const SuppliersPage        = lazy(() => import('@/pages/suppliers/SuppliersPage'))
-const WorkforcePlannerPage = lazy(() => import('@/pages/bi/WorkforcePlannerPage'))
 const PermissionsPage      = lazy(() => import('@/pages/PermissionsPage'))
 const UserManagementPage   = lazy(() => import('@/pages/UserManagementPage'))
 const TaskRequestPage      = lazy(() => import('@/pages/TaskRequestPage'))
@@ -113,17 +112,10 @@ function AppRoutes() {
               <SuppliersPage />
             </RequirePermission>
           }/>
-          {/* Section 130: unified Workforce Planner (Plan + Optimize tabs).
-              Old BI route redirects so bookmarks keep working. */}
-          <Route path="workforce-planner" element={
-            <RequirePermission anyOf={[
-              { module: 'bi',          action: 'workforce_planner' },
-              { module: 'assignments', action: 'smart_assign'      },
-            ]}>
-              <WorkforcePlannerPage />
-            </RequirePermission>
-          }/>
-          <Route path="bi/workforce-planner" element={<Navigate to="/workforce-planner" replace />} />
+          {/* Section 131: planning + optimization merged INTO Assignments
+              (wizard + in-context panel). Old planner routes redirect. */}
+          <Route path="workforce-planner" element={<Navigate to="/assignments" replace />} />
+          <Route path="bi/workforce-planner" element={<Navigate to="/assignments" replace />} />
           <Route path="standup" element={
             <RequirePermission module="standup" action="manage">
               <StandupPage />

@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import api from '@/lib/api'
 import WorkerPicker from '@/components/shared/WorkerPicker'
 import { usePermissions } from '@/hooks/usePermissions.jsx'
+import BulkAssignWizard from './BulkAssignWizard'
+import OptimizePanel from './OptimizePanel'
 import { todayStr, tomorrowStr, fmtTime } from '@/utils/formatters'
 import { trade } from '@/constants/trades'
 import {
@@ -606,11 +607,12 @@ export default function AssignmentsPage() {
   const [reassignModal,  setReassignModal]  = useState(null)
   const [modifying,    setModifying]    = useState(null)
   const [newAssignModal, setNewAssignModal] = useState(false)
-  // Section 130.5: "Repeat today" removed — the Workforce Planner's Plan tab
-  // is a strict superset (carry-over + replacements + gaps + new + emails).
-  const navigate = useNavigate()
+  // Section 131 (Phase 1): ONE surface — bulk-assign WIZARD + in-context
+  // optimization panel live here; the separate Workforce Planner is gone.
+  const [bulkWizard, setBulkWizard] = useState(false)
   const { can, loading: permsLoading } = usePermissions()
   const canSmartPlan = !permsLoading && can('assignments', 'smart_assign')
+  const canOptimize = !permsLoading && can('bi', 'workforce_planner')
 
   useEffect(() => {
     api.get('/projects?status=ACTIVE')
@@ -674,9 +676,9 @@ export default function AssignmentsPage() {
             <Plus className="w-3.5 h-3.5" />{t('assignments.assignButton')}
           </button>
           {canSmartPlan && (
-            <button onClick={() => navigate('/workforce-planner')}
+            <button onClick={() => setBulkWizard(true)}
               className="flex items-center gap-2 px-4 py-2 bg-white text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-50 transition-colors border border-slate-200">
-              <Sparkles className="w-3.5 h-3.5" />{t('assignments.planDayButton')}
+              <Sparkles className="w-3.5 h-3.5" />{t('assignments.bulkButton')}
             </button>
           )}
           <div className="w-px h-5 bg-slate-200 mx-1" />
@@ -693,6 +695,7 @@ export default function AssignmentsPage() {
       </div>
 
       <div className="flex-1 flex flex-col overflow-hidden p-4 gap-4 min-h-0">
+        {tab === 'list' && canOptimize && <OptimizePanel onApplied={fetchAssignments} />}
         {tab === 'list' && (
           <div className="flex-1 flex rounded-xl border border-slate-200 overflow-hidden bg-white min-h-0">
             <ListTab projects={projects} assignments={assignments} loadingAsgn={loadingAsgn}
@@ -745,6 +748,13 @@ export default function AssignmentsPage() {
         )}
 
       </div>
+      {bulkWizard && (
+        <BulkAssignWizard
+          projects={projects}
+          onClose={() => setBulkWizard(false)}
+          onConfirmed={fetchAssignments}
+        />
+      )}
       {newAssignModal && (
         <NewAssignmentModal
           projects={projects}
