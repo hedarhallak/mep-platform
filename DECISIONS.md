@@ -15611,3 +15611,9 @@ Incognito (fresh bundle, no SW cache) still required scrolling to reach Confirm 
 - i18n EN/FR (`type.already_assigned`, `doneSkipped`); integration tests (suggest annotation + totals exclusion; confirm skipped count) + 2 Vitest wizard tests.
 
 **Why the prod data hit this:** seed assignments span months (start Jan-Apr → end June 30), so "plan tomorrow" finds everyone already assigned. Real daily usage creates 1-day rows and would rarely mass-trigger it — but the wizard must never report a 0-created plan as a plain success.
+
+**Shipped as PR #328 (merged + deployed June 4 evening; first CI run failed on Pitfall #37 — `assignment_requests.project_id` BIGINT comes back as a string while `projects.id` int4 is a number, so the busy-project `Set.has()` silently missed; fixed with String() on both sides).** Hedar's incognito smoke confirmed: gray "Already assigned" badges, "0 in plan", Confirm (0).
+
+### 131.13 — OPEN ISSUE for next session: Assignments List shows far fewer rows than the DB has
+
+During the same smoke, the Assignments List tab showed only **8 assignments** (PROJ-11 ×7 "Apr 11 → May 11" + PROJ-23 ×1) while the DB has **51 APPROVED** requests covering June 5 (ranged Jan-Apr → 2026-06-30), and **PROJ-22 "Project Delta"** — the project whose team the wizard displayed as already_assigned moments earlier — is entirely ABSENT from the list. `GET /assignments` itself has no date filter and no LIMIT, so something between the query's JOINs and the page render is dropping rows. Prime suspects to check first: the INNER JOINs (`employee_profiles` missing rows? `app_users requester` missing?), and whether the 8 visible rows differ structurally from the 51 (e.g. different requester provenance). **Hedar ended the session here (tired) — this investigation is the FIRST code task next session.** Severity: the list is the registry surface of the whole Assignments redesign; it under-reporting by 6× misleads every user.
