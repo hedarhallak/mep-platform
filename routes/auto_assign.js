@@ -10,6 +10,7 @@
 const router = require('express').Router();
 const { pool } = require('../db');
 const { sendEmail } = require('../lib/email');
+const { estimateRoadKm, loadRateTable, allowanceCentsFor } = require('../lib/ccq_travel');
 
 const { can } = require('../middleware/permissions');
 
@@ -303,17 +304,47 @@ function assignmentAdminSummaryEmailHtml({
 
 // ─────────────────────────────────────────────────────────────
 // POST /auto-suggest
-// Body: { target_date }
-// Returns suggested assignments per project grouped
+//
+// Section 131 (assignments-redesign Phase 1): the bulk-assign wizard's
+// engine. Body:
+//   {
+//     target_date,                      — required, YYYY-MM-DD
+//     mode: 'FULL'|'REPEAT'|'PROJECT',  — default FULL
+//        FULL    = plan every active project (carry-over + gaps + new)
+//        REPEAT  = carry today's teams over only (no new-project staffing)
+//        PROJECT = plan ONE project (requires project_id)
+//     project_id,                       — PROJECT mode only
+//     optimize_distance: bool,          — default true; ranks candidates by
+//                                         proximity (CCQ allowance savings)
+//     fill_gaps: bool,                  — default true; suggest same-trade
+//                                         replacements for busy workers
+//   }
+//
+// Every suggested employee row carries { distance_km, allowance_cents }
+// (estimated road km + CCQ industrial daily allowance — lib/ccq_travel),
+// and each project + the response carry allowance totals so the wizard
+// preview can show the $ cost of the plan.
 // ─────────────────────────────────────────────────────────────
 router.post('/auto-suggest', can('assignments.smart_assign'), async (req, res) => {
   try {
     const companyId = req.user.company_id;
-    const { target_date } = req.body || {};
+    const { target_date, project_id } = req.body || {};
+    const mode = ['FULL', 'REPEAT', 'PROJECT'].includes(req.body?.mode) ? req.body.mode : 'FULL';
+    const optimizeDistance = req.body?.optimize_distance !== false; // default true
+    const fillGaps = req.body?.fill_gaps !== false; // default true
 
     if (!target_date) return res.status(400).json({ ok: false, error: 'TARGET_DATE_REQUIRED' });
+    if (mode === 'PROJECT' && !project_id) {
+      return res.status(400).json({ ok: false, error: 'PROJECT_ID_REQUIRED' });
+    }
 
-    // 1. Get all ACTIVE projects for this company
+    // 1. Get ACTIVE projects (one project in PROJECT mode)
+    const projParams = [companyId];
+    let projFilter = '';
+    if (mode === 'PROJECT') {
+      projParams.push(Number(project_id));
+      projFilter = ' AND p.id = $2';
+    }
     const projRes = await req.db.query(
       `SELECT p.id, p.project_code, p.project_name, p.site_address,
               p.site_lat, p.site_lng,
@@ -322,12 +353,19 @@ router.post('/auto-suggest', can('assignments.smart_assign'), async (req, res) =
        FROM public.projects p
        JOIN public.project_statuses ps ON ps.id = p.status_id
        JOIN public.companies c ON c.company_id = p.company_id
-       WHERE p.company_id = $1 AND ps.code = 'ACTIVE'`,
-      [companyId]
+       WHERE p.company_id = $1 AND ps.code = 'ACTIVE'${projFilter}`,
+      projParams
     );
     const projects = projRes.rows;
     if (!projects.length)
-      return res.json({ ok: true, suggestions: [], message: 'No active projects found.' });
+      return res.json({
+        ok: true,
+        target_date,
+        mode,
+        suggestions: [],
+        totals: { headcount: 0, allowance_total_cents: 0 },
+        message: 'No active projects found.',
+      });
 
     // 2. Get today's assignments (who is working today per project)
     const today = new Date().toISOString().split('T')[0];
@@ -403,6 +441,26 @@ router.post('/auto-suggest', can('assignments.smart_assign'), async (req, res) =
     // 5. Build suggestions per project
     const suggestions = [];
 
+    // Distance + CCQ allowance annotation (Section 131). Rates come from
+    // the EXISTING global ccq_travel_rates table (SUPER_ADMIN-managed via
+    // routes/ccq_rates.js) — loaded ONCE for the target date, sector IC
+    // (commercial/institutional, MEP's market) — nothing hardcoded.
+    const rateTable = await loadRateTable(req.db, target_date);
+    const annotate = (emp, tradeCode, project) => {
+      if (!emp || !emp.home_lat || !emp.home_lng || !project.site_lat || !project.site_lng) {
+        return { distance_km: null, allowance_cents: null };
+      }
+      const hav = haversineKm(emp.home_lat, emp.home_lng, project.site_lat, project.site_lng);
+      const road_km = estimateRoadKm(hav);
+      return {
+        distance_km: road_km,
+        allowance_cents: allowanceCentsFor(rateTable, tradeCode, road_km),
+      };
+    };
+
+    let planAllowanceCents = 0;
+    let planHeadcount = 0;
+
     for (const project of projects) {
       const todayTeam = todayByProject[project.id] || [];
       const projSuggestions = [];
@@ -411,14 +469,24 @@ router.post('/auto-suggest', can('assignments.smart_assign'), async (req, res) =
       // --- Step A: Try to carry over today's team ---
       for (const worker of todayTeam) {
         if (busyOnTarget.has(worker.employee_id)) {
-          // Busy — find best available replacement with same trade
-          const replacement =
-            allEmployees.find(
-              (e) =>
-                !busyOnTarget.has(e.id) &&
-                !usedInThisRound.has(e.id) &&
-                e.trade_code === worker.trade_code
-            ) || allEmployees.find((e) => !busyOnTarget.has(e.id) && !usedInThisRound.has(e.id));
+          // Busy — when fill_gaps is on, find the best available
+          // replacement (same trade first; nearest first when distance
+          // optimization is on, otherwise stable name order).
+          let replacement = null;
+          if (fillGaps) {
+            const pickBest = (candidates) => {
+              if (!candidates.length) return null;
+              if (!optimizeDistance) return candidates[0]; // name order
+              return candidates
+                .map((e) => ({ e, score: scoreEmployee(e, project) }))
+                .sort((a, b) => b.score - a.score)[0].e;
+            };
+            const free = allEmployees.filter(
+              (e) => !busyOnTarget.has(e.id) && !usedInThisRound.has(e.id)
+            );
+            replacement =
+              pickBest(free.filter((e) => e.trade_code === worker.trade_code)) || pickBest(free);
+          }
 
           if (replacement) {
             usedInThisRound.add(replacement.id);
@@ -431,6 +499,7 @@ router.post('/auto-suggest', can('assignments.smart_assign'), async (req, res) =
               type: 'replacement',
               replacing: worker.employee_name,
               score: scoreEmployee(replacement, project),
+              ...annotate(replacement, replacement.trade_code, project),
             });
           } else {
             projSuggestions.push({
@@ -442,31 +511,33 @@ router.post('/auto-suggest', can('assignments.smart_assign'), async (req, res) =
               type: 'gap',
               replacing: worker.employee_name,
               score: 0,
+              distance_km: null,
+              allowance_cents: null,
             });
           }
         } else {
           usedInThisRound.add(worker.employee_id);
+          const empRecord = allEmployees.find((e) => e.id === worker.employee_id) || {};
           projSuggestions.push({
             employee_id: worker.employee_id,
             employee_name: worker.employee_name,
             trade_code: worker.trade_code,
-            contact_email: allEmployees.find((e) => e.id === worker.employee_id)?.contact_email,
+            contact_email: empRecord.contact_email,
             assignment_role: worker.assignment_role || 'WORKER',
             type: 'carry_over',
             replacing: null,
-            score:
-              100 +
-              scoreEmployee(allEmployees.find((e) => e.id === worker.employee_id) || {}, project),
+            score: 100 + scoreEmployee(empRecord, project),
+            ...annotate(empRecord, worker.trade_code, project),
           });
         }
       }
 
-      // --- Step B: New project (no one working today) ---
-      if (todayTeam.length === 0) {
-        // Suggest top 3 available employees by score
+      // --- Step B: staff an empty project (FULL + PROJECT modes only;
+      //     REPEAT carries existing teams and never opens new fronts) ---
+      if (todayTeam.length === 0 && mode !== 'REPEAT') {
         const candidates = allEmployees
           .filter((e) => !busyOnTarget.has(e.id) && !usedInThisRound.has(e.id))
-          .map((e) => ({ ...e, score: scoreEmployee(e, project) }))
+          .map((e) => ({ ...e, score: optimizeDistance ? scoreEmployee(e, project) : 0 }))
           .sort((a, b) => b.score - a.score)
           .slice(0, 3);
 
@@ -480,9 +551,17 @@ router.post('/auto-suggest', can('assignments.smart_assign'), async (req, res) =
             type: 'new',
             replacing: null,
             score: c.score,
+            ...annotate(c, c.trade_code, project),
           });
         }
       }
+
+      const projectAllowanceCents = projSuggestions.reduce(
+        (n, s) => n + (s.allowance_cents || 0),
+        0
+      );
+      planAllowanceCents += projectAllowanceCents;
+      planHeadcount += projSuggestions.filter((s) => s.employee_id).length;
 
       suggestions.push({
         project_id: project.id,
@@ -494,10 +573,24 @@ router.post('/auto-suggest', can('assignments.smart_assign'), async (req, res) =
         today_count: todayTeam.length,
         employees: projSuggestions,
         foremen: foremenByProject[project.id] || {},
+        allowance_total_cents: projectAllowanceCents,
       });
     }
 
-    return res.json({ ok: true, target_date, suggestions });
+    return res.json({
+      ok: true,
+      target_date,
+      mode,
+      optimize_distance: optimizeDistance,
+      fill_gaps: fillGaps,
+      suggestions,
+      totals: {
+        headcount: planHeadcount,
+        // Estimated CCQ industrial daily travel allowances for the plan
+        // (road km ≈ haversine × 1.3 — see lib/ccq_travel.js).
+        allowance_total_cents: planAllowanceCents,
+      },
+    });
   } catch (err) {
     console.error('POST /auto-suggest error:', err);
     return res.status(500).json({ ok: false, error: 'SERVER_ERROR', message: err.message });
