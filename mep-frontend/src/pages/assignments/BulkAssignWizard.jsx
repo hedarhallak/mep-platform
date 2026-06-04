@@ -17,10 +17,13 @@ import {
 // Engine: POST /assignments/auto-suggest + /auto-confirm (Section 131.3).
 
 const TYPE_STYLE = {
-  carry_over:  'bg-blue-100 text-blue-700',
-  replacement: 'bg-amber-100 text-amber-700',
-  new:         'bg-emerald-100 text-emerald-700',
-  gap:         'bg-red-100 text-red-600',
+  carry_over:       'bg-blue-100 text-blue-700',
+  replacement:      'bg-amber-100 text-amber-700',
+  new:              'bg-emerald-100 text-emerald-700',
+  gap:              'bg-red-100 text-red-600',
+  // Section 131.12: informational — already covered by an existing
+  // assignment on the same project for the target date; nothing created.
+  already_assigned: 'bg-slate-200 text-slate-500',
 }
 
 function tomorrowISO() {
@@ -81,9 +84,13 @@ export default function BulkAssignWizard({ projects, onClose, onConfirmed, inlin
     })
   }
 
+  // already_assigned rows are informational (131.12) — never part of the
+  // plan's kept set, never sent to confirm, never counted in the total.
   const kept = plan
     ? plan.suggestions.flatMap(p =>
-        p.employees.filter(e => e.employee_id && !removed.has(keyOf(p.project_id, e.employee_id)))
+        p.employees.filter(e =>
+          e.employee_id && e.type !== 'already_assigned' && !removed.has(keyOf(p.project_id, e.employee_id))
+        )
       )
     : []
   const keptAllowanceCents = kept.reduce((n, e) => n + (e.allowance_cents || 0), 0)
@@ -97,7 +104,7 @@ export default function BulkAssignWizard({ projects, onClose, onConfirmed, inlin
         shift_end: p.shift_end,
         foremen: p.foremen,
         employees: p.employees.filter(
-          e => e.employee_id && !removed.has(keyOf(p.project_id, e.employee_id))
+          e => e.employee_id && e.type !== 'already_assigned' && !removed.has(keyOf(p.project_id, e.employee_id))
         ),
       }))
       .filter(p => p.employees.length)
@@ -286,10 +293,11 @@ export default function BulkAssignWizard({ projects, onClose, onConfirmed, inlin
                     )}
                     {p.employees.map((e, idx) => {
                       const isGap = !e.employee_id
-                      const isRemoved = !isGap && removed.has(keyOf(p.project_id, e.employee_id))
+                      const isInfo = e.type === 'already_assigned' // 131.12: informational, not actionable
+                      const isRemoved = !isGap && !isInfo && removed.has(keyOf(p.project_id, e.employee_id))
                       return (
                         <div key={`${e.employee_id || 'gap'}-${idx}`}
-                          className={`px-4 py-2.5 flex items-center gap-3 ${isRemoved ? 'opacity-40' : ''}`}>
+                          className={`px-4 py-2.5 flex items-center gap-3 ${isRemoved ? 'opacity-40' : isInfo ? 'opacity-60' : ''}`}>
                           {isGap ? (
                             <div className="w-8 h-8 rounded-full bg-red-50 flex items-center justify-center flex-shrink-0">
                               <UserX className="w-4 h-4 text-red-400" />
@@ -325,7 +333,7 @@ export default function BulkAssignWizard({ projects, onClose, onConfirmed, inlin
                               </div>
                             )}
                           </div>
-                          {!isGap && (
+                          {!isGap && !isInfo && (
                             <button onClick={() => toggleRemove(p.project_id, e.employee_id)}
                               title={isRemoved ? t('assignments.wizard.restore') : t('assignments.wizard.remove')}
                               className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0">
@@ -354,6 +362,11 @@ export default function BulkAssignWizard({ projects, onClose, onConfirmed, inlin
                   emails: result.emails_sent,
                 })}
               </p>
+              {result.assignments_skipped > 0 && (
+                <p className="text-xs text-amber-600 font-semibold mt-2">
+                  {t('assignments.wizard.doneSkipped', { count: result.assignments_skipped })}
+                </p>
+              )}
             </div>
           )}
         </div>
