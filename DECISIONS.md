@@ -15585,3 +15585,17 @@ Also confirmed during this review: the "footer needs scrolling" report was the P
 ### 131.10 — Pinned footer, second attempt: viewport-capped body
 
 Incognito (fresh bundle, no SW cache) still required scrolling to reach Confirm — Hedar's diagnosis "صفحة ضمن صفحة" was right: the percentage/flex height chain (AppLayout main → Outlet wrapper → page h-screen → tab container → wizard card) doesn't reliably constrain the card. Fix: stop depending on ancestors — inline wizard BODY is now capped against the viewport directly (`max-h-[calc(100vh-360px)]`), so the preview list scrolls internally and Back/Confirm always stay on screen. ("Finish update" in his toolbar turned out to be CHROME's own update pill, not our PWA — the 131.9 cache theory was wrong for this bug; PWA staleness remains true in general.)
+
+### 131.11 — Session close: lost-PR recovery + lessons + deferred items
+
+**Recovered note (was only in the never-merged PR #316 — re-recorded here):** §129.9 verified Emergency Purchase e2e on prod, and Hedar flagged the approver default as TEMPORARY: COMPANY_ADMIN's real job is technical admin + permission distribution, not financial approval — revisit (likely a PURCHASING function/role) during the full program overview. Until then companies grant `expense_claims.approve` via the Permissions page.
+
+**Pitfall #66 (NEW):** a PR with a MERGE CONFLICT never gets ANY checks — GitHub can't build the merge ref, so CI shows nothing (not even pending), auto-merge waits forever, and empty-commit pushes change nothing. Symptoms: PR rows with no status icon while neighbors have ✓. Diagnose: `gh pr view <n> --json mergeable`. Our two specimens: #316 (docs-only closeout — every later PR appended to DECISIONS EOF → guaranteed conflict; docs closeouts must merge SAME-DAY or be rebuilt) and #325 (branched off a stale lineage because the post-#324 cleanup hadn't run — and a `2>$null`-littered command hid the failure; recovery = rebuild from fresh main via `git checkout <old-branch> -- <files>`, PR #326).
+
+**Pitfall #67 (NEW):** the tenant app is a PWA — after every frontend deploy the service worker can keep serving the OLD bundle through hard refreshes. Smoke deployed UI changes in an Incognito window (or after the in-app update banner / closing all site tabs). (Also: Chrome's own "Finish update" toolbar pill is the BROWSER's updater, not our app.)
+
+**Ops/workflow:** `git config --global core.editor notepad` set on Hedar's machine — the recurring vim trap (E325 swap files, Arabic-keyboard `:wq` lockouts, June 2 + June 4 incidents) is permanently closed.
+
+**Deferred:** Dependabot #297 (frontend×6) / #298 (backend×4) / #299 (mobile×16), all green — parked for the hygiene/tech-debt phase per the priority order; mobile bumps are moot until the mobile-update phase anyway.
+
+**Assignments redesign Phase 1 = COMPLETE + LIVE** (PRs #317-#324, #326): one Assignments surface, 4 tabs in Hedar's order, sequential-question wizard with REPEAT short-circuit + CCQ allowance costing from ccq_travel_rates, viewport-pinned confirm, no unsolicited suggestions. Next: Phase 2 (crews) and Phase 3 (board) per §131.2 — or Hedar's full program overview first.
