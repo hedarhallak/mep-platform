@@ -15614,6 +15614,14 @@ Incognito (fresh bundle, no SW cache) still required scrolling to reach Confirm 
 
 **Shipped as PR #328 (merged + deployed June 4 evening; first CI run failed on Pitfall #37 — `assignment_requests.project_id` BIGINT comes back as a string while `projects.id` int4 is a number, so the busy-project `Set.has()` silently missed; fixed with String() on both sides).** Hedar's incognito smoke confirmed: gray "Already assigned" badges, "0 in plan", Confirm (0).
 
-### 131.13 — OPEN ISSUE for next session: Assignments List shows far fewer rows than the DB has
+### 131.13 — RESOLVED (same June 4 session, after a break): requester INNER JOIN dropped 50/58 list rows
 
-During the same smoke, the Assignments List tab showed only **8 assignments** (PROJ-11 ×7 "Apr 11 → May 11" + PROJ-23 ×1) while the DB has **51 APPROVED** requests covering June 5 (ranged Jan-Apr → 2026-06-30), and **PROJ-22 "Project Delta"** — the project whose team the wizard displayed as already_assigned moments earlier — is entirely ABSENT from the list. `GET /assignments` itself has no date filter and no LIMIT, so something between the query's JOINs and the page render is dropping rows. Prime suspects to check first: the INNER JOINs (`employee_profiles` missing rows? `app_users requester` missing?), and whether the 8 visible rows differ structurally from the 51 (e.g. different requester provenance). **Hedar ended the session here (tired) — this investigation is the FIRST code task next session.** Severity: the list is the registry surface of the whole Assignments redesign; it under-reporting by 6× misleads every user.
+**Symptom:** Assignments List showed only 8 assignments (PROJ-11 ×7 + PROJ-23 ×1) while the DB had 58 APPROVED; PROJ-22 "Project Delta" — whose team the wizard had just displayed — was entirely absent.
+
+**Diagnosis (one aggregate query):** `count(*)=58, has_project=58, has_profile=58, has_requester=8` — 50 rows carry a `requested_by_user_id` pointing at a DELETED app_users row (seed-era account; the column has NO FK so it dangles silently). `GET /assignments` (and `GET /assignments/requests`) used `JOIN app_users requester` (INNER) → the 50 rows vanished from the registry surface while remaining fully live for RLS, the wizard engine, and overlap checks — a 6× under-report.
+
+**Fix:** both requester joins → `LEFT JOIN` (matching the `reviewer` join, which was already LEFT). `assigned_by` / `requested_by_name` come back null for orphaned rows — the frontend never renders either field, so null is safe. Integration test pins it: seed assignment → DELETE the requester user → row must still appear with `assigned_by: null`.
+
+**Rule (general):** display-only joins in list queries must be LEFT JOIN — a row's visibility must never depend on the survival of a metadata account. INNER is only correct when the joined row is semantically REQUIRED (e.g. the employee, the project).
+
+**Backlog:** add FK `assignment_requests.requested_by_user_id → app_users(id) ON DELETE SET NULL` (+ same audit for decision_by_user_id and sibling tables) in a hygiene-phase migration, so future deletions can't dangle.

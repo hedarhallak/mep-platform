@@ -1,7 +1,7 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: June 4, 2026 (evening, session 4) — **§131.12 wizard silent-skip fix SHIPPED + DEPLOYED (PR #328). NEW OPEN ISSUE §131.13: Assignments List under-reports (8 shown vs 51 in DB, PROJ-22 absent) — FIRST task next session.**
+> Last updated: June 4, 2026 (late evening, session 4 part 2) — **§131.12 silent-skip fix LIVE (PR #328) + §131.13 list under-reporting RESOLVED (requester INNER→LEFT JOIN).**
 > ⚠️ NOTE: the June 4 closeout PR (#316) was never merged (Pitfall #66) — Sections 129-131 (PRs #310-#326) were re-recorded in the June 5 update; sections 131.12-131.13 added June 4 session 4 (PR #328).
 >
 > **🔁 PRIORITY ORDER (Hedar, June 2 — still governs):**
@@ -27,11 +27,9 @@
 >
 > **Earlier sessions still LIVE:** Tools + Surplus menus (S127-128, June 2; Pitfall #62 lesson). Billing automation parked (S125): next real cron = July 1 (June invoice CONS-2026-10001 exists → idempotent skip).
 >
-> **🎯 NEXT TASK — FIRST code task is LOCKED (June 4 session 4, §131.13):**
-> **Investigate the Assignments List under-reporting:** the list tab shows only 8 assignments while the DB has 51 APPROVED covering the next day, and PROJ-22 (the wizard's own project) is entirely absent. `GET /assignments` has no date filter / LIMIT — suspect the INNER JOINs (employee_profiles / app_users requester). Hedar saw it live and stopped there (tired).
-> **June 4 session 4 also shipped:** PR #328 (§131.12) — wizard silent-skip fixed: `already_assigned` rows (gray badge, excluded from counts/totals/confirm) + `assignments_skipped` in the done screen. Deployed + smoked ✅. CI lesson: Pitfall #37 strikes again (BIGINT-as-string vs int4-as-number in a Set).
-> **Session order agreed June 4 (still governs after the fix):** finish remaining URGENT FIRST CHECK browser smokes (Hedar only did prod-health/SQL/gh checks + the wizard one) → (2) Hedar's full program overview/walkthrough (approver-role revisit §129.9 belongs here) → (3) Assignments Phase 2 — CREW concept (§131.2).
-> Also queued: employee_code beside same-name employees in wizard preview (§131.8 note); Mapbox Matrix road distances before payroll use; mobile full update (after web).
+> **June 4 session 4 shipped:** PR #328 (§131.12 — wizard silent-skip: `already_assigned` rows + `assignments_skipped`, deployed + smoked ✅; Pitfall #37 strikes again in CI) and the §131.13 fix (requester INNER→LEFT JOIN in GET /assignments + /requests — 50/58 rows were vanishing because their requester account was deleted; test pins it).
+> **Session order agreed June 4 (still governs):** finish remaining URGENT FIRST CHECK browser smokes (Hedar did prod-health/SQL/gh checks + wizard + list smokes) → (2) Hedar's full program overview/walkthrough (approver-role revisit §129.9 belongs here) → (3) Assignments Phase 2 — CREW concept (§131.2).
+> Also queued: employee_code beside same-name employees in wizard preview (§131.8 note); Mapbox Matrix road distances before payroll use; FK hygiene migration (§131.13 backlog); mobile full update (after web).
 >
 > **Prod safety net (kept):** `ALTER ROLE mepuser_super/mepuser SET idle_in_transaction_session_timeout = '30s';` **Server pending reboot** (kernel updates — check `pm2-root.service` enabled first, Pitfall #32).
 >
@@ -139,9 +137,9 @@
    - Latest section is **131** (assignments redesign Phase 1: 131.1 verdict + CCQ allowance economics, 131.2 phases, 131.3-4 backend + rates-table correction, 131.5 wizard frontend, 131.6 tab restructure, 131.7 REPEAT skips Q3, 131.8 pinned footer, 131.9 no unsolicited banners, 131.10 viewport cap, 131.11 session close + Pitfalls #66/#67). 130 = merge decision + auto-confirm fixes. 129 = Emergency Purchase + DO Spaces. 128/127 = Tools/Surplus.
 3. **Echo this exact line** as the first line of your reply:
    ```
-   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md §131.13, prod stable, §131.12 silent-skip fix LIVE, أول مهمة = تحقيق نقص قائمة التعيينات §131.13)
+   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md §131.13, prod stable, §131.12 + §131.13 LIVE, التسلسل: باقي smokes ← النظرة العامة ← Crews Phase 2)
    ```
-4. **Open with the §131.13 investigation** (FIRST code task, no need to ask): Assignments List shows 8 rows while the DB has 51 APPROVED covering the next day; PROJ-22 absent entirely. `GET /assignments` (routes/assignments.js ~line 798) has no date filter/LIMIT — check the INNER JOINs (employee_profiles missing rows? app_users requester?) by comparing the 8 visible vs the 51 in SQL. After it's fixed, the agreed order: remaining URGENT FIRST CHECK browser smokes → Hedar's full program overview (§129.9 approver revisit) → Assignments Phase 2 CREWS (§131.2 — grep first, Pitfall #62, one architectural question at a time).
+4. **Open with the agreed order** (no need to ask): remaining URGENT FIRST CHECK browser smokes (Pattern B login hop, admin Branding, Subscription page, Billing page, admin apply-loop pages — Hedar already did prod-health/SQL/gh + wizard + list smokes June 4) → Hedar's full program overview/walkthrough (§129.9 approver revisit belongs here) → Assignments Phase 2 CREWS (§131.2 — grep first, Pitfall #62, one architectural question at a time: fixed crews vs per-day composition).
 
 ---
 
@@ -246,6 +244,7 @@ Or pick a backlog item (logo + bank details on the invoice PDF; MEP→ENTERPRISE
 - **⏳ Dependabot #297/#298/#299** (all green) — parked for the hygiene phase.
 - **⏳ Server kernel reboot pending** — verify `pm2-root.service` first (Pitfall #32).
 - **⏳ i18n dead-key cleanup** (bi.workforcePlanner.*, nav.bi, assignments.optimize.*, …) — hygiene pass.
+- **⏳ FK hygiene migration (§131.13):** `assignment_requests.requested_by_user_id → app_users(id) ON DELETE SET NULL` + audit `decision_by_user_id` and sibling FK-less user-reference columns across tables — prevents the dangling-requester class permanently.
 - **⏳ Full mobile-app update** — long neglected; happens AFTER all web menus are built (Hedar's explicit sequencing).
 - **⏳ CCQ Labor Marketplace** (DECISIONS §9, 💡 future/large) — company job posts + worker availability, CCQ-verified.
 - **⏳ Web app i18n** (CLAUDE.md — still TODO; mobile already i18n'd).

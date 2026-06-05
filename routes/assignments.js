@@ -377,7 +377,7 @@ router.get('/requests', can('assignments.view'), async (req, res) => {
       FROM public.assignment_requests ar
       JOIN public.projects         p        ON p.id            = ar.project_id
       JOIN public.employee_profiles ep       ON ep.employee_id  = ar.requested_for_employee_id
-      JOIN public.app_users         requester ON requester.id   = ar.requested_by_user_id
+      LEFT JOIN public.app_users    requester ON requester.id   = ar.requested_by_user_id
       LEFT JOIN public.app_users    reviewer  ON reviewer.id    = ar.decision_by_user_id
       WHERE ar.company_id = $1
     `;
@@ -823,7 +823,7 @@ router.get('/', can('assignments.view'), async (req, res) => {
       FROM public.assignment_requests ar
       JOIN public.projects          p         ON p.id           = ar.project_id
       JOIN public.employee_profiles ep        ON ep.employee_id = ar.requested_for_employee_id
-      JOIN public.app_users         requester ON requester.id   = ar.requested_by_user_id
+      LEFT JOIN public.app_users    requester ON requester.id   = ar.requested_by_user_id
       WHERE ar.company_id = $1 AND ar.status = 'APPROVED'
     `;
 
