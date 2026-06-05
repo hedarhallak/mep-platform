@@ -14,7 +14,11 @@ import {
 
 function fmt(d, locale = 'en-CA', opts = { month: 'short', day: 'numeric' }) {
   if (!d) return '—'
-  return new Date(d).toLocaleDateString(locale, opts)
+  // Section 131.14: DATE-only values must be anchored to LOCAL midnight.
+  // new Date('2026-07-02') parses as UTC midnight, which renders as the
+  // PREVIOUS day in Montréal (UTC-4) — the list showed "Jul 1" for a
+  // 2026-07-02 assignment. Same pattern ReportsPage/StandupPage already use.
+  return new Date(String(d).slice(0, 10) + 'T00:00:00').toLocaleDateString(locale, opts)
 }
 
 const SHIFTS = ['05:00','06:00','07:00','08:00','09:00','12:00',

@@ -245,6 +245,7 @@ Or pick a backlog item (logo + bank details on the invoice PDF; MEP→ENTERPRISE
 - **⏳ Server kernel reboot pending** — verify `pm2-root.service` first (Pitfall #32).
 - **⏳ i18n dead-key cleanup** (bi.workforcePlanner.*, nav.bi, assignments.optimize.*, …) — hygiene pass.
 - **⏳ FK hygiene migration (§131.13):** `assignment_requests.requested_by_user_id → app_users(id) ON DELETE SET NULL` + audit `decision_by_user_id` and sibling FK-less user-reference columns across tables — prevents the dangling-requester class permanently.
+- **⏳ UTC-midnight date-render sweep (§131.14):** AssignmentsPage fixed; same class suspected in `ProjectsPage.jsx:334`, `utils/formatters.js:37` (fmtDate callers), MyHubPage/TaskRequestPage `due_date`. One shared local-midnight helper in utils/formatters.js, then migrate callers.
 - **⏳ Full mobile-app update** — long neglected; happens AFTER all web menus are built (Hedar's explicit sequencing).
 - **⏳ CCQ Labor Marketplace** (DECISIONS §9, 💡 future/large) — company job posts + worker availability, CCQ-verified.
 - **⏳ Web app i18n** (CLAUDE.md — still TODO; mobile already i18n'd).
