@@ -15625,3 +15625,11 @@ Incognito (fresh bundle, no SW cache) still required scrolling to reach Confirm 
 **Rule (general):** display-only joins in list queries must be LEFT JOIN — a row's visibility must never depend on the survival of a metadata account. INNER is only correct when the joined row is semantically REQUIRED (e.g. the employee, the project).
 
 **Backlog:** add FK `assignment_requests.requested_by_user_id → app_users(id) ON DELETE SET NULL` (+ same audit for decision_by_user_id and sibling tables) in a hygiene-phase migration, so future deletions can't dangle.
+
+**Verified live:** list went 8 → 58 after deploy; Hedar then ran a real wizard plan for 2026-07-02 (post-seed-range date) → "50 created — 5 emails, **1 skipped — already assigned**" and the list jumped to 108. Both §131.12 surfaces confirmed working. The 50 July-2 test rows were deleted afterward (prod cleanup).
+
+### 131.14 — Date display off-by-one in Assignments List (found during the §131.13 verification)
+
+The July-2 test plan rendered as "**Jul 1 → Jul 1**" in the list, and the cleanup DELETE for `start_date='2026-07-01'` hit 0 rows — the DB value was `2026-07-02` all along. Root cause: `AssignmentsPage.fmt()` did `new Date(d).toLocaleDateString(...)` — a date-only string parses as **UTC midnight**, which Montréal (UTC-4) renders as 8 PM the **previous day**. Fixed by anchoring to local midnight: `new Date(String(d).slice(0,10) + 'T00:00:00')` — the exact pattern ReportsPage and StandupPage already use.
+
+**Hygiene-pass item (NOT fixed now — scope control):** the same UTC-midnight class likely affects other date-only renders: `ProjectsPage.jsx:334` (project start/end), `utils/formatters.js:37` (`fmtDate` — audit its callers), `MyHubPage`/`TaskRequestPage` `due_date` renders. Timestamps (`created_at`, `activated_at`, …) are NOT affected. Sweep once, fix with one shared helper in `utils/formatters.js`.
