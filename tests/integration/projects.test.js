@@ -445,6 +445,40 @@ describeIfDb('Projects — /api/projects', () => {
     expect(res.body.project.project_name).toBe(proj.project_name);
   });
 
+  test('PATCH /:id writes an old→new audit diff for site_address (§132 anti-tamper)', async () => {
+    const company = await seedCompany();
+    const admin = await seedUser({ company_id: company.company_id, role: 'COMPANY_ADMIN' });
+    const proj = await seedProject({ company_id: company.company_id });
+
+    // Pin a known original address so the diff is unambiguous.
+    await getPool().query(`UPDATE public.projects SET site_address = $1 WHERE id = $2`, [
+      '100 Old Address',
+      proj.id,
+    ]);
+
+    const { token } = await loginUser(admin);
+    const res = await request(app)
+      .patch(`/api/projects/${proj.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ site_address: '999 Far Away Blvd' });
+    expect(res.statusCode).toBe(200);
+
+    // The audit row must prove the address changed FROM 100 TO 999 — not just
+    // record the new value (the CCQ-allowance fraud vector, §132.3/§132.6).
+    const { rows } = await getPool().query(
+      `SELECT old_values, new_values FROM public.audit_logs
+         WHERE entity_type = 'project' AND entity_id = $1 AND action = 'PROJECT_UPDATED'
+         ORDER BY created_at DESC LIMIT 1`,
+      [proj.id]
+    );
+    expect(rows).toHaveLength(1);
+    // jsonb columns come back already parsed by node-pg.
+    expect(rows[0].old_values).not.toBeNull();
+    expect(rows[0].new_values).not.toBeNull();
+    expect(rows[0].old_values.site_address).toBe('100 Old Address');
+    expect(rows[0].new_values.site_address).toBe('999 Far Away Blvd');
+  });
+
   test('PATCH /:id non-existent → 404 PROJECT_NOT_FOUND', async () => {
     const company = await seedCompany();
     const admin = await seedUser({ company_id: company.company_id, role: 'COMPANY_ADMIN' });
