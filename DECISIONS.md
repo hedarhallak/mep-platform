@@ -15956,7 +15956,18 @@ OWNER can do **everything COMPANY_ADMIN can**, PLUS is the **only** role that ma
 - Whether `IT_ADMIN` (level 90) should also lose audit access (it's currently below OWNER but above COMPANY_ADMIN — confirm its real-world holder).
 - One OWNER per company hard-enforced, or allow a controlled backup OWNER (§132.5 said "one + tightly-controlled backup").
 
-> **Slice 1 SHIPPED (PR #347):** migration 029 (OWNER role + role_permissions copied from COMPANY_ADMIN) + `ROLE_LEVEL OWNER:95` + `canAssignRole` guard wired at the 3 in-tenant role-assignment sites (`user_management.js` +`ROLE_RANK OWNER:1`, `employees.js`, `invite_employee.js`) + unit + integration tests. Closed a real latent hole: in-tenant COMPANY_ADMIN could previously DEMOTE an OWNER (targetRank defaulted to 99). Deploy: migration 029 (additive) then code. Next: Slice 2.
+> **Slice 1 SHIPPED + DEPLOYED (PR #347, June 6):** migration 029 (OWNER role + role_permissions copied from COMPANY_ADMIN — prod showed `INSERT 0 60`, superset confirmed) + `ROLE_LEVEL OWNER:95` + `canAssignRole` guard wired at the 3 in-tenant role-assignment sites (`user_management.js` +`ROLE_RANK OWNER:1`, `employees.js`, `invite_employee.js`) + unit + integration tests. Closed a real latent hole: in-tenant COMPANY_ADMIN could previously DEMOTE an OWNER (targetRank defaulted to 99). LIVE on prod (migration 029 applied + restart; OWNER role + constraint verified).
+
+### 140.5 — Three CI-caught bugs on Slice 1 (the value of CI on AI-authored code, §138 G7)
+
+Slice 1 took **3 red CI rounds** before green — each a real bug, none caught locally (sandbox can't run the DB suite):
+1. **Pitfall #61 again** — migration 029 set `roles.role_id` explicitly via `MAX+1`. role_id has a SEQUENCE; the explicit insert left the sequence behind, so the next sequence-based insert (`ensureSeedData`) collided on `roles_pkey`, breaking ~every DB test (all call `seedUser`). Fix: omit role_id, let the sequence assign it (`ON CONFLICT (role_key) DO NOTHING`).
+2. **Test data** — the positive-control used `FOREMAN`, which is NOT in `user_management.js` `ALLOWED_ROLES` → 400 not 200. Fix: use `TRADE_ADMIN`.
+3. **`app_users_role_check` CHECK constraint** enumerates valid roles and did NOT include `OWNER` → `seedUser({role:'OWNER'})` (and prod provisioning) would be rejected at the DB. Fix: migration 029 now `DROP`s + re-`ADD`s the constraint with `OWNER` included. **This one would have broken Slice 3 provisioning on prod** — high-value catch.
+
+### 140.6 — Merge-friction pitfall (NEW): branch-protection "require up-to-date" + queued PRs
+
+`feat/s135` (#341) and `feat/s132` (#347) sat GREEN but UNMERGED because branch protection requires the branch to be up-to-date with main, and other PRs merged ahead of them → they went `BEHIND` and auto-merge silently stalled (reinforces Pitfall #9). `--admin` did NOT bypass it ("5 of 5 required status checks are expected" — required checks must be present on the up-to-date head). **The fix that works: `gh pr update-branch <num>`** → merges main in → CI re-runs on the current head → auto-merge then completes. **Worse consequence:** #341 (§135) was reported "LIVE" hours earlier and the §136/§137 prod deploys ran `git pull` while #341 was still unmerged — so **§135's `projects.js` audit-diff was NOT actually on main or prod until this closeout** (a second near-phantom, different cause). Now merged + deployed (`grep -c "old_values: before.rows" routes/projects.js` = 1 on prod). **Rule going forward:** don't let PRs queue — fully merge each before opening the next, OR `update-branch` a behind PR immediately; never trust "green" as "merged" — verify `mergedAt`.
 
 ---
 
