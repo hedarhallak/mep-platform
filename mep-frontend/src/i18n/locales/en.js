@@ -137,6 +137,25 @@ export default {
     },
   },
 
+  settings: {
+    title: 'Settings',
+    loading: 'Loading settings…',
+    company: 'Company',
+    code: 'Code',
+    plan: 'Plan',
+    defaultShift: 'Default shift',
+    defaultShiftHint: 'Used as the default start/end time when creating assignments.',
+    phone: 'Phone',
+    procurementEmail: 'Procurement email',
+    address: 'Address',
+    save: 'Save settings',
+    saved: 'Settings saved.',
+    errors: {
+      shiftStart: 'Start time must be HH:MM (24-hour).',
+      shiftEnd: 'End time must be HH:MM (24-hour).',
+    },
+  },
+
   surplus: {
     title: 'Material Returns',
     subtitle: 'Declare leftover materials and find what other sites have spare',

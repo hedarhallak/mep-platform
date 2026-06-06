@@ -309,6 +309,9 @@ function mountTenantRoutes(app) {
   app.use('/api/profile', auth, tenantDb, loadRouter('./routes/profile'));
   app.use('/api/profile', auth, tenantDb, require('./routes/push_tokens_route'));
 
+  // Section 134.4: tenant-facing company Settings (default shift + contact).
+  app.use('/api/company', auth, tenantDb, require('./routes/company'));
+
   // ── Project structure ───────────────────────────────────────
   // Section 89-C/1: project_trades + project_foremen migrated to req.db.
   app.use('/api/project-trades', auth, tenantDb, require('./routes/project_trades'));

@@ -43,7 +43,7 @@ sees the menus it holds a permission for.
 | Subscription | `/subscription` | ✅ 🎤 | plan card + seat usage + 3 request buttons |
 | Billing | `/billing/invoices` | ✅ 🎤 | invoice list + type filter |
 | Permissions | `/permissions` | 🟡 | **ROLE matrix only — no per-USER grant UI** (the §132 gap). **§134: added a hint explaining the rank-lock** (own/higher roles are read-only) so it no longer "looks broken" |
-| Settings | `/settings` | 🔴 | **placeholder — "Settings — Coming soon"** (§134 finding) |
+| Settings | `/settings` | ✅ | **BUILT §134.4** — real page: default shift times (drive assignments) + phone/procurement email/address, editable by `settings.company`; company name/code/plan read-only. `routes/company.js` GET+PATCH (audited old→new diff) |
 
 ---
 
@@ -111,8 +111,7 @@ sees the menus it holds a permission for.
 Expenses, Subscription, Billing, the SUPER_ADMIN portal (now security-hardened).
 
 **🟡 Polish before demo:**
-1. **Settings page is a placeholder** — either build a minimal real Settings or hide the menu for
-   the demo. ⏳ NEEDS HEDAR'S CALL (hide vs build).
+1. ~~Settings page placeholder~~ ✅ **BUILT §134.4** (real shift + contact settings page).
 2. ~~Permissions page hint~~ ✅ **FIXED §134** (rank-lock now explained). Per-user grant UI is the
    larger §132 build.
 3. **Expense approver default** is COMPANY_ADMIN (temporary) — decide the real model (§129.9/§132).

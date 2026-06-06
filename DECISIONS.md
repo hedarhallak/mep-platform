@@ -15771,3 +15771,14 @@ Hedar's next refinement: *"if I have multiple tabs and close the super-admin tab
 - Settings: hide vs build (decision). Invoice PDF: logo + bank/remittance details (needs the logo file + Constrai bank info). Expense approver model (§129.9 → §132 OWNER). Per-user permission grants UI + the rest of the §132 anti-tamper program.
 
 `PROGRAM_OVERVIEW.md` is the living artifact — status flags update as items ship.
+
+### 134.4 — Settings page built (was a placeholder)
+
+Hedar chose "A+B" → build a real Settings page (which makes hiding it moot). Grep-first (Pitfall #62): no tenant company-settings route existed; the `companies` table holds `default_shift_start/end` (drive the assignment engine), `phone`, `procurement_email`, `address`. Pitfall #65 check on prod confirmed **`mepuser` has UPDATE on `companies`** → no grant migration needed.
+
+- **`routes/company.js`** (mounted `/api/company`, gated `settings.company`, RLS via req.db): `GET /settings` (read-only identity name/code/plan/status + editable shift/contact, shift formatted `HH24:MI`) + `PATCH /settings` (validates shift `HH:MM` 24h → 400; COALESCE updates; **audits old→new diff** via `COMPANY_UPDATED` — the §132 tamper-evident pattern applied proactively).
+- **`SettingsPage.jsx`** replaces the "Coming soon" placeholder in App.jsx; read-only company chips + editable shift (time inputs) + phone/procurement-email/address + save.
+- i18n `settings.*` EN/FR; integration test (GET shape, PATCH update, bad-time 400) + Vitest smoke (load + save PATCH).
+- Deploy = **backend restart + frontend rebuild** (no migration).
+
+**Remaining §134 deferred (need Hedar assets/decisions):** invoice PDF logo + Constrai bank details; expense approver model (§129.9 → §132 OWNER); the §132 anti-tamper program.

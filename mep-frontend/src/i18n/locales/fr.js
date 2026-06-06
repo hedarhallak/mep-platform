@@ -137,6 +137,25 @@ export default {
     },
   },
 
+  settings: {
+    title: 'Paramètres',
+    loading: 'Chargement des paramètres…',
+    company: 'Entreprise',
+    code: 'Code',
+    plan: 'Forfait',
+    defaultShift: 'Quart par défaut',
+    defaultShiftHint: 'Utilisé comme heure de début/fin par défaut lors de la création d’affectations.',
+    phone: 'Téléphone',
+    procurementEmail: 'Courriel des achats',
+    address: 'Adresse',
+    save: 'Enregistrer',
+    saved: 'Paramètres enregistrés.',
+    errors: {
+      shiftStart: 'L’heure de début doit être au format HH:MM (24 h).',
+      shiftEnd: 'L’heure de fin doit être au format HH:MM (24 h).',
+    },
+  },
+
   surplus: {
     title: 'Retours de matériel',
     subtitle: 'Déclarez le matériel restant et trouvez ce que les autres chantiers ont en trop',
