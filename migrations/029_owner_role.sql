@@ -23,10 +23,14 @@ BEGIN;
 
 -- 1. roles lookup row (role_id has no default → compute next; role_key not
 --    uniquely-constrained → guard with NOT EXISTS).
-INSERT INTO public.roles (role_id, role_key, label)
-SELECT COALESCE(MAX(role_id), 0) + 1, 'OWNER', 'Owner'
-  FROM public.roles
- WHERE NOT EXISTS (SELECT 1 FROM public.roles WHERE role_key = 'OWNER');
+-- role_id has a SEQUENCE default — do NOT set it explicitly (Pitfall #61): an
+-- explicit MAX+1 leaves the sequence behind, and the next sequence-based insert
+-- (tests/helpers/db.js ensureSeedData, or any app insert) then collides on
+-- roles_pkey. Let the sequence assign role_id, exactly like every other roles
+-- insert. role_key is UNIQUE → ON CONFLICT makes this idempotent.
+INSERT INTO public.roles (role_key, label)
+VALUES ('OWNER', 'Owner')
+ON CONFLICT (role_key) DO NOTHING;
 
 -- 2. OWNER permissions = COMPANY_ADMIN's full set (superset). PK (role,
 --    permission_code) makes ON CONFLICT a clean no-op on re-run; the SELECT is
