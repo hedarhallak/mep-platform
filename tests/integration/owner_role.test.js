@@ -73,7 +73,8 @@ describeIfDb('OWNER role guard — PATCH /api/users/:id/role (§132 / §140)', (
     const res = await request(app)
       .patch(`/api/users/${worker.id}/role`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ role: 'FOREMAN' });
+      // TRADE_ADMIN is in the endpoint's ALLOWED_ROLES (FOREMAN is not).
+      .send({ role: 'TRADE_ADMIN' });
 
     expect(res.statusCode).toBe(200);
   });
