@@ -137,15 +137,22 @@ jobs:
       - name: Tests (Jest, blocking — Phase 10 onward)
         # All test categories run against the PostGIS service container above.
         # Tests that don't need DB (smoke, pure helpers) ignore DATABASE_URL.
-        # `--coverage` adds the line/statement/branch coverage summary to the
-        # CI log so we can watch coverage drift over time without enforcing a
-        # threshold yet (Section 18 Week 4 — coverage + branch protection).
-        run: npm test -- --coverage --coverageReporters=text-summary
+        # §141: coverage instrumentation slows the suite noticeably and is only
+        # informational (no threshold). Run it on push-to-main (drift watching)
+        # but run PRs PLAIN for faster feedback + auto-merge.
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            npm test -- --coverage --coverageReporters=text-summary
+          else
+            npm test
+          fi
 
       - name: Knip — dead code detection (informational, CI only — Day 2 Phase 3)
         # NOTE: knip 5.x uses fast-glob + oxc-resolver which crash with null
         # bytes on Hedar's Windows setup. CI runs on fresh Ubuntu — works.
         # `npm run knip` is intentionally not expected to work locally on Windows.
+        # §141: informational + slow — run on push-to-main only, skip on PRs.
+        if: github.event_name == 'push'
         run: npm run knip
         continue-on-error: true
 
@@ -216,10 +223,19 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Cache Playwright browsers (§141 — skip the chromium re-download)
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('mep-frontend/package-lock.json') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
+
       - name: Install Playwright browsers (chromium only)
         # `--with-deps` pulls the Linux system libs Playwright needs for
         # Chromium. We only install Chromium (not webkit + firefox) to
-        # keep the cold-start under 60s.
+        # keep the cold-start under 60s. The browser binary itself is restored
+        # from the cache above on a hit (the apt system-libs step still runs).
         run: npx playwright install --with-deps chromium
 
       - name: Run E2E tests
