@@ -330,12 +330,15 @@ router.patch('/:id', can('projects.edit'), async (req, res) => {
 
     if (!projectId) return res.status(400).json({ ok: false, error: 'INVALID_ID' });
 
-    // Verify ownership
-    const exists = await req.db.query(
-      'SELECT id FROM public.projects WHERE id = $1 AND company_id = $2 LIMIT 1',
+    // Verify ownership AND capture the full before-row → old→new audit diff.
+    // (§132 anti-tamper: a project edit — especially site_address/lat/lng/
+    // ccq_sector, which drive CCQ travel allowances — must be tamper-evident,
+    // proving "address changed from X to Y", not just the new value.)
+    const before = await req.db.query(
+      'SELECT * FROM public.projects WHERE id = $1 AND company_id = $2 LIMIT 1',
       [projectId, companyId]
     );
-    if (!exists.rows.length) return res.status(404).json({ ok: false, error: 'PROJECT_NOT_FOUND' });
+    if (!before.rows.length) return res.status(404).json({ ok: false, error: 'PROJECT_NOT_FOUND' });
 
     const {
       project_name,
@@ -386,7 +389,8 @@ router.patch('/:id', can('projects.edit'), async (req, res) => {
       entity_type: 'project',
       entity_id: rows[0].id,
       entity_name: rows[0].project_name,
-      new_values: req.body,
+      old_values: before.rows[0],
+      new_values: rows[0],
     });
 
     return res.json({ ok: true, project: rows[0] });

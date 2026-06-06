@@ -15955,3 +15955,24 @@ OWNER can do **everything COMPANY_ADMIN can**, PLUS is the **only** role that ma
 - OWNER provisioning UX: dedicated SUPER_ADMIN "create OWNER" action vs a flag on the existing tenant-activation flow.
 - Whether `IT_ADMIN` (level 90) should also lose audit access (it's currently below OWNER but above COMPANY_ADMIN — confirm its real-world holder).
 - One OWNER per company hard-enforced, or allow a controlled backup OWNER (§132.5 said "one + tightly-controlled backup").
+
+> **Slice 1 SHIPPED (PR #347):** migration 029 (OWNER role + role_permissions copied from COMPANY_ADMIN) + `ROLE_LEVEL OWNER:95` + `canAssignRole` guard wired at the 3 in-tenant role-assignment sites (`user_management.js` +`ROLE_RANK OWNER:1`, `employees.js`, `invite_employee.js`) + unit + integration tests. Closed a real latent hole: in-tenant COMPANY_ADMIN could previously DEMOTE an OWNER (targetRank defaulted to 99). Deploy: migration 029 (additive) then code. Next: Slice 2.
+
+---
+
+## 141. Section 141 — June 6, 2026 — CI speedup (free): coverage/knip on push-only + Playwright browser cache
+
+> Follow-up to §139. Hedar noticed each PR still takes ~6–7 min and asked where the speedup is. Honest answer: ship.ps1/CD cut his HANDS-ON effort + babysitting + merge + deploy — NOT the CI wall-clock (that's GitHub running the test matrix). This section trims the wall-clock itself, free.
+
+### 141.1 — Findings
+
+- **npm caching was already on** in every `setup-node` (not a lever).
+- All jobs (backend, frontend, e2e, mobile, security, schema) run in **parallel** (no `needs:`), so PR wall-clock = the **slowest job**. The long poles are the **backend** job (PostGIS setup + 38-migration apply + Jest integration suite **with coverage** + knip) and the **e2e** job (Playwright chromium download).
+
+### 141.2 — Changes (all additive, can't break the gate)
+
+1. **Coverage on push-to-main only.** `--coverage` instruments the whole suite and is purely informational (no threshold). PRs now run `npm test` plain; push-to-main keeps `--coverage` for drift watching. Biggest single win (~1–2 min off the backend job on PRs).
+2. **Knip on push-to-main only** (`if: github.event_name == 'push'`). It's `continue-on-error` (informational) and slow to scan the whole tree (~30–60s) — no reason to gate PRs on it.
+3. **Cache Playwright browsers** (`actions/cache` on `~/.cache/ms-playwright`). Saves the chromium re-download on the e2e job (the apt system-libs step still runs).
+
+Expected PR saving ~1.5–2.5 min. Push-to-main runs stay full (coverage + knip) so nothing is lost for the canonical branch. Further levers if needed (NOT done — higher risk): per-job path filtering (skip frontend/mobile/e2e on backend-only PRs), splitting lint/knip into a separate parallel job, Jest sharding.
