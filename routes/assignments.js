@@ -29,6 +29,7 @@
 const express = require('express');
 const router = express.Router();
 const { audit, ACTIONS } = require('../lib/audit');
+const { snapshotAssignmentLocation } = require('../lib/assignment_snapshot');
 const { can } = require('../middleware/permissions');
 const { sendAssignmentEmployee, sendAssignmentForeman } = require('../lib/email');
 
@@ -525,6 +526,10 @@ router.post('/requests', can('assignments.create'), async (req, res) => {
       ]
     );
 
+    // §132 snapshot: lock the project's location onto the new assignment so a
+    // later project-address edit can't retroactively change its allowance.
+    await snapshotAssignmentLocation(req.db, rows[0].id, companyId);
+
     await audit(req.db, req, {
       action: ACTIONS.ASSIGNMENT_CREATED,
       entity_type: 'assignment_request',
@@ -944,6 +949,9 @@ router.patch('/requests/:id/reassign', can('assignments.edit'), async (req, res)
       ]
     );
 
+    // §132 snapshot: reassign creates a NEW row → capture its location.
+    await snapshotAssignmentLocation(req.db, rows[0].id, companyId);
+
     // Send notification to new employee + foreman (fire-and-forget after
     // tenantDb commits)
     await notifyAssignment(req.db, rows[0].id, companyId);
@@ -1044,6 +1052,10 @@ router.patch('/requests/:id/move', can('assignments.edit'), async (req, res) => 
        RETURNING *`,
       [new_project_id, reqId, companyId]
     );
+
+    // §132 snapshot: the project changed → re-capture the new project's
+    // location so the allowance follows the project the worker is now on.
+    await snapshotAssignmentLocation(req.db, reqId, companyId);
 
     await audit(req.db, req, {
       action: ACTIONS.ASSIGNMENT_UPDATED,
@@ -1193,6 +1205,8 @@ router.post('/repeat-confirm', can('assignments.create'), async (req, res) => {
           a.assignment_role || 'WORKER',
         ]
       );
+      // §132 snapshot: capture the project's location for this new row.
+      await snapshotAssignmentLocation(req.db, rows[0].id, companyId);
       createdIds.push(rows[0].id);
       created++;
     }
