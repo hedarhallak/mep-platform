@@ -32,7 +32,8 @@ describe('SettingsPage', () => {
 
   test('loads and shows company identity + editable fields', async () => {
     render(<SettingsPage />)
-    await waitFor(() => expect(screen.getByText('MEP Construction')).toBeInTheDocument())
+    // Name appears twice (header subtitle + read-only chip) — assert ≥1.
+    await waitFor(() => expect(screen.getAllByText('MEP Construction').length).toBeGreaterThan(0))
     expect(apiGet).toHaveBeenCalledWith('/company/settings')
     expect(screen.getByDisplayValue('06:00')).toBeInTheDocument()
     expect(screen.getByDisplayValue('514-000-0000')).toBeInTheDocument()
