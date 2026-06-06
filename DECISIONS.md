@@ -15782,3 +15782,197 @@ Hedar chose "A+B" → build a real Settings page (which makes hiding it moot). G
 - Deploy = **backend restart + frontend rebuild** (no migration).
 
 **Remaining §134 deferred (need Hedar assets/decisions):** invoice PDF logo + Constrai bank details; expense approver model (§129.9 → §132 OWNER); the §132 anti-tamper program.
+
+---
+
+## 135. Section 135 — June 6, 2026 — §132 prevention foundation, part 1: real old→new audit diff on PATCH /projects/:id (PR #341)
+
+> **Track order for this session (Hedar): §132 (continue) → §133 server-side session → Assignments Phase 2 CREWS.** This section is the first §132 piece.
+
+### 135.1 — Record correction: the prior "§135 / PR #339" was never built (Pitfall #66, again)
+
+The June-4 session-4 closeout claimed "§135 project-edit audit diff (PR #339) — LIVE". On cold-start verification this session, that was **false on two counts**: (a) there is **no PR #339 and no §135 commit** in the git history — `origin/main` was at `f30280b` (PR #338, Settings); (b) the closeout itself lived on an **unmerged docs branch** `docs/s135-session4-closeout` (PR #340, still open at session start) — the same Pitfall #66 pattern (a docs closeout that overclaims state and hasn't merged). The HANDOFF I bootstrapped from came from that unmerged, inaccurate commit. `routes/projects.js` PATCH still logged `new_values: req.body` only — exactly the GAP §132.6 flagged. **So §135 was a phantom; this section is the real build.**
+
+Cold-start also surfaced two environment notes for future sessions: the **Cowork bash sandbox served a truncated/stale copy** of edited files (Pitfall #1) — `node --check` failed on a file that is complete and valid in the Read-tool (host) view; **do not trust bash for syntax/test verification this session, rely on CI.** And bash `git` commands left a **stale `.git/index.lock`** the Windows side had to `Remove-Item -Force` before local git writes worked — **stopped running git in the bash sandbox after that.** (On Windows the tree was clean: only the 2 intended files modified. The "350 EOL-churn files" seen from bash were a sandbox-only artifact.)
+
+### 135.2 — The fix (the §132.3 fraud vector — CCQ allowance inflation via address edit)
+
+`PATCH /api/projects/:id` now captures the **full before-row** (`SELECT *` under the existing ownership check) and logs a true diff: `old_values: before.rows[0]`, `new_values: rows[0]` (the actually-persisted row), replacing the old `new_values: req.body`. This proves "site_address / site_lat / site_lng / ccq_sector changed FROM X TO Y" — the fields that drive CCQ travel allowances (§131). Mirrors the company.js §134.4 pattern exactly. No migration (read-only capture of an existing row; `audit_logs.old_values` is `jsonb`, already supported by `lib/audit.js`).
+
+Test: `tests/integration/projects.test.js` — pins a known `site_address`, PATCHes a new one, then asserts the latest `PROJECT_UPDATED` audit row has `old_values.site_address` = old and `new_values.site_address` = new. (Integration test → runs under CI's DB; sandbox has none.)
+
+### 135.3 — Scope finding: nothing else to instrument yet (assignment shift/date + attendance time edits)
+
+§132.8 named extending the diff to "attendance time edits, assignment shift/date/project edits." Grep-first audit (Pitfall #62) of `routes/assignments.js` + `routes/attendance.js`: **those edit endpoints do not exist.** Assignments expose create / approve / reject / cancel / reassign (status transitions) + `/move` (project change — which **already logs `from_project`→`to_project` in `details`**, tamper-evident for that field). Attendance exposes checkin / checkout / confirm — **no manager time-correction endpoint.** So the only live sensitive-edit surface was `PATCH /projects` (now fixed). When a shift/date/attendance edit endpoint is later built, it must ship with the old→new diff from commit 1, not after.
+
+### 135.4 — §132 remaining (the bigger builds, still need architectural decisions, one at a time §8.9/rule#9)
+
+Per §132.8 ordering: (1) **the other half of the prevention foundation** = allowance computed from a SNAPSHOT of project location at assignment time (makes the fraud structurally impossible, not just detectable — needs a migration + `lib/ccq_travel.js` change + a design decision on where the snapshot lives); (2) **OWNER role** (Constrai-provisioned, sole audit viewer, separation-of-duties); (3) **per-user permission grants UI/endpoints** (audited + expiry), shipped ONLY with #1/#2; (4) **cross-tenant Constrai audit copy**. Deploy for 135.2 = backend restart only (no migration, no frontend).
+
+---
+
+## 136. Section 136 — June 6, 2026 — §132 prevention foundation part 2: project-location snapshot at assignment time (PR #342, LIVE)
+
+> The "other half" of §135.4 item (1). Hedar chose **dedicated columns (migration)** over stuffing the snapshot in `payload_json`. LIVE on prod (migration 027 applied + `pm2 restart`, 4 columns verified).
+
+### 136.1 — What + why
+
+The CCQ travel allowance is a function of the distance from the employee's home to the **project site**. Until now the allowance (wizard preview) read the project's **live** `site_lat/site_lng/ccq_sector` — so editing a project's address later would change a *past* assignment's allowance retroactively (the §132.3 fraud vector). Fix: at assignment-creation time, **copy the project's location onto the assignment row**. The allowance is then locked to the location as it was when the work was assigned → fraud becomes structurally impossible, not just detectable.
+
+### 136.2 — Implementation
+
+- **migration 027** (`027_assignment_location_snapshot.sql`): adds `snapshot_site_lat`, `snapshot_site_lng`, `snapshot_ccq_sector`, `snapshot_captured_at`, and `allowance_cents` to `assignment_requests`. No GRANTs needed (baseline table, table-level privileges cover new columns). `allowance_cents` is **reserved/unpopulated** — deliberately NOT filled until distances are payroll-grade (Mapbox Matrix, §131.3); persisting an estimate-derived allowance as if it were a payroll figure would be misleading.
+- **`lib/assignment_snapshot.js`**: one DRY helper `snapshotAssignmentLocation(db, id, companyId)` = `UPDATE assignment_requests … FROM projects …`. Works on `req.db` or an explicit transaction client.
+- Wired at **5 creation/mutation sites**: POST `/requests`, `/reassign`, `/repeat-confirm`, `/move` (re-snapshots because the project changed), and `auto-confirm` (on the transaction `client`).
+- Test `tests/integration/assignment_snapshot.test.js`: snapshot is captured on create; editing the project address afterward does NOT change the assignment snapshot (the guarantee).
+
+### 136.3 — Storage note (Hedar asked)
+
+"Snapshot" here is **3 numeric/text values per row** (lat, lng, sector) + a timestamp — **not an image** (~40 bytes/row; a million assignments ≈ 40 MB). No relation to the DO Spaces image storage (§129 receipts/logos).
+
+---
+
+## 137. Section 137 — June 6, 2026 — §133 remaining: server-side idle + absolute session caps on /refresh (PR #343)
+
+> The robust layer §133.4 deferred ("SERVER-side idle + absolute-session-cap enforcement on `/refresh` so it doesn't depend on client JS"). SUPER_ADMIN only. Hedar chose **idle 1h / absolute 8h** (the "strict" option). Migration 028 + frontend rebuild.
+
+### 137.1 — Design (and the false-logout trap that shaped it)
+
+The frontend refreshes **reactively (on 401 only)**, so an active SUPER_ADMIN hits `/refresh` only ~hourly (when the 1h access token expires). Measuring idle from the token's `created_at` would therefore falsely log out an *active* admin at the 1h boundary. So idle must be measured against **true activity**, not last-refresh:
+
+- **migration 028** (`028_session_activity_caps.sql`): `session_started_at` + `last_activity_at` on `refresh_tokens` (both `DEFAULT NOW()` → fail-open for pre-existing tokens; no GRANTs needed).
+- `session_started_at` is set at login and **carried forward unchanged through every rotation** → the absolute cap measures from the real login.
+- `last_activity_at` is bumped by the **SUPER_ADMIN guard** (`middleware/super_admin.js`) on every real authenticated admin request — NOT on `/refresh`. So an active admin's `last_activity_at` is always fresh and never falsely idle-timed-out; a truly idle admin (no requests >1h) trips it on the next refresh.
+- **`lib/session_policy.js`**: pure `evaluateSessionCaps({lastActivityAt, sessionStartedAt})` → `{ok}` | `{ok:false, reason:'IDLE'|'ABSOLUTE'}` (absolute checked first). Values from env `SA_IDLE_MAX_MIN` (default 60) + `SA_SESSION_ABS_MAX_MIN` (default 480). `touchActivity()` bumps activity (best-effort, never throws).
+- **`routes/auth.js` `/refresh`**: for `isEphemeralSessionRole` only, evaluate caps → on failure revoke ALL the user's tokens + 401 `SESSION_IDLE_TIMEOUT` / `SESSION_ABSOLUTE_TIMEOUT`. Tenant roles unaffected.
+- **frontend**: `api.js` maps those errors to `/login?reason=idle|expired`; `AdminLogin.jsx` shows a matching banner (generalized off the old hardcoded "15 minutes" text).
+
+### 137.2 — Tests + deploy
+
+Unit `tests/smoke/session_policy.test.js` (truth table, ran green in-sandbox 5/5) + integration `tests/integration/session_caps.test.js` (SA idle→401, SA absolute→401, SA active→200, tenant long-idle→200). Deploy = migration 028 (manual, BEFORE restart, Pitfall #46) + **frontend rebuild** (api.js/AdminLogin changed) + `pm2 restart`.
+
+### 137.3 — §133 status now
+
+ephemeral cookies (§133.2) + client idle (§133.4) + per-tab gate (§133.5) + **server-side idle/absolute caps (this section)** — the §133 session-hardening program is now **complete for SUPER_ADMIN**. Mobile/tenant session hardening stays Phase 7.
+
+---
+
+## 138. Section 138 — June 6, 2026 — Program assessment + KNOWN-GAPS REGISTER (for the two incoming engineers' review)
+
+> Recorded at Hedar's request so the gaps are tracked, not lost, and so the **two engineers who will soon test/review the program** have an honest map of what's known. This is Claude's candid self-assessment of a platform that was **built end-to-end via AI direction with a non-developer owner (Hedar)** — context the reviewers should weigh. Nothing here is a hidden defect; every item below is known and has a fix path. The single most valuable next step (Claude's recommendation, Hedar agrees) is **one independent code + security review before any real revenue / enterprise contract** — exactly the review now being arranged.
+
+### 138.1 — Honest readiness scorecard (Claude's estimate)
+
+| Dimension | Estimate | Note |
+|---|---|---|
+| Product ideas / domain design | ~85% of a small pro SaaS team | Strong CCQ/MEP domain fit, multi-tenant + RBAC + audit + pricing model |
+| Code execution quality | ~70% | Sound overall, but carries tech debt + latent bugs that surface under expert/load review |
+| Production ops / security maturity | ~55–65% | Single node, no HA, no independent audit |
+| Conference-demo / MVP readiness | ~85–90% | Genuinely impressive for a solo non-coder founder |
+
+**Framing:** very strong for a conference/MVP and for a solo founder; not yet "enterprise-production trusted with live payroll data" until the gaps below are closed. The thing a serious buyer will fixate on is **"AI-authored, bus-factor 1, no independent audit"** — a one-time professional review converts that from a risk into a trust point.
+
+### 138.2 — KNOWN-GAPS REGISTER (the punch list for the reviewers)
+
+| # | Gap | Severity | Concrete risk | Fix path / status |
+|---|---|---|---|---|
+| G1 | **Single droplet, single DB, no HA, no load testing** | High (ops) | One server down (crash / full disk / DDoS) = ALL tenants down at once; recovery from daily backup is hours, not instant | Managed Postgres w/ failover → 2nd app node + load balancer → monitoring/alerts. Daily `pg_dump`→Spaces already mitigates data *loss*, not downtime. **Pre-scale, not pre-conference.** |
+| G2 | **PIN instead of password** | Medium (security) | 4-digit PIN is weaker vs brute-force; rate-limiting mitigates but isn't a password | PIN→password migration — **Phase 7** |
+| G3 | **Mobile still Bearer-token + PIN** | Medium (security) | Older, less-secure model than the web's HttpOnly secure-cookie flow; stolen device/token more exposed | Mobile auth modernization — **Phase 7** |
+| G4 | **No independent security audit / pen-test** | High (security) | Defenses are reasoned but never adversarially tested; an RLS-bypass / IDOR could expose another tenant's employee+payroll data → reputational + **Quebec Law 25** (privacy) liability | **Independent pen-test + code review (the review being arranged now)** + Law-25 compliance pass |
+| G5 | **CCQ allowance is an ESTIMATE** (haversine×1.3, not road distance) | Medium (correctness) | Differs from the official CCQ Google-Maps road distance; fine for planning, NOT payroll-grade; a worker could dispute the figure | Mapbox Matrix API for true road distance (§131.3 backlog). **Already gated:** `allowance_cents` left unpopulated until this lands (§136.2). Be explicit with prospects: "estimate for planning, not final payroll — yet." |
+| G6 | **Test coverage ~50–63%** | Medium (quality) | ~half the code (esp. `routes/*` happy paths) has no automated test; a regression there ships silently | Incrementally raise coverage with route + DB fixtures — cumulative, not urgent (target 70–85%) |
+| G7 | **Bus-factor = 1 + AI-authored** | High (organizational) | Whole system lives in Hedar's head + these docs; no second maintainer; AI-authorship means latent issues only an expert/load review surfaces | Onboard the two reviewing engineers as ongoing maintainers; keep DECISIONS/HANDOFF current; the independent review (G4) doubles as knowledge transfer |
+
+### 138.3 — Evidence that latent-bug risk (G7) is real, not theoretical
+
+Bugs that actually surfaced and were fixed only because something forced them into the light — the reviewers should assume **siblings of these still exist** in un-exercised paths: the `tenantDb` per-mount client leak that took down the whole admin portal (§124); `auto-confirm` dead since migration 013 (no UI ever called it) with two fatal dormant bugs (§130); dangling-requester JOIN hiding 50/58 assignment rows (§131.13); the §135 "phantom" (a closeout doc claimed a feature was LIVE that was never coded). Pattern: **features pass because the happy path was hand-tested, while edge/branch/un-wired paths rot silently** — exactly what G6 (coverage) + G4 (audit) are meant to catch.
+
+### 138.4 — Suggested focus for the two engineers
+
+1. **Tenant-isolation / RLS adversarial testing** (G4) — try to read across `company_id` via every route, esp. newer ones; confirm the strict policies hold under `SET LOCAL ROLE mepuser`.
+2. **Auth/session** (G2/G3) — review the JWT+PIN+TOTP+refresh-rotation flow and the new §137 caps.
+3. **The `routes/*` un-covered happy paths** (G6) — where regressions ship silent.
+4. **Ops resilience** (G1) — a restore drill + a basic load test to find the first ceiling.
+5. **Law 25 / privacy posture** (G4) — employee + payroll-adjacent data in Quebec.
+
+These items are mirrored into HANDOFF.md (backlog) so they govern the post-conference Security/Hygiene tracks.
+
+---
+
+## 139. Section 139 — June 6, 2026 — Productivity automation (free): one-command PR + CD + one-command migrations
+
+> Hedar asked how to ship more per hour without a second person. The bottleneck is NOT thinking/coding (fast) — it's the **manual ritual** around each PR (~12 pastes: branch/add/commit/push/PR/merge + ssh/pull/migrate/build/restart) plus CI waits. All free. Full how-to in `DEV_AUTOMATION.md`.
+
+### 139.1 — What shipped
+
+1. **`ship.ps1`** — one-line PR: `ship -Message "…" -Files a,b` → branch off `origin/main` + stage only-named-files (Pitfall #29) + commit + push + `gh pr create` + squash auto-merge. Collapses ~7 pastes → 1.
+2. **`.github/workflows/deploy.yml`** — CD. On **CI success on main**, SSH-runs the existing `scripts/deploy.sh` (code-only: pull → change-detect → frontend build → pm2 restart → health check). **Inert until 3 secrets are set** (`DEPLOY_HOST/USER/SSH_KEY`) — a guard step skips the SSH step when `DEPLOY_HOST` is empty, so merging the file changes nothing until Hedar opts in. `workflow_run`-triggered, so it only activates once on `main`. Code-only by design — migrations stay explicit.
+3. **`scripts/migrate.js` patch** — skip `*.rollback.sql` (revert scripts must never auto-apply). + **`scripts/postgres/backfill_schema_migrations.sql`** (one-time): records the 29 already-applied forward migrations (000–028) into `schema_migrations` so `npm run migrate` sees them as done and applies only NEW (029+) ones. Prereq before relying on `npm run migrate` (prod migrations were applied manually, never recorded).
+4. **`DEV_AUTOMATION.md`** — the operator guide (ship usage, CD secret setup with a DEDICATED revocable key, migration flow).
+
+### 139.2 — Decisions + safety
+
+- **deploy.sh untouched** (battle-tested) — the CD calls it, doesn't reinvent it.
+- **CD deploys CODE only, never migrations** — auto-applying schema changes to prod unattended is too risky for an AI-authored codebase; migrations stay a deliberate one-command step. Rule: **additive migrations (`ADD COLUMN`) applied on prod BEFORE merging** (old code ignores new columns → no broken window), then merge → CD ships the code that uses them.
+- **CD security is itself a G4 review item (§138):** it stores a prod-reaching key in GitHub secrets + auto-deploys on green CI. Mitigations documented: CI is the gate, `deploy.sh` has a health check, use a dedicated revocable key. Hedar to enable when ready.
+- **Velocity pairs with the incoming engineer review, not instead of it** — faster shipping + AI-authored + no reviewer amplifies G7; the 2-engineer review (2–3 weeks out) is the safety valve.
+
+---
+
+## 140. Section 140 — June 6, 2026 — §132 OWNER role: design DECIDED + investigation map + slice plan (build next session)
+
+> Investigation + the key architectural decision are done; implementation deliberately deferred to the START of a fresh session. Reason: OWNER is a **security-critical RBAC change touching 5–6 role-assignment sites**, and an incomplete guard = a real hole (someone self-assigns OWNER). Building it rushed at the tail of a 6-PR marathon is exactly the G7 latent-bug risk (§138.3). This section is a turnkey plan so next session executes immediately.
+
+### 140.1 — DECISION (Hedar, June 6): OWNER = **superset + exclusive audit**
+
+OWNER can do **everything COMPANY_ADMIN can**, PLUS is the **only** role that may view the sensitive-edit audit. **COMPANY_ADMIN loses audit access.** This resolves §129.9 (financial/audit authority lives with OWNER; operational permission-distribution with COMPANY_ADMIN) and delivers the §132.4 separation of duties (the technical admin who distributes permissions can no longer watch themselves).
+
+### 140.2 — Role-model findings (grep-first, Pitfall #62)
+
+- **`middleware/roles.js`** — `ROLE_LEVEL` map (SUPER_ADMIN 100, IT_ADMIN 90, COMPANY_ADMIN 80, …). `normalizeRole()` + `ROLE_ALIASES`. `requireRoles()` lets SUPER_ADMIN bypass everything.
+- **Permissions are DATA-DRIVEN:** `role_permissions(role TEXT, permission_code TEXT)` PK=(role,permission_code), FK permission_code→`permissions(code)`. `middleware/permissions.js` `can()` checks `user_permissions` override → `role_permissions` (5-min cache, `invalidateCache()` after writes). SUPER_ADMIN hardcoded-passes.
+- **Audit viewing today:** `routes/permissions.js` `GET /audit` is gated by `can('settings.permissions')` — which **COMPANY_ADMIN holds**, so the technical admin currently sees the audit (the §132.4 problem). A separate `audit.view` permission also exists.
+- **Role-assignment sites (the guard must cover ALL in-tenant ones):**
+  - SUPER_ADMIN-side (OWNER allowed): `routes/admin_users.js:191` INSERT, `routes/super_admin.js:285` INSERT.
+  - In-tenant (must BLOCK OWNER): `routes/employees.js:399` UPDATE role, `routes/user_management.js:137` UPDATE role, `routes/invite_employee.js` (invite role), `routes/onboarding.js:118` / `routes/activate.js` (first-admin — confirm whether tenant- or Constrai-driven).
+
+### 140.3 — Slice plan
+
+**Slice 1 — the role + superset perms + guard (one PR):**
+1. **migration 029**: insert `OWNER` into `roles` (role_key='OWNER'); seed `role_permissions` for OWNER = `SELECT 'OWNER', permission_code FROM role_permissions WHERE role='COMPANY_ADMIN'` + `('OWNER','audit.view')`, `ON CONFLICT (role,permission_code) DO NOTHING` (FK-safe — all codes already exist). No grants needed (global table). Note: this is a SNAPSHOT of COMPANY_ADMIN perms; if those change later, re-sync.
+2. **`middleware/roles.js`**: add `OWNER: 95` to `ROLE_LEVEL` (above COMPANY_ADMIN 80 and IT_ADMIN 90, below SUPER_ADMIN 100 → only SUPER_ADMIN outranks it for the rank-lock) + docstring.
+3. **Guard** — a helper `assertAssignableRole(callerRole, targetRole)` (or inline check) in `middleware/roles.js`: reject if `normalizeRole(targetRole)==='OWNER'` and `normalizeRole(callerRole)!=='SUPER_ADMIN'`. Apply at EVERY in-tenant assignment site (employees.js, user_management.js, invite_employee.js, onboarding/activate). Also guard MODIFYING an existing OWNER user from in-tenant.
+4. **Tests**: in-tenant assign OWNER → 403; SUPER_ADMIN assign OWNER → ok; OWNER inherits a COMPANY_ADMIN permission; `invalidateCache()` after the migration is a deploy step (or cache TTL).
+   Deploy: migration 029 (additive) + backend restart.
+
+**Slice 2 — exclusive audit viewer:** new owner-only sensitive-edit audit viewer (the §135/§136 old→new diffs); switch the audit gate from `settings.permissions` to `audit.view`; ensure `audit.view` is OWNER-only (remove from COMPANY_ADMIN's role_permissions). Frontend OWNER audit page.
+
+**Slice 3 — provisioning + parent audit:** SUPER_ADMIN endpoint to provision the OWNER account at tenant activation (§132.5); log every OWNER create/transfer/disable at the Constrai parent level (cross-tenant, out of tenant reach).
+
+### 140.4 — Open sub-decisions for next session (one focused question at a time, §8.9)
+
+- OWNER provisioning UX: dedicated SUPER_ADMIN "create OWNER" action vs a flag on the existing tenant-activation flow.
+- Whether `IT_ADMIN` (level 90) should also lose audit access (it's currently below OWNER but above COMPANY_ADMIN — confirm its real-world holder).
+- One OWNER per company hard-enforced, or allow a controlled backup OWNER (§132.5 said "one + tightly-controlled backup").
+
+> **Slice 1 SHIPPED (PR #347):** migration 029 (OWNER role + role_permissions copied from COMPANY_ADMIN) + `ROLE_LEVEL OWNER:95` + `canAssignRole` guard wired at the 3 in-tenant role-assignment sites (`user_management.js` +`ROLE_RANK OWNER:1`, `employees.js`, `invite_employee.js`) + unit + integration tests. Closed a real latent hole: in-tenant COMPANY_ADMIN could previously DEMOTE an OWNER (targetRank defaulted to 99). Deploy: migration 029 (additive) then code. Next: Slice 2.
+
+---
+
+## 141. Section 141 — June 6, 2026 — CI speedup (free): coverage/knip on push-only + Playwright browser cache
+
+> Follow-up to §139. Hedar noticed each PR still takes ~6–7 min and asked where the speedup is. Honest answer: ship.ps1/CD cut his HANDS-ON effort + babysitting + merge + deploy — NOT the CI wall-clock (that's GitHub running the test matrix). This section trims the wall-clock itself, free.
+
+### 141.1 — Findings
+
+- **npm caching was already on** in every `setup-node` (not a lever).
+- All jobs (backend, frontend, e2e, mobile, security, schema) run in **parallel** (no `needs:`), so PR wall-clock = the **slowest job**. The long poles are the **backend** job (PostGIS setup + 38-migration apply + Jest integration suite **with coverage** + knip) and the **e2e** job (Playwright chromium download).
+
+### 141.2 — Changes (all additive, can't break the gate)
+
+1. **Coverage on push-to-main only.** `--coverage` instruments the whole suite and is purely informational (no threshold). PRs now run `npm test` plain; push-to-main keeps `--coverage` for drift watching. Biggest single win (~1–2 min off the backend job on PRs).
+2. **Knip on push-to-main only** (`if: github.event_name == 'push'`). It's `continue-on-error` (informational) and slow to scan the whole tree (~30–60s) — no reason to gate PRs on it.
+3. **Cache Playwright browsers** (`actions/cache` on `~/.cache/ms-playwright`). Saves the chromium re-download on the e2e job (the apt system-libs step still runs).
+
+Expected PR saving ~1.5–2.5 min. Push-to-main runs stay full (coverage + knip) so nothing is lost for the canonical branch. Further levers if needed (NOT done — higher risk): per-job path filtering (skip frontend/mobile/e2e on backend-only PRs), splitting lint/knip into a separate parallel job, Jest sharding.

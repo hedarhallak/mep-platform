@@ -11,6 +11,7 @@ const router = require('express').Router();
 const { pool } = require('../db');
 const { sendEmail } = require('../lib/email');
 const { estimateRoadKm, loadRateTable, allowanceCentsFor } = require('../lib/ccq_travel');
+const { snapshotAssignmentLocation } = require('../lib/assignment_snapshot');
 
 const { can } = require('../middleware/permissions');
 
@@ -755,6 +756,9 @@ router.post('/auto-confirm', can('assignments.smart_assign'), async (req, res) =
         );
 
         const assignId = rows[0].id;
+        // §132 snapshot: capture the project's location for this new row, on
+        // the SAME transaction client (covered by the BEGIN/COMMIT + GUC).
+        await snapshotAssignmentLocation(client, assignId, companyId);
         allCreated.push(assignId);
         projAssignments.push({ ...emp, assignment_id: assignId });
 

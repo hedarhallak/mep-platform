@@ -9,6 +9,7 @@ const { JWT_SECRET, hashPin, verifyPin } = require('../lib/auth_utils');
 // Phase 6-D-6.5 / Section 121 — TOTP 2FA helper.
 const totpLib = require('../lib/totp');
 const { audit, ACTIONS } = require('../lib/audit');
+const { evaluateSessionCaps } = require('../lib/session_policy');
 // Phase 6-D-1a (Section 100, May 14, 2026): cookie-based session for web.
 // See lib/cookie_options.js for the policy. Mobile still uses Bearer.
 const {
@@ -70,16 +71,21 @@ function isValidPin(pin, role) {
   return s.length >= 4 && s.length <= 8;
 }
 
-async function saveRefreshToken(userId, refreshToken, req) {
+// §133: `sessionStartedAt` lets a rotated token carry the ORIGINAL login time
+// forward (for the absolute cap). Pass null on a fresh login → the column
+// DEFAULT NOW() takes over; pass the prior token's value on /refresh.
+async function saveRefreshToken(userId, refreshToken, req, sessionStartedAt = null) {
   const tokenHash = hashRefreshToken(refreshToken);
   const expiresAt = new Date(Date.now() + REFRESH_TOKEN_DAYS * 24 * 60 * 60 * 1000);
   const userAgent = (req.headers['user-agent'] || '').substring(0, 500);
   const ip = req.ip || req.connection?.remoteAddress || null;
 
   await pool.query(
-    `INSERT INTO public.refresh_tokens (user_id, token_hash, expires_at, user_agent, ip_address)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [userId, tokenHash, expiresAt, userAgent, ip]
+    `INSERT INTO public.refresh_tokens
+       (user_id, token_hash, expires_at, user_agent, ip_address,
+        session_started_at, last_activity_at)
+     VALUES ($1, $2, $3, $4, $5, COALESCE($6, NOW()), NOW())`,
+    [userId, tokenHash, expiresAt, userAgent, ip, sessionStartedAt]
   );
 }
 
@@ -624,6 +630,7 @@ router.post('/refresh', async (req, res) => {
     // even for valid tokens.
     const { rows } = await authPool.query(
       `SELECT rt.id, rt.user_id, rt.expires_at, rt.revoked,
+              rt.session_started_at, rt.last_activity_at,
               au.username, au.employee_id, au.company_id, au.role, au.is_active, au.must_change_pin,
               ep.full_name
        FROM public.refresh_tokens rt
@@ -655,6 +662,30 @@ router.post('/refresh', async (req, res) => {
       return res.status(403).json({ ok: false, error: 'USER_DISABLED' });
     }
 
+    // §133: server-side idle + absolute session caps for high-privilege roles.
+    // Enforced HERE so a SUPER_ADMIN session cannot be extended by tampering
+    // with client JS. last_activity_at is bumped by the admin guard on real
+    // requests (not by /refresh), so an active admin is never falsely timed
+    // out. Tenant roles are unaffected (isEphemeralSessionRole excludes them).
+    const sessionRole = record.role ? String(record.role).toUpperCase() : null;
+    if (isEphemeralSessionRole(sessionRole)) {
+      const verdict = evaluateSessionCaps({
+        lastActivityAt: record.last_activity_at,
+        sessionStartedAt: record.session_started_at,
+      });
+      if (!verdict.ok) {
+        // End the whole session — revoke every token for this user.
+        await pool.query('UPDATE public.refresh_tokens SET revoked = TRUE WHERE user_id = $1', [
+          record.user_id,
+        ]);
+        return res.status(401).json({
+          ok: false,
+          error:
+            verdict.reason === 'ABSOLUTE' ? 'SESSION_ABSOLUTE_TIMEOUT' : 'SESSION_IDLE_TIMEOUT',
+        });
+      }
+    }
+
     // Token rotation: revoke old, issue new pair
     await pool.query('UPDATE public.refresh_tokens SET revoked = TRUE WHERE id = $1', [record.id]);
 
@@ -675,7 +706,9 @@ router.post('/refresh', async (req, res) => {
     const newAccessToken = signAccessToken(payload);
     const newRefreshToken = generateRefreshToken();
 
-    await saveRefreshToken(record.user_id, newRefreshToken, req);
+    // §133: carry the ORIGINAL session start forward so the absolute cap is
+    // measured from the real login, not reset on every rotation.
+    await saveRefreshToken(record.user_id, newRefreshToken, req, record.session_started_at);
 
     // Section 100 / Phase 6-D-1a: rotate the cookie pair alongside the
     // body tokens so web clients on the cookie path stay authenticated

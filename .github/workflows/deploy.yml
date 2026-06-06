@@ -1,0 +1,64 @@
+# .github/workflows/deploy.yml — Constrai CD (DECISIONS §139).
+#
+# Auto-deploys CODE to prod after CI passes on main, by SSH-running the
+# existing, battle-tested scripts/deploy.sh (pull → change-detect → frontend
+# build → pm2 restart → health check). It deliberately does NOT run database
+# migrations — those stay an explicit, deliberate step (see DEV_AUTOMATION.md).
+# Rule of thumb: for a PR that adds a migration, apply it on prod FIRST
+# (additive `ADD COLUMN` is backward-compatible), THEN merge so this deploys
+# the code that uses it.
+#
+# SAFETY:
+#   - Runs ONLY when the CI workflow concluded `success` on `main`.
+#   - Is INERT until the three deploy secrets are set — the guard step skips
+#     the SSH step when DEPLOY_HOST is empty, so merging this file changes
+#     nothing until you opt in.
+#
+# One-time setup (see DEV_AUTOMATION.md for the full walkthrough):
+#   Repo → Settings → Secrets and variables → Actions → New repository secret:
+#     DEPLOY_HOST     = 143.110.218.84
+#     DEPLOY_USER     = root            (or a dedicated deploy user)
+#     DEPLOY_SSH_KEY  = <private key of a DEDICATED deploy keypair>
+#   Add the matching PUBLIC key to the server's ~/.ssh/authorized_keys.
+
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: ['CI']
+    types: [completed]
+
+# Never run two deploys at once.
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to prod (code only, via deploy.sh)
+    runs-on: ubuntu-latest
+    # Only after CI SUCCEEDED, and only for the main branch.
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
+    steps:
+      - name: Guard — skip cleanly until deploy secrets are configured
+        id: guard
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          if [ -z "${DEPLOY_HOST}" ]; then
+            echo "::notice::CD not configured (DEPLOY_HOST secret unset) — skipping deploy."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Deploy over SSH (runs scripts/deploy.sh on the droplet)
+        if: steps.guard.outputs.configured == 'true'
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: bash /var/www/mep/scripts/deploy.sh
