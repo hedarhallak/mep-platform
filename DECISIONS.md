@@ -15633,3 +15633,62 @@ Incognito (fresh bundle, no SW cache) still required scrolling to reach Confirm 
 The July-2 test plan rendered as "**Jul 1 → Jul 1**" in the list, and the cleanup DELETE for `start_date='2026-07-01'` hit 0 rows — the DB value was `2026-07-02` all along. Root cause: `AssignmentsPage.fmt()` did `new Date(d).toLocaleDateString(...)` — a date-only string parses as **UTC midnight**, which Montréal (UTC-4) renders as 8 PM the **previous day**. Fixed by anchoring to local midnight: `new Date(String(d).slice(0,10) + 'T00:00:00')` — the exact pattern ReportsPage and StandupPage already use.
 
 **Hygiene-pass item (NOT fixed now — scope control):** the same UTC-midnight class likely affects other date-only renders: `ProjectsPage.jsx:334` (project start/end), `utils/formatters.js:37` (`fmtDate` — audit its callers), `MyHubPage`/`TaskRequestPage` `due_date` renders. Timestamps (`created_at`, `activated_at`, …) are NOT affected. Sweep once, fix with one shared helper in `utils/formatters.js`.
+
+---
+
+## 132. Section 132 — June 4, 2026 — Anti-Tamper / Owner-Audit security model (DESIGN SPEC, implementation = Security phase)
+
+> **Origin:** during the post-fix discussion Hedar opened the Permissions page and found he couldn't edit anything, which surfaced a deeper question about the whole permission + audit model. The conversation converged into a concrete security architecture. This section is the **design spec** — nothing here is built yet; it slots into the Security track (priority item #3, pulled toward Q1 2027 Phase 7 but elevated in importance because the platform now touches CCQ travel allowances + payroll). Recorded so it isn't lost and becomes a September-conference selling point.
+
+### 132.1 — The strategic framing (Hedar)
+
+Anti-tamper / fraud-prevention is a **flagship trust feature**, not a side feature. Because the platform now drives **CCQ travel allowances** (§131) and feeds payroll, any flexibility in permissions opens a fraud surface, so flexibility MUST ship wrapped in a detection layer — never alone. The pitch to a buying company: *"the owner is the only one who can see sensitive edits, employees don't know they're watched, and the history can't be erased — not even by your own admin, not even by Constrai-side tampering."*
+
+### 132.2 — Two distinct problems found in the current code
+
+1. **The Permissions page is ROLE-level only, and looked "uneditable".** `PermissionsPage.jsx` edits a role→module→action matrix (changes apply to ALL holders of a role). `isEditable = callerRank[currentUser.role] < callerRank[selectedRole]`; the page defaults to the COMPANY_ADMIN row, so a COMPANY_ADMIN viewing it sees `2 < 2 = false` → read-only, giving the false impression nothing is editable. You CAN edit lower roles by selecting them. Locking your own/higher role is intentional (privilege-escalation guard).
+
+2. **Per-user permission grants have backend enforcement but NO management surface.** The `user_permissions` table exists and `middleware/permissions.js can()` already honors it (role_permissions + user_permissions override: granted=false denies, granted=true grants). BUT there is no UI and no endpoint to grant/revoke a per-user permission. §129.8's claim that companies grant `expense_claims.approve` "via the Permissions page (user_permissions override)" was **aspirational — that UI was never built.**
+
+### 132.3 — The concrete fraud vector Hedar wants closed
+
+Employee A works a project on a date. Employee B (who holds `projects.edit`, possibly granted temporarily by the technical admin) changes the **project's address to a far location** so A collects an inflated CCQ travel allowance. Chain: A has no edit right → B grants A (or uses their own) edit right → address moved → allowance inflated. Also named: editing **work hours / shift times**, assignment dates — any allowance- or pay-affecting field.
+
+### 132.4 — Decisive principle: Separation of Duties (the linchpin)
+
+The person who **distributes permissions** (today the technical `COMPANY_ADMIN`, whose real job per §129.9 is technical admin, not financial authority) is exactly the person who could enable the fraud. If that same person can also read the audit, the watcher is the watched. Therefore:
+
+- Introduce a distinct **OWNER role**, above the technical admin, who is the **sole viewer of the sensitive-edit audit**.
+- The technical admin distributes day-to-day permissions but **cannot see the audit, cannot disable logging, cannot know logging is active**.
+- This simultaneously resolves the §129.9 "approver default is temporary" open item: financial/audit authority lives with OWNER, operational permission-distribution with COMPANY_ADMIN.
+
+### 132.5 — OWNER provisioning model (Hedar confirmed)
+
+- **Constrai (SUPER_ADMIN) provisions the OWNER account when it activates a new tenant** — same onboarding step that today seeds the first COMPANY_ADMIN; the OWNER credential goes to the company's actual owner. OWNER is that tenant's **root of trust**.
+- **No one inside the tenant can create / edit / assign the OWNER role — only Constrai.** Prevents a technical admin from minting themselves (or a second) OWNER to read or muddy the audit.
+- **Every OWNER change (create / transfer / disable) is logged at the Constrai parent level**, not just in-tenant — so even ownership transfer is itself tamper-evident.
+- Typically **one OWNER per company** (+ a tightly-controlled backup). Day-to-day operations stay delegated to COMPANY_ADMIN; OWNER's core powers = view the audit + ultimate authority.
+
+### 132.6 — Defense-in-depth layers (all must operate together)
+
+| Layer | Guarantee | Status today |
+|---|---|---|
+| **Append-only audit via DB trigger** | No one (not even an admin) can DELETE/UPDATE an audit row | ✅ exists (Pitfall #22) — `audit_logs` is trigger-protected |
+| **Perpetrator can't see or disable logging** | Sensitive actions are always logged, silently | ⏳ to build (visibility gating + no kill-switch) |
+| **old→new diff on sensitive fields** | Proves "address/hours changed from X to Y" | ⏳ GAP — `PATCH /projects/:id` logs `new_values: req.body` only, NO `old_values` (lib/audit.js *supports* old_values; the route just doesn't pass it) |
+| **Permission grant itself audited (+ expiry on temporary grants)** | Exposes "B granted A edit rights" | ⏳ to build (no grant UI/endpoint/audit yet) |
+| **Allowance computed from a SNAPSHOT of project location at assignment time** | A later address edit cannot retroactively inflate past allowances — fraud becomes structurally impossible, not just detectable | ⏳ to build (today allowance reads live project lat/lng) |
+| **Second audit copy held at Constrai parent (out of tenant reach)** | Even a fully-compromised tenant can't erase history — it lives outside the company | ⏳ to build (`audit_logs` has `company_id`; cross-tenant SUPER_ADMIN view + out-of-reach copy not built) |
+
+### 132.7 — Sensitive-field scope (the "high-risk" set that gets full diff + immutable log)
+
+Project site_address / site_lat / site_lng / ccq_sector; assignment shift_start / shift_end / start_date / end_date / project reassignment; attendance time edits; any allowance- or pay-affecting field; **every permission grant/revoke**. Ordinary edits (e.g. a project name typo fix) need normal audit; these high-risk fields need the full prevention+detection stack.
+
+### 132.8 — Implementation order when the Security phase starts (proposed, not locked)
+
+1. **Prevention foundation first:** allowance snapshot at assignment time + old→new diff on the sensitive-field set. (Closes the vector even before the OWNER UI exists.)
+2. **OWNER role** (Constrai-provisioned, separation-of-duties) + the owner-only audit viewer.
+3. **Per-user permission grants UI/endpoints** (model A) with grant/revoke fully audited + optional expiry — shipped ONLY together with #1/#2, never before (don't open the flexibility before the detection is in place).
+4. **Cross-tenant Constrai audit** (out-of-reach second copy + SUPER_ADMIN global view).
+
+**Status:** design only. No code, no migration. Revisit at the Security phase; reference from the program-overview walkthrough (§129.9 folds in here).
