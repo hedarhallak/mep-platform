@@ -1,7 +1,7 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: June 4, 2026 (session 4 part 4) — **§131.12-14 Assignments fixes + Surplus→Material Returns + §132 anti-tamper SPEC + §133 SUPER_ADMIN session hardening (3 layers) + §134 program overview (`PROGRAM_OVERVIEW.md`) + demo-polish fixes — all LIVE.**
+> Last updated: June 4, 2026 (session 4 — full day, 12 PRs #328-#339, all LIVE) — **§131.12-14 Assignments fixes + Surplus→Material Returns + §132 anti-tamper SPEC + §133 SUPER_ADMIN session hardening (3 layers) + §134 program overview (`PROGRAM_OVERVIEW.md`) + demo-polish + Settings page + §135 project-edit audit diff.**
 > 📄 **`PROGRAM_OVERVIEW.md`** is the new conference-readiness map (every menu/role/feature + status). §134 fixed Reports route guard + Tools/Surplus foreman dropdown + Permissions read-only hint.
 > ⏳ **2 items need Hedar's input** (not code-blockable): Invoice PDF logo + Constrai bank/remittance details (needs the assets), Expense approver model (§129.9 → §132 OWNER). (Settings page = ✅ BUILT §134.4 — real shift+contact page, `routes/company.js`.)
 > ⚠️ NOTE: the June 4 closeout PR (#316) was never merged (Pitfall #66) — Sections 129-131 (PRs #310-#326) were re-recorded in the June 5 update; sections 131.12-131.13 added June 4 session 4 (PR #328).
@@ -139,9 +139,13 @@
    - Latest section is **131** (assignments redesign Phase 1: 131.1 verdict + CCQ allowance economics, 131.2 phases, 131.3-4 backend + rates-table correction, 131.5 wizard frontend, 131.6 tab restructure, 131.7 REPEAT skips Q3, 131.8 pinned footer, 131.9 no unsolicited banners, 131.10 viewport cap, 131.11 session close + Pitfalls #66/#67). 130 = merge decision + auto-confirm fixes. 129 = Emergency Purchase + DO Spaces. 128/127 = Tools/Surplus.
 3. **Echo this exact line** as the first line of your reply:
    ```
-   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md §131.13, prod stable, §131.12 + §131.13 LIVE, التسلسل: باقي smokes ← النظرة العامة ← Crews Phase 2)
+   (محادثة استكمال — قرأت HANDOFF.md + DECISIONS.md §132-135, prod stable، النظرة العامة خلصت + بلّشنا §132 الأمني)
    ```
-4. **Open with the agreed order** (no need to ask): remaining URGENT FIRST CHECK browser smokes (Pattern B login hop, admin Branding, Subscription page, Billing page, admin apply-loop pages — Hedar already did prod-health/SQL/gh + wizard + list smokes June 4) → Hedar's full program overview/walkthrough (§129.9 approver revisit belongs here) → Assignments Phase 2 CREWS (§131.2 — grep first, Pitfall #62, one architectural question at a time: fixed crews vs per-day composition).
+4. **Open by asking Hedar to pick the next track** — the program overview is DONE (`PROGRAM_OVERVIEW.md`), all 15 tenant menus live. Candidates, in rough priority:
+   - **§132 anti-tamper program (continue)** — next piece per §132.8: extend the §135 old→new audit-diff pattern to the rest of the sensitive-field set (attendance time edits, assignment shift/date/project edits). Then the bigger builds: OWNER role (Constrai-provisioned, separation-of-duties) + per-user permission grants UI (audited) + allowance-snapshot-at-assignment + cross-tenant Constrai audit. **These need architectural decisions — one focused question at a time (Section 8.9).**
+   - **2 items waiting on Hedar:** invoice PDF logo + Constrai bank/remittance details (needs assets); expense approver model (§129.9 → folds into §132 OWNER).
+   - **Assignments Phase 2 — CREWS** (§131.2): crews table + wizard crews-or-individuals. grep first (Pitfall #62), one architectural question (fixed crews vs per-day composition).
+   - **Server-side session hardening** (§133 remaining): idle + absolute-cap on `/refresh`.
 
 ---
 
@@ -170,8 +174,8 @@ Or pick a backlog item (logo + bank details on the invoice PDF; MEP→ENTERPRISE
 | Server SSH | `ssh root@143.110.218.84` (Ubuntu 24.04) |
 | Backend | Node.js + Express + Postgres 16, pm2 at `/var/www/mep`. invite-employee reads from `subscriptions.subscribed_seats`. GET /super/companies/:id LEFT JOINs subscriptions. 6 new SUPER_ADMIN billing endpoints live (training quotes / custom demands / payments / extend-trial / apply-change). |
 | Frontend | React + Vite + Tailwind v4. CompanyBranding.jsx shows bracket + per-seat price (Section 117 refactor). Customer-facing subscription UI = Phase 6-D-5 (next). |
-| Latest deployed to prod | **§131.12 silent-skip fix (PR #328) — June 4 evening, smoked ✅.** Before it: Assignments redesign Phase 1 (PRs #317-#326), Expenses menu + DO Spaces (June 3-4), Tools + Surplus (June 2). |
-| Last merged to main | **PR #328** (already_assigned rows + assignments_skipped, §131.12 + docs). Before: #326 (banner removal + pinned footer). Session arc: #317-#326. OPEN: Dependabot #297/#298/#299 (parked, green). |
+| Latest deployed to prod | **§135 project-edit audit diff (PR #339) — June 4, backend restart.** Full June-4 arc all LIVE: #328 (assignments skip), #330 (list LEFT JOIN), #331 (date off-by-one), #332 (Material Returns rename), #333 (§132 spec docs), #334-#336 (§133 SA security ×3), #337 (§134 demo polish), #338 (Settings page), #339 (project audit diff). |
+| Last merged to main | **PR #339**. OPEN: Dependabot #297/#298/#299 (parked, green). |
 | Prod DB safety net | `idle_in_transaction_session_timeout = '30s'` on `mepuser_super` + `mepuser` (ALTER ROLE, persists). **Server pending kernel reboot** — verify `pm2-root.service` first (Pitfall #32). |
 | Prod env / ops | `INVOICE_EMAIL_ENABLED=true`, `TRIAL_WARN_DAYS=3`, **6 `DO_SPACES_*` vars (Spaces ACTIVE: `constrai-tenant-assets` TOR1+CDN)** in `/var/www/mep/.env`. Chrome libs for puppeteer. **Latest migration = 026** (025 = expense_claims grants, 026 = approval COMPANY_ADMIN-only, 024 = tool tracking — all applied). `git config --global core.editor notepad` on Hedar's machine (vim trap closed). |
 | TOTP secret | Re-enrolled June 1 under the rotated `TOTP_ENCRYPTION_KEY`. Login = PIN → 6-digit code (no QR). Recovery (lost phone): Section 121.6 SQL reset. |
