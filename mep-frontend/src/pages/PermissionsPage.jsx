@@ -395,6 +395,15 @@ export default function PermissionsPage() {
               </div>
             </div>
 
+            {/* Section 134: explain WHY a role is read-only — you can only
+                edit roles ranked below your own (privilege-escalation guard).
+                Without this the page "looks broken" on your own role. */}
+            {!isEditable && (
+              <div className="px-5 py-2 bg-amber-500/5 border-b border-amber-500/20 text-[11px] text-amber-400/80">
+                {t('permissions.matrix.readOnlyHint')}
+              </div>
+            )}
+
             {loading ? (
               <div className="flex items-center justify-center py-20 text-slate-500 text-sm">
                 <RefreshCw className="w-5 h-5 animate-spin mr-2" />

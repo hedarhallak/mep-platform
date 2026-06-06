@@ -22,6 +22,7 @@ const ASSET_STATUS_STYLE = {
 // ── Request tab ───────────────────────────────────────────────
 function RequestTab({ onRequested }) {
   const { t } = useTranslation()
+  const [todayAssignment, setTodayAssignment] = useState(null)
   const [projects, setProjects] = useState([])
   const [selectedProj, setSelectedProj] = useState('')
   const [trade, setTrade] = useState('')
@@ -33,13 +34,26 @@ function RequestTab({ onRequested }) {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    api.get('/projects?status=ACTIVE')
+    // Section 129.5 pattern: a foreman has no projects.view, so load the
+    // today-assignment first → that project is used directly (no dropdown).
+    // Fallback for manager roles: the active projects list.
+    api.get('/assignments/my-today')
       .then(r => {
-        const list = r.data.projects || r.data.rows || []
-        setProjects(list)
-        if (list.length) setSelectedProj(String(list[0].id))
+        const asgn = r.data.assignment
+        if (asgn) {
+          setTodayAssignment(asgn)
+          setSelectedProj(String(asgn.project_id))
+        } else {
+          api.get('/projects?status=ACTIVE')
+            .then(pr => {
+              const list = pr.data.projects || pr.data.rows || []
+              setProjects(list)
+              if (list.length) setSelectedProj(String(list[0].id))
+            })
+            .catch(e => console.error('Failed to load projects:', e))
+        }
       })
-      .catch(e => console.error('Failed to load projects:', e))
+      .catch(e => console.error('Failed to load today assignment:', e))
   }, [])
 
   // Reload catalog when the trade filter changes.
@@ -78,16 +92,28 @@ function RequestTab({ onRequested }) {
 
   return (
     <div className="space-y-5 max-w-xl">
-      {/* Project */}
+      {/* Project — fixed today-assignment card for foremen, dropdown for managers (§129.5) */}
       <div>
         <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">{t('tools.request.project')}</label>
-        <select value={selectedProj} onChange={e => setSelectedProj(e.target.value)}
-          className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-light">
-          <option value="">{t('tools.request.selectProject')}</option>
-          {projects.map(p => (
-            <option key={p.id} value={p.id}>{p.project_code}{p.project_name ? ` — ${p.project_name}` : ''}</option>
-          ))}
-        </select>
+        {todayAssignment ? (
+          <div className="flex items-center gap-3 px-4 py-3 bg-primary-pale border border-primary-pale rounded-xl max-w-sm">
+            <div className="w-2 h-2 rounded-full bg-primary-light flex-shrink-0" />
+            <div>
+              <div className="text-sm font-bold text-primary-dark">
+                {todayAssignment.project_code}{todayAssignment.project_name ? ` — ${todayAssignment.project_name}` : ''}
+              </div>
+              <div className="text-[10px] text-primary-light mt-0.5">{t('tools.request.todayAssignment')}</div>
+            </div>
+          </div>
+        ) : (
+          <select value={selectedProj} onChange={e => setSelectedProj(e.target.value)}
+            className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-light">
+            <option value="">{t('tools.request.selectProject')}</option>
+            {projects.map(p => (
+              <option key={p.id} value={p.id}>{p.project_code}{p.project_name ? ` — ${p.project_name}` : ''}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       {/* Trade filter (smart filter by specialty) */}

@@ -15746,3 +15746,28 @@ Hedar's next refinement: *"if I have multiple tabs and close the super-admin tab
 **Behavior delivered:** close the admin tab (or open a fresh/new tab, or after an idle-logout) → no per-tab marker → `/login` → **PIN + TOTP**. **Reload (F5) stays signed in** (sessionStorage survives reload). Intentional tradeoff: a SECOND simultaneous admin tab needs its own login; the guard deliberately does NOT clear the shared cookie, so it never clobbers a sibling tab that legitimately holds a session.
 
 **The three §133 layers together:** ephemeral cookies (browser close) + idle auto-logout (15-min unattended) + per-tab gate (tab close / new tab). Server-side idle + absolute-cap enforcement remains the Security-phase hardening on top.
+
+---
+
+## 134. Section 134 — June 4, 2026 — Program overview (conference-readiness review) + quick demo-polish fixes
+
+> The "full program overview" track (priority item #2). Produced `PROGRAM_OVERVIEW.md` — a structured map of every tenant menu, role, admin feature, and cross-cutting system, each with a status + conference-readiness flag. Built by surveying the codebase (App.jsx routes, AppLayout nav, routes/ dir, roles). The survey surfaced four real findings; the concrete ones were fixed the same session.
+
+### 134.1 — Findings from the survey
+
+1. **Settings page is a placeholder** (`/settings` renders "Settings — Coming soon"). ⏳ product decision (hide for demo vs build minimal) — Hedar's call.
+2. **Permissions page is role-only + "looks uneditable"** — the matrix defaults to the viewer's own role, which is read-only by the rank-lock (`callerRank[me] < callerRank[selected]`). Looked broken. The per-USER grant UI is genuinely missing (the §132 build).
+3. **Reports route had no `RequirePermission` wrapper** — the only sibling without one. Page self-gates internally + backend authorizes data, so not a leak, but inconsistent.
+4. **Tools + Surplus foreman project-dropdown** — both loaded `/projects?status=ACTIVE` directly (needs `projects.view`, which FOREMAN lacks → empty dropdown). The exact latent bug flagged in §129.5 (ExpensesPage was fixed then, these two weren't).
+
+### 134.2 — Quick fixes shipped (frontend-only)
+
+- **Reports route** — wrapped in `RequirePermission anyOf [reports.view, reports.view_self]`.
+- **Tools + Surplus** — applied the §129.5 my-today pattern: `GET /assignments/my-today` first → foreman's today-project shown as a fixed card (no dropdown, no `projects.view` needed); `/projects?status=ACTIVE` only as the manager-role fallback. i18n `tools.request.todayAssignment` + `surplus.declare.todayAssignment` (EN+FR).
+- **Permissions page** — added `permissions.matrix.readOnlyHint` (EN+FR): an amber line under the matrix header when the selected role is read-only, explaining "you can only edit roles ranked below your own". No longer looks broken in a live demo.
+
+### 134.3 — Deferred (need Hedar input / larger builds)
+
+- Settings: hide vs build (decision). Invoice PDF: logo + bank/remittance details (needs the logo file + Constrai bank info). Expense approver model (§129.9 → §132 OWNER). Per-user permission grants UI + the rest of the §132 anti-tamper program.
+
+`PROGRAM_OVERVIEW.md` is the living artifact — status flags update as items ship.

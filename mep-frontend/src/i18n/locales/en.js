@@ -68,6 +68,7 @@ export default {
     request: {
       project: 'Project',
       selectProject: 'Select a project',
+      todayAssignment: "Today's assignment",
       trade: 'Filter by trade',
       allTrades: 'All',
       tool: 'Tool',
@@ -146,6 +147,7 @@ export default {
     declare: {
       project: 'Project',
       selectProject: 'Select a project',
+      todayAssignment: "Today's assignment",
       items: 'Surplus items',
       itemNamePlaceholder: 'Item name',
       qtyPlaceholder: 'Qty',
@@ -1234,6 +1236,7 @@ export default {
 
     matrix: {
       readOnly: 'Read-only',
+      readOnlyHint: 'You can only edit roles ranked below your own — this prevents anyone from raising their own access.',
       toggleColumn: 'Toggle column:',
       module: 'Module',
       all: 'All',
