@@ -10,7 +10,10 @@
  * the new two-step flow. When TOTP_ENFORCE is unset / 'false', we keep the
  * original role-only behavior so the rollout is reversible by env var.
  */
-module.exports = function requireSuperAdmin(req, res, next) {
+const { touchActivity } = require('../lib/session_policy');
+const { pool } = require('../db');
+
+module.exports = async function requireSuperAdmin(req, res, next) {
   const role = req.user?.role;
   if (role !== 'SUPER_ADMIN') {
     return res.status(403).json({ ok: false, error: 'SUPER_ADMIN_REQUIRED' });
@@ -24,5 +27,9 @@ module.exports = function requireSuperAdmin(req, res, next) {
       });
     }
   }
+  // §133: stamp real activity (NOT done on /refresh, so idle reflects true
+  // use → an active admin is never falsely idle-timed-out). Best-effort.
+  const refreshCookie = req.cookies && req.cookies.refresh_token;
+  if (refreshCookie) await touchActivity(pool, refreshCookie);
   return next();
 };

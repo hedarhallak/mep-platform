@@ -345,18 +345,26 @@ export default function AdminLogin() {
           <p className="text-sm text-slate-400">Sign in to the internal portal</p>
         </div>
 
-        {/* Section 133.2 — explain an idle auto-logout redirect. */}
+        {/* §133 — explain why the session ended: inactivity (client 15-min
+            idle OR the server-side idle cap) or the absolute session cap. */}
         {(() => {
+          let reason = null
           try {
-            return new URLSearchParams(window.location.search).get('reason') === 'idle'
+            reason = new URLSearchParams(window.location.search).get('reason')
           } catch {
-            return false
+            reason = null
           }
-        })() && (
-          <div className="mb-4 px-3 py-2 bg-amber-500/10 border border-amber-500/30 rounded text-xs text-amber-300 text-center">
-            Your session ended after 15 minutes of inactivity. Please sign in again.
-          </div>
-        )}
+          if (reason !== 'idle' && reason !== 'expired') return null
+          const msg =
+            reason === 'expired'
+              ? 'Your session reached its time limit. Please sign in again.'
+              : 'Your session ended after a period of inactivity. Please sign in again.'
+          return (
+            <div className="mb-4 px-3 py-2 bg-amber-500/10 border border-amber-500/30 rounded text-xs text-amber-300 text-center">
+              {msg}
+            </div>
+          )
+        })()}
 
         <form
           onSubmit={handleSubmit}

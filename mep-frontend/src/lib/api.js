@@ -141,7 +141,7 @@ async function refreshTokenOnce() {
   return data.token || null
 }
 
-function clearAuthAndRedirect() {
+function clearAuthAndRedirect(reason) {
   try {
     localStorage.removeItem('mep_token')
     localStorage.removeItem('mep_refresh_token')
@@ -160,7 +160,7 @@ function clearAuthAndRedirect() {
     const path = window.location.pathname || ''
     const onLoginScreen = path === '/login' || path.startsWith('/login/') || path === '/admin/login' || path.startsWith('/admin/login/')
     if (!onLoginScreen) {
-      window.location.href = '/login'
+      window.location.href = reason ? `/login?reason=${encodeURIComponent(reason)}` : '/login'
     }
   }
 }
@@ -263,7 +263,16 @@ async function apiFetch(method, url, body, options = {}) {
       return apiFetch(method, url, body, { ...options, _retry: true, headers: retryHeaders })
     } catch (refreshErr) {
       processQueue(refreshErr, null)
-      clearAuthAndRedirect()
+      // §133: a server-side SUPER_ADMIN session cap explains WHY the session
+      // ended — surface it on the login screen so the admin isn't confused.
+      const code = refreshErr?.response?.data?.error
+      const reason =
+        code === 'SESSION_IDLE_TIMEOUT'
+          ? 'idle'
+          : code === 'SESSION_ABSOLUTE_TIMEOUT'
+            ? 'expired'
+            : null
+      clearAuthAndRedirect(reason)
       throw refreshErr
     } finally {
       isRefreshing = false
