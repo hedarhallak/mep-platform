@@ -34,7 +34,9 @@ async function run() {
 
     const files = fs
       .readdirSync(MIGRATIONS_DIR)
-      .filter((f) => f.endsWith('.sql'))
+      // Forward migrations only — `.rollback.sql` files are revert scripts and
+      // must never be auto-applied (they DROP things). §139.
+      .filter((f) => f.endsWith('.sql') && !f.endsWith('.rollback.sql'))
       .sort();
 
     const pending = files.filter((f) => !executedSet.has(f));

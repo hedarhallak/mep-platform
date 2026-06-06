@@ -15897,3 +15897,23 @@ Bugs that actually surfaced and were fixed only because something forced them in
 5. **Law 25 / privacy posture** (G4) — employee + payroll-adjacent data in Quebec.
 
 These items are mirrored into HANDOFF.md (backlog) so they govern the post-conference Security/Hygiene tracks.
+
+---
+
+## 139. Section 139 — June 6, 2026 — Productivity automation (free): one-command PR + CD + one-command migrations
+
+> Hedar asked how to ship more per hour without a second person. The bottleneck is NOT thinking/coding (fast) — it's the **manual ritual** around each PR (~12 pastes: branch/add/commit/push/PR/merge + ssh/pull/migrate/build/restart) plus CI waits. All free. Full how-to in `DEV_AUTOMATION.md`.
+
+### 139.1 — What shipped
+
+1. **`ship.ps1`** — one-line PR: `ship -Message "…" -Files a,b` → branch off `origin/main` + stage only-named-files (Pitfall #29) + commit + push + `gh pr create` + squash auto-merge. Collapses ~7 pastes → 1.
+2. **`.github/workflows/deploy.yml`** — CD. On **CI success on main**, SSH-runs the existing `scripts/deploy.sh` (code-only: pull → change-detect → frontend build → pm2 restart → health check). **Inert until 3 secrets are set** (`DEPLOY_HOST/USER/SSH_KEY`) — a guard step skips the SSH step when `DEPLOY_HOST` is empty, so merging the file changes nothing until Hedar opts in. `workflow_run`-triggered, so it only activates once on `main`. Code-only by design — migrations stay explicit.
+3. **`scripts/migrate.js` patch** — skip `*.rollback.sql` (revert scripts must never auto-apply). + **`scripts/postgres/backfill_schema_migrations.sql`** (one-time): records the 29 already-applied forward migrations (000–028) into `schema_migrations` so `npm run migrate` sees them as done and applies only NEW (029+) ones. Prereq before relying on `npm run migrate` (prod migrations were applied manually, never recorded).
+4. **`DEV_AUTOMATION.md`** — the operator guide (ship usage, CD secret setup with a DEDICATED revocable key, migration flow).
+
+### 139.2 — Decisions + safety
+
+- **deploy.sh untouched** (battle-tested) — the CD calls it, doesn't reinvent it.
+- **CD deploys CODE only, never migrations** — auto-applying schema changes to prod unattended is too risky for an AI-authored codebase; migrations stay a deliberate one-command step. Rule: **additive migrations (`ADD COLUMN`) applied on prod BEFORE merging** (old code ignores new columns → no broken window), then merge → CD ships the code that uses them.
+- **CD security is itself a G4 review item (§138):** it stores a prod-reaching key in GitHub secrets + auto-deploys on green CI. Mitigations documented: CI is the gate, `deploy.sh` has a health check, use a dedicated revocable key. Hedar to enable when ready.
+- **Velocity pairs with the incoming engineer review, not instead of it** — faster shipping + AI-authored + no reviewer amplifies G7; the 2-engineer review (2–3 weeks out) is the safety valve.
