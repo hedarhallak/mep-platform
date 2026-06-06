@@ -23,6 +23,7 @@ const router = require('express').Router();
 const crypto = require('crypto');
 const auth = require('../middleware/auth');
 const { can } = require('../middleware/permissions');
+const { canAssignRole } = require('../middleware/roles');
 const { sendEmail } = require('../lib/email');
 
 router.use(auth);
@@ -158,6 +159,11 @@ router.post('/', can('employees.invite'), async (req, res) => {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
       return res.status(400).json({ ok: false, error: 'INVALID_EMAIL' });
     if (!role) return res.status(400).json({ ok: false, error: 'ROLE_REQUIRED' });
+    // §132 OWNER guard (DECISIONS §140): only Constrai (SUPER_ADMIN) may invite
+    // an OWNER; an in-tenant admin cannot mint one.
+    if (!canAssignRole(req.user.role, role)) {
+      return res.status(403).json({ ok: false, error: 'OWNER_ROLE_RESTRICTED' });
+    }
 
     // ── Check email not already used in this company ──────────
     const emailExists = await req.db.query(

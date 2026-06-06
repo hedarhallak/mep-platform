@@ -13,7 +13,7 @@ const crypto = require('crypto');
 // EMAIL_PROVIDER=resend). See lib/email.js#getMailClient.
 const sgMail = require('../lib/email').getMailClient();
 const { can, logAudit } = require('../middleware/permissions');
-const { normalizeRole } = require('../middleware/roles');
+const { normalizeRole, canAssignRole } = require('../middleware/roles');
 const { escapeHtml } = require('../lib/email');
 
 // Section 89-C/5 (Phase 4 Stage 2): in-handler queries migrated to req.db
@@ -39,6 +39,11 @@ const ALLOWED_ROLES = [
 
 const ROLE_RANK = {
   SUPER_ADMIN: 0,
+  // §132 OWNER ranks just below SUPER_ADMIN so the existing rank checks block
+  // any in-tenant actor from altering/demoting an OWNER (targetRank would
+  // otherwise default to 99 = unprotected). The explicit canAssignRole guard
+  // below is the primary protection; this keeps the rank map consistent. §140.
+  OWNER: 1,
   IT_ADMIN: 1,
   COMPANY_ADMIN: 2,
   TRADE_PROJECT_MANAGER: 3,
@@ -120,6 +125,12 @@ router.patch('/:id/role', can('settings.user_management'), async (req, res) => {
     const target = rows[0];
     if (Number(target.company_id) !== Number(companyId)) {
       return res.status(403).json({ ok: false, error: 'CROSS_COMPANY' });
+    }
+
+    // §132 OWNER guard (DECISIONS §140): no in-tenant actor may assign OWNER,
+    // nor alter a user who currently IS an OWNER — only Constrai (SUPER_ADMIN).
+    if (!canAssignRole(req.user.role, newRole, target.role)) {
+      return res.status(403).json({ ok: false, error: 'OWNER_ROLE_RESTRICTED' });
     }
 
     // Rank check â€” cannot change role of someone equal or higher

@@ -46,6 +46,7 @@ const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
 const { can } = require('../middleware/permissions');
+const { canAssignRole } = require('../middleware/roles');
 
 router.use(auth);
 
@@ -396,6 +397,11 @@ router.patch('/:id', can('employees.edit'), async (req, res) => {
 
     // ── Sync role to app_users if changed ──
     if (employee_profile_type !== undefined && existing.user_id) {
+      // §132 OWNER guard (DECISIONS §140): block in-tenant assignment of OWNER
+      // AND any in-tenant change to a user who currently IS an OWNER.
+      if (!canAssignRole(req.user.role, employee_profile_type, existing.current_app_role)) {
+        return res.status(403).json({ ok: false, error: 'OWNER_ROLE_RESTRICTED' });
+      }
       await req.db.query(`UPDATE public.app_users SET role = $1 WHERE id = $2`, [
         employee_profile_type,
         existing.user_id,
