@@ -464,6 +464,7 @@ Prod `/var/www/mep/.env` is in sync. `DO_SPACES_*` env vars not yet set (deferre
 - **ALWAYS delete local branch after merge** — `--delete-branch` only removes the remote.
 - **Don't put `"تم"` inside PowerShell blocks** — Hedar types it manually.
 - **File-based log convention for large output** — `Out-File -Encoding utf8`.
+- **Productivity automation (§139, `DEV_AUTOMATION.md`):** `ship.ps1` = one-line PR (`.\ship.ps1 -Message "…" -Files a,b`); CD (`.github/workflows/deploy.yml`) auto-runs `scripts/deploy.sh` on green CI on main (INERT until `DEPLOY_HOST/USER/SSH_KEY` secrets added — code-only, NOT migrations); migrations = `npm run migrate` (one command) AFTER the one-time `scripts/postgres/backfill_schema_migrations.sql`. Apply additive migrations on prod BEFORE merging.
 - **DECISIONS.md is the archive**, not the entry point.
 - **Verify current branch before commit/push** during parallel work (Pitfall #36).
 - **bigint vs Number in test assertions** — compare via `String()` on both sides (Pitfall #37).
