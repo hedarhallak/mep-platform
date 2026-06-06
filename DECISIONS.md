@@ -15731,3 +15731,18 @@ After verifying the ephemeral cookies in DevTools (both `access_token` + `refres
 **Why client-side is appropriate here:** the threat is the *unattended desk* — a passerby using the legit user's open, logged-in browser. After 15 min the JS ends the session and they hit a login screen. An attacker sophisticated enough to bypass the JS already controls the browser (and thus the cookie) — a different threat that client-side idle was never meant to stop.
 
 **Left for the Security phase (NOT done — the robust layer):** SERVER-side idle + absolute-session-cap enforcement (reject `/refresh` when last-activity gap > idle window or session age > absolute max), so the guarantee doesn't depend on client JS. Tracked under §132 / §133. Deploy for 133.4 is **frontend rebuild only**.
+
+### 133.5 — Follow-up: per-TAB session gate (close the admin tab → reopening forces login + TOTP)
+
+Hedar's next refinement: *"if I have multiple tabs and close the super-admin tab, can I make it un-reopenable without login + verification?"* Right instinct — but the auth cookie is **browser-wide**, so closing one tab can't clear it. The standard mechanism for per-tab session lifetime is **`sessionStorage`** (per-tab, wiped on tab close, NOT inherited by a new tab).
+
+**Shipped (frontend-only):**
+- `src/admin/RequireAdminTab.jsx` — exports a route-guard component + `markAdminTabSession()` / `clearAdminTabSession()` / `hasAdminTabSession()`. The guard redirects to `/login` whenever the per-tab marker (`sessionStorage['admin_tab_session']`) is absent. Fails OPEN if sessionStorage is unavailable (never permanently locks the operator out — the cookie + TOTP remain the real auth; this is UX hardening).
+- `AdminApp.jsx` — every protected route wrapped in `<RequireAdminTab>`; `/login` is NOT gated.
+- `AdminLogin.jsx` — `markAdminTabSession()` set at both success paths (PIN-only and the TOTP-finish path SUPER_ADMIN actually uses).
+- `AdminLogoutButton.jsx` + `AdminIdleGuard.jsx` — `clearAdminTabSession()` on logout / idle-logout.
+- Vitest `RequireAdminTab.test.jsx`: redirects without the marker; renders with it; mark/clear round-trip.
+
+**Behavior delivered:** close the admin tab (or open a fresh/new tab, or after an idle-logout) → no per-tab marker → `/login` → **PIN + TOTP**. **Reload (F5) stays signed in** (sessionStorage survives reload). Intentional tradeoff: a SECOND simultaneous admin tab needs its own login; the guard deliberately does NOT clear the shared cookie, so it never clobbers a sibling tab that legitimately holds a session.
+
+**The three §133 layers together:** ephemeral cookies (browser close) + idle auto-logout (15-min unattended) + per-tab gate (tab close / new tab). Server-side idle + absolute-cap enforcement remains the Security-phase hardening on top.

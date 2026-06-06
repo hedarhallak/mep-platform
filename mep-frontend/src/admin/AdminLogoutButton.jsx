@@ -16,6 +16,7 @@
 import { useState } from 'react'
 import { LogOut } from 'lucide-react'
 import api from '../lib/api'
+import { clearAdminTabSession } from './RequireAdminTab.jsx'
 
 export default function AdminLogoutButton({ className = '' }) {
   const [submitting, setSubmitting] = useState(false)
@@ -33,6 +34,7 @@ export default function AdminLogoutButton({ className = '' }) {
         localStorage.removeItem('mep_token')
         localStorage.removeItem('mep_refresh_token')
       } catch (_e) { /* private mode, ignore */ }
+      clearAdminTabSession() // Section 133.5 — drop the per-tab marker
       window.location.assign('/login')
     }
   }
