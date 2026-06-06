@@ -27,6 +27,7 @@ import TrainingQuotesPage from './admin/TrainingQuotesPage.jsx'
 import CustomDemandsPage from './admin/CustomDemandsPage.jsx'
 import PaymentsPage from './admin/PaymentsPage.jsx'
 import AdminIdleGuard from './admin/AdminIdleGuard.jsx'
+import RequireAdminTab from './admin/RequireAdminTab.jsx'
 
 function NotFound() {
   const { pathname } = useLocation()
@@ -51,18 +52,21 @@ export default function AdminApp() {
       {/* Section 133.2 — idle auto-logout for the SUPER_ADMIN portal. */}
       <AdminIdleGuard />
       <Routes>
-        <Route path="/" element={<CompaniesList />} />
-        <Route path="/companies/new" element={<CreateCompany />} />
+        {/* Section 133.5 — every protected route is gated on a per-tab
+            sessionStorage marker; a reopened/new tab (no marker) is sent to
+            /login for a fresh PIN + TOTP. /login itself is NOT gated. */}
+        <Route path="/" element={<RequireAdminTab><CompaniesList /></RequireAdminTab>} />
+        <Route path="/companies/new" element={<RequireAdminTab><CreateCompany /></RequireAdminTab>} />
         {/* Section 113 / Phase 6-D-3 frontend — per-tenant branding + seat usage page. */}
-        <Route path="/companies/:id/branding" element={<CompanyBranding />} />
+        <Route path="/companies/:id/branding" element={<RequireAdminTab><CompanyBranding /></RequireAdminTab>} />
         {/* Section 120 / Phase 6-D-6 PR 1 — pending customer subscription change inbox. */}
-        <Route path="/subscription-requests" element={<SubscriptionRequestsPage />} />
+        <Route path="/subscription-requests" element={<RequireAdminTab><SubscriptionRequestsPage /></RequireAdminTab>} />
         {/* Section 120 / Phase 6-D-6 PR 2 — cross-company training quote management. */}
-        <Route path="/training-quotes" element={<TrainingQuotesPage />} />
+        <Route path="/training-quotes" element={<RequireAdminTab><TrainingQuotesPage /></RequireAdminTab>} />
         {/* Section 122 / Phase 6-D-6 PR 3 — cross-company custom demand management. */}
-        <Route path="/custom-demands" element={<CustomDemandsPage />} />
+        <Route path="/custom-demands" element={<RequireAdminTab><CustomDemandsPage /></RequireAdminTab>} />
         {/* Section 123 / Phase 6-D-6 PR 4 — cross-company payments management. */}
-        <Route path="/payments" element={<PaymentsPage />} />
+        <Route path="/payments" element={<RequireAdminTab><PaymentsPage /></RequireAdminTab>} />
         <Route path="/login" element={<AdminLogin />} />
         <Route path="*" element={<NotFound />} />
       </Routes>

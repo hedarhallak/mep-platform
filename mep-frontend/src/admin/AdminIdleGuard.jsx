@@ -19,6 +19,7 @@
 import { useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import api from '../lib/api'
+import { clearAdminTabSession } from './RequireAdminTab.jsx'
 
 const IDLE_MS = 15 * 60 * 1000 // 15 minutes of inactivity → sign out
 const REARM_THROTTLE_MS = 5000 // don't re-arm the timer more than once / 5s
@@ -45,6 +46,7 @@ export default function AdminIdleGuard() {
       } catch {
         /* private mode — ignore */
       }
+      clearAdminTabSession() // Section 133.5 — drop the per-tab marker
       // reason=idle lets AdminLogin explain why the user landed here.
       window.location.assign('/login?reason=idle')
     }

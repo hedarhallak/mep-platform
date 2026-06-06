@@ -21,6 +21,7 @@
 
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { markAdminTabSession } from './RequireAdminTab.jsx'
 
 // Phase 6-D-2 (Section 109, May 15, 2026): remember-me checkbox.
 // Separate localStorage key from the tenant LoginPage so SUPER_ADMIN
@@ -175,6 +176,9 @@ export default function AdminLogin() {
         return
       }
 
+      // Section 133.5: mark THIS tab as having completed a login so the
+      // per-tab gate (RequireAdminTab) lets it through.
+      markAdminTabSession()
       navigate('/', { replace: true })
     } catch (networkErr) {
       setError(networkErr.message || 'Network error')
@@ -222,6 +226,9 @@ export default function AdminLogin() {
           localStorage.removeItem('mep_refresh_token')
         }
       } catch { /* private mode */ }
+      // Section 133.5: this is the path SUPER_ADMIN actually takes (TOTP
+      // enforced) — mark the tab as authenticated for the per-tab gate.
+      markAdminTabSession()
       navigate('/', { replace: true })
     } catch (networkErr) {
       setError(networkErr.message || 'Network error')
