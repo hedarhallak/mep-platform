@@ -39,7 +39,7 @@ export default {
     taskRequest: 'Task Request',
     materialRequest: 'Material Request',
     purchaseOrders: 'Purchase Orders',
-    surplus: 'Surplus',
+    surplus: 'Material Returns',
     tools: 'Tools',
     expenses: 'Expenses',
     myHub: 'My Hub',
@@ -137,7 +137,7 @@ export default {
   },
 
   surplus: {
-    title: 'Surplus Materials',
+    title: 'Material Returns',
     subtitle: 'Declare leftover materials and find what other sites have spare',
     tabs: {
       declare: 'Declare',

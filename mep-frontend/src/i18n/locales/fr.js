@@ -39,7 +39,7 @@ export default {
     taskRequest: 'Demande de tâche',
     materialRequest: 'Demande de matériel',
     purchaseOrders: "Bons d'achat",
-    surplus: 'Surplus',
+    surplus: 'Retours de matériel',
     tools: 'Outils',
     expenses: 'Dépenses',
     myHub: 'Mon Hub',
@@ -137,7 +137,7 @@ export default {
   },
 
   surplus: {
-    title: 'Matériel en surplus',
+    title: 'Retours de matériel',
     subtitle: 'Déclarez le matériel restant et trouvez ce que les autres chantiers ont en trop',
     tabs: {
       declare: 'Déclarer',
