@@ -13,19 +13,34 @@ import AdminIdleGuard from './AdminIdleGuard.jsx'
 
 const IDLE_MS = 15 * 60 * 1000
 
-describe('AdminIdleGuard', () => {
-  let assignSpy
+// jsdom forbids spying on window.location.assign (non-configurable). The
+// standard workaround is to redefine the whole location object as a
+// configurable mock. The component only reads location.assign; React Router
+// drives navigation through its own history, so this doesn't affect routing.
+const assign = vi.fn()
+let originalLocation
 
+describe('AdminIdleGuard', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     apiPost.mockClear()
-    assignSpy = vi.spyOn(window.location, 'assign').mockImplementation(() => {})
+    assign.mockClear()
+    originalLocation = window.location
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      writable: true,
+      value: { assign, search: '', href: '', pathname: '/' },
+    })
   })
 
   afterEach(() => {
     vi.runOnlyPendingTimers()
     vi.useRealTimers()
-    assignSpy.mockRestore()
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      writable: true,
+      value: originalLocation,
+    })
   })
 
   test('signs out after the idle window on a non-login route', async () => {
@@ -37,12 +52,12 @@ describe('AdminIdleGuard', () => {
 
     // Just before the threshold — nothing fires yet.
     await vi.advanceTimersByTimeAsync(IDLE_MS - 1000)
-    expect(assignSpy).not.toHaveBeenCalled()
+    expect(assign).not.toHaveBeenCalled()
 
     // Cross the threshold → best-effort revoke + redirect to login.
     await vi.advanceTimersByTimeAsync(2000)
     expect(apiPost).toHaveBeenCalledWith('/auth/logout', {})
-    expect(assignSpy).toHaveBeenCalledWith('/login?reason=idle')
+    expect(assign).toHaveBeenCalledWith('/login?reason=idle')
   })
 
   test('does NOT arm the idle timer on the /login route', async () => {
@@ -52,7 +67,7 @@ describe('AdminIdleGuard', () => {
       </MemoryRouter>
     )
     await vi.advanceTimersByTimeAsync(2 * IDLE_MS)
-    expect(assignSpy).not.toHaveBeenCalled()
+    expect(assign).not.toHaveBeenCalled()
     expect(apiPost).not.toHaveBeenCalled()
   })
 })
