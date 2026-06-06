@@ -15917,3 +15917,41 @@ These items are mirrored into HANDOFF.md (backlog) so they govern the post-confe
 - **CD deploys CODE only, never migrations** — auto-applying schema changes to prod unattended is too risky for an AI-authored codebase; migrations stay a deliberate one-command step. Rule: **additive migrations (`ADD COLUMN`) applied on prod BEFORE merging** (old code ignores new columns → no broken window), then merge → CD ships the code that uses them.
 - **CD security is itself a G4 review item (§138):** it stores a prod-reaching key in GitHub secrets + auto-deploys on green CI. Mitigations documented: CI is the gate, `deploy.sh` has a health check, use a dedicated revocable key. Hedar to enable when ready.
 - **Velocity pairs with the incoming engineer review, not instead of it** — faster shipping + AI-authored + no reviewer amplifies G7; the 2-engineer review (2–3 weeks out) is the safety valve.
+
+---
+
+## 140. Section 140 — June 6, 2026 — §132 OWNER role: design DECIDED + investigation map + slice plan (build next session)
+
+> Investigation + the key architectural decision are done; implementation deliberately deferred to the START of a fresh session. Reason: OWNER is a **security-critical RBAC change touching 5–6 role-assignment sites**, and an incomplete guard = a real hole (someone self-assigns OWNER). Building it rushed at the tail of a 6-PR marathon is exactly the G7 latent-bug risk (§138.3). This section is a turnkey plan so next session executes immediately.
+
+### 140.1 — DECISION (Hedar, June 6): OWNER = **superset + exclusive audit**
+
+OWNER can do **everything COMPANY_ADMIN can**, PLUS is the **only** role that may view the sensitive-edit audit. **COMPANY_ADMIN loses audit access.** This resolves §129.9 (financial/audit authority lives with OWNER; operational permission-distribution with COMPANY_ADMIN) and delivers the §132.4 separation of duties (the technical admin who distributes permissions can no longer watch themselves).
+
+### 140.2 — Role-model findings (grep-first, Pitfall #62)
+
+- **`middleware/roles.js`** — `ROLE_LEVEL` map (SUPER_ADMIN 100, IT_ADMIN 90, COMPANY_ADMIN 80, …). `normalizeRole()` + `ROLE_ALIASES`. `requireRoles()` lets SUPER_ADMIN bypass everything.
+- **Permissions are DATA-DRIVEN:** `role_permissions(role TEXT, permission_code TEXT)` PK=(role,permission_code), FK permission_code→`permissions(code)`. `middleware/permissions.js` `can()` checks `user_permissions` override → `role_permissions` (5-min cache, `invalidateCache()` after writes). SUPER_ADMIN hardcoded-passes.
+- **Audit viewing today:** `routes/permissions.js` `GET /audit` is gated by `can('settings.permissions')` — which **COMPANY_ADMIN holds**, so the technical admin currently sees the audit (the §132.4 problem). A separate `audit.view` permission also exists.
+- **Role-assignment sites (the guard must cover ALL in-tenant ones):**
+  - SUPER_ADMIN-side (OWNER allowed): `routes/admin_users.js:191` INSERT, `routes/super_admin.js:285` INSERT.
+  - In-tenant (must BLOCK OWNER): `routes/employees.js:399` UPDATE role, `routes/user_management.js:137` UPDATE role, `routes/invite_employee.js` (invite role), `routes/onboarding.js:118` / `routes/activate.js` (first-admin — confirm whether tenant- or Constrai-driven).
+
+### 140.3 — Slice plan
+
+**Slice 1 — the role + superset perms + guard (one PR):**
+1. **migration 029**: insert `OWNER` into `roles` (role_key='OWNER'); seed `role_permissions` for OWNER = `SELECT 'OWNER', permission_code FROM role_permissions WHERE role='COMPANY_ADMIN'` + `('OWNER','audit.view')`, `ON CONFLICT (role,permission_code) DO NOTHING` (FK-safe — all codes already exist). No grants needed (global table). Note: this is a SNAPSHOT of COMPANY_ADMIN perms; if those change later, re-sync.
+2. **`middleware/roles.js`**: add `OWNER: 95` to `ROLE_LEVEL` (above COMPANY_ADMIN 80 and IT_ADMIN 90, below SUPER_ADMIN 100 → only SUPER_ADMIN outranks it for the rank-lock) + docstring.
+3. **Guard** — a helper `assertAssignableRole(callerRole, targetRole)` (or inline check) in `middleware/roles.js`: reject if `normalizeRole(targetRole)==='OWNER'` and `normalizeRole(callerRole)!=='SUPER_ADMIN'`. Apply at EVERY in-tenant assignment site (employees.js, user_management.js, invite_employee.js, onboarding/activate). Also guard MODIFYING an existing OWNER user from in-tenant.
+4. **Tests**: in-tenant assign OWNER → 403; SUPER_ADMIN assign OWNER → ok; OWNER inherits a COMPANY_ADMIN permission; `invalidateCache()` after the migration is a deploy step (or cache TTL).
+   Deploy: migration 029 (additive) + backend restart.
+
+**Slice 2 — exclusive audit viewer:** new owner-only sensitive-edit audit viewer (the §135/§136 old→new diffs); switch the audit gate from `settings.permissions` to `audit.view`; ensure `audit.view` is OWNER-only (remove from COMPANY_ADMIN's role_permissions). Frontend OWNER audit page.
+
+**Slice 3 — provisioning + parent audit:** SUPER_ADMIN endpoint to provision the OWNER account at tenant activation (§132.5); log every OWNER create/transfer/disable at the Constrai parent level (cross-tenant, out of tenant reach).
+
+### 140.4 — Open sub-decisions for next session (one focused question at a time, §8.9)
+
+- OWNER provisioning UX: dedicated SUPER_ADMIN "create OWNER" action vs a flag on the existing tenant-activation flow.
+- Whether `IT_ADMIN` (level 90) should also lose audit access (it's currently below OWNER but above COMPANY_ADMIN — confirm its real-world holder).
+- One OWNER per company hard-enforced, or allow a controlled backup OWNER (§132.5 said "one + tightly-controlled backup").
