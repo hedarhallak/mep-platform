@@ -15692,3 +15692,29 @@ Project site_address / site_lat / site_lng / ccq_sector; assignment shift_start 
 4. **Cross-tenant Constrai audit** (out-of-reach second copy + SUPER_ADMIN global view).
 
 **Status:** design only. No code, no migration. Revisit at the Security phase; reference from the program-overview walkthrough (§129.9 folds in here).
+
+---
+
+## 133. Section 133 — June 4, 2026 — SUPER_ADMIN portal: ephemeral session cookies (browser-close ends session, re-entry forces TOTP)
+
+> **Found by Hedar during the URGENT FIRST CHECK admin smokes.** He opened `admin.constrai.ca` in an incognito window that still held the cookies from the earlier Branding smoke, and the Companies portal loaded **without a fresh login** — he flagged it (correctly) as high-risk: the SUPER_ADMIN portal should END the moment the browser closes and only return via a secure login + 2FA.
+
+### 133.1 — Diagnosis (NOT a data leak; a session-longevity gap)
+
+- The backend correctly enforces SUPER_ADMIN — the first incognito paint showed `Failed to load: SUPER_ADMIN_REQUIRED` with an empty table. **No data reaches an unauthenticated visitor.**
+- The session persists via **HttpOnly cookies** (Phase 6-D-1c — cookies are the source of truth, not localStorage): `access_token` maxAge **1h**, `refresh_token` maxAge **7d**, both **persistent** cookies. So in a normal browser: close → reopen within 7 days → the refresh cookie is still valid → `/api/auth/refresh` mints a new access token → the portal resumes **with no PIN and no TOTP**. TOTP is only checked at the initial PIN login, never on refresh.
+- Net effect: a SUPER_ADMIN session could resume for up to 7 days across browser restarts without re-verifying 2FA. That's the gap Hedar wants closed.
+
+### 133.2 — Fix: ephemeral (session) cookies for high-privilege roles
+
+`lib/cookie_options.js` gained `isEphemeralSessionRole(role)` (currently `{ SUPER_ADMIN }`) and an `{ ephemeral }` option on `accessTokenCookieOptions` / `refreshTokenCookieOptions`. When `ephemeral: true` the builder **omits `maxAge` entirely → a session cookie** that the browser drops on close. `routes/auth.js` passes `ephemeral = isEphemeralSessionRole(role)` at all THREE cookie-set sites: PIN login (`/login`), TOTP finish (`finishLoginAfterTotp` — the path SUPER_ADMIN actually takes since TOTP is enforced), and token rotation (`/refresh` — so a mid-session refresh can't silently upgrade the cookies back to persistent).
+
+Result: SUPER_ADMIN closes the browser → both auth cookies vanish → next visit has no cookie → API 401 → AdminLogin → PIN → **TOTP** every time. **Tenant roles are completely unchanged** — they keep the persistent 1h/7d "remember me" cookies (a foreman shouldn't be forced to re-login + 2FA every morning).
+
+### 133.3 — Scope, tests, and what was deliberately left
+
+- Pure-function tests added in `tests/smoke/cookie_options.test.js`: `isEphemeralSessionRole` truth table + `ephemeral:true` omits maxAge on both cookies (rest of the Domain/Secure/SameSite policy intact) + default path still persistent.
+- **Left for the Security phase (NOT done now):** shorter refresh-token DB TTL for SUPER_ADMIN (the DB row is still 7d — but with session cookies the browser no longer holds it after close, so the practical window is the open-session lifetime); periodic TOTP re-verification mid-session; idle timeout. These are hardening-on-top, not required for the browser-close guarantee.
+- This is a focused auth change on prod — deploy is **backend restart + frontend rebuild** (no migration). Smoke after deploy: login admin.constrai.ca (PIN→TOTP) → close ALL browser windows → reopen admin.constrai.ca → MUST land on the login screen (not the Companies list). Tenant: login mep.constrai.ca → close → reopen → should STILL be logged in (persistent cookie unchanged).
+
+**Relation to §132:** this is the first concrete piece of the §132 security program — the session-hardening layer for the SUPER_ADMIN portal — shipped early because Hedar caught it live. The OWNER role + per-user audit model (§132) remains the larger Security-phase build.
