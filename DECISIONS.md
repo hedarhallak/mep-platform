@@ -15782,3 +15782,13 @@ Hedar chose "A+B" → build a real Settings page (which makes hiding it moot). G
 - Deploy = **backend restart + frontend rebuild** (no migration).
 
 **Remaining §134 deferred (need Hedar assets/decisions):** invoice PDF logo + Constrai bank details; expense approver model (§129.9 → §132 OWNER); the §132 anti-tamper program.
+
+---
+
+## 135. Section 135 — June 4, 2026 — §132 program, piece 1: old→new audit diff on the project-edit fraud vector
+
+> Starting the §132 anti-tamper program with its lowest-risk / highest-value piece (per §132.8 step 1): make sensitive edits **tamper-evident** by recording what the value WAS, not just what it became. Chose the project-edit path first because it IS the exact fraud vector Hedar named (move `site_address`/`site_lat`/`site_lng` → inflate CCQ travel allowances). Backend-only, no schema change (audit_logs already has `old_values`/`new_values` jsonb).
+
+- **`routes/projects.js` PATCH** — the ownership-check SELECT now also pulls the full editable column set as a BEFORE snapshot. After the UPDATE, a per-field diff (string-compared to dodge numeric/precision noise) builds `old_values` + `new_values` containing **only the fields that actually changed**, each with its before/after. Replaces the old `new_values: req.body` (which lacked the old value AND logged unchanged fields). `entity_name` + audited columns: project_name, trade_type_id, status_id, site_address, site_lat, site_lng, start_date, end_date, client_id, ccq_sector.
+- Integration test: two PATCHes (NEAR→FAR address); asserts the latest `PROJECT_UPDATED` audit row has `old_values.site_address = 'NEAR…'` + `new_values.site_address = 'FAR…'`.
+- **Pattern to replicate** across the rest of the §132 sensitive-field set (attendance time edits, assignment shift/date/project edits, permission grants): capture-before → diff → audit old+new. The §134.4 Settings PATCH already follows it; projects now too. Deploy = backend restart only.

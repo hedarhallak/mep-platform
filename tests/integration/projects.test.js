@@ -445,6 +445,35 @@ describeIfDb('Projects — /api/projects', () => {
     expect(res.body.project.project_name).toBe(proj.project_name);
   });
 
+  // Section 132.6 — the audit row for a site-address edit must record the
+  // OLD and NEW value (the CCQ-allowance fraud vector must be provable).
+  test('PATCH /:id records an old→new audit diff for site_address', async () => {
+    const company = await seedCompany();
+    const admin = await seedUser({ company_id: company.company_id, role: 'COMPANY_ADMIN' });
+    const proj = await seedProject({ company_id: company.company_id });
+
+    const { token } = await loginUser(admin);
+    // Set a known starting address, then move it (the "far site" edit).
+    await request(app)
+      .patch(`/api/projects/${proj.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ site_address: 'NEAR — 10 Rue A' });
+    await request(app)
+      .patch(`/api/projects/${proj.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ site_address: 'FAR — 999 Rue Z' });
+
+    const { rows } = await getPool().query(
+      `SELECT old_values, new_values FROM public.audit_logs
+        WHERE entity_type = 'project' AND entity_id = $1 AND action = 'PROJECT_UPDATED'
+        ORDER BY created_at DESC LIMIT 1`,
+      [proj.id]
+    );
+    expect(rows.length).toBe(1);
+    expect(rows[0].old_values.site_address).toBe('NEAR — 10 Rue A');
+    expect(rows[0].new_values.site_address).toBe('FAR — 999 Rue Z');
+  });
+
   test('PATCH /:id non-existent → 404 PROJECT_NOT_FOUND', async () => {
     const company = await seedCompany();
     const admin = await seedUser({ company_id: company.company_id, role: 'COMPANY_ADMIN' });

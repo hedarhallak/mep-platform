@@ -330,12 +330,18 @@ router.patch('/:id', can('projects.edit'), async (req, res) => {
 
     if (!projectId) return res.status(400).json({ ok: false, error: 'INVALID_ID' });
 
-    // Verify ownership
+    // Verify ownership AND capture the BEFORE snapshot for the audit diff.
+    // Section 132.6: a project edit (esp. site_address / site_lat / site_lng /
+    // ccq_sector) can inflate CCQ travel allowances — the audit must record
+    // what the value WAS, not just what it became, so the change is provable.
     const exists = await req.db.query(
-      'SELECT id FROM public.projects WHERE id = $1 AND company_id = $2 LIMIT 1',
+      `SELECT id, project_name, trade_type_id, status_id, site_address,
+              site_lat, site_lng, start_date, end_date, client_id, ccq_sector
+         FROM public.projects WHERE id = $1 AND company_id = $2 LIMIT 1`,
       [projectId, companyId]
     );
     if (!exists.rows.length) return res.status(404).json({ ok: false, error: 'PROJECT_NOT_FOUND' });
+    const beforeRow = exists.rows[0];
 
     const {
       project_name,
@@ -381,12 +387,40 @@ router.patch('/:id', can('projects.edit'), async (req, res) => {
       ]
     );
 
+    // Section 132.6: record only the fields that actually CHANGED, with both
+    // the old and new value, so the audit row is a precise tamper-evident diff
+    // (not the raw request body). Compared as strings to dodge type/precision
+    // noise (e.g. numeric lat/lng coming back as strings).
+    const AUDITED = [
+      'project_name',
+      'trade_type_id',
+      'status_id',
+      'site_address',
+      'site_lat',
+      'site_lng',
+      'start_date',
+      'end_date',
+      'client_id',
+      'ccq_sector',
+    ];
+    const oldDiff = {};
+    const newDiff = {};
+    for (const col of AUDITED) {
+      const before = beforeRow[col];
+      const after = rows[0][col];
+      if (String(before ?? '') !== String(after ?? '')) {
+        oldDiff[col] = before;
+        newDiff[col] = after;
+      }
+    }
+
     await audit(req.db, req, {
       action: ACTIONS.PROJECT_UPDATED,
       entity_type: 'project',
       entity_id: rows[0].id,
       entity_name: rows[0].project_name,
-      new_values: req.body,
+      old_values: Object.keys(oldDiff).length ? oldDiff : null,
+      new_values: Object.keys(newDiff).length ? newDiff : null,
     });
 
     return res.json({ ok: true, project: rows[0] });

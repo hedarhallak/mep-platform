@@ -97,7 +97,7 @@ sees the menus it holds a permission for.
 |--------|--------|-------|
 | Auth | ✅ | JWT + PIN, refresh rotation, HttpOnly cookies (web), Bearer (mobile) |
 | Multi-tenancy | ✅ | `company_id` + strict RLS (migration 013); tenantDb per-request client |
-| Audit log | 🟡 | `audit_logs` append-only via DB trigger ✅; **but project PATCH logs `new_values` only — no old→new diff** (§132.6 gap); no per-user-grant audit yet |
+| Audit log | 🟡 | `audit_logs` append-only via DB trigger ✅; **§135: project PATCH now records a real old→new diff** (the address fraud vector — first §132 piece). Settings PATCH too (§134.4). Remaining: attendance/assignment edits + permission-grant audit |
 | Anti-tamper / fraud prevention | 🔴 | **§132 design spec done, not built** — OWNER role, sensitive-field diff, allowance-snapshot-at-assignment, Constrai-held audit copy. Flagship conference selling point. |
 | Web i18n | 🟡 | EN/FR locale files exist + in active use; some dead keys to prune (hygiene) |
 | Mobile app | 🟡 | still Bearer+PIN; full update deferred until web menus done (then a dedicated phase) |
