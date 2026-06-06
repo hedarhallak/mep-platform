@@ -21,13 +21,25 @@
 
 BEGIN;
 
--- 1. roles lookup row (role_id has no default → compute next; role_key not
---    uniquely-constrained → guard with NOT EXISTS).
--- role_id has a SEQUENCE default — do NOT set it explicitly (Pitfall #61): an
--- explicit MAX+1 leaves the sequence behind, and the next sequence-based insert
--- (tests/helpers/db.js ensureSeedData, or any app insert) then collides on
--- roles_pkey. Let the sequence assign role_id, exactly like every other roles
--- insert. role_key is UNIQUE → ON CONFLICT makes this idempotent.
+-- 0. Allow 'OWNER' in the app_users.role CHECK constraint. Without this, NO
+--    user can be assigned role='OWNER' at the DB level (the constraint enumerates
+--    the valid roles and OWNER was not in it) — provisioning (Slice 3) would fail.
+--    DROP + re-ADD is idempotent; the list mirrors the baseline + OWNER.
+ALTER TABLE public.app_users DROP CONSTRAINT IF EXISTS app_users_role_check;
+ALTER TABLE public.app_users ADD CONSTRAINT app_users_role_check CHECK (
+  role = ANY (ARRAY[
+    'SUPER_ADMIN', 'OWNER', 'IT_ADMIN', 'COMPANY_ADMIN', 'TRADE_PROJECT_MANAGER',
+    'TRADE_ADMIN', 'FOREMAN', 'JOURNEYMAN', 'APPRENTICE_1', 'APPRENTICE_2',
+    'APPRENTICE_3', 'APPRENTICE_4', 'WORKER', 'DRIVER'
+  ]::text[])
+);
+
+-- 1. roles lookup row. role_id has a SEQUENCE default — do NOT set it explicitly
+--    (Pitfall #61): an explicit MAX+1 leaves the sequence behind, and the next
+--    sequence-based insert (tests/helpers/db.js ensureSeedData, or any app
+--    insert) then collides on roles_pkey. Let the sequence assign role_id,
+--    exactly like every other roles insert. role_key is UNIQUE → ON CONFLICT
+--    makes this idempotent.
 INSERT INTO public.roles (role_key, label)
 VALUES ('OWNER', 'Owner')
 ON CONFLICT (role_key) DO NOTHING;
