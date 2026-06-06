@@ -47,6 +47,10 @@ function normalizeRole(role) {
  */
 const ROLE_LEVEL = {
   SUPER_ADMIN: 100,
+  // §132 OWNER — tenant root of trust, above the technical COMPANY_ADMIN and
+  // IT_ADMIN; only SUPER_ADMIN (Constrai) outranks it. Constrai-provisioned;
+  // no in-tenant role may create/edit/assign it (see canAssignRole). §140.
+  OWNER: 95,
   IT_ADMIN: 90,
   COMPANY_ADMIN: 80,
   TRADE_PROJECT_MANAGER: 60,
@@ -117,6 +121,25 @@ function requireMinLevel(level) {
   };
 }
 
+/**
+ * canAssignRole(callerRole, targetRole, currentRole)
+ * §132 OWNER protection (DECISIONS §140). OWNER is Constrai-managed: no
+ * in-tenant role may CREATE/ASSIGN it, nor MODIFY a user who currently IS an
+ * OWNER — only SUPER_ADMIN (Constrai). Returns true if the change is allowed.
+ *
+ * @param {string} callerRole    the acting user's role
+ * @param {string} targetRole    the role being assigned (may be undefined)
+ * @param {string} [currentRole] the target user's current role — blocks an
+ *                               in-tenant actor from demoting/altering an OWNER
+ * @returns {boolean}
+ */
+function canAssignRole(callerRole, targetRole, currentRole = null) {
+  if (normalizeRole(callerRole) === 'SUPER_ADMIN') return true;
+  if (normalizeRole(targetRole) === 'OWNER') return false;
+  if (currentRole && normalizeRole(currentRole) === 'OWNER') return false;
+  return true;
+}
+
 // ── Prebuilt guards ───────────────────────────────────────────
 const SUPER_ADMIN_ONLY = requireRoles(['SUPER_ADMIN']);
 const IT_ADMIN_UP = requireMinLevel(90); // IT_ADMIN + SUPER_ADMIN
@@ -128,6 +151,8 @@ const ANY_AUTHENTICATED = requireMinLevel(10); // any logged in user
 
 module.exports = {
   normalizeRole,
+  canAssignRole,
+  ROLE_LEVEL,
   requireRoles,
   requireMinLevel,
   SUPER_ADMIN_ONLY,
