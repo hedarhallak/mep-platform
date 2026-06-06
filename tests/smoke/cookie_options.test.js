@@ -20,6 +20,7 @@ const {
   accessTokenCookieOptions,
   refreshTokenCookieOptions,
   clearCookieOptions,
+  isEphemeralSessionRole,
 } = require('../../lib/cookie_options');
 
 const ORIGINAL_NODE_ENV = process.env.NODE_ENV;
@@ -133,5 +134,43 @@ describe('cookie_options — token-specific helpers', () => {
     const clear = clearCookieOptions(reqWithHost('app.constrai.ca'));
     expect(clear.domain).toBe(set.domain);
     expect(clear.path).toBe(set.path);
+  });
+});
+
+describe('cookie_options — ephemeral (session) cookies (Section 133)', () => {
+  test('isEphemeralSessionRole: SUPER_ADMIN yes, everyone else no', () => {
+    expect(isEphemeralSessionRole('SUPER_ADMIN')).toBe(true);
+    expect(isEphemeralSessionRole('super_admin')).toBe(true); // case-insensitive
+    expect(isEphemeralSessionRole('COMPANY_ADMIN')).toBe(false);
+    expect(isEphemeralSessionRole('FOREMAN')).toBe(false);
+    expect(isEphemeralSessionRole(null)).toBe(false);
+    expect(isEphemeralSessionRole(undefined)).toBe(false);
+  });
+
+  test('ephemeral=true OMITS maxAge on both access + refresh (session cookie)', () => {
+    process.env.NODE_ENV = 'production';
+    const access = accessTokenCookieOptions(reqWithHost('admin.constrai.ca'), { ephemeral: true });
+    const refresh = refreshTokenCookieOptions(reqWithHost('admin.constrai.ca'), {
+      ephemeral: true,
+    });
+    expect(access.maxAge).toBeUndefined();
+    expect(refresh.maxAge).toBeUndefined();
+    // The rest of the policy is unchanged — still HttpOnly + Secure + Domain.
+    expect(access.httpOnly).toBe(true);
+    expect(access.secure).toBe(true);
+    expect(access.domain).toBe('.constrai.ca');
+  });
+
+  test('ephemeral=false (default) keeps the persistent maxAge — tenant unchanged', () => {
+    process.env.NODE_ENV = 'test';
+    expect(accessTokenCookieOptions(reqWithHost('app.constrai.ca')).maxAge).toBe(
+      ACCESS_TOKEN_MAX_AGE_MS
+    );
+    expect(refreshTokenCookieOptions(reqWithHost('app.constrai.ca')).maxAge).toBe(
+      REFRESH_TOKEN_MAX_AGE_MS
+    );
+    expect(
+      accessTokenCookieOptions(reqWithHost('app.constrai.ca'), { ephemeral: false }).maxAge
+    ).toBe(ACCESS_TOKEN_MAX_AGE_MS);
   });
 });

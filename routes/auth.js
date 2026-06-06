@@ -15,6 +15,7 @@ const {
   accessTokenCookieOptions,
   refreshTokenCookieOptions,
   clearCookieOptions,
+  isEphemeralSessionRole,
 } = require('../lib/cookie_options');
 
 // =============================================================================
@@ -378,8 +379,11 @@ router.post('/login', async (req, res) => {
     // Additive — the response body still carries the tokens so existing
     // localStorage-based flows + mobile (Bearer) keep working unchanged.
     // Phase 6-D-1b will drop the body tokens for web routes.
-    res.cookie('access_token', accessToken, accessTokenCookieOptions(req));
-    res.cookie('refresh_token', refreshToken, refreshTokenCookieOptions(req));
+    // Section 133: SUPER_ADMIN gets session cookies (no maxAge) so closing
+    // the browser ends the session and forces login+TOTP on next visit.
+    const ephemeral = isEphemeralSessionRole(role);
+    res.cookie('access_token', accessToken, accessTokenCookieOptions(req, { ephemeral }));
+    res.cookie('refresh_token', refreshToken, refreshTokenCookieOptions(req, { ephemeral }));
 
     // Section 100 / Phase 6-D-1a: Pattern B (generic-entry → email lookup
     // → tenant subdomain). Only set redirect_url when:
@@ -475,8 +479,12 @@ async function finishLoginAfterTotp(req, res, user, role) {
     entity_name: user.username,
     details: { role, totp_verified: true },
   });
-  res.cookie('access_token', accessToken, accessTokenCookieOptions(req));
-  res.cookie('refresh_token', refreshToken, refreshTokenCookieOptions(req));
+  // Section 133: SUPER_ADMIN → session cookies (ephemeral). This is the
+  // path SUPER_ADMIN actually takes (TOTP is enforced), so it's the one
+  // that matters most for the 2FA-on-every-session guarantee.
+  const ephemeral = isEphemeralSessionRole(role);
+  res.cookie('access_token', accessToken, accessTokenCookieOptions(req, { ephemeral }));
+  res.cookie('refresh_token', refreshToken, refreshTokenCookieOptions(req, { ephemeral }));
   return res.status(200).json({
     ok: true,
     token: accessToken,
@@ -672,8 +680,12 @@ router.post('/refresh', async (req, res) => {
     // Section 100 / Phase 6-D-1a: rotate the cookie pair alongside the
     // body tokens so web clients on the cookie path stay authenticated
     // after rotation. Same additive policy as /login.
-    res.cookie('access_token', newAccessToken, accessTokenCookieOptions(req));
-    res.cookie('refresh_token', newRefreshToken, refreshTokenCookieOptions(req));
+    // Section 133: keep the rotated SUPER_ADMIN cookies ephemeral too —
+    // a mid-session refresh must NOT silently upgrade them to persistent
+    // (that would re-open the browser-close gap).
+    const ephemeral = isEphemeralSessionRole(role);
+    res.cookie('access_token', newAccessToken, accessTokenCookieOptions(req, { ephemeral }));
+    res.cookie('refresh_token', newRefreshToken, refreshTokenCookieOptions(req, { ephemeral }));
 
     // Phase 6-D-1c: same web-vs-mobile body shape as /login.
     const responseBody = {

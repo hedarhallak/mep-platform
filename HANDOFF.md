@@ -1,7 +1,7 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: June 4, 2026 (late evening, session 4 part 2) — **§131.12 silent-skip fix LIVE (PR #328) + §131.13 list under-reporting RESOLVED (requester INNER→LEFT JOIN).**
+> Last updated: June 4, 2026 (late evening, session 4 part 3) — **§131.12 silent-skip + §131.13 list under-report + §131.14 date off-by-one + Surplus→Material Returns rename + §132 anti-tamper SPEC + §133 SUPER_ADMIN ephemeral-cookie security fix — all LIVE.**
 > ⚠️ NOTE: the June 4 closeout PR (#316) was never merged (Pitfall #66) — Sections 129-131 (PRs #310-#326) were re-recorded in the June 5 update; sections 131.12-131.13 added June 4 session 4 (PR #328).
 >
 > **🔁 PRIORITY ORDER (Hedar, June 2 — still governs):**
@@ -246,6 +246,7 @@ Or pick a backlog item (logo + bank details on the invoice PDF; MEP→ENTERPRISE
 - **⏳ i18n dead-key cleanup** (bi.workforcePlanner.*, nav.bi, assignments.optimize.*, …) — hygiene pass.
 - **⏳ FK hygiene migration (§131.13):** `assignment_requests.requested_by_user_id → app_users(id) ON DELETE SET NULL` + audit `decision_by_user_id` and sibling FK-less user-reference columns across tables — prevents the dangling-requester class permanently.
 - **⏳ UTC-midnight date-render sweep (§131.14):** AssignmentsPage fixed; same class suspected in `ProjectsPage.jsx:334`, `utils/formatters.js:37` (fmtDate callers), MyHubPage/TaskRequestPage `due_date`. One shared local-midnight helper in utils/formatters.js, then migrate callers.
+- **✅ DONE — §133 SUPER_ADMIN ephemeral session cookies:** browser close now ends the SA session and forces login+TOTP on re-entry (was: persistent 7d refresh cookie resumed the portal with no 2FA). `lib/cookie_options.js` `isEphemeralSessionRole` + `{ephemeral}` on the builders; `routes/auth.js` passes it at login/TOTP/refresh. Tenant cookies unchanged. First concrete piece of the §132 security program. **Post-deploy smoke (do after rebuild):** admin login → close ALL windows → reopen admin.constrai.ca → MUST hit login (not Companies); tenant login → close → reopen → still logged in.
 - **⭐ Anti-Tamper / Owner-Audit security model (§132 — DESIGN SPEC done, NOT built):** flagship anti-fraud feature for the conference. Key decisions locked: (1) OWNER role provisioned by Constrai per tenant, sole audit viewer, separation-of-duties above the technical COMPANY_ADMIN (resolves §129.9); (2) defense-in-depth — append-only audit (exists) + old→new diff on sensitive fields (GAP: PATCH /projects logs new_values only) + allowance from project-location SNAPSHOT at assignment time + permission-grant audit w/ expiry + out-of-reach Constrai-parent audit copy; (3) per-user grants UI (model A) ships ONLY bundled with the detection layer. Implementation = Security phase (priority #3, elevated by payroll exposure). Full spec in DECISIONS §132.
 - **⏳ Full mobile-app update** — long neglected; happens AFTER all web menus are built (Hedar's explicit sequencing).
 - **⏳ CCQ Labor Marketplace** (DECISIONS §9, 💡 future/large) — company job posts + worker availability, CCQ-verified.
