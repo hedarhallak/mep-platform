@@ -338,6 +338,19 @@ export default function AdminLogin() {
           <p className="text-sm text-slate-400">Sign in to the internal portal</p>
         </div>
 
+        {/* Section 133.2 — explain an idle auto-logout redirect. */}
+        {(() => {
+          try {
+            return new URLSearchParams(window.location.search).get('reason') === 'idle'
+          } catch {
+            return false
+          }
+        })() && (
+          <div className="mb-4 px-3 py-2 bg-amber-500/10 border border-amber-500/30 rounded text-xs text-amber-300 text-center">
+            Your session ended after 15 minutes of inactivity. Please sign in again.
+          </div>
+        )}
+
         <form
           onSubmit={handleSubmit}
           className="bg-slate-800/50 border border-slate-700 rounded-lg p-6 space-y-4"

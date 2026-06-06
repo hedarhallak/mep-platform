@@ -26,6 +26,7 @@ import SubscriptionRequestsPage from './admin/SubscriptionRequestsPage.jsx'
 import TrainingQuotesPage from './admin/TrainingQuotesPage.jsx'
 import CustomDemandsPage from './admin/CustomDemandsPage.jsx'
 import PaymentsPage from './admin/PaymentsPage.jsx'
+import AdminIdleGuard from './admin/AdminIdleGuard.jsx'
 
 function NotFound() {
   const { pathname } = useLocation()
@@ -47,6 +48,8 @@ function NotFound() {
 export default function AdminApp() {
   return (
     <BrowserRouter>
+      {/* Section 133.2 — idle auto-logout for the SUPER_ADMIN portal. */}
+      <AdminIdleGuard />
       <Routes>
         <Route path="/" element={<CompaniesList />} />
         <Route path="/companies/new" element={<CreateCompany />} />

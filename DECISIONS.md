@@ -15718,3 +15718,16 @@ Result: SUPER_ADMIN closes the browser → both auth cookies vanish → next vis
 - This is a focused auth change on prod — deploy is **backend restart + frontend rebuild** (no migration). Smoke after deploy: login admin.constrai.ca (PIN→TOTP) → close ALL browser windows → reopen admin.constrai.ca → MUST land on the login screen (not the Companies list). Tenant: login mep.constrai.ca → close → reopen → should STILL be logged in (persistent cookie unchanged).
 
 **Relation to §132:** this is the first concrete piece of the §132 security program — the session-hardening layer for the SUPER_ADMIN portal — shipped early because Hedar caught it live. The OWNER role + per-user audit model (§132) remains the larger Security-phase build.
+
+### 133.4 — Follow-up the same session: idle auto-logout (browser left OPEN + unattended)
+
+After verifying the ephemeral cookies in DevTools (both `access_token` + `refresh_token` showed `Expires = Session`), Hedar raised the residual case: *open a second tab, close the first, paste `admin.constrai.ca` → it's still logged in.* Correct diagnosis of expected web behavior — **session cookies are browser-wide, not tab-wide; closing a tab is not closing the browser.** Per-tab isolation would be wrong (you couldn't open links in new tabs); the industry-standard answer to "unattended logged-in browser" is an **idle timeout**, not tab isolation.
+
+**Shipped (client-side, frontend-only — deliberately chosen so it CANNOT lock anyone out at the backend):**
+- `src/admin/AdminIdleGuard.jsx` — mounted once inside `AdminApp`'s `<BrowserRouter>`. Tracks activity (`mousemove/mousedown/keydown/scroll/touchstart/click`, re-arm throttled to once/5s); after **15 min** of no activity it does a best-effort `POST /auth/logout` (revokes the refresh token server-side), clears local state, and redirects to `/login?reason=idle`. NOT armed on the `/login` route.
+- `AdminLogin.jsx` shows an amber "Your session ended after 15 minutes of inactivity" banner when `?reason=idle`.
+- Vitest: fires after the window on a non-login route (asserts `/auth/logout` + `assign('/login?reason=idle')`); does NOT arm on `/login`.
+
+**Why client-side is appropriate here:** the threat is the *unattended desk* — a passerby using the legit user's open, logged-in browser. After 15 min the JS ends the session and they hit a login screen. An attacker sophisticated enough to bypass the JS already controls the browser (and thus the cookie) — a different threat that client-side idle was never meant to stop.
+
+**Left for the Security phase (NOT done — the robust layer):** SERVER-side idle + absolute-session-cap enforcement (reject `/refresh` when last-activity gap > idle window or session age > absolute max), so the guarantee doesn't depend on client JS. Tracked under §132 / §133. Deploy for 133.4 is **frontend rebuild only**.
