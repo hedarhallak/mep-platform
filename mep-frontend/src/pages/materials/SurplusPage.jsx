@@ -17,6 +17,7 @@ const UNITS = ['pcs', 'm', 'ft', 'kg', 'lb', 'box', 'roll', 'bag', 'set', 'pair'
 // ── Declare tab ───────────────────────────────────────────────
 function DeclareTab({ onDeclared }) {
   const { t } = useTranslation()
+  const [todayAssignment, setTodayAssignment] = useState(null)
   const [projects, setProjects] = useState([])
   const [selectedProj, setSelectedProj] = useState('')
   const [items, setItems] = useState([{ item_name: '', quantity: '', unit: 'pcs' }])
@@ -25,13 +26,25 @@ function DeclareTab({ onDeclared }) {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    api.get('/projects?status=ACTIVE')
+    // Section 129.5 pattern: foreman has no projects.view — use the
+    // today-assignment project directly; managers get the dropdown.
+    api.get('/assignments/my-today')
       .then(r => {
-        const list = r.data.projects || r.data.rows || []
-        setProjects(list)
-        if (list.length) setSelectedProj(String(list[0].id))
+        const asgn = r.data.assignment
+        if (asgn) {
+          setTodayAssignment(asgn)
+          setSelectedProj(String(asgn.project_id))
+        } else {
+          api.get('/projects?status=ACTIVE')
+            .then(pr => {
+              const list = pr.data.projects || pr.data.rows || []
+              setProjects(list)
+              if (list.length) setSelectedProj(String(list[0].id))
+            })
+            .catch(e => console.error('Failed to load projects:', e))
+        }
       })
-      .catch(e => console.error('Failed to load projects:', e))
+      .catch(e => console.error('Failed to load today assignment:', e))
   }, [])
 
   const addItem = () => setItems(prev => [...prev, { item_name: '', quantity: '', unit: 'pcs' }])
@@ -71,15 +84,27 @@ function DeclareTab({ onDeclared }) {
         <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
           {t('surplus.declare.project')}
         </label>
-        <select value={selectedProj} onChange={e => setSelectedProj(e.target.value)}
-          className="w-full max-w-sm px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-light">
-          <option value="">{t('surplus.declare.selectProject')}</option>
-          {projects.map(p => (
-            <option key={p.id} value={p.id}>
-              {p.project_code}{p.project_name ? ` — ${p.project_name}` : ''}
-            </option>
-          ))}
-        </select>
+        {todayAssignment ? (
+          <div className="flex items-center gap-3 px-4 py-3 bg-primary-pale border border-primary-pale rounded-xl max-w-sm">
+            <div className="w-2 h-2 rounded-full bg-primary-light flex-shrink-0" />
+            <div>
+              <div className="text-sm font-bold text-primary-dark">
+                {todayAssignment.project_code}{todayAssignment.project_name ? ` — ${todayAssignment.project_name}` : ''}
+              </div>
+              <div className="text-[10px] text-primary-light mt-0.5">{t('surplus.declare.todayAssignment')}</div>
+            </div>
+          </div>
+        ) : (
+          <select value={selectedProj} onChange={e => setSelectedProj(e.target.value)}
+            className="w-full max-w-sm px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-light">
+            <option value="">{t('surplus.declare.selectProject')}</option>
+            {projects.map(p => (
+              <option key={p.id} value={p.id}>
+                {p.project_code}{p.project_name ? ` — ${p.project_name}` : ''}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
       {/* Items */}

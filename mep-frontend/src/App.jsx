@@ -121,7 +121,18 @@ function AppRoutes() {
               <StandupPage />
             </RequirePermission>
           }/>
-          <Route path="reports" element={<ReportsPage />} />
+          {/* Section 134: route-level guard for consistency with siblings.
+              The page already self-gates all-vs-self internally and the
+              backend authorizes the data; this blocks direct-URL access for
+              users with no reports permission at all. */}
+          <Route path="reports" element={
+            <RequirePermission anyOf={[
+              { module: 'reports', action: 'view'      },
+              { module: 'reports', action: 'view_self' },
+            ]}>
+              <ReportsPage />
+            </RequirePermission>
+          }/>
           <Route path="task-request" element={
             <RequirePermission module="hub" action="send_tasks">
               <TaskRequestPage />

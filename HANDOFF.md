@@ -1,7 +1,9 @@
 # Constrai — Session Handoff
 
 > **Single source of truth for new conversations.** This file is REPLACED (not appended) at the end of every session.
-> Last updated: June 4, 2026 (late evening, session 4 part 3) — **§131.12 silent-skip + §131.13 list under-report + §131.14 date off-by-one + Surplus→Material Returns rename + §132 anti-tamper SPEC + §133 SUPER_ADMIN ephemeral-cookie security fix — all LIVE.**
+> Last updated: June 4, 2026 (session 4 part 4) — **§131.12-14 Assignments fixes + Surplus→Material Returns + §132 anti-tamper SPEC + §133 SUPER_ADMIN session hardening (3 layers) + §134 program overview (`PROGRAM_OVERVIEW.md`) + demo-polish fixes — all LIVE.**
+> 📄 **`PROGRAM_OVERVIEW.md`** is the new conference-readiness map (every menu/role/feature + status). §134 fixed Reports route guard + Tools/Surplus foreman dropdown + Permissions read-only hint.
+> ⏳ **3 items need Hedar's input** (not code-blockable): Settings page (hide-for-demo vs build), Invoice PDF logo + Constrai bank/remittance details (needs the assets), Expense approver model (§129.9 → §132 OWNER).
 > ⚠️ NOTE: the June 4 closeout PR (#316) was never merged (Pitfall #66) — Sections 129-131 (PRs #310-#326) were re-recorded in the June 5 update; sections 131.12-131.13 added June 4 session 4 (PR #328).
 >
 > **🔁 PRIORITY ORDER (Hedar, June 2 — still governs):**

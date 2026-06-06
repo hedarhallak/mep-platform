@@ -68,6 +68,7 @@ export default {
     request: {
       project: 'Projet',
       selectProject: 'Sélectionnez un projet',
+      todayAssignment: 'Affectation du jour',
       trade: 'Filtrer par métier',
       allTrades: 'Tous',
       tool: 'Outil',
@@ -146,6 +147,7 @@ export default {
     declare: {
       project: 'Projet',
       selectProject: 'Sélectionnez un projet',
+      todayAssignment: 'Affectation du jour',
       items: 'Articles en surplus',
       itemNamePlaceholder: "Nom de l'article",
       qtyPlaceholder: 'Qté',
@@ -1237,6 +1239,7 @@ export default {
 
     matrix: {
       readOnly: 'Lecture seule',
+      readOnlyHint: 'Vous ne pouvez modifier que les rôles de rang inférieur au vôtre — cela empêche quiconque d’élever son propre accès.',
       toggleColumn: 'Basculer la colonne :',
       module: 'Module',
       all: 'Tous',
