@@ -278,7 +278,8 @@ router.post('/reset/:role', can('settings.permissions'), async (req, res) => {
         'settings.company',
         'settings.user_management',
         'settings.permissions',
-        'audit.view',
+        // §132.4 / §140 Slice 2b: audit.view is OWNER-only (separation of
+        // duties — the technical admins must not view the sensitive-edit audit).
         'employees.view',
         'employees.create',
         'employees.edit',
@@ -312,7 +313,8 @@ router.post('/reset/:role', can('settings.permissions'), async (req, res) => {
         'bi.workforce_planner',
         'settings.company',
         'settings.user_management',
-        'audit.view',
+        // §132.4 / §140 Slice 2b: audit.view removed — OWNER is the sole audit
+        // viewer (the permission distributor must not be the audit reader).
       ],
       TRADE_PROJECT_MANAGER: [
         'dashboard.view',
