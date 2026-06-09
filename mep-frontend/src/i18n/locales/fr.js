@@ -42,6 +42,7 @@ export default {
     surplus: 'Retours de matériel',
     tools: 'Outils',
     expenses: 'Dépenses',
+    ownerAudit: 'Audit (Propriétaire)',
     myHub: 'Mon Hub',
     bi: "Intelligence d'affaires",
     workforcePlanner: "Planificateur d'effectifs",
@@ -135,6 +136,15 @@ export default {
       reasonPlaceholder: 'Motif (obligatoire)…',
       markPaid: 'Marquer remboursée',
     },
+  },
+
+  ownerAudit: {
+    title: 'Audit des modifications sensibles',
+    subtitle: 'Vue réservée au propriétaire des changements à risque (emplacement de projet, affectations, présences, paramètres) — ancien → nouveau.',
+    loading: 'Chargement de l’audit…',
+    loadError: 'Échec du chargement de l’audit.',
+    empty: 'Aucune modification sensible enregistrée pour l’instant.',
+    noFieldDiff: 'Aucun changement de champ capturé.',
   },
 
   settings: {

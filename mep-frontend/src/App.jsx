@@ -26,6 +26,7 @@ const ToolsPage            = lazy(() => import('@/pages/materials/ToolsPage'))
 const ExpensesPage         = lazy(() => import('@/pages/materials/ExpensesPage'))
 const SuppliersPage        = lazy(() => import('@/pages/suppliers/SuppliersPage'))
 const PermissionsPage      = lazy(() => import('@/pages/PermissionsPage'))
+const OwnerAuditPage       = lazy(() => import('@/pages/OwnerAuditPage'))
 const UserManagementPage   = lazy(() => import('@/pages/UserManagementPage'))
 const TaskRequestPage      = lazy(() => import('@/pages/TaskRequestPage'))
 const StandupPage          = lazy(() => import('@/pages/StandupPage'))
@@ -147,6 +148,11 @@ function AppRoutes() {
           <Route path="permissions" element={
             <RequirePermission module="settings" action="permissions">
               <PermissionsPage />
+            </RequirePermission>
+          }/>
+          <Route path="owner-audit" element={
+            <RequirePermission module="audit" action="view">
+              <OwnerAuditPage />
             </RequirePermission>
           }/>
           <Route path="settings" element={

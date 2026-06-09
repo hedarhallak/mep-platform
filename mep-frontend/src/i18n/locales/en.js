@@ -42,6 +42,7 @@ export default {
     surplus: 'Material Returns',
     tools: 'Tools',
     expenses: 'Expenses',
+    ownerAudit: 'Audit (Owner)',
     myHub: 'My Hub',
     bi: 'Business Intelligence',
     workforcePlanner: 'Workforce Planner',
@@ -135,6 +136,15 @@ export default {
       reasonPlaceholder: 'Reason (required)…',
       markPaid: 'Mark reimbursed',
     },
+  },
+
+  ownerAudit: {
+    title: 'Sensitive-Edit Audit',
+    subtitle: 'Owner-only view of high-risk changes (project location, assignments, attendance, company settings) — old → new.',
+    loading: 'Loading audit…',
+    loadError: 'Failed to load the audit.',
+    empty: 'No sensitive edits recorded yet.',
+    noFieldDiff: 'No field-level changes captured.',
   },
 
   settings: {
