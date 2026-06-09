@@ -521,4 +521,44 @@ router.get('/audit', can('settings.permissions'), async (req, res) => {
   }
 });
 
+// ─────────────────────────────────────────────────────────────────
+// GET /api/permissions/owner-audit  (§132 / §140 Slice 2a)
+// OWNER-only sensitive-edit audit viewer: the high-risk old→new diffs
+// (project site/location/sector, assignment shift/date/project moves,
+// attendance edits, company settings) — the fraud-detection picture
+// (§132.7). Gated by `audit.view` (OWNER only; SUPER_ADMIN bypasses).
+// Tenant-scoped via req.db (RLS) + explicit company_id (defense-in-depth).
+// ─────────────────────────────────────────────────────────────────
+const SENSITIVE_AUDIT_ACTIONS = [
+  'PROJECT_UPDATED',
+  'PROJECT_DELETED',
+  'ASSIGNMENT_UPDATED',
+  'ASSIGNMENT_DELETED',
+  'ATTENDANCE_CHECKIN',
+  'ATTENDANCE_CHECKOUT',
+  'ATTENDANCE_CONFIRMED',
+  'COMPANY_UPDATED',
+];
+
+router.get('/owner-audit', can('audit.view'), async (req, res) => {
+  try {
+    const result = await req.db.query(
+      `SELECT al.id, al.action, al.entity_type, al.entity_id, al.entity_name,
+              al.old_values, al.new_values,
+              al.username AS changed_by, al.role AS changer_role,
+              al.ip_address, al.created_at
+         FROM public.audit_logs al
+        WHERE al.company_id = $1
+          AND al.action = ANY($2)
+        ORDER BY al.created_at DESC
+        LIMIT 200`,
+      [req.user.company_id, SENSITIVE_AUDIT_ACTIONS]
+    );
+    res.json({ audit: result.rows });
+  } catch (err) {
+    console.error('GET /permissions/owner-audit error:', err);
+    res.status(500).json({ error: 'Failed to load sensitive-edit audit' });
+  }
+});
+
 module.exports = router;
