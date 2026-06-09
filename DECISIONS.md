@@ -15971,7 +15971,11 @@ Slice 1 took **3 red CI rounds** before green — each a real bug, none caught l
 
 **Slice 2b (PR #353, migration 031):** made it OWNER-exclusive. **Discovery on deploy:** `audit.view` was NOT new — it already existed and was already granted to SUPER_ADMIN, **IT_ADMIN, and COMPANY_ADMIN** (from the `DEFAULT_ROLE_PERMISSIONS` seed in `routes/permissions.js`), so the new viewer was reachable by the technical admins → not exclusive. Fix: migration 031 `DELETE`s the `audit.view` grant from COMPANY_ADMIN + IT_ADMIN (`DELETE 2` on prod), and the `DEFAULT_ROLE_PERMISSIONS` arrays were edited so a future "reset to defaults" won't re-grant it. Resolves the §140.4 open question (IT_ADMIN also loses audit — separation of duties). Verified on prod: `audit.view` now granted to **OWNER + SUPER_ADMIN only**. Safe because NOTHING else gates on `audit.view`. (CI didn't catch the pre-grant because CI's `role_permissions` is unseeded — the broad grant only existed on prod; lesson: prod role_permissions ≠ CI's.)
 
-**Slice 2 backend = DONE + LIVE.** Remaining: **Slice 2c** = frontend OWNER audit page (+ hide/gate the existing `/permissions/audit` RBAC-change view appropriately). **Slice 3** = SUPER_ADMIN provisioning endpoint for the OWNER account (§132.5) + cross-tenant parent audit.
+**Slice 2 backend = DONE + LIVE.**
+
+**Slice 2c SHIPPED + DEPLOYED (PR #355, frontend):** `OwnerAuditPage.jsx` (route `/owner-audit`, gated `RequirePermission module="audit" action="view"`) consumes `GET /permissions/owner-audit` and renders each sensitive edit with its per-field **old→new diff** (red strike → green; noise keys like updated_at hidden). Nav item (Shield icon, gated `audit.view` → only OWNER/SUPER_ADMIN see it) + i18n EN/FR + Vitest smoke. Frontend rebuilt on prod. NOTE: the page is **present but invisible until an OWNER is provisioned** (only OWNER+SUPER_ADMIN hold `audit.view`, and no OWNER exists yet) — that's Slice 3.
+
+**§132 OWNER role: Slice 1 + Slice 2 (backend + frontend) = COMPLETE + LIVE.** Remaining: **Slice 3** = SUPER_ADMIN endpoint to provision the OWNER account per tenant (§132.5) + cross-tenant parent-level audit copy. Then the §132 prevention stack is whole. Open sub-decisions in §140.4.
 
 ### 140.6 — Merge-friction pitfall (NEW): branch-protection "require up-to-date" + queued PRs
 
