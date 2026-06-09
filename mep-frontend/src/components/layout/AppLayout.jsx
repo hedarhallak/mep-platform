@@ -29,6 +29,7 @@ const mainNav = [
   { to: '/surplus',          icon: Recycle,         labelKey: 'nav.surplus',          permission: { module: 'materials',       action: 'surplus_view'   } },
   { to: '/tools',            icon: Wrench,          labelKey: 'nav.tools',            permission: { module: 'materials',       action: 'request_submit' } },
   { to: '/expenses',         icon: ReceiptText,     labelKey: 'nav.expenses',         permission: { module: 'expense_claims',  action: 'submit'         } },
+  { to: '/owner-audit',      icon: Shield,          labelKey: 'nav.ownerAudit',       permission: { module: 'audit',           action: 'view'           } },
   { to: '/my-hub',           icon: Inbox,           labelKey: 'nav.myHub',            permission: null, badge: true },
 ]
 
