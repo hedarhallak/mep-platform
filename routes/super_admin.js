@@ -342,6 +342,102 @@ router.post('/companies', async (req, res) => {
 });
 
 /**
+ * POST /api/super/companies/:id/owner — provision the OWNER account (§132.5 / §140 Slice 3).
+ *
+ * Constrai-only (SUPER_ADMIN). Creates a NEW user with role=OWNER for the
+ * company and emails them a temp PIN (must_change_pin → they set their own on
+ * first login) — the same provisioning shape as the company's first admin.
+ * One active OWNER per company (backup-OWNER is a future option, §140.4).
+ * Works for existing tenants (e.g. MEP) and new ones. The in-tenant OWNER
+ * guard (canAssignRole) already blocks anyone but SUPER_ADMIN from minting one.
+ */
+router.post('/companies/:id/owner', async (req, res) => {
+  try {
+    const companyId = Number(req.params.id);
+    if (!companyId) return res.status(400).json({ ok: false, error: 'INVALID_ID' });
+
+    const { email, username: usernameRaw } = req.body || {};
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email))) {
+      return res.status(400).json({ ok: false, error: 'VALID_EMAIL_REQUIRED' });
+    }
+    const ownerEmail = String(email).trim().toLowerCase();
+
+    const co = await req.db.query(
+      'SELECT company_id, name, company_code FROM public.companies WHERE company_id = $1 LIMIT 1',
+      [companyId]
+    );
+    if (!co.rows.length) return res.status(404).json({ ok: false, error: 'COMPANY_NOT_FOUND' });
+    const company = co.rows[0];
+
+    // One active OWNER per company (§132.5 / §140.4).
+    const existingOwner = await req.db.query(
+      `SELECT 1 FROM public.app_users WHERE company_id = $1 AND role = 'OWNER' AND is_active = true LIMIT 1`,
+      [companyId]
+    );
+    if (existingOwner.rows.length)
+      return res.status(409).json({ ok: false, error: 'OWNER_ALREADY_EXISTS' });
+
+    // Email is globally unique (migration 011).
+    const emailTaken = await req.db.query(
+      'SELECT 1 FROM public.app_users WHERE lower(email) = $1 LIMIT 1',
+      [ownerEmail]
+    );
+    if (emailTaken.rows.length) return res.status(409).json({ ok: false, error: 'EMAIL_TAKEN' });
+
+    // Username from the email local-part; ensure unique.
+    const base =
+      String(usernameRaw || ownerEmail.split('@')[0])
+        .toLowerCase()
+        .replace(/[^a-z0-9_.-]/g, '')
+        .slice(0, 30) || 'owner';
+    let username = base;
+    for (let i = 1; i < 50; i++) {
+      const taken = await req.db.query(
+        'SELECT 1 FROM public.app_users WHERE username = $1 LIMIT 1',
+        [username]
+      );
+      if (!taken.rows.length) break;
+      username = `${base}${i}`;
+    }
+
+    // Temp PIN — owner sets a real PIN on first login (must_change_pin).
+    const tempPin = String(Math.floor(100000 + Math.random() * 900000));
+    const pinHash = await hashPin(tempPin);
+
+    const ins = await req.db.query(
+      `INSERT INTO public.app_users
+         (username, email, pin_hash, company_id, role, is_active, must_change_pin, is_temp_pin)
+       VALUES ($1, $2, $3, $4, 'OWNER', true, true, true)
+       RETURNING id, username, email, role`,
+      [username, ownerEmail, pinHash, companyId]
+    );
+    const owner = ins.rows[0];
+
+    // Welcome email with the temp PIN (catches its own errors → never rolls back).
+    const emailSent = await sendAdminWelcome({
+      to: ownerEmail,
+      companyName: company.name,
+      companyCode: company.company_code,
+      username,
+      tempPin,
+    });
+
+    await audit(req.db, req, {
+      action: ACTIONS.OWNER_PROVISIONED,
+      entity_type: 'app_users',
+      entity_id: owner.id,
+      entity_name: username,
+      new_values: { role: 'OWNER', company_id: companyId, email: ownerEmail },
+    });
+
+    return res.status(201).json({ ok: true, owner, email_sent: emailSent });
+  } catch (err) {
+    console.error('POST /super/companies/:id/owner error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR', message: err.message });
+  }
+});
+
+/**
  * PATCH /api/super/companies/:id
  */
 router.patch('/companies/:id', async (req, res) => {
