@@ -15975,7 +15975,11 @@ Slice 1 took **3 red CI rounds** before green — each a real bug, none caught l
 
 **Slice 2c SHIPPED + DEPLOYED (PR #355, frontend):** `OwnerAuditPage.jsx` (route `/owner-audit`, gated `RequirePermission module="audit" action="view"`) consumes `GET /permissions/owner-audit` and renders each sensitive edit with its per-field **old→new diff** (red strike → green; noise keys like updated_at hidden). Nav item (Shield icon, gated `audit.view` → only OWNER/SUPER_ADMIN see it) + i18n EN/FR + Vitest smoke. Frontend rebuilt on prod. NOTE: the page is **present but invisible until an OWNER is provisioned** (only OWNER+SUPER_ADMIN hold `audit.view`, and no OWNER exists yet) — that's Slice 3.
 
-**§132 OWNER role: Slice 1 + Slice 2 (backend + frontend) = COMPLETE + LIVE.** Remaining: **Slice 3** = SUPER_ADMIN endpoint to provision the OWNER account per tenant (§132.5) + cross-tenant parent-level audit copy. Then the §132 prevention stack is whole. Open sub-decisions in §140.4.
+**§132 OWNER role: Slice 1 + Slice 2 + Slice 3a = COMPLETE + LIVE.**
+
+**Slice 3a SHIPPED + DEPLOYED (PR #358, no migration):** `POST /api/super/companies/:id/owner` (SUPER_ADMIN only, in `routes/super_admin.js`) provisions the OWNER account for a tenant — creates a `role='OWNER'` user + emails a temp PIN (`must_change_pin` → owner sets their own; same shape as the company's first-admin provisioning, reuses `sendAdminWelcome`). Enforces **one active OWNER per company** (409 `OWNER_ALREADY_EXISTS`; backup-OWNER deferred, §140.4), email validation (400), global email uniqueness (409). Audits `OWNER_PROVISIONED`. Works for existing tenants (MEP) + new ones. Decision (Hedar §140.4): dedicated endpoint + temp-PIN invite (over promote-existing-user). Tests in `tests/admin/super_owner_provision.test.js`. **No OWNER provisioned yet** — Hedar provisions when ready (the `/owner-audit` page stays invisible until then).
+
+**Remaining for the §132 stack:** **Slice 3b** = cross-tenant parent-level audit copy (§132.6 layer 6 — OWNER changes + the audit held out of any single tenant's reach, SUPER_ADMIN global view). **Slice 3c (UX)** = a "Provision OWNER" button in the admin portal (CompaniesList) instead of curl. Then the §132 prevention+detection stack is whole. Open sub-decisions in §140.4.
 
 ### 140.6 — Merge-friction pitfall (NEW): branch-protection "require up-to-date" + queued PRs
 
