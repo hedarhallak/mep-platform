@@ -438,6 +438,47 @@ router.post('/companies/:id/owner', async (req, res) => {
 });
 
 /**
+ * GET /api/super/audit — cross-tenant audit (§132.6 layer 6, §140 Slice 3b).
+ *
+ * Constrai's global oversight view of the high-risk / OWNER audit across ALL
+ * tenants. SUPER_ADMIN routes through superPool (BYPASSRLS), so the absence of
+ * a company_id filter intentionally spans every tenant. Surfaces OWNER
+ * provisioning + the §132.7 sensitive-field edits with old→new + the company.
+ * (The separate out-of-tenant-reach audit COPY is future infra — not this.)
+ */
+const SUPER_AUDIT_ACTIONS = [
+  'OWNER_PROVISIONED',
+  'PROJECT_UPDATED',
+  'PROJECT_DELETED',
+  'ASSIGNMENT_UPDATED',
+  'ASSIGNMENT_DELETED',
+  'ATTENDANCE_CHECKIN',
+  'ATTENDANCE_CHECKOUT',
+  'ATTENDANCE_CONFIRMED',
+  'COMPANY_UPDATED',
+];
+
+router.get('/audit', async (req, res) => {
+  try {
+    const result = await req.db.query(
+      `SELECT al.id, al.company_id, c.name AS company_name, al.action, al.entity_type,
+              al.entity_name, al.old_values, al.new_values,
+              al.username AS changed_by, al.role AS changer_role, al.created_at
+         FROM public.audit_logs al
+         LEFT JOIN public.companies c ON c.company_id = al.company_id
+        WHERE al.action = ANY($1)
+        ORDER BY al.created_at DESC
+        LIMIT 200`,
+      [SUPER_AUDIT_ACTIONS]
+    );
+    return res.json({ ok: true, audit: result.rows });
+  } catch (err) {
+    console.error('GET /super/audit error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
+  }
+});
+
+/**
  * PATCH /api/super/companies/:id
  */
 router.patch('/companies/:id', async (req, res) => {
