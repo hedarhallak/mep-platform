@@ -65,6 +65,11 @@ export default function CompaniesList() {
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState('name')
   const [sortDir, setSortDir] = useState('asc')
+  // §132 / §140 Slice 3c — provision OWNER modal (per company).
+  const [ownerFor, setOwnerFor] = useState(null)
+  const [ownerEmail, setOwnerEmail] = useState('')
+  const [ownerBusy, setOwnerBusy] = useState(false)
+  const [ownerMsg, setOwnerMsg] = useState(null)
 
   useEffect(() => {
     let cancelled = false
@@ -133,6 +138,25 @@ export default function CompaniesList() {
     } else {
       setSortBy(key)
       setSortDir('asc')
+    }
+  }
+
+  // §132 / §140 Slice 3c — provision the company's OWNER (Constrai-only).
+  async function provisionOwner(e) {
+    e.preventDefault()
+    if (!ownerFor) return
+    setOwnerBusy(true)
+    setOwnerMsg(null)
+    try {
+      await api.post(`/super/companies/${ownerFor.company_id}/owner`, { email: ownerEmail.trim() })
+      setOwnerMsg({ ok: true, text: 'OWNER provisioned — an activation email with a temp PIN was sent.' })
+      setOwnerEmail('')
+    } catch (err) {
+      const msg =
+        (err.response && err.response.data && err.response.data.error) || err.message || 'Failed'
+      setOwnerMsg({ ok: false, text: msg })
+    } finally {
+      setOwnerBusy(false)
     }
   }
 
@@ -277,6 +301,17 @@ export default function CompaniesList() {
                     >
                       Branding →
                     </Link>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOwnerFor(c)
+                        setOwnerEmail('')
+                        setOwnerMsg(null)
+                      }}
+                      className="ml-3 text-amber-300 hover:text-amber-200 text-xs font-medium"
+                    >
+                      Owner →
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -284,6 +319,50 @@ export default function CompaniesList() {
           </table>
         </div>
       </main>
+
+      {ownerFor && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-slate-800 border border-slate-700 rounded-lg p-5 w-full max-w-md">
+            <h3 className="text-lg font-semibold mb-1">Provision OWNER</h3>
+            <p className="text-xs text-slate-400 mb-4">
+              {ownerFor.name} — creates the company&apos;s OWNER account and emails an activation
+              temp-PIN. One OWNER per company.
+            </p>
+            <form onSubmit={provisionOwner}>
+              <input
+                type="email"
+                required
+                value={ownerEmail}
+                onChange={(e) => setOwnerEmail(e.target.value)}
+                placeholder="owner@company.com"
+                aria-label="Owner email"
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded text-sm text-slate-100 mb-3"
+              />
+              {ownerMsg && (
+                <div className={`text-xs mb-3 ${ownerMsg.ok ? 'text-green-400' : 'text-red-400'}`}>
+                  {ownerMsg.text}
+                </div>
+              )}
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setOwnerFor(null)}
+                  className="px-3 py-2 text-sm text-slate-300 hover:text-slate-100"
+                >
+                  Close
+                </button>
+                <button
+                  type="submit"
+                  disabled={ownerBusy}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-500 rounded text-white text-sm font-medium disabled:opacity-50"
+                >
+                  {ownerBusy ? 'Provisioning…' : 'Provision OWNER'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
