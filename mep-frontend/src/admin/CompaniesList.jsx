@@ -210,6 +210,12 @@ export default function CompaniesList() {
             Payments
           </Link>
           <Link
+            to="/audit"
+            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-slate-100 text-sm font-medium"
+          >
+            Audit
+          </Link>
+          <Link
             to="/companies/new"
             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded text-white text-sm font-medium"
           >

@@ -26,6 +26,7 @@ import SubscriptionRequestsPage from './admin/SubscriptionRequestsPage.jsx'
 import TrainingQuotesPage from './admin/TrainingQuotesPage.jsx'
 import CustomDemandsPage from './admin/CustomDemandsPage.jsx'
 import PaymentsPage from './admin/PaymentsPage.jsx'
+import SuperAuditPage from './admin/SuperAuditPage.jsx'
 import AdminIdleGuard from './admin/AdminIdleGuard.jsx'
 import RequireAdminTab from './admin/RequireAdminTab.jsx'
 
@@ -67,6 +68,8 @@ export default function AdminApp() {
         <Route path="/custom-demands" element={<RequireAdminTab><CustomDemandsPage /></RequireAdminTab>} />
         {/* Section 123 / Phase 6-D-6 PR 4 — cross-company payments management. */}
         <Route path="/payments" element={<RequireAdminTab><PaymentsPage /></RequireAdminTab>} />
+        {/* §132.6 / §140 Slice 3b — cross-tenant audit oversight. */}
+        <Route path="/audit" element={<RequireAdminTab><SuperAuditPage /></RequireAdminTab>} />
         <Route path="/login" element={<AdminLogin />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
