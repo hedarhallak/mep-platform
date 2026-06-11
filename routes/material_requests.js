@@ -351,14 +351,21 @@ router.get('/pdf-data', can('purchase_orders.print'), async (req, res) => {
       [ids[0], companyId]
     );
 
-    // 4. Merged items
+    // 4. Merged items.
+    // SECURITY: material_request_items has NO company_id column and NO RLS
+    // policy (it inherits isolation from its parent material_requests). The
+    // request_ids come straight from the client (req.query), so we MUST join
+    // to material_requests and scope by company_id — otherwise a caller could
+    // pass another tenant's request_ids and read their line items (the project
+    // and supplier lookups below are already company-scoped; this one was not).
     const { rows: items } = await req.db.query(
       `SELECT mri.item_name, SUM(mri.quantity) AS quantity, mri.unit
        FROM public.material_request_items mri
-       WHERE mri.request_id = ANY($1::bigint[])
+       JOIN public.material_requests mr ON mr.id = mri.request_id
+       WHERE mri.request_id = ANY($1::bigint[]) AND mr.company_id = $2
        GROUP BY mri.item_name, mri.unit
        ORDER BY mri.item_name`,
-      [ids]
+      [ids, companyId]
     );
 
     // 5. Supplier info (optional)

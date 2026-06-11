@@ -360,6 +360,57 @@ describeIfDb('GET /api/materials/pdf-data', () => {
     expect(res.statusCode).toBe(400);
     expect(res.body).toMatchObject({ ok: false, error: 'REQUEST_IDS_REQUIRED' });
   });
+
+  // Security regression (DECISIONS §142 — tenant-isolation audit, Finding #1):
+  // material_request_items has no company_id column and no RLS policy, so the
+  // merged-items query MUST scope through material_requests.company_id. Without
+  // it, a caller could pass another tenant's request_ids and read their line
+  // items. These two tests pin the fix: own-company items load; cross-tenant
+  // request_ids return zero items.
+  test('200 returns own-company line items (positive control)', async () => {
+    const company = await seedCompany();
+    const { admin } = await seedAdminWithEmployee(company.company_id);
+    const mr = await seedMaterialRequest({ company_id: company.company_id });
+    await seedMaterialRequestItem(mr.id, { item_name: 'own_copper_pipe', quantity: 7 });
+    const { token } = await loginUser(admin);
+
+    const res = await request(app)
+      .get(`/api/materials/pdf-data?request_ids=${mr.id}&supplier_id=procurement`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(200);
+    const names = (res.body.pdf_data?.items || []).map((i) => i.item_name);
+    expect(names).toContain('own_copper_pipe');
+  });
+
+  test('does NOT leak another company line items via foreign request_ids', async () => {
+    // Victim company B with a material request + a distinctive line item.
+    const victim = await seedCompany();
+    const victimReq = await seedMaterialRequest({ company_id: victim.company_id });
+    await seedMaterialRequestItem(victimReq.id, { item_name: 'secret_victim_item', quantity: 99 });
+
+    // Attacker company A (different tenant): a real own request so the PO
+    // project lookup resolves on ids[0], plus the victim's request id appended
+    // to the query — the classic mixed-array cross-tenant attempt.
+    const attackerCo = await seedCompany();
+    const { admin: attacker } = await seedAdminWithEmployee(attackerCo.company_id);
+    const attackerReq = await seedMaterialRequest({ company_id: attackerCo.company_id });
+    await seedMaterialRequestItem(attackerReq.id, { item_name: 'attacker_own_item', quantity: 3 });
+    const { token } = await loginUser(attacker);
+
+    const res = await request(app)
+      .get(
+        `/api/materials/pdf-data?request_ids=${attackerReq.id},${victimReq.id}&supplier_id=procurement`
+      )
+      .set('Authorization', `Bearer ${token}`);
+
+    // The attacker's own item is returned; the victim's item is filtered out by
+    // the company_id-scoped JOIN — no cross-tenant leak.
+    expect(res.statusCode).toBe(200);
+    const names = (res.body.pdf_data?.items || []).map((i) => i.item_name);
+    expect(names).toContain('attacker_own_item');
+    expect(names).not.toContain('secret_victim_item');
+  });
 });
 
 // ──────────────────────────────────────────────────────────────────
