@@ -389,21 +389,27 @@ describeIfDb('GET /api/materials/pdf-data', () => {
     const victimReq = await seedMaterialRequest({ company_id: victim.company_id });
     await seedMaterialRequestItem(victimReq.id, { item_name: 'secret_victim_item', quantity: 99 });
 
-    // Attacker company A (different tenant) with print permission.
+    // Attacker company A (different tenant): a real own request so the PO
+    // project lookup resolves on ids[0], plus the victim's request id appended
+    // to the query — the classic mixed-array cross-tenant attempt.
     const attackerCo = await seedCompany();
     const { admin: attacker } = await seedAdminWithEmployee(attackerCo.company_id);
+    const attackerReq = await seedMaterialRequest({ company_id: attackerCo.company_id });
+    await seedMaterialRequestItem(attackerReq.id, { item_name: 'attacker_own_item', quantity: 3 });
     const { token } = await loginUser(attacker);
 
     const res = await request(app)
-      .get(`/api/materials/pdf-data?request_ids=${victimReq.id}&supplier_id=procurement`)
+      .get(
+        `/api/materials/pdf-data?request_ids=${attackerReq.id},${victimReq.id}&supplier_id=procurement`
+      )
       .set('Authorization', `Bearer ${token}`);
 
-    // Request succeeds for the attacker's own tenant context, but the victim's
-    // items must NOT appear — the company_id-scoped JOIN filters them out.
+    // The attacker's own item is returned; the victim's item is filtered out by
+    // the company_id-scoped JOIN — no cross-tenant leak.
     expect(res.statusCode).toBe(200);
     const names = (res.body.pdf_data?.items || []).map((i) => i.item_name);
+    expect(names).toContain('attacker_own_item');
     expect(names).not.toContain('secret_victim_item');
-    expect(res.body.pdf_data.items).toHaveLength(0);
   });
 });
 
