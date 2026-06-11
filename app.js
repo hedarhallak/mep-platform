@@ -129,6 +129,22 @@ const superAdminLimiter = rateLimit({
   message: { ok: false, error: 'TOO_MANY_REQUESTS' },
 });
 
+// TOTP second-factor endpoints (DECISIONS §142.4 Finding #2). The /totp/verify
+// and /totp/confirm-setup handlers check a 6-digit code against a 5-minute
+// stateless pending token; without a limiter the code is brute-forceable
+// (~200k expected guesses with window=2). A strict per-IP cap removes the
+// unthrottled-verify gap — a legit user needs only 1-3 attempts. Combined with
+// authLimiter on /login (which throttles minting fresh pending tokens) this
+// closes the 2FA brute-force path guarding the BYPASSRLS SUPER_ADMIN portal.
+const totpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: skipInTests,
+  message: { ok: false, error: 'TOO_MANY_REQUESTS' },
+});
+
 // =============================================================================
 // Middleware imports for the route mounts
 // =============================================================================
@@ -433,6 +449,8 @@ root.use('/api/auth/login', authLimiter);
 root.use('/api/auth/signup', authLimiter);
 root.use('/api/auth/refresh', refreshLimiter);
 root.use('/api/auth/change-pin', changePinLimiter);
+root.use('/api/auth/totp/verify', totpLimiter);
+root.use('/api/auth/totp/confirm-setup', totpLimiter);
 root.use('/api/onboarding', onboardingLimiter);
 root.use('/activate', onboardingLimiter);
 root.use('/api/super', superAdminLimiter);
