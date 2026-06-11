@@ -16009,3 +16009,29 @@ Slice 1 took **3 red CI rounds** before green — each a real bug, none caught l
 3. **Cache Playwright browsers** (`actions/cache` on `~/.cache/ms-playwright`). Saves the chromium re-download on the e2e job (the apt system-libs step still runs).
 
 Expected PR saving ~1.5–2.5 min. Push-to-main runs stay full (coverage + knip) so nothing is lost for the canonical branch. Further levers if needed (NOT done — higher risk): per-job path filtering (skip frontend/mobile/e2e on backend-only PRs), splitting lint/knip into a separate parallel job, Jest sharding.
+
+---
+
+## 142. Section 142 — June 11, 2026 — Session Log: provisioned MEP's OWNER (§132 demoable e2e) + welcome-email login-link bug fix
+
+> First operational step after §132 OWNER role hit 100% code-complete (§140.7). Goal this session: provision MEP's real OWNER so the anti-tamper feature is demonstrable end-to-end for the September conference, then pick a new track. Provisioning surfaced a real email bug (caught + fixed same session).
+
+### 142.1 — Provisioned MEP's OWNER (the operational close-out of §132)
+
+- Prod verified healthy first (URGENT FIRST CHECK): `mep-backend` online, `/api/health` 200.
+- From `admin.constrai.ca` → CompaniesList → **"Owner →"** on MEP Construction → provisioned OWNER with email `hedar.hallak+worker123@gmail.com` (Gmail alias — same inbox, globally unique in `app_users`; NOT `hedar.hallak@gmail.com` which is the SUPER_ADMIN → would 409 EMAIL_TAKEN). Endpoint = `POST /api/super/companies/:id/owner` (§140.7 Slice 3a). Green "OWNER provisioned" message; welcome email delivered.
+- Logged in as OWNER at `app.constrai.ca/login` (temp PIN → `must_change_pin` → set real PIN) → **`/owner-audit` ("Audit (Owner)" Shield nav) renders MEP's sensitive-edit audit** with old→new diffs (e.g. `default_shift_start 06:00 → 07:00` by `admin (COMPANY_ADMIN)`). **Scoped to MEP only** (tenant RLS) — confirmed the §132 separation of duties: OWNER sees own-company audit; Constrai SUPER_ADMIN sees cross-tenant (`admin/audit`). **§132 anti-tamper stack now demoable end-to-end.**
+- **Pitfall #67 struck (PWA stale bundle):** first OWNER login in a NON-incognito window showed NO "Audit" nav item, even though prod `role_permissions` confirmed `audit.view` granted to OWNER (+ SUPER_ADMIN) — the service worker was serving an app bundle predating the owner-audit nav (PR #355). A **fresh Incognito** login showed the nav + page correctly. Diagnosis path: bisected by hitting `/owner-audit` directly + ground-truthing the grant via `psql`. Lesson reinforced: smoke deployed UI in Incognito; a missing nav item with a confirmed backend grant = stale SW, not a permission bug.
+
+### 142.2 — BUG found + fixed: welcome/OWNER email login link pointed to `localhost:3000/login.html`
+
+The OWNER welcome email's "Sign In" link rendered `http://localhost:3000/login.html` — two defects:
+1. **`APP_URL` was never set on prod `/var/www/mep/.env`** → `lib/email.js:18` fell back to its `http://localhost:3000` default. (`.env.example:134` already documents `APP_URL=https://app.constrai.ca` — prod just never had it.) **Fix:** appended `APP_URL=https://app.constrai.ca` to prod `.env` + `pm2 restart mep-backend --update-env`. (env-only; no deploy.)
+2. **Path `/login.html` is stale** — the web app is a Vite SPA (`index.html` + `admin.html` entries); the login route is the React-Router path **`/login`** (no `login.html` file exists; the only repo refs to `login.html` were these two lines in `lib/email.js`). **Fix:** `lib/email.js` HTML button + text body → `/login` (PR #366, `fix/email-login-link`, backend-only, no migration).
+- Both are needed: the env fix corrects the host, the PR corrects the path. After PR #366 merges, deploy = `git pull` + **`pm2 restart mep-backend`** (Pitfall #46: `mep-webhook` auto-pulls but does NOT restart; backend-only so no frontend rebuild). Then re-verify the email link reads `https://app.constrai.ca/login`.
+- Cosmetic backlog (noted, not fixed): the OWNER provisioning reuses `sendAdminWelcome`, so the email subject/body say "Admin" not "Owner". A dedicated OWNER welcome template is a low-priority polish item.
+
+### 142.3 — State after this session
+
+- **§132 OWNER role: 100% complete + LIVE + now demoable e2e** (MEP's OWNER provisioned). Only remainder = future INFRA (out-of-tenant-reach audit copy, §132.6 layer 6 — not code).
+- **Next track (Hedar's pick):** Assignments Phase 2 — CREWS (§131.2) was the recommended next feature; or a hygiene item (FK hygiene §131.13, web i18n, Mapbox distances). Two items still waiting on Hedar (non-code): invoice PDF logo + bank/remittance details; expense approver model.
