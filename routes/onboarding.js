@@ -10,7 +10,18 @@
 const router = require('express').Router();
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
-const { pool } = require('../db');
+const { pool, superPool } = require('../db');
+
+// authPool — for PRE-TENANT lookups/writes against RLS-strict tables in this
+// invite-acceptance flow (user_invites, app_users, employees). There is no
+// authenticated tenant context here (the invite token IS the authorization),
+// so no `app.company_id` GUC can be set; under strict RLS (migration 013) a
+// regular-pool query on these tables returns 0 rows / fails closed. superPool
+// (mepuser_super, BYPASSRLS) is the documented pre-tenant path (auth.js §, the
+// `authPool = superPool || pool` pattern; Pitfall #28/#59). Falls back to pool
+// where superPool is absent (dev/legacy CI under permissive RLS). Tenant
+// scoping is enforced by the single-use invite token + invite.company_id.
+const authPool = superPool || pool;
 
 const hashToken = (t) => crypto.createHash('sha256').update(t).digest('hex');
 
@@ -22,7 +33,7 @@ router.get('/verify', async (req, res) => {
 
     const tokenHash = hashToken(token);
 
-    const result = await pool.query(
+    const result = await authPool.query(
       `SELECT
          ui.id, ui.email, ui.role, ui.employee_id, ui.company_id,
          ui.expires_at, ui.status, ui.used_at,
@@ -66,7 +77,7 @@ router.get('/verify', async (req, res) => {
 
 // ── POST /api/onboarding/complete ─────────────────────────────
 router.post('/complete', async (req, res) => {
-  const client = await pool.connect();
+  const client = await authPool.connect();
   try {
     await client.query('BEGIN');
 
