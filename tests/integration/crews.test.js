@@ -15,6 +15,8 @@ const {
   seedCompany,
   seedUser,
   seedEmployee,
+  seedEmployeeProfile,
+  seedProject,
   cleanupTestRows,
 } = require('../helpers/db');
 
@@ -166,5 +168,80 @@ describeIfDb('crews CRUD + tenant isolation', () => {
       .set('Authorization', `Bearer ${tokenA}`);
     expect(stillThere.statusCode).toBe(200);
     expect(stillThere.body.crew.members).toHaveLength(1);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────
+describeIfDb('POST /api/crews/:id/plan (crew deploy preview)', () => {
+  afterAll(async () => {
+    await cleanupTestRows();
+    await closePool();
+  });
+
+  test('expands roster into a wizard-compatible block (foreman role + members)', async () => {
+    const company = await seedCompany();
+    const { token } = await seedAdmin(company.company_id);
+    const foreman = await seedEmployee({ company_id: company.company_id });
+    const m1 = await seedEmployee({ company_id: company.company_id });
+    await seedEmployeeProfile({ employee_id: foreman.id, full_name: 'Boss Foreman' });
+    await seedEmployeeProfile({ employee_id: m1.id, full_name: 'Worker One' });
+    const project = await seedProject({ company_id: company.company_id });
+
+    const crew = await request(app)
+      .post('/api/crews')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Deploy Crew', foreman_employee_id: foreman.id, member_ids: [m1.id] });
+    expect(crew.statusCode).toBe(201);
+
+    const plan = await request(app)
+      .post(`/api/crews/${crew.body.crew.id}/plan`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ project_id: project.id, target_date: '2026-07-01' });
+
+    expect(plan.statusCode).toBe(200);
+    expect(plan.body.suggestions).toHaveLength(1);
+    const block = plan.body.suggestions[0];
+    expect(Number(block.project_id)).toBe(Number(project.id));
+    // Roster = foreman + 1 member.
+    expect(block.employees).toHaveLength(2);
+    const foremanRow = block.employees.find((e) => Number(e.employee_id) === Number(foreman.id));
+    const memberRow = block.employees.find((e) => Number(e.employee_id) === Number(m1.id));
+    expect(foremanRow.assignment_role).toBe('FOREMAN');
+    expect(memberRow.assignment_role).toBe('WORKER');
+    expect(plan.body.totals.headcount).toBe(2);
+  });
+
+  test('400 when target_date or project_id missing', async () => {
+    const company = await seedCompany();
+    const { token } = await seedAdmin(company.company_id);
+    const crew = await request(app)
+      .post('/api/crews')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Bare Crew' });
+    const res = await request(app)
+      .post(`/api/crews/${crew.body.crew.id}/plan`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ project_id: 1 });
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toMatchObject({ ok: false, error: 'TARGET_DATE_REQUIRED' });
+  });
+
+  test('404 when planning a crew from another company', async () => {
+    const compA = await seedCompany();
+    const { token: tokenA } = await seedAdmin(compA.company_id);
+    const crewA = await request(app)
+      .post('/api/crews')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .send({ name: 'A Deploy Crew' });
+
+    const compB = await seedCompany();
+    const { token: tokenB } = await seedAdmin(compB.company_id);
+    const projB = await seedProject({ company_id: compB.company_id });
+
+    const res = await request(app)
+      .post(`/api/crews/${crewA.body.crew.id}/plan`)
+      .set('Authorization', `Bearer ${tokenB}`)
+      .send({ project_id: projB.id, target_date: '2026-07-01' });
+    expect(res.statusCode).toBe(404);
   });
 });
