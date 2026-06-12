@@ -6,25 +6,26 @@
 //
 // Mounted at /api/crews with `auth, tenantDb` (app.js), so every query runs on
 // req.db (the RLS-bound, per-request transaction client — company_id GUC set).
-// crews + crew_members are both under strict RLS (migration 033), so reads are
-// auto-scoped to the caller's company and writes are WITH CHECK-enforced.
+// crews + crew_members are both under strict RLS (migration 033).
+//
+// DEFENSE-IN-DEPTH (§142.4 lesson): every query ALSO carries an explicit
+// `company_id = req.user.company_id` predicate — we do NOT rely on RLS alone.
+// Besides being the right discipline, it's what makes tenant isolation hold in
+// CI too, where the test pool connects as a BYPASSRLS role (Pitfall #14) and
+// RLS is silently inert.
 //
 // Permissions reuse the existing `assignments.*` module (no new seeding):
-//   GET  -> assignments.view   POST -> assignments.create   PATCH/DELETE -> assignments.edit
+//   GET -> assignments.view   POST -> assignments.create   PATCH/DELETE -> assignments.edit
 //
-// Employee-ownership is validated explicitly (not left to FK + RLS alone): a
-// foreman/member id that isn't an employee of the caller's company is rejected
-// 400 — the §142.4 / project_foremen "validate the id belongs to the tenant"
-// discipline.
+// Employee-ownership is validated explicitly (not left to FK + RLS): a foreman/
+// member id that isn't an employee of the caller's company is rejected 400.
 
 const express = require('express');
 const router = express.Router();
 const { can } = require('../middleware/permissions');
 
-// Validate that every id in `ids` is an active-or-existing employee of the
-// caller's company. Returns the set of valid ids (as numbers). Uses req.db so
-// RLS already scopes employees to the tenant; the explicit company_id check is
-// belt-and-suspenders + makes intent obvious.
+// Validate that every id in `ids` is an employee of the caller's company.
+// Returns the set of valid ids (numbers).
 async function validCompanyEmployeeIds(db, companyId, ids) {
   const unique = [...new Set(ids.map(Number).filter((n) => Number.isInteger(n) && n > 0))];
   if (unique.length === 0) return new Set();
@@ -35,16 +36,16 @@ async function validCompanyEmployeeIds(db, companyId, ids) {
   return new Set(rows.map((r) => Number(r.id)));
 }
 
-// Shape a crew row + its members for the response.
-async function loadCrewWithMembers(db, crewId) {
+// Shape a crew row + its members for the response. company_id-scoped.
+async function loadCrewWithMembers(db, crewId, companyId) {
   const { rows: crewRows } = await db.query(
     `SELECT c.id, c.name, c.foreman_employee_id, c.trade_code, c.is_active,
             c.created_at, c.updated_at,
             fe.full_name AS foreman_name
        FROM public.crews c
        LEFT JOIN public.employees fe ON fe.id = c.foreman_employee_id
-      WHERE c.id = $1`,
-    [crewId]
+      WHERE c.id = $1 AND c.company_id = $2`,
+    [crewId, companyId]
   );
   if (!crewRows.length) return null;
   const crew = crewRows[0];
@@ -52,9 +53,9 @@ async function loadCrewWithMembers(db, crewId) {
     `SELECT cm.employee_id, e.full_name, e.employee_code
        FROM public.crew_members cm
        JOIN public.employees e ON e.id = cm.employee_id
-      WHERE cm.crew_id = $1
+      WHERE cm.crew_id = $1 AND cm.company_id = $2
       ORDER BY e.full_name`,
-    [crewId]
+    [crewId, companyId]
   );
   crew.members = members;
   return crew;
@@ -63,6 +64,7 @@ async function loadCrewWithMembers(db, crewId) {
 // ── GET /api/crews ── list crews (with foreman name + member count) ──────────
 router.get('/', can('assignments.view'), async (req, res) => {
   try {
+    const companyId = req.user.company_id;
     const { rows } = await req.db.query(
       `SELECT c.id, c.name, c.foreman_employee_id, c.trade_code, c.is_active,
               c.created_at, c.updated_at,
@@ -71,8 +73,10 @@ router.get('/', can('assignments.view'), async (req, res) => {
          FROM public.crews c
          LEFT JOIN public.employees fe ON fe.id = c.foreman_employee_id
          LEFT JOIN public.crew_members cm ON cm.crew_id = c.id
+        WHERE c.company_id = $1
         GROUP BY c.id, fe.full_name
-        ORDER BY c.is_active DESC, c.name`
+        ORDER BY c.is_active DESC, c.name`,
+      [companyId]
     );
     return res.json({ ok: true, crews: rows });
   } catch (err) {
@@ -87,7 +91,7 @@ router.get('/:id', can('assignments.view'), async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0)
       return res.status(400).json({ ok: false, error: 'INVALID_ID' });
-    const crew = await loadCrewWithMembers(req.db, id);
+    const crew = await loadCrewWithMembers(req.db, id, req.user.company_id);
     if (!crew) return res.status(404).json({ ok: false, error: 'NOT_FOUND' });
     return res.json({ ok: true, crew });
   } catch (err) {
@@ -117,7 +121,7 @@ router.post('/', can('assignments.create'), async (req, res) => {
     const badMember = members.find((m) => !valid.has(Number(m)));
     if (badMember != null) return res.status(400).json({ ok: false, error: 'INVALID_MEMBER' });
 
-    // Create the crew (company_id stamped server-side; RLS WITH CHECK enforces it).
+    // Create the crew (company_id stamped server-side; RLS WITH CHECK enforces it too).
     let crewId;
     try {
       const { rows } = await req.db.query(
@@ -141,7 +145,7 @@ router.post('/', can('assignments.create'), async (req, res) => {
       );
     }
 
-    const crew = await loadCrewWithMembers(req.db, crewId);
+    const crew = await loadCrewWithMembers(req.db, crewId, companyId);
     return res.status(201).json({ ok: true, crew });
   } catch (err) {
     console.error('POST /crews error:', err);
@@ -157,8 +161,11 @@ router.patch('/:id', can('assignments.edit'), async (req, res) => {
     if (!Number.isInteger(id) || id <= 0)
       return res.status(400).json({ ok: false, error: 'INVALID_ID' });
 
-    // RLS scopes this to the tenant — a foreign id returns no row → 404.
-    const { rows: exists } = await req.db.query(`SELECT id FROM public.crews WHERE id = $1`, [id]);
+    // Explicit company_id scope (defense-in-depth) — a foreign id → 404.
+    const { rows: exists } = await req.db.query(
+      `SELECT id FROM public.crews WHERE id = $1 AND company_id = $2`,
+      [id, companyId]
+    );
     if (!exists.length) return res.status(404).json({ ok: false, error: 'NOT_FOUND' });
 
     const { name, foreman_employee_id, trade_code, is_active, member_ids } = req.body || {};
@@ -201,8 +208,12 @@ router.patch('/:id', can('assignments.edit'), async (req, res) => {
     if (sets.length) {
       sets.push(`updated_at = NOW()`);
       params.push(id);
+      params.push(companyId);
       try {
-        await req.db.query(`UPDATE public.crews SET ${sets.join(', ')} WHERE id = $${p}`, params);
+        await req.db.query(
+          `UPDATE public.crews SET ${sets.join(', ')} WHERE id = $${p++} AND company_id = $${p}`,
+          params
+        );
       } catch (e) {
         if (e.code === '23505') return res.status(409).json({ ok: false, error: 'NAME_TAKEN' });
         throw e;
@@ -211,7 +222,10 @@ router.patch('/:id', can('assignments.edit'), async (req, res) => {
 
     // Replace the roster only when member_ids was explicitly provided.
     if (Array.isArray(member_ids)) {
-      await req.db.query(`DELETE FROM public.crew_members WHERE crew_id = $1`, [id]);
+      await req.db.query(`DELETE FROM public.crew_members WHERE crew_id = $1 AND company_id = $2`, [
+        id,
+        companyId,
+      ]);
       const uniqueMembers = [...new Set(member_ids.map(Number))];
       for (const empId of uniqueMembers) {
         await req.db.query(
@@ -222,7 +236,7 @@ router.patch('/:id', can('assignments.edit'), async (req, res) => {
       }
     }
 
-    const crew = await loadCrewWithMembers(req.db, id);
+    const crew = await loadCrewWithMembers(req.db, id, companyId);
     return res.json({ ok: true, crew });
   } catch (err) {
     console.error('PATCH /crews/:id error:', err);
@@ -236,8 +250,11 @@ router.delete('/:id', can('assignments.edit'), async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0)
       return res.status(400).json({ ok: false, error: 'INVALID_ID' });
-    // RLS scopes the DELETE; rowCount 0 means it wasn't the caller's crew.
-    const { rowCount } = await req.db.query(`DELETE FROM public.crews WHERE id = $1`, [id]);
+    // Explicit company_id scope (defense-in-depth) — rowCount 0 → not the caller's crew.
+    const { rowCount } = await req.db.query(
+      `DELETE FROM public.crews WHERE id = $1 AND company_id = $2`,
+      [id, req.user.company_id]
+    );
     if (!rowCount) return res.status(404).json({ ok: false, error: 'NOT_FOUND' });
     return res.json({ ok: true });
   } catch (err) {
