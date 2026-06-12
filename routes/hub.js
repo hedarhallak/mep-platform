@@ -27,19 +27,18 @@ const { can, logAudit } = require('../middleware/permissions');
 // POST /messages — that handler needs all-or-nothing atomicity across the
 // task_messages INSERT + the loop of task_recipients INSERTs, and uses
 // BEGIN/COMMIT/ROLLBACK on a manually-acquired client. Same pattern as
-// auto_assign.js's /auto-confirm (Section 89-C/4).
+// auto_assign.js's /auto-confirm (Section 130).
 //
-// TODO Stage 3 (Section 89-E): the manual transaction client doesn't have
-// `app.company_id` GUC set, so under strict RLS the INSERTs into
-// `task_messages` + `task_recipients` would fail. Refactor pattern: either
-// (a) drop the manual transaction and trust the per-request middleware
-// transaction, or (b) call `client.query("SET LOCAL app.company_id = ...")`
-// immediately after BEGIN. Plan B is the smaller delta — same as the
-// 89-C/4 auto_assign deferred refactor.
+// Section 89-E Stage 3 (DONE): under strict RLS (migration 013, live since
+// May 9 2026) the manual client needs the tenant GUC, else the app_users
+// SELECT + task_messages/task_recipients INSERTs fail. Fixed by running
+// `set_config('app.company_id', companyId, true)` right after BEGIN — see
+// the POST /messages handler below. Mirrors the auto_assign /auto-confirm fix.
 //
-// `logAudit(req, ...)` (from middleware/permissions.js) is fire-and-forget
-// and uses its own internal pool.query — same Stage 3 backlog item already
-// filed (HANDOFF Pitfall #21).
+// `logAudit(req, ...)` (from middleware/permissions.js) now writes via
+// `req.db || pool`, so its audit_logs INSERT carries the tenant GUC and
+// is RLS-safe. It runs on req.db (the per-request transaction), not the
+// manual `client` above — the audit row is committed independently.
 //
 // WHERE company_id clauses are kept for defense-in-depth.
 
@@ -329,6 +328,13 @@ router.post('/messages', can('hub.send_tasks'), upload.single('file'), async (re
     }
 
     await client.query('BEGIN');
+    // Section 89-E Stage 3: scope this manual transaction to the tenant — strict
+    // RLS (tenant_isolation, migration 013, live since May 9 2026) requires the
+    // GUC on THIS client, otherwise the app_users SELECT returns 0 rows and the
+    // task_messages / task_recipients INSERTs fail the WITH CHECK. is_local=true
+    // ⇒ SET LOCAL semantics (resets at COMMIT/ROLLBACK). Same fix as auto_assign
+    // /auto-confirm (Section 130). NOTE: SET LOCAL can't bind params, so set_config.
+    await client.query(`SELECT set_config('app.company_id', $1, true)`, [String(companyId)]);
 
     // NOTE: an `allAssigned` precheck used to exist here as `recipients.every(...)`,
     // but the inner callback always returned true and the result was never read.
