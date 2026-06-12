@@ -23,6 +23,19 @@
 const express = require('express');
 const router = express.Router();
 const { can } = require('../middleware/permissions');
+const { estimateRoadKm, loadRateTable, allowanceCentsFor } = require('../lib/ccq_travel');
+
+// Local haversine (auto_assign.js keeps its own copy; ccq_travel exports the
+// road-km estimate that consumes it). Great-circle km between two lat/lng.
+function haversineKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 // Validate that every id in `ids` is an employee of the caller's company.
 // Returns the set of valid ids (numbers).
@@ -259,6 +272,153 @@ router.delete('/:id', can('assignments.edit'), async (req, res) => {
     return res.json({ ok: true });
   } catch (err) {
     console.error('DELETE /crews/:id error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
+  }
+});
+
+// ── POST /api/crews/:id/plan ── expand a crew roster into a wizard-compatible
+// preview block for ONE project + target date (CREWS Slice 2, §143.3).
+//
+// The returned `suggestions[0]` block is shaped to drop straight into
+// /api/assignments/auto-confirm as confirmed[0] (identical employees[] row
+// shape), so crew deploy reuses the existing confirm + email + dedup + §132
+// location-snapshot pipeline unchanged. Foreman → assignment_role FOREMAN;
+// other members → WORKER. Roster members already assigned over target_date are
+// marked type 'already_assigned' (auto-confirm re-checks overlap and skips
+// them too, §131.12). Distance/allowance reuse lib/ccq_travel (estimate).
+router.post('/:id/plan', can('assignments.create'), async (req, res) => {
+  try {
+    const companyId = req.user.company_id;
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0)
+      return res.status(400).json({ ok: false, error: 'INVALID_ID' });
+
+    const { project_id, target_date } = req.body || {};
+    if (!target_date) return res.status(400).json({ ok: false, error: 'TARGET_DATE_REQUIRED' });
+    if (!project_id) return res.status(400).json({ ok: false, error: 'PROJECT_ID_REQUIRED' });
+
+    // Crew (company-scoped) + roster.
+    const { rows: crewRows } = await req.db.query(
+      `SELECT id, name, foreman_employee_id FROM public.crews WHERE id = $1 AND company_id = $2`,
+      [id, companyId]
+    );
+    if (!crewRows.length) return res.status(404).json({ ok: false, error: 'NOT_FOUND' });
+    const crew = crewRows[0];
+
+    const { rows: memberRows } = await req.db.query(
+      `SELECT employee_id FROM public.crew_members WHERE crew_id = $1 AND company_id = $2`,
+      [id, companyId]
+    );
+    const rosterIds = [
+      ...new Set([
+        ...memberRows.map((m) => Number(m.employee_id)),
+        ...(crew.foreman_employee_id != null ? [Number(crew.foreman_employee_id)] : []),
+      ]),
+    ];
+    if (!rosterIds.length) return res.status(400).json({ ok: false, error: 'EMPTY_CREW' });
+
+    // Project (company-scoped) with coords + shift defaults.
+    const { rows: projRows } = await req.db.query(
+      `SELECT p.id, p.project_code, p.project_name, p.site_address, p.site_lat, p.site_lng,
+              c.default_shift_start AS shift_start, c.default_shift_end AS shift_end
+         FROM public.projects p
+         JOIN public.companies c ON c.company_id = p.company_id
+        WHERE p.id = $1 AND p.company_id = $2`,
+      [Number(project_id), companyId]
+    );
+    if (!projRows.length) return res.status(404).json({ ok: false, error: 'PROJECT_NOT_FOUND' });
+    const project = projRows[0];
+
+    // Roster profiles + coords. The ids are already company-scoped (they came
+    // from crews/crew_members), so querying the policy-less employee_profiles by
+    // those ids is safe.
+    const { rows: profiles } = await req.db.query(
+      `SELECT ep.employee_id AS id, ep.full_name, ep.trade_code, ep.contact_email,
+              ST_X(ep.home_location::geometry) AS home_lng,
+              ST_Y(ep.home_location::geometry) AS home_lat
+         FROM public.employee_profiles ep
+        WHERE ep.employee_id = ANY($1::int[])`,
+      [rosterIds]
+    );
+    const profileById = new Map(profiles.map((p) => [Number(p.id), p]));
+
+    // Roster members already assigned anywhere over target_date.
+    const { rows: busyRows } = await req.db.query(
+      `SELECT DISTINCT requested_for_employee_id AS id
+         FROM public.assignment_requests
+        WHERE company_id = $1 AND status IN ('APPROVED','PENDING')
+          AND start_date <= $2 AND end_date >= $2
+          AND requested_for_employee_id = ANY($3::int[])`,
+      [companyId, target_date, rosterIds]
+    );
+    const busy = new Set(busyRows.map((r) => Number(r.id)));
+
+    const rateTable = await loadRateTable(req.db, target_date);
+    const annotate = (emp) => {
+      if (
+        !emp ||
+        emp.home_lat == null ||
+        emp.home_lng == null ||
+        project.site_lat == null ||
+        project.site_lng == null
+      ) {
+        return { distance_km: null, allowance_cents: null };
+      }
+      const road_km = estimateRoadKm(
+        haversineKm(emp.home_lat, emp.home_lng, project.site_lat, project.site_lng)
+      );
+      return {
+        distance_km: road_km,
+        allowance_cents: allowanceCentsFor(rateTable, emp.trade_code, road_km),
+      };
+    };
+
+    let allowanceTotal = 0;
+    const employees = rosterIds.map((empId) => {
+      const prof = profileById.get(empId) || {};
+      const isForeman =
+        crew.foreman_employee_id != null && Number(crew.foreman_employee_id) === empId;
+      const already = busy.has(empId);
+      const ann = annotate(prof);
+      if (!already) allowanceTotal += ann.allowance_cents || 0;
+      return {
+        employee_id: empId,
+        employee_name: prof.full_name || null,
+        trade_code: prof.trade_code || null,
+        contact_email: prof.contact_email || null,
+        assignment_role: isForeman ? 'FOREMAN' : 'WORKER',
+        type: already ? 'already_assigned' : 'crew',
+        replacing: null,
+        score: 0,
+        ...ann,
+      };
+    });
+
+    const block = {
+      project_id: project.id,
+      project_code: project.project_code,
+      project_name: project.project_name,
+      site_address: project.site_address,
+      shift_start: project.shift_start || '06:00',
+      shift_end: project.shift_end || '14:30',
+      today_count: 0,
+      employees,
+      foremen: {},
+      allowance_total_cents: allowanceTotal,
+    };
+
+    return res.json({
+      ok: true,
+      target_date,
+      crew: { id: crew.id, name: crew.name },
+      suggestions: [block],
+      totals: {
+        headcount: employees.filter((e) => e.type !== 'already_assigned').length,
+        allowance_total_cents: allowanceTotal,
+      },
+    });
+  } catch (err) {
+    console.error('POST /crews/:id/plan error:', err);
     return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
 });
