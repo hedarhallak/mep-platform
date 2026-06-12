@@ -319,6 +319,8 @@ function mountTenantRoutes(app) {
   // matching assignments.js endpoints fire first; auto_assign sees only
   // /auto-suggest, /auto-confirm, etc.
   app.use('/api/assignments', auth, tenantDb, require('./routes/auto_assign'));
+  // Assignments Phase 2 (§131.2): crews — reusable foreman+roster teams.
+  app.use('/api/crews', auth, tenantDb, require('./routes/crews'));
   // Section 89-C/2: attendance migrated to req.db (RLS-enforced).
   app.use('/api/attendance', auth, tenantDb, loadRouter('./routes/attendance'));
   // Section 89-C/13: profile + push_tokens migrated to req.db (RLS-enforced).
