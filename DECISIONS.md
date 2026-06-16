@@ -16163,3 +16163,14 @@ Track 1 (Mapbox/Google distances, G5) — PR 1 LIVE; PR 2 LIVE; PR 3 LIVE (PRs #
 ### 145.3 — Status + remaining
 
 Main tenant app (app.constrai.ca) is **EN+FR complete** after this PR. The SUPER_ADMIN portal (admin.constrai.ca — `AdminApp.jsx`: CompaniesList, AdminLogin error strings, AdminLogoutButton, etc.) is **English-only by design** (internal Constrai staff, not tenant-facing) — left as-is; can be internationalized later if needed but it's not a Quebec-market requirement. Recommended manual check before calling it 100%: a runtime click-through with the language toggle on FR (the parity test guarantees no raw keys, but only a human confirms phrasing/layout in context). Sandbox mount served stale/truncated locale files again (Pitfall #1/§4.6) so the parity script couldn't run locally — relying on the committed vitest parity test in CI.
+
+### 145.4 — Production deploy + Google activation (June 16, 2026 — DONE, all 3 tracks LIVE)
+
+Closed out the whole session's work on prod in one pass:
+
+- **Google Maps Platform setup (Hedar, via GCP console):** created the "Maps Platform API Key" under project `Constrai` (free trial, $414 credit / 90 days). **Application restriction = IP addresses → `143.110.218.84`** (server-locked). Routes API confirmed **enabled**. Key API-restriction currently the broad Maps set ("33 APIs") — acceptable because IP-locked; optional future tightening to Routes-API-only noted, not required.
+- **Key on prod:** `GOOGLE_MAPS_API_KEY` (39-char `AIza…`) placed in `/var/www/mep/.env` (added on the server, never in chat — verified present + non-placeholder via an `awk` length/placeholder probe that doesn't reveal the value).
+- **Deploy:** `bash /var/www/mep/scripts/deploy.sh` → `123274e → 9427ecc`, frontend rebuilt (WorkerPicker FR), `pm2 mep-backend` restarted with `--update-env` (picks up the key), `/api/health/deep` → `ok:true`.
+- **Google-live verification (no data touched):** ran `roadDistanceKm(MTL, QC)` on the server → **263.23 km** (real road distance) vs the ~303 km haversine×1.3 fallback would give → confirms a road provider (Google, first in the chain with the now-valid key) is answering. The committed CCQ allowance is now genuinely Google-grade / dispute-proof.
+
+**All three backlog tracks are now DONE and LIVE:** Track 1 (G5 Google road distance + persisted payroll-grade allowance across all 6 assignment write paths), Track 2 status unchanged (CREWS Slice 3 frontend page still the remaining CREWS piece — not started this session), Track 3 (web i18n EN+FR complete for the tenant app + permanent parity guard). Suggested next session: Track 2 CREWS Slice 3 (crews-management page), and optionally a runtime FR click-through of the main app.
