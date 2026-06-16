@@ -16081,3 +16081,50 @@ Wizard integration: the bulk-assign wizard (`BulkAssignWizard.jsx` + `/auto-sugg
 ### 143.4 — Slice 2a SHIPPED (backend): crew deploy-preview endpoint
 
 `POST /api/crews/:id/plan` (in `routes/crews.js`, gated `assignments.create`). Body `{ project_id, target_date }`. Expands the crew's roster (members + foreman, deduped) into a **wizard-compatible preview block** — `suggestions[0]` shaped to drop straight into `/api/assignments/auto-confirm` as `confirmed[0]` (identical `employees[]` rows: employee_id / employee_name / trade_code / contact_email / assignment_role / type / distance_km / allowance_cents). So crew deploy **reuses the existing confirm pipeline unchanged** — the §130-fixed manual transaction (GUC + dup-check + decision_note), the §132 location-snapshot, and the assignment emails. Foreman → `assignment_role: 'FOREMAN'`, other members → `'WORKER'`; roster members already assigned over `target_date` are marked `type: 'already_assigned'` (auto-confirm re-checks overlap and skips them anyway, §131.12). Distance/allowance reuse **`lib/ccq_travel.js`** (`loadRateTable` + `estimateRoadKm` + `allowanceCentsFor`) — NOT a copy of auto_assign's annotate, and **auto_assign.js was deliberately NOT touched** (it's the fragile §130 file; building a self-contained endpoint avoids that risk). Tests: roster→block expansion (foreman/worker roles + headcount), 400 missing date, 404 cross-tenant crew. **Single-day (target_date) to match the current wizard; multi-day ranges are a later enhancement.** Next = Slice 2b (frontend: the "Deploy crew" basis in `BulkAssignWizard.jsx` calling `/plan` → existing preview → `/auto-confirm`).
+
+### 143.5 — Slice 2b SHIPPED (frontend): "Deploy crew" wizard basis
+
+`BulkAssignWizard.jsx` gains a 4th Q2 basis, **CREW** ("Deploy a crew"), alongside REPEAT/FULL/PROJECT. Selecting it shows a crew dropdown (from a new on-mount `GET /crews` fetch) + the project dropdown; both are required (`stepValid`). Like REPEAT, CREW **skips Q3** (a fixed roster isn't re-optimized — `/crews/:id/plan` already annotates distance/allowance). `generate()` branches: CREW posts to `/crews/${crewId}/plan` (instead of `/auto-suggest`); the response is the same `suggestions` shape, so the **preview (step 4) and confirm (`/auto-confirm`) are reused verbatim** — zero changes to the confirm path. New `crew` type badge (indigo) in the preview. i18n EN+FR (`basis.crew`/`crewHint`, `selectCrew`, `noCrews`). Vitest: a CREW-path test (pick crew+project → Generate → asserts `POST /crews/3/plan` with the project_id) + the existing 5 still green (the test mock gained `api.get` returning `{crews:[]}`). **Deploy needs a frontend rebuild (Pitfall #41).** Remaining for the CREWS track: Slice 3 (a dedicated crews-management page to create/edit rosters — today they're only creatable via the API/tests).
+
+---
+
+## 144. Section 144 — June 16, 2026 — Payroll-grade CCQ travel allowance: real road distance (Google Routes) + persisted `allowance_cents` (G5 / §131.3)
+
+> Backlog track 1 ("Mapbox distances", G5 / §131.3). The §131 estimate `road_km ≈ haversine × 1.3` was fine for the optimization wizard's *preview* but not for payroll: the employee verifies the distance on **Google Maps**, so a CCQ travel-allowance dispute is settled on Google's road distance. Goal of §144 = make the *committed* allowance dispute-proof by (a) computing the REAL road distance via Google, and (b) actually PERSISTING the daily allowance in cents (the column migration 027 reserved as NULL "until distances are payroll-grade").
+>
+> **Hedar's constraints (verbatim intent):** use **Google** (matches what the employee sees); it's free at his scale (he set up the GCP account + key, restricted to Routes API + the server IP); the allowance must be computed **precisely per the `ccq_travel_rates` table** (which changes every ~4 years with the collective agreement).
+
+### 144.1 — PR 1 (PR #379, MERGED): provider-swappable road-distance service
+
+`lib/road_distance.js` — `roadDistanceKm(oLat,oLng,dLat,dLng)` tries providers in order and returns the first that succeeds, **never throws**:
+
+1. **Google Routes API** (`POST routes.googleapis.com/directions/v2:computeRoutes`, `travelMode:'DRIVE'`, `X-Goog-FieldMask: routes.distanceMeters`) — the payroll reference. Used when `GOOGLE_MAPS_API_KEY` is set.
+2. **Mapbox Directions** — second real-road engine; used when `MAPBOX_ACCESS_TOKEN` is set and Google is unset/failed.
+3. **Haversine × 1.3** — offline estimate of last resort so the feature never hard-fails (historical §131 behaviour).
+
+Returns km (2 decimals) or `null`. **Guards null/empty coords BEFORE `Number()`** because `Number(null) === 0` (finite) would silently treat an un-geocoded employee as `(0,0)` and bill a bogus distance. `routes/assignments.js#calcDistanceKm` now delegates to it (removed the old inline Mapbox block + unused `MAPBOX_TOKEN`). `.env.example` documents `GOOGLE_MAPS_API_KEY`. Unit test `tests/smoke/road_distance.test.js` (no network — deletes keys → asserts the deterministic haversine×1.3 fallback + null-coord handling).
+
+**Caching note (by design):** callers COMPUTE ONCE per assignment and persist `distance_km` — we never re-bill Google on a read.
+
+### 144.2 — PR 2 (this session): compute + persist payroll-grade `allowance_cents`
+
+`lib/assignment_allowance.js`:
+
+- `rateSectorFor(projectSector)` — maps `projects.ccq_sector` **{IC, INDUSTRIAL, RESIDENTIAL}** → `ccq_travel_rates.sector` **{IC, I, RESIDENTIAL}** (i.e. `INDUSTRIAL → 'I'`). Without this an INDUSTRIAL project matches zero rate rows and silently yields a $0 allowance — a payroll bug. This vocabulary mismatch is a live schema fact (two different CHECK constraints), confirmed against the baseline.
+- `computeAndPersistAllowance(db, assignmentId, companyId, roadKm)` — reads the **§132 snapshot sector** (`snapshot_ccq_sector`, frozen at assignment time — never the live project, so an address/sector edit can't retroactively change a past allowance) + the employee `trade_code` + `start_date`; loads the rate row **effective on `start_date`** (rates change every ~4 years — must use the rate in force on the work date, not "today"); computes cents via the existing `ccq_travel.allowanceCentsFor` (highest matching `min_km` bracket, GENERAL trade fallback); writes `allowance_cents`. The real road km is **passed in** (caller already stored `distance_km`) so we don't re-bill the distance provider. Never throws.
+
+`routes/assignments.js` — new local orchestrator `persistDistanceAndAllowance(db, assignmentId, employeeId, projectId, companyId)` = `calcDistanceKm` → UPDATE `distance_km` → `computeAndPersistAllowance`. DRYs the **four single-assignment write paths**, each now one await: **create auto-approve**, **approve**, **reassign** (new approved row), **move** (project changed → re-snapshot → recompute). Reassign + move previously wrote NO distance/allowance at all — closed those payroll holes too.
+
+Unit test `tests/smoke/assignment_allowance.test.js` (mocked db, no DB/network): sector mapping, highest-bracket pick, INDUSTRIAL→I + `start_date`-as-`Date` → `YYYY-MM-DD`, GENERAL fallback, $0 below bracket (still writes 0), non-finite km → null + no UPDATE. Logic also verified via a standalone node assertion run (sandbox mount was serving a stale/truncated `assignments.js`, Pitfall #1 — relied on Read tool + CI per §4.6).
+
+**Migration-less deploy:** `allowance_cents` already exists (migration 027). Deploy = `git pull` + `pm2 restart` + add `GOOGLE_MAPS_API_KEY` to prod `/var/www/mep/.env` (added on the server, NEVER pasted in chat). Until the key is on prod, the service falls back to Mapbox/haversine — no breakage, just not yet Google-grade.
+
+### 144.3 — KNOWN GAP → next (PR 3): the BULK paths persist nothing
+
+`POST /api/assignments/auto-confirm` (auto_assign.js — the **dominant** path: the bulk wizard AND crew deploy both end here) and the daily-copy loop (`assignments.js` ~line 1190) INSERT approved rows **without `distance_km` or `allowance_cents`** (pre-existing — the wizard *preview* shows an estimate via `estimateRoadKm`, but the committed row stores NULL). Consequence: wizard/crew-created assignments don't even appear in the CCQ travel report (`reports.js` filters `distance_km IS NOT NULL`).
+
+**Deliberately NOT fixed in PR 2** because: (a) auto_assign.js is the fragile §130 manual-transaction file (§143.4 — "deliberately NOT touched"); (b) a per-row Google call inside the create loop = N sequential network round-trips inside a held transaction (§4.5 anti-pattern). **PR 3 plan:** after COMMIT, compute distance+allowance for the `allCreated[]` ids on `req.db`, batched/parallel (short transaction, parallel network), reusing `lib/assignment_allowance.js` + `lib/road_distance.js`. Separate PR, its own review + test.
+
+### 144.4 — Track status
+
+Track 1 (Mapbox/Google distances, G5) — PR 1 LIVE; PR 2 in review; **PR 3 (bulk) is the remaining piece before this track is "done" for payroll.** Then Track 2 = Assignments Phase 2 CREWS Slice 3 (crews-management page); Track 3 = web i18n EN+FR coverage pass.
