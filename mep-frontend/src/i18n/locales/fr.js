@@ -11,6 +11,14 @@ export default {
     error: 'Erreur',
   },
 
+  workerPicker: {
+    assigned: 'Assigné',
+    pending: 'En attente',
+    placeholderMulti: 'Tapez un nom pour ajouter des destinataires…',
+    placeholderSingle: 'Tapez pour rechercher un employé…',
+    noResults: 'Aucun travailleur trouvé pour « {{query}} »',
+  },
+
   language: {
     label: 'Langue',
     en: 'English',
@@ -634,8 +642,12 @@ export default {
         fullHint: 'Tous les projets actifs : reconductions, remplacements et dotation des chantiers vides.',
         project: 'Un projet précis',
         projectHint: 'Planifier ou doter un seul projet.',
+        crew: 'Déployer une équipe',
+        crewHint: 'Envoyer une équipe enregistrée (contremaître + membres) sur un projet pour la journée.',
       },
       selectProject: 'Sélectionnez un projet…',
+      selectCrew: 'Sélectionnez une équipe…',
+      noCrews: "Aucune équipe — créez-en une d'abord.",
       opt: {
         distance: 'Distance et frais de déplacement',
         distanceHint: 'Privilégie les travailleurs les plus proches — minimise les frais de déplacement CCQ.',
