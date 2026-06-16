@@ -16123,8 +16123,21 @@ Unit test `tests/smoke/assignment_allowance.test.js` (mocked db, no DB/network):
 
 `POST /api/assignments/auto-confirm` (auto_assign.js — the **dominant** path: the bulk wizard AND crew deploy both end here) and the daily-copy loop (`assignments.js` ~line 1190) INSERT approved rows **without `distance_km` or `allowance_cents`** (pre-existing — the wizard *preview* shows an estimate via `estimateRoadKm`, but the committed row stores NULL). Consequence: wizard/crew-created assignments don't even appear in the CCQ travel report (`reports.js` filters `distance_km IS NOT NULL`).
 
-**Deliberately NOT fixed in PR 2** because: (a) auto_assign.js is the fragile §130 manual-transaction file (§143.4 — "deliberately NOT touched"); (b) a per-row Google call inside the create loop = N sequential network round-trips inside a held transaction (§4.5 anti-pattern). **PR 3 plan:** after COMMIT, compute distance+allowance for the `allCreated[]` ids on `req.db`, batched/parallel (short transaction, parallel network), reusing `lib/assignment_allowance.js` + `lib/road_distance.js`. Separate PR, its own review + test.
+**Deliberately NOT fixed in PR 2** because: (a) auto_assign.js is the fragile §130 manual-transaction file (§143.4 — "deliberately NOT touched"); (b) a per-row Google call inside the create loop = N sequential network round-trips inside a held transaction (§4.5 anti-pattern). Fixed in PR 3 (below).
+
+### 144.3b — PR 3 (this session): bulk paths backfill distance + allowance AFTER commit
+
+Two new exports in `lib/assignment_allowance.js`:
+
+- `persistDistanceAndAllowanceById(db, assignmentId, companyId)` — self-contained: looks the employee home coords (PostGIS `ST_Y/ST_X(home_location)`) + project `site_lat/lng` UP FROM THE ROW (caller only needs the id), computes the real road km via `roadDistanceKm`, stores `distance_km`, then delegates the allowance to `computeAndPersistAllowance`. Returns null (no write) when coords are missing. Never throws.
+- `backfillDistanceAllowance(db, ids, companyId, concurrency=6)` — runs the by-id fn over the freshly-created ids in **concurrency-capped chunks** (`Promise.allSettled` per chunk so one provider failure can't abort the batch; chunked so a 50-person day-plan fires ≤6 parallel Google calls, not 50 — the §4.5 reason it isn't an inline per-row loop).
+
+Wiring:
+- **`auto_assign.js` `/auto-confirm`** (the dominant path — bulk wizard AND crew deploy) — call placed **right after `client.query('COMMIT')`** (rows now visible), on **`req.db`** (its own tenant tx, commits at `res.end`), before the email send + `res.json`. The §130 manual-transaction `client` block is otherwise UNTOUCHED (the fragile file's insert/rollback path is unchanged — only a post-commit `req.db` call was added).
+- **`assignments.js` `/repeat-confirm`** (daily-copy loop) — one `backfillDistanceAllowance(req.db, createdIds, companyId)` after the create loop; here `req.db` sees its own still-uncommitted inserts (same tx) and the UPDATEs commit with the request.
+
+Adds latency to these bulk admin actions (≈ ceil(N/6) × one Google round-trip) — an accepted trade for payroll-correct, dispute-proof figures, and it's what finally makes wizard/crew assignments appear in the CCQ travel report. Tests appended to `tests/smoke/assignment_allowance.test.js` (mock db, haversine fallback forced): by-id writes positive distance then the bracket cents; missing coords → null + no UPDATE; backfill processes every id in chunks and **tolerates a bad row** (id with no coords skipped, others still written); empty/null input is a no-op. (Sandbox mount stale again, Pitfall #1/§4.6 — verified via Read tool + relying on CI.)
 
 ### 144.4 — Track status
 
-Track 1 (Mapbox/Google distances, G5) — PR 1 LIVE; PR 2 in review; **PR 3 (bulk) is the remaining piece before this track is "done" for payroll.** Then Track 2 = Assignments Phase 2 CREWS Slice 3 (crews-management page); Track 3 = web i18n EN+FR coverage pass.
+Track 1 (Mapbox/Google distances, G5) — PR 1 LIVE; PR 2 LIVE; PR 3 in review. After PR 3 merges, **all four single-assignment paths + both bulk paths persist payroll-grade real-road-distance + CCQ allowance** → the track is functionally done (pending the prod `GOOGLE_MAPS_API_KEY` so it's Google-grade rather than haversine-fallback). Then Track 2 = Assignments Phase 2 CREWS Slice 3 (crews-management page); Track 3 = web i18n EN+FR coverage pass.
