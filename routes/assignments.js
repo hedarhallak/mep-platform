@@ -30,7 +30,10 @@ const express = require('express');
 const router = express.Router();
 const { audit, ACTIONS } = require('../lib/audit');
 const { snapshotAssignmentLocation } = require('../lib/assignment_snapshot');
-const { computeAndPersistAllowance } = require('../lib/assignment_allowance');
+const {
+  computeAndPersistAllowance,
+  backfillDistanceAllowance,
+} = require('../lib/assignment_allowance');
 const { roadDistanceKm } = require('../lib/road_distance');
 const { can } = require('../middleware/permissions');
 const { sendAssignmentEmployee, sendAssignmentForeman } = require('../lib/email');
@@ -1209,13 +1212,18 @@ router.post('/repeat-confirm', can('assignments.create'), async (req, res) => {
         ]
       );
       // §132 snapshot: capture the project's location for this new row.
+      // §144: distance/allowance NOT computed per-row here (a Google call inside
+      // this loop = N sequential round-trips, §4.5) — done in one concurrency-
+      // capped batch after the loop instead.
       await snapshotAssignmentLocation(req.db, rows[0].id, companyId);
-      // §144: distance/allowance intentionally NOT computed here — a per-row
-      // Google Routes call inside this bulk loop would be N sequential network
-      // round-trips (§4.5). Deferred to a batch distance path (Track 2 CREWS).
       createdIds.push(rows[0].id);
       created++;
     }
+
+    // §144.3: batch payroll-grade real-road-distance + CCQ allowance for all
+    // created rows (concurrency-capped). On req.db — sees its own uncommitted
+    // inserts; the UPDATEs commit with the request at res.end.
+    await backfillDistanceAllowance(req.db, createdIds, companyId);
 
     // Send notifications (DB reads await'd inside the loop; emails fire detached
     // per-assignment after each notifyAssignment returns)
