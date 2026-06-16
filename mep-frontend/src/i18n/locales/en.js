@@ -11,6 +11,14 @@ export default {
     error: 'Error',
   },
 
+  workerPicker: {
+    assigned: 'Assigned',
+    pending: 'Pending',
+    placeholderMulti: 'Type a name to add recipients…',
+    placeholderSingle: 'Type to search for an employee…',
+    noResults: 'No workers found for "{{query}}"',
+  },
+
   language: {
     label: 'Language',
     en: 'English',
@@ -628,8 +636,12 @@ export default {
         fullHint: 'All active projects: carry-over, replacements and staffing for empty sites.',
         project: 'One specific project',
         projectHint: 'Plan or staff a single project only.',
+        crew: 'Deploy a crew',
+        crewHint: 'Send a saved crew (foreman + members) to a project for the day.',
       },
       selectProject: 'Select a project…',
+      selectCrew: 'Select a crew…',
+      noCrews: 'No crews yet — create one first.',
       opt: {
         distance: 'Distance & travel allowances',
         distanceHint: 'Prefer workers who live closest — minimizes CCQ travel allowance costs.',

@@ -16140,4 +16140,26 @@ Adds latency to these bulk admin actions (≈ ceil(N/6) × one Google round-trip
 
 ### 144.4 — Track status
 
-Track 1 (Mapbox/Google distances, G5) — PR 1 LIVE; PR 2 LIVE; PR 3 in review. After PR 3 merges, **all four single-assignment paths + both bulk paths persist payroll-grade real-road-distance + CCQ allowance** → the track is functionally done (pending the prod `GOOGLE_MAPS_API_KEY` so it's Google-grade rather than haversine-fallback). Then Track 2 = Assignments Phase 2 CREWS Slice 3 (crews-management page); Track 3 = web i18n EN+FR coverage pass.
+Track 1 (Mapbox/Google distances, G5) — PR 1 LIVE; PR 2 LIVE; PR 3 LIVE (PRs #379/#380/#381 all merged). **All four single-assignment paths + both bulk paths now persist payroll-grade real-road-distance + CCQ allowance** → the track is functionally done (pending the prod `GOOGLE_MAPS_API_KEY` so it's Google-grade rather than haversine-fallback). Also merged this session: the 4 open Dependabot PRs (#376/#377/#378 grouped minor+patch for frontend/backend/mobile, #350 appleboy/ssh-action 1.0.3→1.2.5 used by the CD deploy).
+
+---
+
+## 145. Section 145 — June 16, 2026 — Track 3: Web i18n (EN+FR) audit + close the one user-facing gap + permanent parity guard
+
+> Backlog track 3 ("web i18n — EN+FR only, NO Arabic; verify everything works in both languages", Quebec French market). Started by AUDITING the current state rather than assuming a from-scratch build — the §45 pilot (May 2026) set up the infra + LoginPage, and many follow-up sessions (incl. §143.5 wizard) translated more pages.
+
+### 145.1 — Audit finding: the web app is already ~98% translated
+
+`src/i18n/` is fully wired: react-i18next, `LanguageDetector`, default `fr`, fallback `fr`, supported `['fr','en']`, persisted under `localStorage['constrai_language']`. Locale files `src/i18n/locales/en.js` + `fr.js` (~1740 lines, 30 aligned top-level namespaces). 36 of 45 non-test `.jsx` use `useTranslation`; the 9 that don't are mostly structural (hooks, route guards, entry points — no visible text). A targeted scan of `src/pages/**` and `src/components/**` for hardcoded `placeholder=`/`title=`/`alert(`/`confirm(` literals found **zero** in the main pages. EN/FR namespace parity was already symmetric; Quebec terms correct (Courriel, Contremaître, Compagnon, CVAC).
+
+**The single real user-facing gap:** `src/components/shared/WorkerPicker.jsx` — a SHARED autocomplete used by Assignments + Task-Request + the bulk wizard — was the only non-test component with hardcoded English visible text and no `useTranslation`. (The "Pending/Assigned" the audit flagged on AssignmentsPage trace back to this shared component, not the page itself.)
+
+### 145.2 — What shipped
+
+- `WorkerPicker.jsx` — added `useTranslation` to both its `WorkerRow` and main components; replaced 5 hardcoded strings (`✓ Assigned`, `⏳ Pending`, the multi/single input placeholders, and the `No workers found for "{query}"` empty-state) with `t('workerPicker.*')`. Emojis kept in JSX; only the words are translated. The no-results string uses i18next interpolation `t('workerPicker.noResults', { query })`.
+- `en.js` + `fr.js` — new `workerPicker` namespace (5 keys), inserted symmetrically right after `common`. FR: `Assigné`, `En attente`, `Tapez un nom pour ajouter des destinataires…`, `Tapez pour rechercher un employé…`, `Aucun travailleur trouvé pour « {{query}} »` (French guillemets).
+- `src/i18n/locales/parity.test.js` (NEW, vitest) — **permanent guard**: flattens both locales and fails the build if any key exists in one language but not the other (a missing key renders as a raw key string to that language's users), if any value is an empty string, or if the new `workerPicker` FR value equals EN (left-in placeholder). This is the verification step AND prevents future EN/FR drift — every new EN key must now get a FR sibling or CI goes red.
+
+### 145.3 — Status + remaining
+
+Main tenant app (app.constrai.ca) is **EN+FR complete** after this PR. The SUPER_ADMIN portal (admin.constrai.ca — `AdminApp.jsx`: CompaniesList, AdminLogin error strings, AdminLogoutButton, etc.) is **English-only by design** (internal Constrai staff, not tenant-facing) — left as-is; can be internationalized later if needed but it's not a Quebec-market requirement. Recommended manual check before calling it 100%: a runtime click-through with the language toggle on FR (the parity test guarantees no raw keys, but only a human confirms phrasing/layout in context). Sandbox mount served stale/truncated locale files again (Pitfall #1/§4.6) so the parity script couldn't run locally — relying on the committed vitest parity test in CI.

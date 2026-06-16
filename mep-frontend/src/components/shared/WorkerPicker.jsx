@@ -12,6 +12,7 @@
 //   disabled   — bool (optional)
 
 import { useState, useRef, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { X, Check } from 'lucide-react'
 
 const AVATAR_COLORS = [
@@ -44,6 +45,7 @@ export function WorkerAvatar({ worker, size = 'sm', className = '' }) {
 
 // ── Worker row — reusable ─────────────────────────────────────
 function WorkerRow({ worker, selected, showAssigned, projectSelected, onClick }) {
+  const { t } = useTranslation()
   const name = workerName(worker)
   return (
     <button
@@ -60,8 +62,8 @@ function WorkerRow({ worker, selected, showAssigned, projectSelected, onClick })
           )}
           {showAssigned && projectSelected && (
             worker.is_assigned
-              ? <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">✓ Assigned</span>
-              : <span className="text-[10px] font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full">⏳ Pending</span>
+              ? <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">✓ {t('workerPicker.assigned')}</span>
+              : <span className="text-[10px] font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full">⏳ {t('workerPicker.pending')}</span>
           )}
         </div>
       </div>
@@ -81,6 +83,7 @@ export default function WorkerPicker({
   showAssigned = false,
   projectSelected = false,
 }) {
+  const { t } = useTranslation()
   const [query, setQuery]   = useState('')
   const [open, setOpen]     = useState(false)
   const [focused, setFocused] = useState(false)
@@ -129,8 +132,8 @@ export default function WorkerPicker({
   }, [])
 
   const defaultPlaceholder = mode === 'multi'
-    ? 'Type a name to add recipients...'
-    : 'Type to search for an employee...'
+    ? t('workerPicker.placeholderMulti')
+    : t('workerPicker.placeholderSingle')
 
   return (
     <div ref={dropRef} className="relative">
@@ -216,7 +219,7 @@ export default function WorkerPicker({
 
       {open && query.trim().length >= 1 && suggestions.length === 0 && (
         <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg px-4 py-3 text-sm text-slate-400">
-          No workers found for "{query}"
+          {t('workerPicker.noResults', { query })}
         </div>
       )}
     </div>
