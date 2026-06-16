@@ -30,6 +30,7 @@ const express = require('express');
 const router = express.Router();
 const { audit, ACTIONS } = require('../lib/audit');
 const { snapshotAssignmentLocation } = require('../lib/assignment_snapshot');
+const { roadDistanceKm } = require('../lib/road_distance');
 const { can } = require('../middleware/permissions');
 const { sendAssignmentEmployee, sendAssignmentForeman } = require('../lib/email');
 
@@ -582,8 +583,10 @@ router.post('/requests', can('assignments.create'), async (req, res) => {
 // (The post-Mapbox UPDATE is the caller's responsibility now — the
 // helper just returns the km. Keeps the helper simple and lets the
 // caller pick the right tx for the UPDATE.)
-const MAPBOX_TOKEN = process.env.MAPBOX_ACCESS_TOKEN || '';
-
+//
+// §131.3 / G5: the actual road-distance call is now delegated to
+// lib/road_distance.js (Google Routes API → Mapbox → haversine fallback) so
+// the committed distance matches what employees verify on Google Maps.
 async function calcDistanceKm(db, employeeId, projectId, companyId) {
   try {
     const empRes = await db.query(
@@ -607,34 +610,8 @@ async function calcDistanceKm(db, employeeId, projectId, companyId) {
     const proj = projRes.rows[0];
     if (!proj || !proj.site_lat || !proj.site_lng) return null;
 
-    // Call Mapbox Directions API (driving distance)
-    const url =
-      `https://api.mapbox.com/directions/v5/mapbox/driving/` +
-      `${emp.home_lng},${emp.home_lat};${proj.site_lng},${proj.site_lat}` +
-      `?access_token=${MAPBOX_TOKEN}&overview=false`;
-
-    const https = require('https');
-    const data = await new Promise((resolve, reject) => {
-      https
-        .get(url, (res) => {
-          let body = '';
-          res.on('data', (chunk) => (body += chunk));
-          res.on('end', () => {
-            try {
-              resolve(JSON.parse(body));
-            } catch (e) {
-              reject(e);
-            }
-          });
-        })
-        .on('error', reject);
-    });
-
-    if (data.routes && data.routes[0]) {
-      const meters = data.routes[0].distance;
-      return Math.round((meters / 1000) * 100) / 100; // km rounded to 2 decimals
-    }
-    return null;
+    // Google Routes → Mapbox → haversine (lib/road_distance.js).
+    return await roadDistanceKm(emp.home_lat, emp.home_lng, proj.site_lat, proj.site_lng);
   } catch (err) {
     console.error('calcDistanceKm error:', err.message);
     return null;
