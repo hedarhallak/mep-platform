@@ -16174,3 +16174,24 @@ Closed out the whole session's work on prod in one pass:
 - **Google-live verification (no data touched):** ran `roadDistanceKm(MTL, QC)` on the server → **263.23 km** (real road distance) vs the ~303 km haversine×1.3 fallback would give → confirms a road provider (Google, first in the chain with the now-valid key) is answering. The committed CCQ allowance is now genuinely Google-grade / dispute-proof.
 
 **All three backlog tracks are now DONE and LIVE:** Track 1 (G5 Google road distance + persisted payroll-grade allowance across all 6 assignment write paths), Track 2 status unchanged (CREWS Slice 3 frontend page still the remaining CREWS piece — not started this session), Track 3 (web i18n EN+FR complete for the tenant app + permanent parity guard). Suggested next session: Track 2 CREWS Slice 3 (crews-management page), and optionally a runtime FR click-through of the main app.
+
+---
+
+## 146. Section 146 — June 16, 2026 — Track 2: CREWS Slice 3 — crews-management page (frontend)
+
+> Picked up the remaining CREWS piece (§143.3): crews were only creatable via the API/tests; this adds the tenant-facing management UI. The CRUD backend (`routes/crews.js`) + the wizard "Deploy crew" basis (§143.4/§143.5) already existed.
+
+### 146.1 — What shipped (all frontend)
+
+- **`src/pages/crews/CrewsPage.jsx`** (NEW) — list + create/edit modal + delete, modelled on `SuppliersPage` (plain `useState`/`useEffect`, no react-query; `api.get` returns `{data}`, unwrap `.data`). Cards show crew name, trade badge, foreman name (or "No foreman"), member count, and an Inactive badge when `is_active=false`. The modal edits name + optional trade (the shared `TRADES` chips; `'ALL'` maps to `null` on save) + foreman (`WorkerPicker mode="single"`) + members (`WorkerPicker mode="multi"`).
+  - **Roster reuse detail:** the list row only carries `member_count`, so on **edit** the modal fetches `GET /crews/:id` to get the full roster, then maps each `{employee_id}` to the matching worker object (the picker needs `{id, first_name, last_name, …}`). The employee list comes from **`/hub/workers`** — the same source the Task-Request + Assignments pickers use — so the picker shape matches without a second mapping layer.
+  - **Save payload:** `{ name, foreman_employee_id: foreman?.id || null, trade_code: ALL→null, member_ids: members.map(w=>w.id) }`. `NAME_TAKEN` (409) is surfaced as a friendly field error.
+- **Permissions:** the page + nav + route all gate on the **existing `assignments.*`** module (view to see, `create` to show "New Crew", `edit` to show edit/delete) — matching the backend's permission reuse (no new permission seeding). NOT a new "crews" module (an early audit suggestion that was wrong — the backend gates on `assignments.*`).
+- **Routing:** `App.jsx` lazy-loads `CrewsPage` and adds `<Route path="crews">` wrapped in `RequirePermission module="assignments" action="view"`, right after the assignments route.
+- **Nav:** `AppLayout.jsx` adds a `HardHat`-icon "Crews" entry right after Assignments, gated `assignments.view`.
+- **i18n:** new `crews` namespace + `nav.crews` added symmetrically to `en.js` + `fr.js` (FR: "Équipes", "Contremaître", "Nouvelle équipe", etc. — Quebec terms). The §145 parity test covers the new keys automatically.
+- **Test:** `CrewsPage.test.jsx` (vitest + RTL) — mounts, asserts `GET /crews` + `/hub/workers` fire and a crew row renders (name + foreman), empty state, the New-Crew button hides without `assignments.create`, and the create modal opens.
+
+### 146.2 — Status + remaining
+
+CREWS is now **end-to-end**: create/manage rosters (Slice 3, this section) → deploy a crew via the wizard (Slice 2, §143.5) → expand into payroll-grade assignments (the §144 allowance backfill runs on the auto-confirm path the wizard uses). Deploy needs a frontend rebuild (Pitfall #41) — `scripts/deploy.sh` handles it. Nothing else outstanding on the three backlog tracks; possible follow-ups: a runtime FR click-through, and (optional) tightening the Google key to Routes-API-only.
