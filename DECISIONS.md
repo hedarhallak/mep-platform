@@ -16195,3 +16195,79 @@ Closed out the whole session's work on prod in one pass:
 ### 146.2 — Status + remaining
 
 CREWS is now **end-to-end**: create/manage rosters (Slice 3, this section) → deploy a crew via the wizard (Slice 2, §143.5) → expand into payroll-grade assignments (the §144 allowance backfill runs on the auto-confirm path the wizard uses). Deploy needs a frontend rebuild (Pitfall #41) — `scripts/deploy.sh` handles it. Nothing else outstanding on the three backlog tracks; possible follow-ups: a runtime FR click-through, and (optional) tightening the Google key to Routes-API-only.
+
+### 146.3 — UX fix (same day): browsable, trade-filterable member selector (Hedar feedback)
+
+First-run feedback on the deployed page: the shared `WorkerPicker` (type-a-name autocomplete) is fine for picking ONE person but tedious for building a whole roster — "how do I assign a whole team without typing every name?". Replaced the **members** field (only — foreman stays the single-pick `WorkerPicker`) with a purpose-built `MemberSelector` inside `CrewsPage.jsx`:
+
+- A scrollable, **always-visible** checklist of all employees (`/hub/workers`), each a checkbox row with avatar + name + trade.
+- A **search** box (filter by name) and **trade filter chips** (built from the distinct `trade_name`s present, + "All Trades").
+- A **"Select all"** toggle that adds/removes everyone currently matching the filter — so "filter = Plumbing → Select all" adds every plumber in one click. Live selected-count.
+
+Deliberately a **crew-local component**, not a change to the shared `WorkerPicker` (which 2 other pages depend on) — the browse-and-bulk-select pattern fits roster-building but would be wrong for the single-pick assignment flow. New i18n keys (`crews.modal.searchMembers/selectAll/selectedCount/noEmployees`) added EN+FR (parity test covers them). Needs the usual frontend rebuild to deploy.
+
+---
+
+## 147. Section 147 — June 17, 2026 — PROGRAM: project-centric assignment redesign (demand-driven) — Phase 0 (foundation)
+
+> **Origin (Hedar, design discussion June 17):** after shipping CREWS Slice 3, Hedar pushed back on the *whole* assignment UX — "صارت عملية التعيين كتير معقدة وفيها كتير خيارات... رح يخلق ضياعات هائلة". Too many overlapping paths to the same outcome (manual single, 4-base wizard, auto-suggest, crews, reassign/move, daily-copy). We stepped back and redesigned the model collaboratively (one focused question at a time, §8.9/rule#9). This section records the agreed model + the program, and ships Phase 0.
+
+### 147.1 — The agreed model (decided via 4 design questions)
+
+- **Daily reality (Q1):** "mix — stable base + daily adjustments." Most people are stable; the daily work is *exceptions* (absence, move, new project, swap). ⇒ the plan should ROLL FORWARD, the manager only touches exceptions — never rebuild a day from scratch.
+- **Hedar's pivot (the key insight):** the unit of construction work is the **PROJECT**. So the system must be *demand-driven*: a project declares its **needs**, and the manager's only job is to **close the gap** between need and assigned. This turns assignment from "distribute people" into "fill the project's need" — far simpler to reason about (green = covered, red = gap).
+- **How needs are expressed (Q-final):** "changes by project phase." ⇒ a project's labor demand is a **time-phased staffing plan**, not one number: a set of `{trade, count, date-range}` rows (one row = flat need; many rows = phases like foundation ≠ finishing).
+- **Coverage = required − assigned, per trade, per day.** Every exception just opens/closes a gap; the four exceptions (absence/move/new-project/swap) all resolve inside the same "fill the gap" concept.
+
+### 147.2 — The program (phased; backend-first; reuses existing assignment/crew/distance/allowance backend)
+
+- **Phase 0 (THIS section):** the demand foundation — `project_labor_requirements` table + CRUD + a coverage endpoint. No behaviour change to existing assignment flows.
+- **Phase 1:** project-page UI to enter the phased plan + display coverage (required/assigned/gap). Filling still uses today's flows.
+- **Phase 2:** "fill the gap" directly from the project view — assign people/crew against a gap, with nearest-available same-trade suggestions (reuses §144 Google distance + CCQ allowance cost).
+- **Phase 3:** cross-project coverage overview (red/green), then retire the 4-base wizard once the project flow covers the cases.
+
+### 147.3 — Phase 0 shipped
+
+- **migration 034** — `project_labor_requirements` (id, company_id→companies, project_id→projects(id) [INTEGER], trade_code TEXT, required_count INT ≥0, start_date, end_date, note; `CHECK(start_date<=end_date)`; indexes on (company_id,project_id) and (project_id,dates)). Strict `tenant_isolation` RLS (migration-013 form) + GRANTs to mepuser/mepuser_super (Pitfall #49). Idempotent. CASCADE from both company and project.
+- **routes/project_requirements.js** — mounted at `/api/projects` (after the projects router; resolves by segment count, no collision). Endpoints: `GET/POST /:projectId/requirements`, `PATCH/DELETE /:projectId/requirements/:id`, `GET /:projectId/coverage?date=`. Reuses `assignments.*` permissions (view/create/edit — no new seeding, same as crews). Defense-in-depth: every query carries explicit `company_id`, and the parent project is verified in-company before any write (foreign project → 404). `trade_code` normalized to UPPER. Coverage = SUM(required rows covering the date) vs COUNT(DISTINCT APPROVED assignees overlapping the date, by profile trade), per trade, with totals (gap clamped ≥0 in the total).
+- **tests/integration/project_requirements.test.js** — lifecycle (create→list→patch→delete), validation (TRADE_CODE_REQUIRED, INVALID_DATE_RANGE), coverage math (2 required vs 1 assigned → gap 1), tenant isolation (company B → 404 on A's project). `describeIfDb` (runs in CI).
+
+**Deploy:** migration 034 must run before the backend restart (Pitfall #46) — `sudo -u postgres psql mepdb -f migrations/034_project_labor_requirements.sql` then `pm2 restart`, or `node scripts/migrate.js`. Migration-only on the DB; no frontend in Phase 0.
+
+### 147.4 — Assignment "methods" are a CATALOG, never deleted (Hedar, June 17)
+
+Hard product principle from Hedar: **do NOT delete any assignment method we've built.** Different companies have different workflows, so the platform keeps ALL of them and lets each company enable the one(s) it wants (a future company-level "assignment method" setting). Name them as a catalog:
+
+- **Method 1 — Manual single:** pick employee + project + dates. (exists)
+- **Method 2 — Wizard + smart suggest:** the bulk-assign wizard (REPEAT/FULL/PROJECT bases) + auto-suggest/optimize. (exists, §131/§143)
+- **Method 3 — Crew deploy:** define a crew, deploy its roster onto a project. (exists, §143/§146)
+- **Method 4 — Two-stage gated daily (NEW, chosen as the most practical):** see §147.5.
+
+The simplification Hedar reacted to is NOT achieved by removing methods — it's achieved by (a) making each company see only its chosen method, and (b) Method 4 itself being a clean two-stage flow. The §147 project demand model + coverage powers the planning/overview methods and gives the dispatcher a "how many are really needed" reference.
+
+### 147.5 — Method 4 DESIGN SPEC — two-stage gated daily assignment (decided June 17)
+
+The flow Quebec dispatch actually uses, decided across a design discussion (daily cadence; foreman owns the ask; dispatcher owns the final names; gated):
+
+```
+Stage 1 — the ask (foreman)                Stage 2 — the decision (dispatcher)
+foreman opens "My projects" → a date       dispatcher sees PENDING requests grouped
+(screen PRE-FILLS with today's team)       by project → approve / edit names / adjust
+picks count + names he wants  ───────────► count (cut 4→3, swap) → APPROVE (gated)
+  → creates PENDING assignment_requests          → APPROVED → §144 distance+allowance
+```
+
+Decisions locked:
+- **Daily, NO execution phases** (Hedar) — the foreman's daily request IS the demand; the §147 phased-requirements table is for the planning/coverage methods, not Method 4's core.
+- **Foreman picks BOTH count AND names** (not count-only), choosing from his current/available people; the screen pre-fills with today's team (carry-forward) and he adjusts.
+- **GATED approval (Hedar):** nothing is final until the dispatcher approves. The foreman's submission stays PENDING; the dispatcher may approve as-is, edit names, or change the count up/down, then approve. (His own example — "the dispatcher knows only 3 are needed, so he edits and approves" — is gated by definition.) Optimistic/auto-apply is a possible per-company option LATER, not now.
+- **Rides on the EXISTING request/approve primitive:** `assignment_requests` already has `requested_by_user_id`, `status` PENDING→APPROVED, `decision_by_user_id`, and an audit trail; `POST /assignments/requests` already creates PENDING for non-admins and `PATCH /assignments/requests/:id/approve` already approves + computes §144 allowance. So Method 4 is **mostly two role-facing UIs over existing backend**, not a new data model.
+
+**Roles:** trade manager → assigns a foreman to a project (Stage 0, can come later; `assignment_role=FOREMAN` exists); foreman → submits the daily request for his project(s); dispatcher (`assignments.edit`) → the gated approver/editor.
+
+**Method 4 build plan (next):**
+1. Foreman submit screen — "My projects" → date → MemberSelector (reuse §146.3) pre-filled with today's team → submit → batch-creates PENDING `assignment_requests`. (Likely needs a small batch-request endpoint or reuse of `POST /requests` per row.)
+2. Dispatcher review screen — PENDING grouped by project/date → approve / add-remove names / approve-all. Approve reuses the existing approve endpoint (→ §144 allowance).
+3. Permissions/roles wiring + (later) the per-company method setting.
+
+Status: DESIGN LOCKED. Phase 0 (§147.3, the demand foundation) PR is in flight separately. Method 4 build not started.
