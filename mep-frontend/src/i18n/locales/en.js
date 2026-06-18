@@ -42,6 +42,7 @@ export default {
     suppliers: 'Suppliers',
     assignments: 'Assignments',
     crews: 'Crews',
+    foremanRequest: 'Submit Request',
     pendingRequests: 'Pending Requests',
     attendance: 'Attendance',
     reports: 'Reports',
@@ -101,6 +102,19 @@ export default {
         nameTaken: 'A crew with this name already exists',
       },
     },
+  },
+
+  foremanRequest: {
+    title: 'Submit a Staffing Request',
+    subtitle: 'Pick your project, date, and the team you need — sent to the dispatcher for approval',
+    project: 'Project',
+    selectProject: 'Select a project…',
+    noProjects: 'You have no projects assigned yet.',
+    date: 'Date',
+    team: 'Team',
+    submit: 'Submit request ({{count}})',
+    submitted: '{{count}} request(s) submitted ✓',
+    skipped: '{{count}} skipped (already assigned or pending)',
   },
 
   pendingRequests: {
