@@ -18,8 +18,9 @@ vi.mock('react-i18next', () => ({
 }))
 
 const apiPost = vi.fn()
+const apiGet = vi.fn()
 vi.mock('@/lib/api', () => ({
-  default: { post: (...a) => apiPost(...a) },
+  default: { post: (...a) => apiPost(...a), get: (...a) => apiGet(...a) },
 }))
 
 import BulkAssignWizard from './BulkAssignWizard.jsx'
@@ -36,6 +37,9 @@ function renderWizard() {
 describe('BulkAssignWizard', () => {
   beforeEach(() => {
     apiPost.mockReset()
+    // §143 Slice 2b: the wizard now fetches /crews on mount for the CREW basis.
+    apiGet.mockReset()
+    apiGet.mockResolvedValue({ data: { crews: [] } })
   })
 
   test('walks the three questions and generates with the chosen options', async () => {
@@ -82,6 +86,34 @@ describe('BulkAssignWizard', () => {
     await waitFor(() => expect(screen.getByText('Sam')).toBeInTheDocument())
     expect(screen.getByText('assignments.wizard.gap')).toBeInTheDocument()
     expect(screen.getByText('assignments.wizard.allowanceTotal:$53.89')).toBeInTheDocument()
+  })
+
+  test('CREW basis deploys a saved crew via /crews/:id/plan (§143 Slice 2b)', async () => {
+    apiGet.mockResolvedValue({
+      data: { crews: [{ id: 3, name: 'Alpha', member_count: 2, is_active: true }] },
+    })
+    apiPost.mockResolvedValue({
+      data: { target_date: '2027-06-15', crew: { id: 3, name: 'Alpha' }, suggestions: [], totals: { headcount: 0, allowance_total_cents: 0 } },
+    })
+
+    renderWizard()
+    fireEvent.click(screen.getByText('assignments.wizard.next')) // → Q2
+    fireEvent.click(screen.getByText('assignments.wizard.basis.crew'))
+
+    // Crew dropdown is populated from the on-mount /crews fetch.
+    await screen.findByText('Alpha (2)')
+    const [crewSelect, projectSelect] = screen.getAllByRole('combobox')
+    fireEvent.change(crewSelect, { target: { value: '3' } })
+    fireEvent.change(projectSelect, { target: { value: '7' } })
+
+    // CREW skips Q3 → Generate is available right at Q2.
+    fireEvent.click(screen.getByText('assignments.wizard.generate'))
+
+    await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(1))
+    const [url, body] = apiPost.mock.calls[0]
+    expect(url).toBe('/crews/3/plan')
+    expect(body.project_id).toBe(7)
+    expect(body.target_date).toBeTruthy()
   })
 
   test('REPEAT basis skips the optimizations question (S131.7)', () => {
