@@ -16081,3 +16081,193 @@ Wizard integration: the bulk-assign wizard (`BulkAssignWizard.jsx` + `/auto-sugg
 ### 143.4 — Slice 2a SHIPPED (backend): crew deploy-preview endpoint
 
 `POST /api/crews/:id/plan` (in `routes/crews.js`, gated `assignments.create`). Body `{ project_id, target_date }`. Expands the crew's roster (members + foreman, deduped) into a **wizard-compatible preview block** — `suggestions[0]` shaped to drop straight into `/api/assignments/auto-confirm` as `confirmed[0]` (identical `employees[]` rows: employee_id / employee_name / trade_code / contact_email / assignment_role / type / distance_km / allowance_cents). So crew deploy **reuses the existing confirm pipeline unchanged** — the §130-fixed manual transaction (GUC + dup-check + decision_note), the §132 location-snapshot, and the assignment emails. Foreman → `assignment_role: 'FOREMAN'`, other members → `'WORKER'`; roster members already assigned over `target_date` are marked `type: 'already_assigned'` (auto-confirm re-checks overlap and skips them anyway, §131.12). Distance/allowance reuse **`lib/ccq_travel.js`** (`loadRateTable` + `estimateRoadKm` + `allowanceCentsFor`) — NOT a copy of auto_assign's annotate, and **auto_assign.js was deliberately NOT touched** (it's the fragile §130 file; building a self-contained endpoint avoids that risk). Tests: roster→block expansion (foreman/worker roles + headcount), 400 missing date, 404 cross-tenant crew. **Single-day (target_date) to match the current wizard; multi-day ranges are a later enhancement.** Next = Slice 2b (frontend: the "Deploy crew" basis in `BulkAssignWizard.jsx` calling `/plan` → existing preview → `/auto-confirm`).
+
+### 143.5 — Slice 2b SHIPPED (frontend): "Deploy crew" wizard basis
+
+`BulkAssignWizard.jsx` gains a 4th Q2 basis, **CREW** ("Deploy a crew"), alongside REPEAT/FULL/PROJECT. Selecting it shows a crew dropdown (from a new on-mount `GET /crews` fetch) + the project dropdown; both are required (`stepValid`). Like REPEAT, CREW **skips Q3** (a fixed roster isn't re-optimized — `/crews/:id/plan` already annotates distance/allowance). `generate()` branches: CREW posts to `/crews/${crewId}/plan` (instead of `/auto-suggest`); the response is the same `suggestions` shape, so the **preview (step 4) and confirm (`/auto-confirm`) are reused verbatim** — zero changes to the confirm path. New `crew` type badge (indigo) in the preview. i18n EN+FR (`basis.crew`/`crewHint`, `selectCrew`, `noCrews`). Vitest: a CREW-path test (pick crew+project → Generate → asserts `POST /crews/3/plan` with the project_id) + the existing 5 still green (the test mock gained `api.get` returning `{crews:[]}`). **Deploy needs a frontend rebuild (Pitfall #41).** Remaining for the CREWS track: Slice 3 (a dedicated crews-management page to create/edit rosters — today they're only creatable via the API/tests).
+
+---
+
+## 144. Section 144 — June 16, 2026 — Payroll-grade CCQ travel allowance: real road distance (Google Routes) + persisted `allowance_cents` (G5 / §131.3)
+
+> Backlog track 1 ("Mapbox distances", G5 / §131.3). The §131 estimate `road_km ≈ haversine × 1.3` was fine for the optimization wizard's *preview* but not for payroll: the employee verifies the distance on **Google Maps**, so a CCQ travel-allowance dispute is settled on Google's road distance. Goal of §144 = make the *committed* allowance dispute-proof by (a) computing the REAL road distance via Google, and (b) actually PERSISTING the daily allowance in cents (the column migration 027 reserved as NULL "until distances are payroll-grade").
+>
+> **Hedar's constraints (verbatim intent):** use **Google** (matches what the employee sees); it's free at his scale (he set up the GCP account + key, restricted to Routes API + the server IP); the allowance must be computed **precisely per the `ccq_travel_rates` table** (which changes every ~4 years with the collective agreement).
+
+### 144.1 — PR 1 (PR #379, MERGED): provider-swappable road-distance service
+
+`lib/road_distance.js` — `roadDistanceKm(oLat,oLng,dLat,dLng)` tries providers in order and returns the first that succeeds, **never throws**:
+
+1. **Google Routes API** (`POST routes.googleapis.com/directions/v2:computeRoutes`, `travelMode:'DRIVE'`, `X-Goog-FieldMask: routes.distanceMeters`) — the payroll reference. Used when `GOOGLE_MAPS_API_KEY` is set.
+2. **Mapbox Directions** — second real-road engine; used when `MAPBOX_ACCESS_TOKEN` is set and Google is unset/failed.
+3. **Haversine × 1.3** — offline estimate of last resort so the feature never hard-fails (historical §131 behaviour).
+
+Returns km (2 decimals) or `null`. **Guards null/empty coords BEFORE `Number()`** because `Number(null) === 0` (finite) would silently treat an un-geocoded employee as `(0,0)` and bill a bogus distance. `routes/assignments.js#calcDistanceKm` now delegates to it (removed the old inline Mapbox block + unused `MAPBOX_TOKEN`). `.env.example` documents `GOOGLE_MAPS_API_KEY`. Unit test `tests/smoke/road_distance.test.js` (no network — deletes keys → asserts the deterministic haversine×1.3 fallback + null-coord handling).
+
+**Caching note (by design):** callers COMPUTE ONCE per assignment and persist `distance_km` — we never re-bill Google on a read.
+
+### 144.2 — PR 2 (this session): compute + persist payroll-grade `allowance_cents`
+
+`lib/assignment_allowance.js`:
+
+- `rateSectorFor(projectSector)` — maps `projects.ccq_sector` **{IC, INDUSTRIAL, RESIDENTIAL}** → `ccq_travel_rates.sector` **{IC, I, RESIDENTIAL}** (i.e. `INDUSTRIAL → 'I'`). Without this an INDUSTRIAL project matches zero rate rows and silently yields a $0 allowance — a payroll bug. This vocabulary mismatch is a live schema fact (two different CHECK constraints), confirmed against the baseline.
+- `computeAndPersistAllowance(db, assignmentId, companyId, roadKm)` — reads the **§132 snapshot sector** (`snapshot_ccq_sector`, frozen at assignment time — never the live project, so an address/sector edit can't retroactively change a past allowance) + the employee `trade_code` + `start_date`; loads the rate row **effective on `start_date`** (rates change every ~4 years — must use the rate in force on the work date, not "today"); computes cents via the existing `ccq_travel.allowanceCentsFor` (highest matching `min_km` bracket, GENERAL trade fallback); writes `allowance_cents`. The real road km is **passed in** (caller already stored `distance_km`) so we don't re-bill the distance provider. Never throws.
+
+`routes/assignments.js` — new local orchestrator `persistDistanceAndAllowance(db, assignmentId, employeeId, projectId, companyId)` = `calcDistanceKm` → UPDATE `distance_km` → `computeAndPersistAllowance`. DRYs the **four single-assignment write paths**, each now one await: **create auto-approve**, **approve**, **reassign** (new approved row), **move** (project changed → re-snapshot → recompute). Reassign + move previously wrote NO distance/allowance at all — closed those payroll holes too.
+
+Unit test `tests/smoke/assignment_allowance.test.js` (mocked db, no DB/network): sector mapping, highest-bracket pick, INDUSTRIAL→I + `start_date`-as-`Date` → `YYYY-MM-DD`, GENERAL fallback, $0 below bracket (still writes 0), non-finite km → null + no UPDATE. Logic also verified via a standalone node assertion run (sandbox mount was serving a stale/truncated `assignments.js`, Pitfall #1 — relied on Read tool + CI per §4.6).
+
+**Migration-less deploy:** `allowance_cents` already exists (migration 027). Deploy = `git pull` + `pm2 restart` + add `GOOGLE_MAPS_API_KEY` to prod `/var/www/mep/.env` (added on the server, NEVER pasted in chat). Until the key is on prod, the service falls back to Mapbox/haversine — no breakage, just not yet Google-grade.
+
+### 144.3 — KNOWN GAP → next (PR 3): the BULK paths persist nothing
+
+`POST /api/assignments/auto-confirm` (auto_assign.js — the **dominant** path: the bulk wizard AND crew deploy both end here) and the daily-copy loop (`assignments.js` ~line 1190) INSERT approved rows **without `distance_km` or `allowance_cents`** (pre-existing — the wizard *preview* shows an estimate via `estimateRoadKm`, but the committed row stores NULL). Consequence: wizard/crew-created assignments don't even appear in the CCQ travel report (`reports.js` filters `distance_km IS NOT NULL`).
+
+**Deliberately NOT fixed in PR 2** because: (a) auto_assign.js is the fragile §130 manual-transaction file (§143.4 — "deliberately NOT touched"); (b) a per-row Google call inside the create loop = N sequential network round-trips inside a held transaction (§4.5 anti-pattern). Fixed in PR 3 (below).
+
+### 144.3b — PR 3 (this session): bulk paths backfill distance + allowance AFTER commit
+
+Two new exports in `lib/assignment_allowance.js`:
+
+- `persistDistanceAndAllowanceById(db, assignmentId, companyId)` — self-contained: looks the employee home coords (PostGIS `ST_Y/ST_X(home_location)`) + project `site_lat/lng` UP FROM THE ROW (caller only needs the id), computes the real road km via `roadDistanceKm`, stores `distance_km`, then delegates the allowance to `computeAndPersistAllowance`. Returns null (no write) when coords are missing. Never throws.
+- `backfillDistanceAllowance(db, ids, companyId, concurrency=6)` — runs the by-id fn over the freshly-created ids in **concurrency-capped chunks** (`Promise.allSettled` per chunk so one provider failure can't abort the batch; chunked so a 50-person day-plan fires ≤6 parallel Google calls, not 50 — the §4.5 reason it isn't an inline per-row loop).
+
+Wiring:
+- **`auto_assign.js` `/auto-confirm`** (the dominant path — bulk wizard AND crew deploy) — call placed **right after `client.query('COMMIT')`** (rows now visible), on **`req.db`** (its own tenant tx, commits at `res.end`), before the email send + `res.json`. The §130 manual-transaction `client` block is otherwise UNTOUCHED (the fragile file's insert/rollback path is unchanged — only a post-commit `req.db` call was added).
+- **`assignments.js` `/repeat-confirm`** (daily-copy loop) — one `backfillDistanceAllowance(req.db, createdIds, companyId)` after the create loop; here `req.db` sees its own still-uncommitted inserts (same tx) and the UPDATEs commit with the request.
+
+Adds latency to these bulk admin actions (≈ ceil(N/6) × one Google round-trip) — an accepted trade for payroll-correct, dispute-proof figures, and it's what finally makes wizard/crew assignments appear in the CCQ travel report. Tests appended to `tests/smoke/assignment_allowance.test.js` (mock db, haversine fallback forced): by-id writes positive distance then the bracket cents; missing coords → null + no UPDATE; backfill processes every id in chunks and **tolerates a bad row** (id with no coords skipped, others still written); empty/null input is a no-op. (Sandbox mount stale again, Pitfall #1/§4.6 — verified via Read tool + relying on CI.)
+
+### 144.4 — Track status
+
+Track 1 (Mapbox/Google distances, G5) — PR 1 LIVE; PR 2 LIVE; PR 3 LIVE (PRs #379/#380/#381 all merged). **All four single-assignment paths + both bulk paths now persist payroll-grade real-road-distance + CCQ allowance** → the track is functionally done (pending the prod `GOOGLE_MAPS_API_KEY` so it's Google-grade rather than haversine-fallback). Also merged this session: the 4 open Dependabot PRs (#376/#377/#378 grouped minor+patch for frontend/backend/mobile, #350 appleboy/ssh-action 1.0.3→1.2.5 used by the CD deploy).
+
+---
+
+## 145. Section 145 — June 16, 2026 — Track 3: Web i18n (EN+FR) audit + close the one user-facing gap + permanent parity guard
+
+> Backlog track 3 ("web i18n — EN+FR only, NO Arabic; verify everything works in both languages", Quebec French market). Started by AUDITING the current state rather than assuming a from-scratch build — the §45 pilot (May 2026) set up the infra + LoginPage, and many follow-up sessions (incl. §143.5 wizard) translated more pages.
+
+### 145.1 — Audit finding: the web app is already ~98% translated
+
+`src/i18n/` is fully wired: react-i18next, `LanguageDetector`, default `fr`, fallback `fr`, supported `['fr','en']`, persisted under `localStorage['constrai_language']`. Locale files `src/i18n/locales/en.js` + `fr.js` (~1740 lines, 30 aligned top-level namespaces). 36 of 45 non-test `.jsx` use `useTranslation`; the 9 that don't are mostly structural (hooks, route guards, entry points — no visible text). A targeted scan of `src/pages/**` and `src/components/**` for hardcoded `placeholder=`/`title=`/`alert(`/`confirm(` literals found **zero** in the main pages. EN/FR namespace parity was already symmetric; Quebec terms correct (Courriel, Contremaître, Compagnon, CVAC).
+
+**The single real user-facing gap:** `src/components/shared/WorkerPicker.jsx` — a SHARED autocomplete used by Assignments + Task-Request + the bulk wizard — was the only non-test component with hardcoded English visible text and no `useTranslation`. (The "Pending/Assigned" the audit flagged on AssignmentsPage trace back to this shared component, not the page itself.)
+
+### 145.2 — What shipped
+
+- `WorkerPicker.jsx` — added `useTranslation` to both its `WorkerRow` and main components; replaced 5 hardcoded strings (`✓ Assigned`, `⏳ Pending`, the multi/single input placeholders, and the `No workers found for "{query}"` empty-state) with `t('workerPicker.*')`. Emojis kept in JSX; only the words are translated. The no-results string uses i18next interpolation `t('workerPicker.noResults', { query })`.
+- `en.js` + `fr.js` — new `workerPicker` namespace (5 keys), inserted symmetrically right after `common`. FR: `Assigné`, `En attente`, `Tapez un nom pour ajouter des destinataires…`, `Tapez pour rechercher un employé…`, `Aucun travailleur trouvé pour « {{query}} »` (French guillemets).
+- `src/i18n/locales/parity.test.js` (NEW, vitest) — **permanent guard**: flattens both locales and fails the build if any key exists in one language but not the other (a missing key renders as a raw key string to that language's users), if any value is an empty string, or if the new `workerPicker` FR value equals EN (left-in placeholder). This is the verification step AND prevents future EN/FR drift — every new EN key must now get a FR sibling or CI goes red.
+
+### 145.3 — Status + remaining
+
+Main tenant app (app.constrai.ca) is **EN+FR complete** after this PR. The SUPER_ADMIN portal (admin.constrai.ca — `AdminApp.jsx`: CompaniesList, AdminLogin error strings, AdminLogoutButton, etc.) is **English-only by design** (internal Constrai staff, not tenant-facing) — left as-is; can be internationalized later if needed but it's not a Quebec-market requirement. Recommended manual check before calling it 100%: a runtime click-through with the language toggle on FR (the parity test guarantees no raw keys, but only a human confirms phrasing/layout in context). Sandbox mount served stale/truncated locale files again (Pitfall #1/§4.6) so the parity script couldn't run locally — relying on the committed vitest parity test in CI.
+
+### 145.4 — Production deploy + Google activation (June 16, 2026 — DONE, all 3 tracks LIVE)
+
+Closed out the whole session's work on prod in one pass:
+
+- **Google Maps Platform setup (Hedar, via GCP console):** created the "Maps Platform API Key" under project `Constrai` (free trial, $414 credit / 90 days). **Application restriction = IP addresses → `143.110.218.84`** (server-locked). Routes API confirmed **enabled**. Key API-restriction currently the broad Maps set ("33 APIs") — acceptable because IP-locked; optional future tightening to Routes-API-only noted, not required.
+- **Key on prod:** `GOOGLE_MAPS_API_KEY` (39-char `AIza…`) placed in `/var/www/mep/.env` (added on the server, never in chat — verified present + non-placeholder via an `awk` length/placeholder probe that doesn't reveal the value).
+- **Deploy:** `bash /var/www/mep/scripts/deploy.sh` → `123274e → 9427ecc`, frontend rebuilt (WorkerPicker FR), `pm2 mep-backend` restarted with `--update-env` (picks up the key), `/api/health/deep` → `ok:true`.
+- **Google-live verification (no data touched):** ran `roadDistanceKm(MTL, QC)` on the server → **263.23 km** (real road distance) vs the ~303 km haversine×1.3 fallback would give → confirms a road provider (Google, first in the chain with the now-valid key) is answering. The committed CCQ allowance is now genuinely Google-grade / dispute-proof.
+
+**All three backlog tracks are now DONE and LIVE:** Track 1 (G5 Google road distance + persisted payroll-grade allowance across all 6 assignment write paths), Track 2 status unchanged (CREWS Slice 3 frontend page still the remaining CREWS piece — not started this session), Track 3 (web i18n EN+FR complete for the tenant app + permanent parity guard). Suggested next session: Track 2 CREWS Slice 3 (crews-management page), and optionally a runtime FR click-through of the main app.
+
+---
+
+## 146. Section 146 — June 16, 2026 — Track 2: CREWS Slice 3 — crews-management page (frontend)
+
+> Picked up the remaining CREWS piece (§143.3): crews were only creatable via the API/tests; this adds the tenant-facing management UI. The CRUD backend (`routes/crews.js`) + the wizard "Deploy crew" basis (§143.4/§143.5) already existed.
+
+### 146.1 — What shipped (all frontend)
+
+- **`src/pages/crews/CrewsPage.jsx`** (NEW) — list + create/edit modal + delete, modelled on `SuppliersPage` (plain `useState`/`useEffect`, no react-query; `api.get` returns `{data}`, unwrap `.data`). Cards show crew name, trade badge, foreman name (or "No foreman"), member count, and an Inactive badge when `is_active=false`. The modal edits name + optional trade (the shared `TRADES` chips; `'ALL'` maps to `null` on save) + foreman (`WorkerPicker mode="single"`) + members (`WorkerPicker mode="multi"`).
+  - **Roster reuse detail:** the list row only carries `member_count`, so on **edit** the modal fetches `GET /crews/:id` to get the full roster, then maps each `{employee_id}` to the matching worker object (the picker needs `{id, first_name, last_name, …}`). The employee list comes from **`/hub/workers`** — the same source the Task-Request + Assignments pickers use — so the picker shape matches without a second mapping layer.
+  - **Save payload:** `{ name, foreman_employee_id: foreman?.id || null, trade_code: ALL→null, member_ids: members.map(w=>w.id) }`. `NAME_TAKEN` (409) is surfaced as a friendly field error.
+- **Permissions:** the page + nav + route all gate on the **existing `assignments.*`** module (view to see, `create` to show "New Crew", `edit` to show edit/delete) — matching the backend's permission reuse (no new permission seeding). NOT a new "crews" module (an early audit suggestion that was wrong — the backend gates on `assignments.*`).
+- **Routing:** `App.jsx` lazy-loads `CrewsPage` and adds `<Route path="crews">` wrapped in `RequirePermission module="assignments" action="view"`, right after the assignments route.
+- **Nav:** `AppLayout.jsx` adds a `HardHat`-icon "Crews" entry right after Assignments, gated `assignments.view`.
+- **i18n:** new `crews` namespace + `nav.crews` added symmetrically to `en.js` + `fr.js` (FR: "Équipes", "Contremaître", "Nouvelle équipe", etc. — Quebec terms). The §145 parity test covers the new keys automatically.
+- **Test:** `CrewsPage.test.jsx` (vitest + RTL) — mounts, asserts `GET /crews` + `/hub/workers` fire and a crew row renders (name + foreman), empty state, the New-Crew button hides without `assignments.create`, and the create modal opens.
+
+### 146.2 — Status + remaining
+
+CREWS is now **end-to-end**: create/manage rosters (Slice 3, this section) → deploy a crew via the wizard (Slice 2, §143.5) → expand into payroll-grade assignments (the §144 allowance backfill runs on the auto-confirm path the wizard uses). Deploy needs a frontend rebuild (Pitfall #41) — `scripts/deploy.sh` handles it. Nothing else outstanding on the three backlog tracks; possible follow-ups: a runtime FR click-through, and (optional) tightening the Google key to Routes-API-only.
+
+### 146.3 — UX fix (same day): browsable, trade-filterable member selector (Hedar feedback)
+
+First-run feedback on the deployed page: the shared `WorkerPicker` (type-a-name autocomplete) is fine for picking ONE person but tedious for building a whole roster — "how do I assign a whole team without typing every name?". Replaced the **members** field (only — foreman stays the single-pick `WorkerPicker`) with a purpose-built `MemberSelector` inside `CrewsPage.jsx`:
+
+- A scrollable, **always-visible** checklist of all employees (`/hub/workers`), each a checkbox row with avatar + name + trade.
+- A **search** box (filter by name) and **trade filter chips** (built from the distinct `trade_name`s present, + "All Trades").
+- A **"Select all"** toggle that adds/removes everyone currently matching the filter — so "filter = Plumbing → Select all" adds every plumber in one click. Live selected-count.
+
+Deliberately a **crew-local component**, not a change to the shared `WorkerPicker` (which 2 other pages depend on) — the browse-and-bulk-select pattern fits roster-building but would be wrong for the single-pick assignment flow. New i18n keys (`crews.modal.searchMembers/selectAll/selectedCount/noEmployees`) added EN+FR (parity test covers them). Needs the usual frontend rebuild to deploy.
+
+---
+
+## 147. Section 147 — June 17, 2026 — PROGRAM: project-centric assignment redesign (demand-driven) — Phase 0 (foundation)
+
+> **Origin (Hedar, design discussion June 17):** after shipping CREWS Slice 3, Hedar pushed back on the *whole* assignment UX — "صارت عملية التعيين كتير معقدة وفيها كتير خيارات... رح يخلق ضياعات هائلة". Too many overlapping paths to the same outcome (manual single, 4-base wizard, auto-suggest, crews, reassign/move, daily-copy). We stepped back and redesigned the model collaboratively (one focused question at a time, §8.9/rule#9). This section records the agreed model + the program, and ships Phase 0.
+
+### 147.1 — The agreed model (decided via 4 design questions)
+
+- **Daily reality (Q1):** "mix — stable base + daily adjustments." Most people are stable; the daily work is *exceptions* (absence, move, new project, swap). ⇒ the plan should ROLL FORWARD, the manager only touches exceptions — never rebuild a day from scratch.
+- **Hedar's pivot (the key insight):** the unit of construction work is the **PROJECT**. So the system must be *demand-driven*: a project declares its **needs**, and the manager's only job is to **close the gap** between need and assigned. This turns assignment from "distribute people" into "fill the project's need" — far simpler to reason about (green = covered, red = gap).
+- **How needs are expressed (Q-final):** "changes by project phase." ⇒ a project's labor demand is a **time-phased staffing plan**, not one number: a set of `{trade, count, date-range}` rows (one row = flat need; many rows = phases like foundation ≠ finishing).
+- **Coverage = required − assigned, per trade, per day.** Every exception just opens/closes a gap; the four exceptions (absence/move/new-project/swap) all resolve inside the same "fill the gap" concept.
+
+### 147.2 — The program (phased; backend-first; reuses existing assignment/crew/distance/allowance backend)
+
+- **Phase 0 (THIS section):** the demand foundation — `project_labor_requirements` table + CRUD + a coverage endpoint. No behaviour change to existing assignment flows.
+- **Phase 1:** project-page UI to enter the phased plan + display coverage (required/assigned/gap). Filling still uses today's flows.
+- **Phase 2:** "fill the gap" directly from the project view — assign people/crew against a gap, with nearest-available same-trade suggestions (reuses §144 Google distance + CCQ allowance cost).
+- **Phase 3:** cross-project coverage overview (red/green), then retire the 4-base wizard once the project flow covers the cases.
+
+### 147.3 — Phase 0 shipped
+
+- **migration 034** — `project_labor_requirements` (id, company_id→companies, project_id→projects(id) [INTEGER], trade_code TEXT, required_count INT ≥0, start_date, end_date, note; `CHECK(start_date<=end_date)`; indexes on (company_id,project_id) and (project_id,dates)). Strict `tenant_isolation` RLS (migration-013 form) + GRANTs to mepuser/mepuser_super (Pitfall #49). Idempotent. CASCADE from both company and project.
+- **routes/project_requirements.js** — mounted at `/api/projects` (after the projects router; resolves by segment count, no collision). Endpoints: `GET/POST /:projectId/requirements`, `PATCH/DELETE /:projectId/requirements/:id`, `GET /:projectId/coverage?date=`. Reuses `assignments.*` permissions (view/create/edit — no new seeding, same as crews). Defense-in-depth: every query carries explicit `company_id`, and the parent project is verified in-company before any write (foreign project → 404). `trade_code` normalized to UPPER. Coverage = SUM(required rows covering the date) vs COUNT(DISTINCT APPROVED assignees overlapping the date, by profile trade), per trade, with totals (gap clamped ≥0 in the total).
+- **tests/integration/project_requirements.test.js** — lifecycle (create→list→patch→delete), validation (TRADE_CODE_REQUIRED, INVALID_DATE_RANGE), coverage math (2 required vs 1 assigned → gap 1), tenant isolation (company B → 404 on A's project). `describeIfDb` (runs in CI).
+
+**Deploy:** migration 034 must run before the backend restart (Pitfall #46) — `sudo -u postgres psql mepdb -f migrations/034_project_labor_requirements.sql` then `pm2 restart`, or `node scripts/migrate.js`. Migration-only on the DB; no frontend in Phase 0.
+
+### 147.4 — Assignment "methods" are a CATALOG, never deleted (Hedar, June 17)
+
+Hard product principle from Hedar: **do NOT delete any assignment method we've built.** Different companies have different workflows, so the platform keeps ALL of them and lets each company enable the one(s) it wants (a future company-level "assignment method" setting). Name them as a catalog:
+
+- **Method 1 — Manual single:** pick employee + project + dates. (exists)
+- **Method 2 — Wizard + smart suggest:** the bulk-assign wizard (REPEAT/FULL/PROJECT bases) + auto-suggest/optimize. (exists, §131/§143)
+- **Method 3 — Crew deploy:** define a crew, deploy its roster onto a project. (exists, §143/§146)
+- **Method 4 — Two-stage gated daily (NEW, chosen as the most practical):** see §147.5.
+
+The simplification Hedar reacted to is NOT achieved by removing methods — it's achieved by (a) making each company see only its chosen method, and (b) Method 4 itself being a clean two-stage flow. The §147 project demand model + coverage powers the planning/overview methods and gives the dispatcher a "how many are really needed" reference.
+
+### 147.5 — Method 4 DESIGN SPEC — two-stage gated daily assignment (decided June 17)
+
+The flow Quebec dispatch actually uses, decided across a design discussion (daily cadence; foreman owns the ask; dispatcher owns the final names; gated):
+
+```
+Stage 1 — the ask (foreman)                Stage 2 — the decision (dispatcher)
+foreman opens "My projects" → a date       dispatcher sees PENDING requests grouped
+(screen PRE-FILLS with today's team)       by project → approve / edit names / adjust
+picks count + names he wants  ───────────► count (cut 4→3, swap) → APPROVE (gated)
+  → creates PENDING assignment_requests          → APPROVED → §144 distance+allowance
+```
+
+Decisions locked:
+- **Daily, NO execution phases** (Hedar) — the foreman's daily request IS the demand; the §147 phased-requirements table is for the planning/coverage methods, not Method 4's core.
+- **Foreman picks BOTH count AND names** (not count-only), choosing from his current/available people; the screen pre-fills with today's team (carry-forward) and he adjusts.
+- **GATED approval (Hedar):** nothing is final until the dispatcher approves. The foreman's submission stays PENDING; the dispatcher may approve as-is, edit names, or change the count up/down, then approve. (His own example — "the dispatcher knows only 3 are needed, so he edits and approves" — is gated by definition.) Optimistic/auto-apply is a possible per-company option LATER, not now.
+- **Rides on the EXISTING request/approve primitive:** `assignment_requests` already has `requested_by_user_id`, `status` PENDING→APPROVED, `decision_by_user_id`, and an audit trail; `POST /assignments/requests` already creates PENDING for non-admins and `PATCH /assignments/requests/:id/approve` already approves + computes §144 allowance. So Method 4 is **mostly two role-facing UIs over existing backend**, not a new data model.
+
+**Roles:** trade manager → assigns a foreman to a project (Stage 0, can come later; `assignment_role=FOREMAN` exists); foreman → submits the daily request for his project(s); dispatcher (`assignments.edit`) → the gated approver/editor.
+
+**Method 4 build plan (next):**
+1. Foreman submit screen — "My projects" → date → MemberSelector (reuse §146.3) pre-filled with today's team → submit → batch-creates PENDING `assignment_requests`. (Likely needs a small batch-request endpoint or reuse of `POST /requests` per row.)
+2. Dispatcher review screen — PENDING grouped by project/date → approve / add-remove names / approve-all. Approve reuses the existing approve endpoint (→ §144 allowance).
+3. Permissions/roles wiring + (later) the per-company method setting.
+
+Status: DESIGN LOCKED. Phase 0 (§147.3, the demand foundation) PR is in flight separately. Method 4 build not started.

@@ -30,6 +30,11 @@ const express = require('express');
 const router = express.Router();
 const { audit, ACTIONS } = require('../lib/audit');
 const { snapshotAssignmentLocation } = require('../lib/assignment_snapshot');
+const {
+  computeAndPersistAllowance,
+  backfillDistanceAllowance,
+} = require('../lib/assignment_allowance');
+const { roadDistanceKm } = require('../lib/road_distance');
 const { can } = require('../middleware/permissions');
 const { sendAssignmentEmployee, sendAssignmentForeman } = require('../lib/email');
 
@@ -538,24 +543,14 @@ router.post('/requests', can('assignments.create'), async (req, res) => {
       new_values: { status, start_date, end_date, shift_start, shift_end },
     });
 
-    // Calculate and store distance for auto-approved assignments
+    // Calculate and store distance + CCQ allowance for auto-approved assignments
     if (isAdmin) {
       await notifyAssignment(req.db, rows[0].id, companyId);
-      // 89-E/2: synchronous Mapbox distance calculation. Adds ~200-500ms
-      // to response time but works under Stage 3 strict RLS (pool path
-      // would return 0 rows). The UPDATE writes through req.db so it's
-      // covered by the request transaction.
-      try {
-        const km = await calcDistanceKm(req.db, employee_id, project_id, companyId);
-        if (km !== null) {
-          await req.db.query(
-            'UPDATE public.assignment_requests SET distance_km = $1 WHERE id = $2',
-            [km, rows[0].id]
-          );
-        }
-      } catch (e) {
-        console.error('distance update error:', e.message);
-      }
+      // 89-E/2 / §144: synchronous real-road-distance + allowance calc. Adds
+      // ~200-500ms to response time but works under Stage 3 strict RLS (pool
+      // path would return 0 rows). Writes through req.db so it's covered by
+      // the request transaction.
+      await persistDistanceAndAllowance(req.db, rows[0].id, employee_id, project_id, companyId);
     }
 
     return res.status(201).json({ ok: true, request: rows[0], auto_approved: isAdmin });
@@ -582,8 +577,10 @@ router.post('/requests', can('assignments.create'), async (req, res) => {
 // (The post-Mapbox UPDATE is the caller's responsibility now — the
 // helper just returns the km. Keeps the helper simple and lets the
 // caller pick the right tx for the UPDATE.)
-const MAPBOX_TOKEN = process.env.MAPBOX_ACCESS_TOKEN || '';
-
+//
+// §131.3 / G5: the actual road-distance call is now delegated to
+// lib/road_distance.js (Google Routes API → Mapbox → haversine fallback) so
+// the committed distance matches what employees verify on Google Maps.
 async function calcDistanceKm(db, employeeId, projectId, companyId) {
   try {
     const empRes = await db.query(
@@ -607,37 +604,37 @@ async function calcDistanceKm(db, employeeId, projectId, companyId) {
     const proj = projRes.rows[0];
     if (!proj || !proj.site_lat || !proj.site_lng) return null;
 
-    // Call Mapbox Directions API (driving distance)
-    const url =
-      `https://api.mapbox.com/directions/v5/mapbox/driving/` +
-      `${emp.home_lng},${emp.home_lat};${proj.site_lng},${proj.site_lat}` +
-      `?access_token=${MAPBOX_TOKEN}&overview=false`;
-
-    const https = require('https');
-    const data = await new Promise((resolve, reject) => {
-      https
-        .get(url, (res) => {
-          let body = '';
-          res.on('data', (chunk) => (body += chunk));
-          res.on('end', () => {
-            try {
-              resolve(JSON.parse(body));
-            } catch (e) {
-              reject(e);
-            }
-          });
-        })
-        .on('error', reject);
-    });
-
-    if (data.routes && data.routes[0]) {
-      const meters = data.routes[0].distance;
-      return Math.round((meters / 1000) * 100) / 100; // km rounded to 2 decimals
-    }
-    return null;
+    // Google Routes → Mapbox → haversine (lib/road_distance.js).
+    return await roadDistanceKm(emp.home_lat, emp.home_lng, proj.site_lat, proj.site_lng);
   } catch (err) {
     console.error('calcDistanceKm error:', err.message);
     return null;
+  }
+}
+
+// ── Distance + CCQ allowance persistence ──────────────────────────
+//
+// §131.3 / G5 / §144: every time an assignment becomes APPROVED or is moved
+// to a different project, recompute the REAL road distance (Google Routes) and
+// the payroll-grade daily CCQ allowance, and persist both. The allowance reads
+// the §132 location snapshot (sector frozen at assignment time) + the rate
+// effective on start_date, so it is both dispute-proof and tamper-proof.
+//
+// Single orchestrator so the four single-assignment write paths (create
+// auto-approve, approve, reassign, move) stay DRY — each is one await. The
+// snapshot MUST already be captured for this assignment before calling this
+// (allowance reads snapshot_ccq_sector). Never throws.
+async function persistDistanceAndAllowance(db, assignmentId, employeeId, projectId, companyId) {
+  try {
+    const km = await calcDistanceKm(db, employeeId, projectId, companyId);
+    if (km === null) return;
+    await db.query('UPDATE public.assignment_requests SET distance_km = $1 WHERE id = $2', [
+      km,
+      assignmentId,
+    ]);
+    await computeAndPersistAllowance(db, assignmentId, companyId, km);
+  } catch (e) {
+    console.error('persistDistanceAndAllowance error:', e.message);
   }
 }
 
@@ -691,18 +688,14 @@ router.patch('/requests/:id/approve', can('assignments.edit'), async (req, res) 
     // Send notification emails
     await notifyAssignment(req.db, reqId, companyId);
 
-    // 89-E/2: synchronous Mapbox distance calculation. Adds ~200-500ms.
-    try {
-      const km = await calcDistanceKm(req.db, r.requested_for_employee_id, r.project_id, companyId);
-      if (km !== null) {
-        await req.db.query('UPDATE public.assignment_requests SET distance_km = $1 WHERE id = $2', [
-          km,
-          reqId,
-        ]);
-      }
-    } catch (e) {
-      console.error('distance update error:', e.message);
-    }
+    // 89-E/2 / §144: synchronous real-road-distance + allowance calc. ~200-500ms.
+    await persistDistanceAndAllowance(
+      req.db,
+      reqId,
+      r.requested_for_employee_id,
+      r.project_id,
+      companyId
+    );
 
     return res.json({ ok: true, request: rows[0] });
   } catch (err) {
@@ -952,6 +945,9 @@ router.patch('/requests/:id/reassign', can('assignments.edit'), async (req, res)
     // §132 snapshot: reassign creates a NEW row → capture its location.
     await snapshotAssignmentLocation(req.db, rows[0].id, companyId);
 
+    // §144: new approved assignment → compute its real distance + allowance.
+    await persistDistanceAndAllowance(req.db, rows[0].id, new_employee_id, r.project_id, companyId);
+
     // Send notification to new employee + foreman (fire-and-forget after
     // tenantDb commits)
     await notifyAssignment(req.db, rows[0].id, companyId);
@@ -1056,6 +1052,16 @@ router.patch('/requests/:id/move', can('assignments.edit'), async (req, res) => 
     // §132 snapshot: the project changed → re-capture the new project's
     // location so the allowance follows the project the worker is now on.
     await snapshotAssignmentLocation(req.db, reqId, companyId);
+
+    // §144: project changed → recompute real distance + allowance for the
+    // project the worker is now on.
+    await persistDistanceAndAllowance(
+      req.db,
+      reqId,
+      r.requested_for_employee_id,
+      new_project_id,
+      companyId
+    );
 
     await audit(req.db, req, {
       action: ACTIONS.ASSIGNMENT_UPDATED,
@@ -1206,10 +1212,18 @@ router.post('/repeat-confirm', can('assignments.create'), async (req, res) => {
         ]
       );
       // §132 snapshot: capture the project's location for this new row.
+      // §144: distance/allowance NOT computed per-row here (a Google call inside
+      // this loop = N sequential round-trips, §4.5) — done in one concurrency-
+      // capped batch after the loop instead.
       await snapshotAssignmentLocation(req.db, rows[0].id, companyId);
       createdIds.push(rows[0].id);
       created++;
     }
+
+    // §144.3: batch payroll-grade real-road-distance + CCQ allowance for all
+    // created rows (concurrency-capped). On req.db — sees its own uncommitted
+    // inserts; the UPDATEs commit with the request at res.end.
+    await backfillDistanceAllowance(req.db, createdIds, companyId);
 
     // Send notifications (DB reads await'd inside the loop; emails fire detached
     // per-assignment after each notifyAssignment returns)

@@ -12,6 +12,7 @@ const { pool } = require('../db');
 const { sendEmail } = require('../lib/email');
 const { estimateRoadKm, loadRateTable, allowanceCentsFor } = require('../lib/ccq_travel');
 const { snapshotAssignmentLocation } = require('../lib/assignment_snapshot');
+const { backfillDistanceAllowance } = require('../lib/assignment_allowance');
 
 const { can } = require('../middleware/permissions');
 
@@ -836,6 +837,15 @@ router.post('/auto-confirm', can('assignments.smart_assign'), async (req, res) =
     }
 
     await client.query('COMMIT');
+
+    // §144.3: rows are now committed → compute payroll-grade real road distance
+    // (Google Routes) + persisted CCQ allowance for each created row. Done AFTER
+    // commit (NOT inside the insert loop) so the manual transaction stays short,
+    // on req.db (its own tenant tx, commits at res.end), and concurrency-capped
+    // so a large day-plan doesn't fire dozens of parallel Google calls (§4.5).
+    // Adds latency to this bulk admin action but makes wizard/crew assignments
+    // appear in the CCQ travel report (reports.js filters distance_km NOT NULL).
+    await backfillDistanceAllowance(req.db, allCreated, companyId);
 
     // Send emails after commit (fire and forget — don't fail assignment if email fails)
     const emailResults = await Promise.allSettled(

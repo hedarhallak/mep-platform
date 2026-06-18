@@ -11,6 +11,14 @@ export default {
     error: 'Erreur',
   },
 
+  workerPicker: {
+    assigned: 'Assigné',
+    pending: 'En attente',
+    placeholderMulti: 'Tapez un nom pour ajouter des destinataires…',
+    placeholderSingle: 'Tapez pour rechercher un employé…',
+    noResults: 'Aucun travailleur trouvé pour « {{query}} »',
+  },
+
   language: {
     label: 'Langue',
     en: 'English',
@@ -33,6 +41,7 @@ export default {
     projects: 'Projets',
     suppliers: 'Fournisseurs',
     assignments: 'Affectations',
+    crews: 'Équipes',
     attendance: 'Présences',
     reports: 'Rapports',
     standup: 'Réunion quotidienne',
@@ -53,6 +62,40 @@ export default {
     billing: 'Facturation',
     logout: 'Déconnexion',
     companyFallback: 'Entreprise',
+  },
+
+  crews: {
+    title: 'Équipes',
+    subtitle: 'Équipes permanentes — un contremaître et une liste fixe à déployer en une fois',
+    addButton: 'Nouvelle équipe',
+    searchPlaceholder: 'Rechercher des équipes…',
+    empty: 'Aucune équipe',
+    emptyHint: 'Créez une équipe pour déployer toute une équipe sur un projet en une étape.',
+    confirmDelete: 'Supprimer cette équipe ? Cette action est irréversible.',
+    successAdded: 'Équipe créée ✓',
+    successUpdated: 'Équipe mise à jour ✓',
+    successRemoved: 'Équipe supprimée',
+    noForeman: 'Aucun contremaître',
+    inactive: 'Inactive',
+    memberCount: '{{count}} membres',
+    modal: {
+      titleNew: 'Nouvelle équipe',
+      titleEdit: 'Modifier l’équipe',
+      name: 'Nom de l’équipe',
+      namePlaceholder: 'ex. Équipe plomberie A',
+      trade: 'Métier',
+      foreman: 'Contremaître',
+      foremanPlaceholder: 'Rechercher un contremaître…',
+      members: 'Membres',
+      membersPlaceholder: 'Ajouter des membres…',
+      cancel: 'Annuler',
+      add: 'Créer',
+      update: 'Enregistrer',
+      errors: {
+        nameRequired: 'Le nom de l’équipe est requis',
+        nameTaken: 'Une équipe portant ce nom existe déjà',
+      },
+    },
   },
 
   tools: {
@@ -634,8 +677,12 @@ export default {
         fullHint: 'Tous les projets actifs : reconductions, remplacements et dotation des chantiers vides.',
         project: 'Un projet précis',
         projectHint: 'Planifier ou doter un seul projet.',
+        crew: 'Déployer une équipe',
+        crewHint: 'Envoyer une équipe enregistrée (contremaître + membres) sur un projet pour la journée.',
       },
       selectProject: 'Sélectionnez un projet…',
+      selectCrew: 'Sélectionnez une équipe…',
+      noCrews: "Aucune équipe — créez-en une d'abord.",
       opt: {
         distance: 'Distance et frais de déplacement',
         distanceHint: 'Privilégie les travailleurs les plus proches — minimise les frais de déplacement CCQ.',

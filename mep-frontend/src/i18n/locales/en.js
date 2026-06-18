@@ -11,6 +11,14 @@ export default {
     error: 'Error',
   },
 
+  workerPicker: {
+    assigned: 'Assigned',
+    pending: 'Pending',
+    placeholderMulti: 'Type a name to add recipients…',
+    placeholderSingle: 'Type to search for an employee…',
+    noResults: 'No workers found for "{{query}}"',
+  },
+
   language: {
     label: 'Language',
     en: 'English',
@@ -33,6 +41,7 @@ export default {
     projects: 'Projects',
     suppliers: 'Suppliers',
     assignments: 'Assignments',
+    crews: 'Crews',
     attendance: 'Attendance',
     reports: 'Reports',
     standup: 'Daily Standup',
@@ -53,6 +62,40 @@ export default {
     billing: 'Billing',
     logout: 'Logout',
     companyFallback: 'Company',
+  },
+
+  crews: {
+    title: 'Crews',
+    subtitle: 'Standing crews — a foreman plus a fixed roster you can deploy at once',
+    addButton: 'New Crew',
+    searchPlaceholder: 'Search crews…',
+    empty: 'No crews yet',
+    emptyHint: 'Create a crew to deploy a whole team onto a project in one step.',
+    confirmDelete: 'Delete this crew? This cannot be undone.',
+    successAdded: 'Crew created ✓',
+    successUpdated: 'Crew updated ✓',
+    successRemoved: 'Crew deleted',
+    noForeman: 'No foreman',
+    inactive: 'Inactive',
+    memberCount: '{{count}} members',
+    modal: {
+      titleNew: 'New Crew',
+      titleEdit: 'Edit Crew',
+      name: 'Crew name',
+      namePlaceholder: 'e.g. Plumbing Team A',
+      trade: 'Trade',
+      foreman: 'Foreman',
+      foremanPlaceholder: 'Search for a foreman…',
+      members: 'Members',
+      membersPlaceholder: 'Add crew members…',
+      cancel: 'Cancel',
+      add: 'Create',
+      update: 'Save',
+      errors: {
+        nameRequired: 'Crew name is required',
+        nameTaken: 'A crew with this name already exists',
+      },
+    },
   },
 
   tools: {
@@ -628,8 +671,12 @@ export default {
         fullHint: 'All active projects: carry-over, replacements and staffing for empty sites.',
         project: 'One specific project',
         projectHint: 'Plan or staff a single project only.',
+        crew: 'Deploy a crew',
+        crewHint: 'Send a saved crew (foreman + members) to a project for the day.',
       },
       selectProject: 'Select a project…',
+      selectCrew: 'Select a crew…',
+      noCrews: 'No crews yet — create one first.',
       opt: {
         distance: 'Distance & travel allowances',
         distanceHint: 'Prefer workers who live closest — minimizes CCQ travel allowance costs.',

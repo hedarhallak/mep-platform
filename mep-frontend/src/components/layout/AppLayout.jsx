@@ -9,7 +9,7 @@ import {
   LayoutDashboard, FolderKanban, Users, ClipboardList,
   Settings, LogOut, Building2, BarChart2,
   CalendarCheck, Inbox, Package, Truck, FileText, Shield, Send,
-  Download, WifiOff, RefreshCw, Receipt, CreditCard, Recycle, Wrench, ReceiptText
+  Download, WifiOff, RefreshCw, Receipt, CreditCard, Recycle, Wrench, ReceiptText, HardHat
 } from 'lucide-react'
 
 // Section 50: nav items reference i18n keys instead of inline EN strings.
@@ -20,6 +20,7 @@ const mainNav = [
   { to: '/projects',         icon: FolderKanban,    labelKey: 'nav.projects',         permission: { module: 'projects',        action: 'view'           } },
   { to: '/suppliers',        icon: Truck,           labelKey: 'nav.suppliers',        permission: { module: 'suppliers',       action: 'view'           } },
   { to: '/assignments',      icon: ClipboardList,   labelKey: 'nav.assignments',      permission: { module: 'assignments',     action: 'view'           } },
+  { to: '/crews',            icon: HardHat,         labelKey: 'nav.crews',            permission: { module: 'assignments',     action: 'view'           } },
   { to: '/attendance',       icon: CalendarCheck,   labelKey: 'nav.attendance',       permission: { module: 'attendance',      action: 'view_self'      } },
   { to: '/reports',          icon: BarChart2,       labelKey: 'nav.reports',          permission: { module: 'reports', action: 'view_self' } },
   { to: '/standup',          icon: ClipboardList,   labelKey: 'nav.standup',          permission: { module: 'standup',         action: 'manage'         } },

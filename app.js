@@ -308,6 +308,10 @@ function mountTenantRoutes(app) {
   app.use('/api/employees', auth, tenantDb, loadRouter('./routes/employees'));
   // Section 89-C/8: projects migrated to req.db (RLS-enforced).
   app.use('/api/projects', auth, tenantDb, loadRouter('./routes/projects'));
+  // §147 Phase 0: project labor requirements (demand) + coverage. Nested under
+  // /api/projects/:projectId/requirements + /coverage; mounted after the
+  // projects router (resolves by segment count, no route collision).
+  app.use('/api/projects', auth, tenantDb, require('./routes/project_requirements'));
   // Section 89-B sample migration: /api/suppliers was the first production
   // route to consume req.db (RLS-enforced).
   app.use('/api/suppliers', auth, tenantDb, require('./routes/suppliers'));
