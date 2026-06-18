@@ -42,6 +42,7 @@ export default {
     suppliers: 'Fournisseurs',
     assignments: 'Affectations',
     crews: 'Équipes',
+    foremanRequest: 'Demander du personnel',
     pendingRequests: 'Demandes en attente',
     attendance: 'Présences',
     reports: 'Rapports',
@@ -101,6 +102,19 @@ export default {
         nameTaken: 'Une équipe portant ce nom existe déjà',
       },
     },
+  },
+
+  foremanRequest: {
+    title: 'Soumettre une demande de personnel',
+    subtitle: 'Choisissez votre projet, la date et l’équipe voulue — envoyée au répartiteur pour approbation',
+    project: 'Projet',
+    selectProject: 'Choisir un projet…',
+    noProjects: 'Aucun projet ne vous est assigné pour le moment.',
+    date: 'Date',
+    team: 'Équipe',
+    submit: 'Soumettre la demande ({{count}})',
+    submitted: '{{count}} demande(s) soumise(s) ✓',
+    skipped: '{{count}} ignoré(s) (déjà assigné ou en attente)',
   },
 
   pendingRequests: {
