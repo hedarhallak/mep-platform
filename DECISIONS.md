@@ -16270,4 +16270,12 @@ Decisions locked:
 2. Dispatcher review screen — PENDING grouped by project/date → approve / add-remove names / approve-all. Approve reuses the existing approve endpoint (→ §144 allowance).
 3. Permissions/roles wiring + (later) the per-company method setting.
 
-Status: DESIGN LOCKED. Phase 0 (§147.3, the demand foundation) PR is in flight separately. Method 4 build not started.
+Status: DESIGN LOCKED. Phase 0 (§147.3) merged. Method 4 build STARTED — see §147.6.
+
+### 147.6 — Method 4 Stage 2 SHIPPED: dispatcher review screen (frontend-only)
+
+Key finding on starting the build: **Method 4's backend already exists** in `routes/assignments.js` — `GET /requests?status=PENDING` returns PENDING requests enriched with project_code/name + employee_name + employee_trade + requested_by_name (and a TRADE_PROJECT_MANAGER only sees their own); `POST /requests` already creates PENDING for non-admins (gated — autoApproveRoles = COMPANY_ADMIN/TRADE_ADMIN/TRADE_PROJECT_MANAGER) with project-ACTIVE + employee-in-company + APPROVED/PENDING overlap checks; `PATCH /requests/:id/approve` (→ §144 distance+allowance) and `/reject` ({reason}) are the gated decisions. So Method 4 is **frontend-only** over these.
+
+Shipped the **dispatcher review screen** (Stage 2): `mep-frontend/src/pages/assignments/PendingRequestsPage.jsx` — fetches `GET /assignments/requests?status=PENDING`, **groups by project** (project-centric), each row shows employee + trade badge + date(s) + "requested by <foreman>", with **Approve** (PATCH approve) / **Reject** (PATCH reject, optional reason prompt) gated on `assignments.edit`; optimistic row-removal + success toast + a pending count. Route `/assignments/requests` (RequirePermission `assignments.edit`), nav entry "Pending Requests" (ClipboardCheck icon, gated `assignments.edit`), i18n `pendingRequests.*` + `nav.pendingRequests` EN+FR (parity-guarded), and `PendingRequestsPage.test.jsx` (mount→grouped render, approve→endpoint+row removal, empty state, hides actions without edit).
+
+**Remaining for Method 4:** Stage 1 — the foreman SUBMIT screen ("My projects" → date → MemberSelector pre-filled with today's team → `POST /requests` per name). Then the per-company "assignment method" enable/disable setting. Deploy needs a frontend rebuild (Pitfall #41).

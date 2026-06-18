@@ -42,6 +42,7 @@ export default {
     suppliers: 'Fournisseurs',
     assignments: 'Affectations',
     crews: 'Équipes',
+    pendingRequests: 'Demandes en attente',
     attendance: 'Présences',
     reports: 'Rapports',
     standup: 'Réunion quotidienne',
@@ -100,6 +101,20 @@ export default {
         nameTaken: 'Une équipe portant ce nom existe déjà',
       },
     },
+  },
+
+  pendingRequests: {
+    title: 'Demandes en attente',
+    subtitle: 'Réviser et approuver les demandes de personnel des contremaîtres',
+    count: '{{count}} en attente',
+    empty: 'Aucune demande en attente',
+    emptyHint: 'Les demandes de personnel des contremaîtres apparaîtront ici.',
+    requestedBy: 'par {{name}}',
+    approve: 'Approuver',
+    reject: 'Refuser',
+    rejectReason: 'Raison du refus (facultatif) :',
+    approved: 'Demande approuvée ✓',
+    rejected: 'Demande refusée',
   },
 
   tools: {
