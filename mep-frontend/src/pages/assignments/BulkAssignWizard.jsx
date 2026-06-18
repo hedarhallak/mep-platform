@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import api from '@/lib/api'
 import { trade } from '@/constants/trades'
 import {
   X, Check, Loader2, Sparkles, Send, UserX, RefreshCw,
-  CalendarDays, AlertTriangle, MapPin, Banknote, ChevronLeft,
+  CalendarDays, AlertTriangle, MapPin, Banknote, ChevronLeft, Users,
 } from 'lucide-react'
 
 // Section 131 (assignments-redesign Phase 1) — the bulk-assign WIZARD.
@@ -24,6 +24,8 @@ const TYPE_STYLE = {
   // Section 131.12: informational — already covered by an existing
   // assignment on the same project for the target date; nothing created.
   already_assigned: 'bg-slate-200 text-slate-500',
+  // §143 CREWS Slice 2b: a roster member being deployed with the crew.
+  crew:             'bg-indigo-100 text-indigo-700',
 }
 
 function tomorrowISO() {
@@ -48,6 +50,18 @@ export default function BulkAssignWizard({ projects, onClose, onConfirmed, inlin
   const [projectId, setProjectId] = useState('')
   const [optimizeDistance, setOptimizeDistance] = useState(true)
   const [fillGaps, setFillGaps] = useState(true)
+  // §143 CREWS Slice 2b — the "Deploy crew" basis.
+  const [crewId, setCrewId] = useState('')
+  const [crews, setCrews] = useState([])
+
+  // Load the company's crews once so the CREW basis can offer them.
+  useEffect(() => {
+    let alive = true
+    api.get('/crews')
+      .then(r => { if (alive) setCrews(r.data?.crews || []) })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [])
 
   // Preview / confirm state
   const [plan, setPlan] = useState(null)
@@ -60,13 +74,21 @@ export default function BulkAssignWizard({ projects, onClose, onConfirmed, inlin
   const generate = async () => {
     setLoading(true); setError(''); setRemoved(new Set())
     try {
-      const r = await api.post('/assignments/auto-suggest', {
-        target_date: targetDate,
-        mode,
-        project_id: mode === 'PROJECT' ? Number(projectId) : undefined,
-        optimize_distance: optimizeDistance,
-        fill_gaps: fillGaps,
-      })
+      // §143 Slice 2b: CREW deploys a fixed roster via /crews/:id/plan, which
+      // returns the SAME suggestions shape the optimizer does — so the preview
+      // (step 4) and confirm (/auto-confirm) work identically.
+      const r = mode === 'CREW'
+        ? await api.post(`/crews/${crewId}/plan`, {
+            project_id: Number(projectId),
+            target_date: targetDate,
+          })
+        : await api.post('/assignments/auto-suggest', {
+            target_date: targetDate,
+            mode,
+            project_id: mode === 'PROJECT' ? Number(projectId) : undefined,
+            optimize_distance: optimizeDistance,
+            fill_gaps: fillGaps,
+          })
       setPlan(r.data)
       setStep(4)
     } catch (e) { setError(e.response?.data?.message || e.response?.data?.error || e.message) }
@@ -121,14 +143,20 @@ export default function BulkAssignWizard({ projects, onClose, onConfirmed, inlin
 
   const stepValid =
     step === 1 ? !!targetDate :
-    step === 2 ? (mode !== 'PROJECT' || !!projectId) :
+    step === 2 ? (
+      mode === 'PROJECT' ? !!projectId :
+      mode === 'CREW'    ? (!!crewId && !!projectId) :
+      true
+    ) :
     true
 
   // Section 131.7 (Hedar): REPEAT = "same as yesterday" — the
   // optimizations question is meaningless there, so Q3 is SKIPPED and
   // Q2 generates directly (defaults stay on: busy workers still get
   // replacement suggestions, visible in the preview).
-  const skipQ3 = mode === 'REPEAT'
+  // CREW also skips Q3: a fixed roster isn't re-optimized (members don't get
+  // swapped); /crews/:id/plan already annotates distance + allowance.
+  const skipQ3 = mode === 'REPEAT' || mode === 'CREW'
   const wizardSteps = skipQ3 ? [1, 2] : [1, 2, 3]
 
   const resetWizard = () => {
@@ -198,6 +226,7 @@ export default function BulkAssignWizard({ projects, onClose, onConfirmed, inlin
                 { id: 'REPEAT',  title: t('assignments.wizard.basis.repeat'),  hint: t('assignments.wizard.basis.repeatHint') },
                 { id: 'FULL',    title: t('assignments.wizard.basis.full'),    hint: t('assignments.wizard.basis.fullHint') },
                 { id: 'PROJECT', title: t('assignments.wizard.basis.project'), hint: t('assignments.wizard.basis.projectHint') },
+                { id: 'CREW',    title: t('assignments.wizard.basis.crew'),    hint: t('assignments.wizard.basis.crewHint') },
               ].map(opt => (
                 <button key={opt.id} onClick={() => setMode(opt.id)}
                   className={`w-full text-left px-4 py-3 rounded-xl border transition-colors ${mode === opt.id ? 'border-primary bg-primary-pale' : 'border-slate-200 bg-white hover:bg-slate-50'}`}>
@@ -216,6 +245,30 @@ export default function BulkAssignWizard({ projects, onClose, onConfirmed, inlin
                     <option key={p.id} value={p.id}>{p.project_code}{p.project_name ? ` — ${p.project_name}` : ''}</option>
                   ))}
                 </select>
+              )}
+              {/* §143 Slice 2b: CREW deploy needs BOTH a crew and a project. */}
+              {mode === 'CREW' && (
+                <div className="space-y-2">
+                  <select value={crewId} onChange={e => setCrewId(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-light">
+                    <option value="">{t('assignments.wizard.selectCrew')}</option>
+                    {crews.filter(c => c.is_active !== false).map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}{c.member_count != null ? ` (${c.member_count})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <select value={projectId} onChange={e => setProjectId(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-light">
+                    <option value="">{t('assignments.wizard.selectProject')}</option>
+                    {projects.map(p => (
+                      <option key={p.id} value={p.id}>{p.project_code}{p.project_name ? ` — ${p.project_name}` : ''}</option>
+                    ))}
+                  </select>
+                  {crews.length === 0 && (
+                    <p className="text-xs text-amber-600">{t('assignments.wizard.noCrews')}</p>
+                  )}
+                </div>
               )}
             </div>
           )}
