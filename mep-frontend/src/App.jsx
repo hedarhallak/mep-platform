@@ -18,6 +18,7 @@ const EmployeesPage        = lazy(() => import('@/pages/employees/EmployeesPage'
 const OnboardingPage       = lazy(() => import('@/pages/onboarding/OnboardingPage'))
 const AssignmentsPage      = lazy(() => import('@/pages/assignments/AssignmentsPage'))
 const CrewsPage            = lazy(() => import('@/pages/crews/CrewsPage'))
+const PendingRequestsPage  = lazy(() => import('@/pages/assignments/PendingRequestsPage'))
 const AttendancePage       = lazy(() => import('@/pages/attendance/AttendancePage'))
 const MyHubPage            = lazy(() => import('@/pages/hub/MyHubPage'))
 const MaterialRequestPage  = lazy(() => import('@/pages/materials/MaterialRequestPage'))
@@ -113,6 +114,11 @@ function AppRoutes() {
           <Route path="crews" element={
             <RequirePermission module="assignments" action="view">
               <CrewsPage />
+            </RequirePermission>
+          }/>
+          <Route path="assignments/requests" element={
+            <RequirePermission module="assignments" action="edit">
+              <PendingRequestsPage />
             </RequirePermission>
           }/>
           <Route path="suppliers" element={

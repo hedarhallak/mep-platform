@@ -42,6 +42,7 @@ export default {
     suppliers: 'Suppliers',
     assignments: 'Assignments',
     crews: 'Crews',
+    pendingRequests: 'Pending Requests',
     attendance: 'Attendance',
     reports: 'Reports',
     standup: 'Daily Standup',
@@ -100,6 +101,20 @@ export default {
         nameTaken: 'A crew with this name already exists',
       },
     },
+  },
+
+  pendingRequests: {
+    title: 'Pending Requests',
+    subtitle: 'Review and approve foreman staffing requests',
+    count: '{{count}} pending',
+    empty: 'No pending requests',
+    emptyHint: 'Foreman staffing requests will appear here for review.',
+    requestedBy: 'by {{name}}',
+    approve: 'Approve',
+    reject: 'Reject',
+    rejectReason: 'Reason for rejection (optional):',
+    approved: 'Request approved ✓',
+    rejected: 'Request rejected',
   },
 
   tools: {
