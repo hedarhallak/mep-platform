@@ -16468,3 +16468,15 @@ The `user_permissions` table + the can() resolution (most-specific layer) alread
 - **Test** — integration: grant WORKER a non-inherited code → override created + read back; set it back to inherited → override dropped; COMPANY_ADMIN editing a peer COMPANY_ADMIN → 403.
 
 No migration (user_permissions has UNIQUE(user_id,permission_code) + FK to permissions.code already). NEXT = Phase 5b: the per-user editor UI in User Management (open a user → matrix with inherited vs overridden, toggle → PUT). After 5b, §148 is complete end-to-end.
+
+### 148.16 — Phase 5b: per-user overrides UI (§148 COMPLETE)
+
+The admin surface for the Phase 5a backend. In `UserManagementPage.jsx`, each user row gets a **Permissions** action (next to Change Role) → opens `UserPermissionsModal`:
+
+- Fetches `GET /permissions/user/:id` (inherited baseline + overrides) + `GET /permissions/matrix` (catalog) in parallel.
+- Renders every module's action chips; the **effective** value = the admin's unsaved edit ▸ the stored override ▸ the inherited role+company value. A chip whose effective value differs from the inherited one shows an **amber dot** = a personal override. (State is an `edits` overlay derived in render — no setState-in-effect.)
+- Save sends the full effective set; the backend (5a) stores only the diffs in `user_permissions`. React-query invalidates `['users']`.
+- Rank-lock is enforced by the backend GET/PUT; if the admin can't edit the target (403), the modal shows a "role ranks at/above yours" notice instead of the grid.
+- New UI strings use `t(key, {defaultValue})` so NO locale keys are added → the §145 EN/FR parity test stays green. Reuses existing `permissions.modules.*` / `permissions.actions.*` labels.
+
+**§148 is now COMPLETE end-to-end:** data-driven roles (1) → dynamic matrix (2) → per-company layer + writes (3a/3b) → expanded catalog (4) → per-user overrides (5a/5b). Resolution everywhere: user_permissions ▸ company_role_permissions ▸ role_permissions, with audit.view OWNER-only throughout. No migration (Phase 5 reuses the existing user_permissions table).
