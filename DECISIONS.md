@@ -16401,3 +16401,21 @@ Hedar: "ألوان صفحة الصلاحيات مزعجة لازم تكون ال
 ### 148.11 — apply_role_defaults.js: load dotenv (standalone-run fix)
 
 Running `node scripts/apply_role_defaults.js` on prod failed with `SASL: client password must be a string` — db.js reads `DATABASE_URL`/`DATABASE_URL_SUPER` at require-time, and a manual `node` invocation (unlike pm2) doesn't inherit the app env. Fix: `require('dotenv').config()` BEFORE `require('../db')` (the convention used by seed.js / scripts/migrate.js). Immediate prod workaround that needed no redeploy: `node -r dotenv/config scripts/apply_role_defaults.js`.
+
+### 147.13 — Project Staffing: full trade-lock for trade-scoped roles
+
+Hedar logged in as a foreman and saw ALL trades in the "Add Requirement" picker. Decision (his pick): **full trade-lock** — a trade-scoped user (foreman / field) may only see and author requirements for their OWN trade; company-level roles (admin/PM, `tradeScopeFor`=null) stay unrestricted.
+
+Root cause was two-fold: (a) the test foreman had no `trade_code`, so `tradeScopeFor()` returned null → read-side scoping (coverage/requirements list, already wired in §147) was inert → he saw every trade; (b) the "Add Requirement" trade picker was a hardcoded all-trades list and the write endpoints did NOT enforce scope.
+
+Fixes (this PR):
+- **Backend `routes/project_requirements.js`** — POST/PATCH/DELETE now enforce `tradeScopeFor(req.user)`: a scoped user gets `403 TRADE_SCOPE_FORBIDDEN` creating/moving a row to another trade, and PATCH/DELETE WHERE clauses restrict to rows of their own trade. Company-level roles (scope=null) unaffected — existing COMPANY_ADMIN tests stay green.
+- **Frontend `ProjectStaffingPage.jsx`** — the RequirementModal picker collapses to the user's single trade when `user.trade_code` is set (read from `useAuth`), defaulting `tradeCode` to it. Mirrors the backend guard.
+- **`routes/auth.js`** — added `trade_code` to the login + 2FA-login `user` response objects (whoami already returned it via the token payload) so the frontend has it immediately, not only after a reload.
+- **Test** — `project_requirements.test.js`: a PLUMBING foreman (granted assignments.create via `seedUserPermission`, independent of seeded role defaults) gets 201 for PLUMBING, 403 TRADE_SCOPE_FORBIDDEN for HVAC.
+
+OPERATIONAL: for a foreman to actually see the lock, they must have `employee_profiles.trade_code` set. Foremen with no trade still see all (scope=null) — assign their trade in the data step.
+
+### 147.14 — ROOT CAUSE: req.user.trade_code was never populated (§147 scoping never engaged)
+
+CI on the §147.13 PR went red: the foreman trade-lock test got 201 (not 403) on a cross-trade POST. Root cause was deeper than the picker — **`middleware/auth.js` built `req.user` from the JWT but never copied `trade_code`** (only `_token_payload`). So `tradeScopeFor(req.user)` read `req.user.trade_code === undefined` and returned `null` for EVERYONE, every request. The entire §147 trade-scoping layer (the read filters on `/assignments/requests`, `/projects/:id/requirements`, `/coverage` shipped earlier) was silently inert — that is the real reason the foreman saw all trades, not just the missing data. Fix: add `trade_code: payload.trade_code || null` to `req.user` in `middleware/auth.js`. One line; it activates all the scoping that was already written. Verified safe against the suite: every existing test that hits a scoped endpoint logs in as COMPANY_ADMIN (scope=null regardless), and nothing hits `/assignments/available`; only the new foreman test exercises a non-null scope. Lesson: when a guard "does nothing", check that its INPUT is actually populated — the scoping code was correct, its input was empty.

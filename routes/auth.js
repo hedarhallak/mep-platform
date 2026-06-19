@@ -426,6 +426,7 @@ router.post('/login', async (req, res) => {
         company_id: user.company_id,
         company_code: user.company_code || null,
         role,
+        trade_code: user.trade_code || null,
         must_change_pin: mustChangePin,
       },
     };
@@ -503,6 +504,7 @@ async function finishLoginAfterTotp(req, res, user, role) {
       id: user.id,
       username: user.username,
       role,
+      trade_code: user.trade_code || null,
       must_change_pin: mustChangePin,
     },
   });

@@ -17,6 +17,7 @@ import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import api from '@/lib/api'
 import { usePermissions } from '@/hooks/usePermissions.jsx'
+import { useAuth } from '@/hooks/useAuth'
 import MemberSelector from '@/components/shared/MemberSelector'
 import { TRADES, tradeBadge } from '@/constants/trades'
 import {
@@ -32,8 +33,13 @@ function fmt(d) {
 
 function RequirementModal({ projectId, requirement, defaultDate, onClose, onSaved }) {
   const { t } = useTranslation()
+  const { user } = useAuth()
   const isEdit = !!requirement?.id
-  const [tradeCode, setTradeCode] = useState(requirement?.trade_code || 'PLUMBING')
+  // §147.13 trade-lock: a user bound to a trade (foreman / field) can only
+  // pick that one trade; company-level roles (no trade_code) pick any. Mirrors
+  // tradeScopeFor() on the backend, which also enforces it on write.
+  const lockedTrade = user?.trade_code ? String(user.trade_code).toUpperCase() : null
+  const [tradeCode, setTradeCode] = useState(requirement?.trade_code || lockedTrade || 'PLUMBING')
   const [count, setCount] = useState(requirement?.required_count ?? 1)
   // New rows default to the date you're viewing (no need to re-type it);
   // editing keeps the row's own range.
@@ -44,7 +50,13 @@ function RequirementModal({ projectId, requirement, defaultDate, onClose, onSave
   const [error, setError] = useState('')
 
   // Real trades only (exclude the ALL sentinel — a requirement is per trade).
-  const trades = TRADES.filter((tr) => tr.value !== 'ALL')
+  // When the user is trade-locked, the picker collapses to their single trade.
+  const realTrades = TRADES.filter((tr) => tr.value !== 'ALL')
+  const trades = lockedTrade
+    ? realTrades.some((tr) => tr.value === lockedTrade)
+      ? realTrades.filter((tr) => tr.value === lockedTrade)
+      : [{ value: lockedTrade, labelKey: `trades.${lockedTrade.toLowerCase()}` }]
+    : realTrades
 
   const handleSave = async () => {
     setError('')

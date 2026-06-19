@@ -107,6 +107,14 @@ router.post('/:projectId/requirements', can('assignments.create'), async (req, r
     const { value, error } = normalizeRequirement(req.body || {});
     if (error) return res.status(400).json({ ok: false, error });
 
+    // §147.13 trade-lock: a trade-scoped user (foreman / field) may only create
+    // a requirement for their OWN trade. Company-level roles (scope=null) are
+    // unrestricted. The frontend already hides the picker, this is the guard.
+    const scope = tradeScopeFor(req.user);
+    if (scope && value.trade_code !== scope) {
+      return res.status(403).json({ ok: false, error: 'TRADE_SCOPE_FORBIDDEN', scope });
+    }
+
     const { rows } = await req.db.query(
       `INSERT INTO public.project_labor_requirements
          (company_id, project_id, trade_code, required_count, start_date, end_date, note)
@@ -144,6 +152,13 @@ router.patch('/:projectId/requirements/:id', can('assignments.edit'), async (req
     const keys = Object.keys(value);
     if (!keys.length) return res.status(400).json({ ok: false, error: 'NO_FIELDS' });
 
+    // §147.13 trade-lock: a scoped user can't move a row to another trade, and
+    // the WHERE clause below restricts edits to rows of their own trade.
+    const scope = tradeScopeFor(req.user);
+    if (scope && value.trade_code && value.trade_code !== scope) {
+      return res.status(403).json({ ok: false, error: 'TRADE_SCOPE_FORBIDDEN', scope });
+    }
+
     const sets = [];
     const params = [];
     let p = 1;
@@ -152,12 +167,13 @@ router.patch('/:projectId/requirements/:id', can('assignments.edit'), async (req
       params.push(value[k]);
     }
     sets.push('updated_at = NOW()');
-    params.push(id, projectId, companyId);
+    params.push(id, projectId, companyId, scope);
 
     const { rows } = await req.db.query(
       `UPDATE public.project_labor_requirements
           SET ${sets.join(', ')}
-        WHERE id = $${p++} AND project_id = $${p++} AND company_id = $${p}
+        WHERE id = $${p++} AND project_id = $${p++} AND company_id = $${p++}
+          AND ($${p}::text IS NULL OR trade_code = $${p})
         RETURNING id, project_id, trade_code, required_count, start_date, end_date, note,
                   created_at, updated_at`,
       params
@@ -181,10 +197,13 @@ router.delete('/:projectId/requirements/:id', can('assignments.edit'), async (re
     const id = Number(req.params.id);
     if (!projectId || !Number.isInteger(id) || id <= 0)
       return res.status(400).json({ ok: false, error: 'INVALID_ID' });
+    // §147.13 trade-lock: a scoped user can only delete rows of their own trade.
+    const scope = tradeScopeFor(req.user);
     const { rowCount } = await req.db.query(
       `DELETE FROM public.project_labor_requirements
-        WHERE id = $1 AND project_id = $2 AND company_id = $3`,
-      [id, projectId, req.user.company_id]
+        WHERE id = $1 AND project_id = $2 AND company_id = $3
+          AND ($4::text IS NULL OR trade_code = $4)`,
+      [id, projectId, req.user.company_id, scope]
     );
     if (!rowCount) return res.status(404).json({ ok: false, error: 'NOT_FOUND' });
     return res.json({ ok: true });

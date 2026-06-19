@@ -17,6 +17,7 @@ const {
   seedEmployeeProfile,
   seedProject,
   seedAssignment,
+  seedUserPermission,
   cleanupTestRows,
 } = require('../helpers/db');
 
@@ -83,6 +84,49 @@ describeIfDb('project labor requirements CRUD + tenant isolation', () => {
       .get(`/api/projects/${project.id}/requirements`)
       .set('Authorization', `Bearer ${token}`);
     expect(after.body.requirements).toHaveLength(0);
+  });
+
+  test('§147.13 trade-lock: a foreman may author only their own trade', async () => {
+    const company = await seedCompany();
+    const project = await seedProject({ company_id: company.company_id });
+
+    // A PLUMBING foreman, linked to an employee_profile so the login token
+    // carries trade_code. Grant assignments.create explicitly so the can()
+    // gate passes regardless of the seeded role defaults in the test DB.
+    const emp = await seedEmployee({ company_id: company.company_id });
+    await seedEmployeeProfile({ employee_id: emp.id, trade_code: 'PLUMBING' });
+    const foreman = await seedUser({
+      company_id: company.company_id,
+      role: 'FOREMAN',
+      employee_id: emp.id,
+    });
+    await seedUserPermission({ user_id: foreman.id, permission_code: 'assignments.create' });
+    const { token } = await loginUser(foreman);
+
+    // Own trade → allowed.
+    const ok = await request(app)
+      .post(`/api/projects/${project.id}/requirements`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        trade_code: 'PLUMBING',
+        required_count: 2,
+        start_date: '2026-07-01',
+        end_date: '2026-07-31',
+      });
+    expect(ok.statusCode).toBe(201);
+
+    // Another trade → blocked by the trade-lock guard, not the permission gate.
+    const blocked = await request(app)
+      .post(`/api/projects/${project.id}/requirements`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        trade_code: 'HVAC',
+        required_count: 2,
+        start_date: '2026-07-01',
+        end_date: '2026-07-31',
+      });
+    expect(blocked.statusCode).toBe(403);
+    expect(blocked.body.error).toBe('TRADE_SCOPE_FORBIDDEN');
   });
 
   test('400 on missing trade and on inverted date range', async () => {
