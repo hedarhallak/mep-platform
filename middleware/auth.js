@@ -43,6 +43,11 @@ module.exports = function auth(req, res, next) {
       username: payload.username || null,
       role,
       company_id: payload.company_id != null ? String(payload.company_id) : null,
+      // §147.13: the user's trade (set by buildTokenPayload) — REQUIRED by
+      // tradeScopeFor(). Without it req.user.trade_code is undefined and every
+      // trade-scoped read/write silently falls back to scope=null (all trades),
+      // which is why §147 scoping never actually engaged until now.
+      trade_code: payload.trade_code || null,
       // Section 121 (Phase 6-D-6.5): TOTP 2FA flag. Carry it through so
       // middleware/super_admin.js can enforce when TOTP_ENFORCE=true.
       totp_verified: payload.totp_verified === true,
