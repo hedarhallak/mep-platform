@@ -16442,3 +16442,18 @@ CONSTRUCTION_MANAGER (70, mgmt), PROJECT_MANAGER (65, mgmt), SUPERINTENDENT (55,
 - **tests** — role_defaults.test.js: all 18 have a default, none get audit.view or settings.*, OPERATOR=FIELD_WORKER, ACCOUNTANT approves expenses. roles alias tests updated (PROJECT_MANAGER now passes through). 51 green.
 
 DEPLOY: 038 is additive, so order is flexible. After merge+deploy: run migration 038 on prod, then `node scripts/apply_role_defaults.js` (populates role_permissions for the 18), then pm2 restart (refresh the 5-min role cache). The new roles then appear in the matrix + can be assigned to users. Phase 5 (per-user overrides UI) remains.
+
+### 148.13 — Phase 3b: the matrix writes per-company
+
+(Restored — this note was lost from the Phase 3b commit; the code shipped in PR #408.)
+
+The permissions UI is company-aware. A **company admin** (OWNER / COMPANY_ADMIN / IT_ADMIN) edits THEIR company's overrides; a **SUPER_ADMIN** (platform) edits the global defaults. All in `routes/permissions.js`:
+
+- **PUT /role/:role** — branches on `isPlatform`. Platform: global DELETE+reinsert (unchanged). Company admin: writes `company_role_permissions` as a DIFF vs the global default (matching value removes the override → falls through; differing value upserted). Partial bodies are fine. Audit action `UPDATE_COMPANY_PERMISSIONS`.
+- **GET /matrix** — overlays the caller's company overrides on the global defaults → shows that company's EFFECTIVE permissions. Platform sees raw globals.
+- **GET /my-permissions** — same overlay for the logged-in user's role, so the UI menu matches what `can()` (Phase 3a) enforces.
+- **POST /reset/:role** — platform resets the global default; a company admin's reset DELETEs their company's override rows for the role. Audit `RESET_COMPANY_PERMISSIONS`. Guard widened to OWNER/COMPANY_ADMIN.
+- **Frontend** — Reset button now shows for OWNER/COMPANY_ADMIN too.
+- **Test** — integration: COMPANY_ADMIN@A flips FOREMAN's projects.view; A sees it, B (same default) does NOT; reset reverts A. Shipped green as PR #408.
+
+No migration (the table is 148.12). Empty overrides = identical behaviour. Phase 4 (148.14) / Phase 5 (per-user UI) follow.
