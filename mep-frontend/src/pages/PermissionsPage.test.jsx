@@ -26,10 +26,14 @@ vi.mock('@/lib/api', () => ({
   },
 }));
 
+// The current user's role comes from the auth context, not localStorage.
+vi.mock('@/hooks/useAuth', () => ({
+  useAuth: () => ({ user: { role: 'COMPANY_ADMIN' } }),
+}));
+
 import PermissionsPage from './PermissionsPage.jsx';
 
 beforeEach(() => {
-  localStorage.setItem('user', JSON.stringify({ role: 'COMPANY_ADMIN' }));
   apiGet.mockReset();
   apiGet.mockImplementation((url) => {
     if (url === '/permissions/roles')
@@ -69,6 +73,12 @@ describe('PermissionsPage (§148 dynamic matrix)', () => {
     expect(screen.getByText('Audit')).toBeInTheDocument();
 
     // Non-CRUD actions render too (was impossible with the fixed 5-action grid).
-    expect(screen.getByText('Smart Assign')).toBeInTheDocument();
+    const smart = screen.getByText('Smart Assign');
+    expect(smart).toBeInTheDocument();
+
+    // EDITABLE: COMPANY_ADMIN (rank 80) editing FOREMAN (40) → chips enabled,
+    // not locked. (Regression guard: the role came back undefined when read
+    // from localStorage, which locked every role.)
+    expect(smart.closest('button')).not.toBeDisabled();
   });
 });
