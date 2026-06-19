@@ -140,6 +140,20 @@ function canAssignRole(callerRole, targetRole, currentRole = null) {
   return true;
 }
 
+// ── §147 trade-scoping ────────────────────────────────────────
+// Company-level roles oversee ALL trades (dispatchers / admins) and are never
+// trade-scoped. Trade-level roles (TRADE_PROJECT_MANAGER / TRADE_ADMIN /
+// FOREMAN / workers) are scoped to their own specialty (req.user.trade_code,
+// derived from their employee profile at login). Returns the trade_code to
+// filter by, or null = "see all trades".
+const COMPANY_LEVEL_ROLES = new Set(['SUPER_ADMIN', 'OWNER', 'IT_ADMIN', 'COMPANY_ADMIN']);
+function tradeScopeFor(user) {
+  if (!user) return null;
+  if (COMPANY_LEVEL_ROLES.has(normalizeRole(user.role))) return null;
+  const tc = user.trade_code ? String(user.trade_code).trim().toUpperCase() : '';
+  return tc || null;
+}
+
 // ── Prebuilt guards ───────────────────────────────────────────
 const SUPER_ADMIN_ONLY = requireRoles(['SUPER_ADMIN']);
 const IT_ADMIN_UP = requireMinLevel(90); // IT_ADMIN + SUPER_ADMIN
@@ -152,6 +166,7 @@ const ANY_AUTHENTICATED = requireMinLevel(10); // any logged in user
 module.exports = {
   normalizeRole,
   canAssignRole,
+  tradeScopeFor,
   ROLE_LEVEL,
   requireRoles,
   requireMinLevel,

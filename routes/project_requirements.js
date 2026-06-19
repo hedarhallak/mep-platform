@@ -19,6 +19,7 @@
 const express = require('express');
 const router = express.Router();
 const { can } = require('../middleware/permissions');
+const { tradeScopeFor } = require('../middleware/roles');
 
 // Verify a project belongs to the caller's company. Returns true/false.
 async function projectInCompany(db, projectId, companyId) {
@@ -75,13 +76,17 @@ router.get('/:projectId/requirements', can('assignments.view'), async (req, res)
     if (!(await projectInCompany(req.db, projectId, companyId)))
       return res.status(404).json({ ok: false, error: 'PROJECT_NOT_FOUND' });
 
+    // §147 trade-scoping: a trade-level user (foreman/trade manager) sees only
+    // their specialty's requirement rows; company-level roles see all (scope=null).
+    const scope = tradeScopeFor(req.user);
     const { rows } = await req.db.query(
       `SELECT id, project_id, trade_code, required_count, start_date, end_date, note,
               created_at, updated_at
          FROM public.project_labor_requirements
         WHERE project_id = $1 AND company_id = $2
+          AND ($3::text IS NULL OR trade_code = $3)
         ORDER BY start_date, trade_code`,
-      [projectId, companyId]
+      [projectId, companyId, scope]
     );
     return res.json({ ok: true, requirements: rows });
   } catch (err) {
@@ -202,14 +207,17 @@ router.get('/:projectId/coverage', can('assignments.view'), async (req, res) => 
       return res.status(404).json({ ok: false, error: 'PROJECT_NOT_FOUND' });
 
     const date = req.query.date || new Date().toISOString().slice(0, 10);
+    // §147 trade-scoping: trade-level users see coverage for their trade only.
+    const scope = tradeScopeFor(req.user);
 
     const { rows: reqRows } = await req.db.query(
       `SELECT trade_code, COALESCE(SUM(required_count), 0)::int AS required
          FROM public.project_labor_requirements
         WHERE project_id = $1 AND company_id = $2
           AND start_date <= $3 AND end_date >= $3
+          AND ($4::text IS NULL OR trade_code = $4)
         GROUP BY trade_code`,
-      [projectId, companyId, date]
+      [projectId, companyId, date, scope]
     );
 
     const { rows: asgRows } = await req.db.query(
@@ -221,8 +229,9 @@ router.get('/:projectId/coverage', can('assignments.view'), async (req, res) => 
         WHERE ar.project_id = $1 AND ar.company_id = $2
           AND ar.status = 'APPROVED'
           AND ar.start_date <= $3 AND ar.end_date >= $3
+          AND ($4::text IS NULL OR ep.trade_code = $4)
         GROUP BY COALESCE(ep.trade_code, 'UNKNOWN')`,
-      [projectId, companyId, date]
+      [projectId, companyId, date, scope]
     );
 
     // Merge required + assigned across the union of trades.

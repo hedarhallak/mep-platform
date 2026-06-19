@@ -99,6 +99,10 @@ function buildTokenPayload(user, role, mustChangePin, opts = {}) {
     employee_id: user.employee_id ? String(user.employee_id) : null,
     company_id: user.company_id ? String(user.company_id) : null,
     role,
+    // §147 trade-scoping: the user's specialty (from their employee profile).
+    // Drives backend filtering of project demand/coverage/pickers for
+    // trade-level roles; company-level roles ignore it (see tradeScopeFor).
+    trade_code: user.trade_code || null,
     must_change_pin: mustChangePin || false,
     totp_verified: opts.totpVerified === true,
   };
@@ -225,7 +229,7 @@ router.post('/login', async (req, res) => {
       `SELECT au.id, au.username, au.email, au.employee_id, au.company_id, au.role,
               au.is_active, au.pin_hash, au.must_change_pin,
               au.totp_secret_encrypted, au.totp_iv, au.totp_auth_tag, au.totp_enabled_at,
-              ep.full_name,
+              ep.full_name, ep.trade_code,
               c.company_code, c.name AS company_name
        FROM public.app_users au
        LEFT JOIN public.employee_profiles ep ON ep.employee_id = au.employee_id
@@ -632,7 +636,7 @@ router.post('/refresh', async (req, res) => {
       `SELECT rt.id, rt.user_id, rt.expires_at, rt.revoked,
               rt.session_started_at, rt.last_activity_at,
               au.username, au.employee_id, au.company_id, au.role, au.is_active, au.must_change_pin,
-              ep.full_name
+              ep.full_name, ep.trade_code
        FROM public.refresh_tokens rt
        JOIN public.app_users au ON au.id = rt.user_id
        LEFT JOIN public.employee_profiles ep ON ep.employee_id = au.employee_id
