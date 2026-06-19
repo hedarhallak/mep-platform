@@ -37,8 +37,17 @@ export default function ForemanRequestPage() {
 
   useEffect(() => {
     api.get('/hub/my-projects').then((r) => setProjects(r.data.projects || [])).catch(() => {})
-    api.get('/hub/workers').then((r) => setWorkers(r.data.workers || [])).catch(() => {})
   }, [])
+
+  // Only employees free on the chosen date (and id = employee_id, so the
+  // request posts the right id). Refetches when the date changes.
+  useEffect(() => {
+    setMembers([]) // available list changes with the date — drop stale picks
+    api
+      .get(`/assignments/available?date=${encodeURIComponent(date)}`)
+      .then((r) => setWorkers(r.data.workers || []))
+      .catch(() => {})
+  }, [date])
 
   const canSubmit = projectId && date && members.length > 0 && !submitting
 

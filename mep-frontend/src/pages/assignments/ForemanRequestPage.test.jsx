@@ -23,7 +23,7 @@ function mockData() {
   apiGet.mockImplementation((url) => {
     if (url === '/hub/my-projects')
       return Promise.resolve({ data: { projects: [{ id: 7, project_code: 'P-7', project_name: 'Tower' }] } })
-    if (url === '/hub/workers')
+    if (url.startsWith('/assignments/available'))
       return Promise.resolve({
         data: { workers: [{ id: 1, first_name: 'Ali', last_name: 'H', trade_name: 'PLUMBING' }] },
       })
@@ -42,7 +42,7 @@ describe('ForemanRequestPage', () => {
     render(<ForemanRequestPage />)
     await waitFor(() => expect(screen.getByText('Ali H')).toBeInTheDocument())
     expect(apiGet).toHaveBeenCalledWith('/hub/my-projects')
-    expect(apiGet).toHaveBeenCalledWith('/hub/workers')
+    expect(apiGet).toHaveBeenCalledWith(expect.stringContaining('/assignments/available'))
   })
 
   test('submitting posts one PENDING request per chosen member', async () => {

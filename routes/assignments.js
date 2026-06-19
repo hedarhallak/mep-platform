@@ -314,6 +314,52 @@ router.get('/defaults', can('assignments.view'), async (req, res) => {
   }
 });
 
+// ── GET /api/assignments/available ────────────────────────────────
+// §147 Phase 2: employees AVAILABLE to assign on a date — i.e. NOT already in
+// an APPROVED/PENDING assignment overlapping that date. Optional ?trade= filters
+// to a trade_code (matches employee_profiles.trade_code + project requirement
+// codes exactly). Shaped for WorkerPicker/MemberSelector, and CRUCIALLY returns
+// `id = employee_id` (NOT app_user id) so callers can POST it straight as the
+// assignment's employee_id. Drives the "fill the gap" picker so the manager
+// only ever sees people who are actually free.
+router.get('/available', can('assignments.view'), async (req, res) => {
+  try {
+    const companyId = req.user.company_id;
+    const date = req.query.date || new Date().toISOString().slice(0, 10);
+    const trade = req.query.trade ? String(req.query.trade).toUpperCase() : null;
+
+    const { rows } = await req.db.query(
+      `SELECT e.id            AS id,
+              e.first_name,
+              e.last_name,
+              au.username,
+              ep.trade_code,
+              tt.name          AS trade_name
+         FROM public.employees e
+         JOIN public.app_users au
+           ON au.employee_id = e.id AND au.is_active = true
+         LEFT JOIN public.employee_profiles ep ON ep.employee_id = e.id
+         LEFT JOIN public.trade_types       tt ON tt.code = ep.trade_code
+        WHERE e.company_id = $1
+          AND au.role IN ('WORKER','JOURNEYMAN','APPRENTICE_1','APPRENTICE_2','APPRENTICE_3','APPRENTICE_4','DRIVER','FOREMAN')
+          AND ($3::text IS NULL OR ep.trade_code = $3)
+          AND NOT EXISTS (
+            SELECT 1 FROM public.assignment_requests a
+             WHERE a.requested_for_employee_id = e.id
+               AND a.company_id = $1
+               AND a.status IN ('APPROVED','PENDING')
+               AND a.start_date <= $2 AND a.end_date >= $2
+          )
+        ORDER BY e.first_name, e.last_name`,
+      [companyId, date, trade]
+    );
+    return res.json({ ok: true, workers: rows });
+  } catch (err) {
+    console.error('GET /assignments/available error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
+  }
+});
+
 // ── GET /api/assignments/my-today ─────────────────────────────────
 // Returns the current user's active assignment for today
 // Used by MaterialRequest, TaskRequest, Standup to auto-select project

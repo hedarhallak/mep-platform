@@ -226,9 +226,11 @@ export default function CrewsPage() {
 
   useEffect(() => {
     fetchCrews()
+    // /hub/workers returns id = app_user id; crews need employee_id. Normalize
+    // so the picker's `id` IS the employee_id (used for member_ids + foreman).
     api
       .get('/hub/workers')
-      .then((r) => setWorkers(r.data.workers || []))
+      .then((r) => setWorkers((r.data.workers || []).map((w) => ({ ...w, id: w.employee_id }))))
       .catch(() => {})
   }, [])
 

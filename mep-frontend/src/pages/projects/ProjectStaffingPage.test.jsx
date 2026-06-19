@@ -46,7 +46,7 @@ describe('ProjectStaffingPage', () => {
         return Promise.resolve({
           data: { coverage: [{ trade_code: 'PLUMBING', required: 2, assigned: 1, gap: 1 }], totals: { required: 2, assigned: 1, gap: 1 } },
         })
-      if (url === '/hub/workers') return Promise.resolve({ data: { workers: [] } })
+      if (url.startsWith('/assignments/available')) return Promise.resolve({ data: { workers: [] } })
       return Promise.resolve({ data: {} })
     })
 
@@ -71,7 +71,7 @@ describe('ProjectStaffingPage', () => {
         return Promise.resolve({
           data: { coverage: [{ trade_code: 'PLUMBING', required: 2, assigned: 1, gap: 1 }], totals: { required: 2, assigned: 1, gap: 1 } },
         })
-      if (url === '/hub/workers') return Promise.resolve({ data: { workers: [] } })
+      if (url.startsWith('/assignments/available')) return Promise.resolve({ data: { workers: [] } })
       return Promise.resolve({ data: {} })
     })
 

@@ -124,7 +124,8 @@ export default {
     fill: 'Combler',
     fillModal: {
       title: 'Combler {{trade}} — besoin de {{n}} le {{date}}',
-      hint: 'Choisissez les travailleurs à affecter. Astuce : filtrez par métier, puis sélectionnez.',
+      hint: 'Seuls les employés libres à cette date sont affichés.',
+      noneAvailable: 'Aucun employé de ce métier disponible à cette date.',
       assign: 'Affecter ({{count}})',
       assigned: '{{count}} affecté(s) ✓',
       skipped: '{{count}} ignoré(s) (déjà affecté)',

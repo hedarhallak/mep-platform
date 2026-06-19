@@ -16305,3 +16305,17 @@ Route `/projects/staffing` (RequirePermission `assignments.view`), nav "Project 
 Each **red** coverage row (gap > 0) now shows a **Fill** button (gated `assignments.create`). It opens `FillGapModal` (in `ProjectStaffingPage.jsx`): the gap context in the title ("Fill PLUMBING — need 1 on <date>") + the shared `MemberSelector` (fed by `/hub/workers`, with its own trade filter so the manager narrows to the gap's trade) → submit fires one `POST /assignments/requests` per chosen worker for the project on the viewed date (`start=end=date`, shift defaults, WORKER). Admins auto-approve → §144 distance+allowance computed; reports "{n} assigned · {m} skipped" (skips = overlap conflicts) and **refreshes coverage in place** so the gap shrinks immediately. Frontend-only (no migration/route); i18n `projectStaffing.fill` + `projectStaffing.fillModal.*` EN+FR (parity-guarded); test asserts the Fill button appears on a gap row and opens the modal.
 
 **The project-centric loop is now whole:** define demand (Phase 1) → see the red gap → **Fill** → assign → coverage turns green, payroll-grade. Deferred (Hedar's call): trade-scoping (a manager only sees their trade) — the proper home is the future trade-scoped **user** model; until then the MemberSelector's manual trade filter bridges it. Possible polish: pre-filter the Fill selector to the gap's trade (needs the trade_code↔trade_name reconciliation), and a "fill with a crew" option.
+
+### 147.10 — Phase 2 fix (Hedar testing): only-AVAILABLE picker + the `id` bug
+
+Two issues surfaced when Hedar first tried to fill a gap ("ماعم اقدر اعمل تعيين"):
+
+1. **The `id` bug (root cause of "can't assign").** `/hub/workers` returns `id = app_user id`, but the assignment/crew flows POST it as `employee_id`. So `POST /assignments/requests` with `employee_id = au.id` failed validation (`EMPLOYEE_NOT_FOUND`) and showed up as "skipped" → nothing got assigned. Same latent bug in the foreman screen and in crews member/foreman selection (would've been `INVALID_MEMBER`).
+2. **Cluttered picker.** The Fill list showed everyone, including people already assigned that day — "if I re-pick someone already on a project, that's wasted time" (Hedar). It should show only the AVAILABLE.
+
+Fix — new backend endpoint **`GET /api/assignments/available?date=&trade=`** (`assignments.js`, `assignments.view`): returns employees NOT in any APPROVED/PENDING assignment overlapping the date, optional exact `trade_code` filter, shaped for the picker and **returning `id = employee_id`** (so callers post the right id). Wired:
+- **FillGapModal** fetches `/available?date=<viewed>&trade=<gap trade>` → only free, right-trade people; drops just-assigned ones from the list after a successful fill; refreshes coverage.
+- **ForemanRequestPage** switched from `/hub/workers` to `/available?date=<date>` (refetches on date change) — fixes its id bug too.
+- **CrewsPage** normalizes `/hub/workers` rows to `id = employee_id` (crews aren't date-scoped, so no availability filter) — fixes crew member/foreman id.
+
+i18n `projectStaffing.fillModal.noneAvailable` + reworded hint, EN+FR. Tests updated to the `/available` source. Backend route + frontend only (no migration). **This is what actually closes the loop end-to-end** — before it, the Fill button posted the wrong id and silently no-op'd.
