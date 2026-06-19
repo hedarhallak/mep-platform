@@ -16457,3 +16457,14 @@ The permissions UI is company-aware. A **company admin** (OWNER / COMPANY_ADMIN 
 - **Test** — integration: COMPANY_ADMIN@A flips FOREMAN's projects.view; A sees it, B (same default) does NOT; reset reverts A. Shipped green as PR #408.
 
 No migration (the table is 148.12). Empty overrides = identical behaviour. Phase 4 (148.14) / Phase 5 (per-user UI) follow.
+
+### 148.15 — Phase 5a: per-user overrides (backend)
+
+The `user_permissions` table + the can() resolution (most-specific layer) already existed; Phase 5 adds the admin surface to manage them. Backend (`routes/permissions.js`):
+
+- **GET /permissions/user/:userId** — returns `{ user:{id,name,role}, inherited:{mod:{act:bool}}, overrides:{code:granted} }`. `inherited` = the user's role default overlaid with their company's tuning (helper `inheritedRoleSet`, mirrors the matrix overlay); `overrides` = explicit `user_permissions` rows. Lets the UI render every toggle and badge the overrides.
+- **PUT /permissions/user/:userId** — body `{ permissions:[{module,action,allowed}] }`, applied as a DIFF vs the inherited baseline: a value matching the baseline DELETEs the override (falls through to role/company), a differing value upserts a `user_permissions` row (`ON CONFLICT (user_id,permission_code)`, records `granted_by`). Audit `UPDATE_USER_PERMISSIONS`.
+- **Authorization** (`loadEditableTargetUser`): `can('settings.permissions')` + the target must be in the caller's company + the same rank-lock as the matrix (caller's role must rank strictly above the target's role). SUPER_ADMIN bypasses the rank check.
+- **Test** — integration: grant WORKER a non-inherited code → override created + read back; set it back to inherited → override dropped; COMPANY_ADMIN editing a peer COMPANY_ADMIN → 403.
+
+No migration (user_permissions has UNIQUE(user_id,permission_code) + FK to permissions.code already). NEXT = Phase 5b: the per-user editor UI in User Management (open a user → matrix with inherited vs overridden, toggle → PUT). After 5b, §148 is complete end-to-end.
