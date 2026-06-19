@@ -11,6 +11,7 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import api from '@/lib/api';
+import { useAuth } from '@/hooks/useAuth';
 
 // §148 Phase 2 — the role list, modules and actions are ALL data-driven now:
 // roles come from GET /permissions/roles (rank + category), and the modules ×
@@ -91,7 +92,11 @@ function AuditLog({ logs, loading }) {
 export default function PermissionsPage() {
   const { t } = useTranslation();
 
-  const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+  // §148 fix: the current user's role comes from the auth CONTEXT (the app does
+  // not persist the user in localStorage) — reading localStorage gave undefined,
+  // so the rank-lock computed myRank = 0 and locked EVERY role.
+  const { user } = useAuth();
+  const currentUserRole = user?.role;
 
   const [roleList, setRoleList] = useState([]); // [{ role_key, label, rank, category }]
   const [catalog, setCatalog] = useState({}); //  { module: [action, ...] }
@@ -110,7 +115,7 @@ export default function PermissionsPage() {
     (roleKey) => roleList.find((r) => r.role_key === roleKey)?.rank ?? 0,
     [roleList]
   );
-  const myRank = rankOf(currentUser.role);
+  const myRank = rankOf(currentUserRole);
   // §148 rank-lock: you may edit ONLY a role ranked strictly below yours.
   const isEditable = myRank > rankOf(selectedRole);
   const selectedRoleObj = roleList.find((r) => r.role_key === selectedRole);
@@ -143,9 +148,9 @@ export default function PermissionsPage() {
       // matrix opens read-only and looks broken. `roles` is sorted senior→junior.
       setSelectedRole((cur) => {
         if (cur) return cur;
-        const mine = roles.find((r) => r.role_key === currentUser.role)?.rank ?? 0;
+        const mine = roles.find((r) => r.role_key === currentUserRole)?.rank ?? 0;
         const firstEditable = roles.find((r) => mine > (r.rank ?? 0));
-        return firstEditable?.role_key || currentUser.role || roles[0]?.role_key || '';
+        return firstEditable?.role_key || currentUserRole || roles[0]?.role_key || '';
       });
     } catch {
       showToast(t('permissions.toast.loadFailed'), 'error');
@@ -270,7 +275,7 @@ export default function PermissionsPage() {
               {showAudit ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
             </button>
 
-            {['SUPER_ADMIN', 'IT_ADMIN'].includes(currentUser.role) && isEditable && (
+            {['SUPER_ADMIN', 'IT_ADMIN'].includes(currentUserRole) && isEditable && (
               <button
                 onClick={resetToDefaults}
                 disabled={resetting || loading}
