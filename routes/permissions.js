@@ -72,6 +72,27 @@ router.get('/matrix', can('settings.permissions'), async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────
+// GET /api/permissions/roles
+// The data-driven role catalog (§148, migration 035) — role_key + label +
+// rank + category, ordered senior→junior. Lets the frontend render roles from
+// the DB instead of a hardcoded array, so adding a role is a data change.
+// ─────────────────────────────────────────────────────────────────
+router.get('/roles', can('settings.permissions'), async (req, res) => {
+  try {
+    const { rows } = await req.db.query(
+      `SELECT role_key, label, rank, category, is_active
+         FROM public.roles
+        WHERE is_active = true
+        ORDER BY rank DESC NULLS LAST, role_key`
+    );
+    res.json({ ok: true, roles: rows });
+  } catch (err) {
+    console.error('GET /permissions/roles error:', err);
+    res.status(500).json({ error: 'Failed to load roles' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────
 // GET /api/permissions/my-permissions
 // Returns current user's permissions as { module: { action: true } }
 // ─────────────────────────────────────────────────────────────────

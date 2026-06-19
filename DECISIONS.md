@@ -16344,3 +16344,32 @@ Hedar's point while testing Phase 2: *"a plumbing foreman has nothing to do with
 - `routes/assignments.js` `GET /requests` — a trade-level reviewer sees only their specialty's pending requests (by the requested employee's trade); company-level roles (the dispatcher) see all.
 
 Unit test `tests/smoke/trade_scope.test.js` pins the role matrix (5 cases). Backend-only PR, no migration — deploy = pull + restart. **Note:** a foreman must have an `employee_profiles.trade_code` for scoping to engage; if unset they're unscoped (see-all) — acceptable fail-open for a non-security filter (it's UX focus, not tenant isolation, which RLS still enforces). **Future (optional):** an explicit `app_users.trade_code` column would let a company-level admin be scoped to a trade, or decouple a manager's oversight-trade from their personal trade — not needed for the domain today.
+
+---
+
+## 148. Section 148 — June 19, 2026 — PROGRAM: professional permissions (data-driven roles + dynamic matrix + per-company control)
+
+> Triggered while testing §147: a plumbing foreman saw an empty Project Staffing dropdown (lacks `projects.view`), exposing that the permission model needs to be properly manageable. Long design discussion with Hedar; decisions locked below. This is a multi-session program.
+
+### 148.1 — Decisions (Hedar)
+
+- **Roles are a FIXED, rich catalog — NOT user-addable** (no custom-role-builder). The construction/CCQ field classifications (apprentice 1-4, journeyman, foreman, …) are a regulated real-world standard; management/engineering roles are added to the catalog deliberately. Roles being a known finite set keeps the security model auditable (important pre-engineer-review, §138 G7).
+- **What a role can see/do = PERMISSIONS, not hierarchy.** "Reports reach the accountant" because the accountant role holds `reports.view`, not because of an org-tree position. There is NO explicit reports-to/manages tree — the single `rank` (former ROLE_LEVEL) covers the only structural need (the "you can only manage roles ranked below you" lock + task routing).
+- **Permissions must be controllable PER COMPANY.** Accountant@A ≠ Accountant@B. Resolution is layered: `user_permissions` (per-user override) ▸ `company_role_permissions` (per-company role tuning, NEW) ▸ `role_permissions` (global default template, Constrai-managed). COMPANY_ADMIN/OWNER tunes their company's roles; Constrai sets the global defaults.
+- **Roles are DATA-DRIVEN** so adding one later is (eventually) a pure INSERT: the `roles` table is the source of truth (role_key + label + rank + category), the frontend reads it instead of a hardcoded array, and the `app_users_role_check` CHECK becomes an FK to `roles.role_key` (Phase 1b). Caveat: a new role gets access automatically via its PERMISSIONS, but the few role-NAME-hardcoded behaviors (`requireRoles('FOREMAN')`, task routing, trade-scoping) won't auto-apply — finishing the migration to permission-based gating is part of the program.
+
+### 148.2 — Proposed role catalog (Hedar approved, ~24 roles)
+
+platform: SUPER_ADMIN · governance: OWNER, IT_ADMIN, COMPANY_ADMIN · management: PROJECT_MANAGER (=TRADE_PROJECT_MANAGER), CONSTRUCTION_MANAGER, ESTIMATOR, DISPATCHER, PROCUREMENT_OFFICER (=TRADE_ADMIN), ACCOUNTANT, PAYROLL_OFFICER, HR_OFFICER, SAFETY_OFFICER, QA_QC_OFFICER, OFFICE_CLERK · engineering: PROJECT_ENGINEER, MEP_ENGINEER, SITE_ENGINEER, BIM_COORDINATOR · supervision: SUPERINTENDENT, GENERAL_FOREMAN, FOREMAN · field (CCQ-fixed): JOURNEYMAN, APPRENTICE_1-4, OPERATOR, WORKER, DRIVER. (The 14 existing roles are the starting set; the rest are added in Phase 4.)
+
+### 148.3 — Phase plan
+
+1. **roles data-driven** — (1a) rank/category on `roles` + catalog upsert + read endpoint [THIS]; (1b) CHECK → FK(roles.role_key), verified separately (touches the auth table).
+2. **dynamic matrix** — PermissionsPage renders ALL real permission codes from the catalog (today it hardcodes 12 modules × 5 actions, so audit/bi/hub/tasks + many actions + the `materials` module are invisible, while dead `workforce_planner` shows). Also fix the UX trap: the matrix opens on the viewer's OWN (locked) role → looks read-only; default to the first editable role.
+3. **per-company layer** — `company_role_permissions` + layered `can()` resolution.
+4. **expand catalog** — add the §148.2 roles.
+5. **per-user overrides UI** — surface the existing `user_permissions` table.
+
+### 148.4 — Phase 1a SHIPPED (migration 035 + roles endpoint)
+
+`migrations/035_roles_rank_category.sql` adds `rank` (mirrors the former hardcoded ROLE_LEVEL exactly — no behavior change) + `category` to `roles`, and upserts the 14 canonical roles idempotently (normalizing OWNER from §029 too). `GET /api/permissions/roles` (gated `settings.permissions`) returns the catalog senior→junior. Read-side foundation only — the CHECK→FK swap is Phase 1b (kept separate so it can be verified against prod's actual `app_users.role` values before touching the auth table). Tests: catalog shape + rank/category + 403 without permission. Deploy: migration 035 (additive) + restart.
