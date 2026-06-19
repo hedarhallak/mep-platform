@@ -36,8 +36,10 @@ describe('normalizeRole', () => {
     expect(normalizeRole('PM')).toBe('TRADE_PROJECT_MANAGER');
   });
 
-  test('maps legacy PROJECT_MANAGER to TRADE_PROJECT_MANAGER', () => {
-    expect(normalizeRole('PROJECT_MANAGER')).toBe('TRADE_PROJECT_MANAGER');
+  // §148 Phase 4: PROJECT_MANAGER is now a first-class role (cross-trade PM),
+  // no longer an alias of TRADE_PROJECT_MANAGER — it passes through unchanged.
+  test('PROJECT_MANAGER is canonical (not aliased)', () => {
+    expect(normalizeRole('PROJECT_MANAGER')).toBe('PROJECT_MANAGER');
   });
 
   test('maps legacy PURCHASING to TRADE_ADMIN', () => {

@@ -16429,3 +16429,16 @@ The `company_role_permissions` table + the resolution layer that reads it — th
 - **test** — 5 new cases in middleware_permissions.test.js: company grant=true wins, grant=false denies over a granting default, absent row falls through, user layer still outranks company, null companyId skips the layer. 29/29 green.
 
 DEPLOY ORDER (migration-bearing PR, per deploy.yml): **apply 037 on prod FIRST**, then merge so the auto-deploy ships code that finds the table. `can()` queries the table on every check once company_id is set, so a missing table would 500 — the table must exist before the code lands. CI applies all `migrations/*.sql` to its testdb automatically, so it validates green on its own. Phase 3b (next): the matrix UI writes a company's edits to this table instead of the global defaults.
+
+### 148.14 — Phase 4: roles catalog expansion (+18 construction/MEP positions)
+
+Hedar approved the proposed catalog. Added 18 roles to the fixed catalog, all ranked below COMPANY_ADMIN (80) so an admin can tune every one:
+
+CONSTRUCTION_MANAGER (70, mgmt), PROJECT_MANAGER (65, mgmt), SUPERINTENDENT (55, supervision), MEP_ENGINEER (54, eng), ESTIMATOR (52, mgmt), PROJECT_ENGINEER (52, eng), SITE_ENGINEER (50, eng), ACCOUNTANT (50, governance), BIM_COORDINATOR (48, eng), HR_OFFICER (46, governance), GENERAL_FOREMAN (45, supervision), DISPATCHER (45, mgmt), PROCUREMENT_OFFICER (45, mgmt), SAFETY_OFFICER (44, supervision), QA_QC_OFFICER (44, supervision), PAYROLL_OFFICER (42, governance), OFFICE_CLERK (30, mgmt), OPERATOR (18, field).
+
+- **migration 038** — INSERTs the 18 roles (rank + category + label), idempotent ON CONFLICT. Additive only (no schema change) → the running code does NOT 500 without it; new roles simply don't appear until applied.
+- **lib/role_defaults.js** — a sensible default permission set for each (built from real catalog codes; the apply script/reset skip any unknown code). audit.view stays OWNER-only; none get settings.*. OPERATOR = FIELD_WORKER baseline.
+- **middleware/roles.js** — REMOVED the legacy `PROJECT_MANAGER → TRADE_PROJECT_MANAGER` alias so PROJECT_MANAGER is a first-class cross-trade PM (distinct from the trade-scoped TRADE_PROJECT_MANAGER). Safe: migration 036's role FK means no user ever held the literal. (Side effect: `routes/material_requests.js:232`'s hardcoded `'PROJECT_MANAGER'` manager-check, previously dead after normalization, now actually matches the real role.)
+- **tests** — role_defaults.test.js: all 18 have a default, none get audit.view or settings.*, OPERATOR=FIELD_WORKER, ACCOUNTANT approves expenses. roles alias tests updated (PROJECT_MANAGER now passes through). 51 green.
+
+DEPLOY: 038 is additive, so order is flexible. After merge+deploy: run migration 038 on prod, then `node scripts/apply_role_defaults.js` (populates role_permissions for the 18), then pm2 restart (refresh the 5-min role cache). The new roles then appear in the matrix + can be assigned to users. Phase 5 (per-user overrides UI) remains.
