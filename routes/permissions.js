@@ -309,6 +309,155 @@ router.post('/reset/:role', can('settings.permissions'), async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────
+// §148 Phase 5 — per-user permission overrides (the user_permissions layer).
+// The can() resolution already honours user_permissions as the MOST specific
+// layer (above company + global); these endpoints are the admin surface to
+// read/write a single user's overrides. The baseline a user inherits is their
+// role default overlaid with their company's tuning (Phases 3a/3b).
+// ─────────────────────────────────────────────────────────────────
+
+// The set of codes a role effectively grants in a company (role default +
+// company override) — i.e. what a user of that role inherits before their own
+// per-user overrides. Mirrors the GET /matrix overlay, scoped to one role.
+async function inheritedRoleSet(db, role, companyId) {
+  const { rows: def } = await db.query(
+    `SELECT permission_code FROM public.role_permissions WHERE role = $1`,
+    [role]
+  );
+  const set = new Set(def.map((r) => r.permission_code));
+  if (companyId) {
+    const { rows: ov } = await db.query(
+      `SELECT permission_code, granted FROM public.company_role_permissions
+        WHERE company_id = $1 AND role = $2`,
+      [companyId, role]
+    );
+    for (const r of ov) {
+      if (r.granted) set.add(r.permission_code);
+      else set.delete(r.permission_code);
+    }
+  }
+  return set;
+}
+
+// Load the target user (same company as the caller) + enforce the rank-lock:
+// you may only edit a user whose role ranks strictly below yours. Returns
+// { user } on success or { error, status } to short-circuit.
+async function loadEditableTargetUser(req, userId) {
+  const companyId = req.user.company_id ? Number(req.user.company_id) : null;
+  const { rows } = await req.db.query(
+    `SELECT au.id, au.role, au.company_id,
+            COALESCE(e.first_name || ' ' || e.last_name, au.username) AS name
+       FROM public.app_users au
+       LEFT JOIN public.employees e ON e.id = au.employee_id
+      WHERE au.id = $1`,
+    [userId]
+  );
+  const target = rows[0];
+  if (!target || (companyId && Number(target.company_id) !== companyId)) {
+    return { error: 'User not found', status: 404 };
+  }
+  const callerKey = normalizeRole(req.user.role);
+  const targetKey = normalizeRole(target.role);
+  if (callerKey !== 'SUPER_ADMIN') {
+    const { rows: rk } = await req.db.query(
+      `SELECT role_key, rank FROM public.roles WHERE role_key = ANY($1::text[])`,
+      [[callerKey, targetKey]]
+    );
+    const callerRank = rk.find((r) => r.role_key === callerKey)?.rank ?? 0;
+    const targetRank = rk.find((r) => r.role_key === targetKey)?.rank ?? 0;
+    if (callerRank <= targetRank) {
+      return { error: 'Cannot edit a user whose role is equal or higher than yours', status: 403 };
+    }
+  }
+  return { user: { id: target.id, role: targetKey, name: target.name } };
+}
+
+// GET /api/permissions/user/:userId — the user's inherited baseline + their
+// explicit overrides, so the UI can render every toggle and badge the overrides.
+router.get('/user/:userId', can('settings.permissions'), async (req, res) => {
+  try {
+    const userId = Number(req.params.userId);
+    if (!Number.isInteger(userId) || userId <= 0)
+      return res.status(400).json({ error: 'Invalid user id' });
+
+    const t = await loadEditableTargetUser(req, userId);
+    if (t.error) return res.status(t.status).json({ error: t.error });
+
+    const companyId = req.user.company_id ? Number(req.user.company_id) : null;
+    const inheritedSet = await inheritedRoleSet(req.db, t.user.role, companyId);
+    const inherited = {};
+    for (const code of inheritedSet) {
+      const { module, action } = parseCode(code);
+      if (!inherited[module]) inherited[module] = {};
+      inherited[module][action] = true;
+    }
+
+    const { rows: ovRows } = await req.db.query(
+      `SELECT permission_code, granted FROM public.user_permissions WHERE user_id = $1`,
+      [userId]
+    );
+    const overrides = {};
+    for (const r of ovRows) overrides[r.permission_code] = r.granted === true;
+
+    res.json({ user: t.user, inherited, overrides });
+  } catch (err) {
+    console.error('GET /permissions/user/:userId error:', err);
+    res.status(500).json({ error: 'Failed to load user permissions' });
+  }
+});
+
+// PUT /api/permissions/user/:userId — set per-user overrides as a DIFF vs the
+// inherited baseline: a value matching the baseline removes the override (falls
+// through to role/company), a differing value upserts the override.
+router.put('/user/:userId', can('settings.permissions'), async (req, res) => {
+  try {
+    const userId = Number(req.params.userId);
+    if (!Number.isInteger(userId) || userId <= 0)
+      return res.status(400).json({ error: 'Invalid user id' });
+    const { permissions } = req.body;
+    if (!Array.isArray(permissions))
+      return res.status(400).json({ error: 'permissions array is required' });
+
+    const t = await loadEditableTargetUser(req, userId);
+    if (t.error) return res.status(t.status).json({ error: t.error });
+
+    const companyId = req.user.company_id ? Number(req.user.company_id) : null;
+    const inheritedSet = await inheritedRoleSet(req.db, t.user.role, companyId);
+
+    for (const perm of permissions) {
+      const { module, action, allowed } = perm;
+      const code = `${module}.${action}`;
+      const desired = !!allowed;
+      if (desired === inheritedSet.has(code)) {
+        await req.db.query(
+          `DELETE FROM public.user_permissions WHERE user_id = $1 AND permission_code = $2`,
+          [userId, code]
+        );
+      } else {
+        // granted_by is intentionally omitted — it isn't present in every
+        // environment's user_permissions schema, and logAudit already records
+        // who made the change.
+        await req.db.query(
+          `INSERT INTO public.user_permissions (user_id, permission_code, granted)
+           SELECT $1, $2, $3 WHERE EXISTS (SELECT 1 FROM public.permissions WHERE code = $2)
+           ON CONFLICT (user_id, permission_code)
+           DO UPDATE SET granted = EXCLUDED.granted`,
+          [userId, code, desired]
+        );
+      }
+    }
+
+    await logAudit(req, 'UPDATE_USER_PERMISSIONS', 'user_permissions', userId, null, {
+      user_id: userId,
+    });
+    res.json({ success: true, message: `Permissions updated for user ${t.user.name}` });
+  } catch (err) {
+    console.error('PUT /permissions/user/:userId error:', err);
+    res.status(500).json({ error: 'Failed to update user permissions' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────
 // GET /api/permissions/audit
 // Tenant-scoped — only this endpoint actually benefits from RLS.
 // ─────────────────────────────────────────────────────────────────

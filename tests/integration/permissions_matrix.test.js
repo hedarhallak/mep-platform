@@ -84,6 +84,49 @@ describeIfDb('Permissions matrix — /api/permissions/matrix', () => {
     expect(higherRole.statusCode).toBe(403);
   });
 
+  test('§148 Phase 5: per-user overrides — create, read-back, diff-removal, rank-lock', async () => {
+    const company = await seedCompany();
+    const admin = await seedUser({ company_id: company.company_id, role: 'COMPANY_ADMIN' });
+    const { token } = await loginUser(admin);
+    const worker = await seedUser({ company_id: company.company_id, role: 'WORKER' });
+
+    // Grant the worker a permission their role does NOT inherit → creates an override.
+    const grant = await request(app)
+      .put(`/api/permissions/user/${worker.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ permissions: [{ module: 'projects', action: 'delete', allowed: true }] });
+    expect(grant.statusCode).toBe(200);
+
+    const afterGrant = await request(app)
+      .get(`/api/permissions/user/${worker.id}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(afterGrant.statusCode).toBe(200);
+    expect(afterGrant.body.user.role).toBe('WORKER');
+    expect(afterGrant.body.overrides['projects.delete']).toBe(true);
+    // projects.delete is NOT part of the WORKER baseline.
+    expect(afterGrant.body.inherited.projects?.delete).toBeFalsy();
+
+    // Setting it back to the inherited value (false) DROPS the override.
+    const revert = await request(app)
+      .put(`/api/permissions/user/${worker.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ permissions: [{ module: 'projects', action: 'delete', allowed: false }] });
+    expect(revert.statusCode).toBe(200);
+
+    const afterRevert = await request(app)
+      .get(`/api/permissions/user/${worker.id}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(afterRevert.body.overrides['projects.delete']).toBeUndefined();
+
+    // Rank-lock: a COMPANY_ADMIN cannot edit another COMPANY_ADMIN (equal rank).
+    const peer = await seedUser({ company_id: company.company_id, role: 'COMPANY_ADMIN' });
+    const blocked = await request(app)
+      .put(`/api/permissions/user/${peer.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ permissions: [{ module: 'projects', action: 'view', allowed: false }] });
+    expect(blocked.statusCode).toBe(403);
+  });
+
   test('GET /matrix without settings.permissions returns 403', async () => {
     const company = await seedCompany();
     const worker = await seedUser({ company_id: company.company_id, role: 'WORKER' });
