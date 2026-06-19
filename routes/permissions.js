@@ -64,7 +64,27 @@ router.get('/matrix', can('settings.permissions'), async (req, res) => {
     // Build unique modules list from permissions table
     const modules = [...new Set(allPerms.rows.map((r) => r.grp))].sort();
 
-    res.json({ roles, modules, matrix });
+    // §148 Phase 2 — full catalog keyed the SAME way the matrix is (parseCode
+    // module → its actions), so the frontend can render EVERY permission toggle
+    // (not a hardcoded module/action grid). Includes ungranted codes too.
+    const catalog = {};
+    for (const row of allPerms.rows) {
+      const { module, action } = parseCode(row.code);
+      if (!catalog[module]) catalog[module] = [];
+      if (!catalog[module].includes(action)) catalog[module].push(action);
+    }
+    // Stable display order: common CRUD actions first, then the rest A→Z.
+    const ACTION_ORDER = ['view', 'create', 'edit', 'delete', 'approve'];
+    for (const m of Object.keys(catalog)) {
+      catalog[m].sort((a, b) => {
+        const ia = ACTION_ORDER.indexOf(a);
+        const ib = ACTION_ORDER.indexOf(b);
+        if (ia !== -1 || ib !== -1) return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+        return a.localeCompare(b);
+      });
+    }
+
+    res.json({ roles, modules, matrix, catalog });
   } catch (err) {
     console.error('GET /permissions/matrix error:', err);
     res.status(500).json({ error: 'Failed to load permissions matrix' });

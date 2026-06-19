@@ -50,6 +50,15 @@ describeIfDb('Permissions matrix — /api/permissions/matrix', () => {
     expect(res.body.roles).toContain('COMPANY_ADMIN');
     expect(res.body.matrix.COMPANY_ADMIN).toBeDefined();
     expect(res.body.matrix.COMPANY_ADMIN.employees?.view).toBe(true);
+
+    // §148 Phase 2 — the full catalog (all codes by module, granted or not),
+    // so the UI can render every toggle dynamically.
+    expect(typeof res.body.catalog).toBe('object');
+    expect(Array.isArray(res.body.catalog.assignments)).toBe(true);
+    expect(res.body.catalog.assignments).toContain('view');
+    // CRUD actions sort before the rest: 'view' precedes 'smart_assign'.
+    const a = res.body.catalog.assignments;
+    expect(a.indexOf('view')).toBeLessThan(a.indexOf('smart_assign'));
   });
 
   test('GET /matrix without settings.permissions returns 403', async () => {
