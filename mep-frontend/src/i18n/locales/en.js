@@ -120,6 +120,9 @@ export default {
     requirements: 'Requirements (demand)',
     addRequirement: 'Add requirement',
     noRequirements: 'No requirements yet.',
+    noneForDate: 'No requirements for this date.',
+    showAll: 'Show all ({{count}})',
+    showForDate: 'Filter to date',
     confirmDelete: 'Delete this requirement?',
     fill: 'Fill',
     fillModal: {

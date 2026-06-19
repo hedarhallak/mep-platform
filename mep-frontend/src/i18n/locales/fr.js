@@ -120,6 +120,9 @@ export default {
     requirements: 'Exigences (demande)',
     addRequirement: 'Ajouter une exigence',
     noRequirements: 'Aucune exigence pour le moment.',
+    noneForDate: 'Aucune exigence pour cette date.',
+    showAll: 'Voir tout ({{count}})',
+    showForDate: 'Filtrer par date',
     confirmDelete: 'Supprimer cette exigence ?',
     fill: 'Combler',
     fillModal: {

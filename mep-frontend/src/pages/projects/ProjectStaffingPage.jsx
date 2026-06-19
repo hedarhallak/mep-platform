@@ -30,13 +30,15 @@ function fmt(d) {
   return d ? String(d).slice(0, 10) : ''
 }
 
-function RequirementModal({ projectId, requirement, onClose, onSaved }) {
+function RequirementModal({ projectId, requirement, defaultDate, onClose, onSaved }) {
   const { t } = useTranslation()
   const isEdit = !!requirement?.id
   const [tradeCode, setTradeCode] = useState(requirement?.trade_code || 'PLUMBING')
   const [count, setCount] = useState(requirement?.required_count ?? 1)
-  const [startDate, setStartDate] = useState(fmt(requirement?.start_date) || todayISO())
-  const [endDate, setEndDate] = useState(fmt(requirement?.end_date) || todayISO())
+  // New rows default to the date you're viewing (no need to re-type it);
+  // editing keeps the row's own range.
+  const [startDate, setStartDate] = useState(fmt(requirement?.start_date) || defaultDate || todayISO())
+  const [endDate, setEndDate] = useState(fmt(requirement?.end_date) || defaultDate || todayISO())
   const [note, setNote] = useState(requirement?.note || '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -296,6 +298,7 @@ export default function ProjectStaffingPage() {
   const [loading, setLoading] = useState(false)
   const [modal, setModal] = useState(null) // null | 'new' | requirement
   const [fillGap, setFillGap] = useState(null) // null | { trade_code, gap }
+  const [showAllReqs, setShowAllReqs] = useState(false)
   const [error, setError] = useState('')
 
   const canCreate = can('assignments', 'create')
@@ -358,6 +361,13 @@ export default function ProjectStaffingPage() {
       alert(e.response?.data?.error || e.message)
     }
   }
+
+  // Requirements list: by default only the phases active on the viewed date
+  // (matches the coverage context); "Show all" reveals the full multi-phase plan.
+  const visibleReqs = showAllReqs
+    ? requirements
+    : requirements.filter((r) => fmt(r.start_date) <= date && fmt(r.end_date) >= date)
+  const hiddenReqs = requirements.length - visibleReqs.length
 
   return (
     <div className="flex flex-col h-screen bg-slate-50 overflow-hidden">
@@ -482,23 +492,39 @@ export default function ProjectStaffingPage() {
 
             {/* Requirements */}
             <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-              <div className="px-5 py-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+              <div className="px-5 py-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between gap-2">
                 <span className="text-sm font-bold text-slate-800">{t('projectStaffing.requirements')}</span>
-                {canCreate && (
-                  <button
-                    onClick={() => setModal('new')}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-xs font-bold rounded-lg hover:bg-primary-dark"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    {t('projectStaffing.addRequirement')}
-                  </button>
-                )}
+                <div className="flex items-center gap-2">
+                  {(showAllReqs || hiddenReqs > 0) && (
+                    <button
+                      onClick={() => setShowAllReqs((v) => !v)}
+                      className="text-[11px] font-semibold text-primary hover:text-primary-dark"
+                    >
+                      {showAllReqs
+                        ? t('projectStaffing.showForDate')
+                        : t('projectStaffing.showAll', { count: hiddenReqs })}
+                    </button>
+                  )}
+                  {canCreate && (
+                    <button
+                      onClick={() => setModal('new')}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-xs font-bold rounded-lg hover:bg-primary-dark"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      {t('projectStaffing.addRequirement')}
+                    </button>
+                  )}
+                </div>
               </div>
-              {requirements.length === 0 ? (
-                <p className="text-center text-xs text-slate-400 py-6">{t('projectStaffing.noRequirements')}</p>
+              {visibleReqs.length === 0 ? (
+                <p className="text-center text-xs text-slate-400 py-6">
+                  {showAllReqs || hiddenReqs === 0
+                    ? t('projectStaffing.noRequirements')
+                    : t('projectStaffing.noneForDate')}
+                </p>
               ) : (
                 <div className="divide-y divide-slate-50">
-                  {requirements.map((r) => (
+                  {visibleReqs.map((r) => (
                     <div key={r.id} className="flex items-center gap-3 px-5 py-2.5">
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${tradeBadge(r.trade_code)}`}>
                         {r.trade_code}
@@ -531,6 +557,7 @@ export default function ProjectStaffingPage() {
         <RequirementModal
           projectId={projectId}
           requirement={modal === 'new' ? null : modal}
+          defaultDate={date}
           onClose={() => setModal(null)}
           onSaved={() => {
             setModal(null)
