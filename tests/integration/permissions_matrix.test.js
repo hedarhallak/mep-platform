@@ -94,3 +94,44 @@ describeIfDb('Permissions matrix — /api/permissions/matrix', () => {
     expect(res.body.error).toBe('Invalid role');
   });
 });
+
+// §148 — data-driven role catalog (migration 035).
+describeIfDb('Role catalog — /api/permissions/roles', () => {
+  afterAll(async () => {
+    await cleanupTestRows();
+    await closePool();
+  });
+
+  test('GET /roles returns the catalog with rank + category', async () => {
+    const company = await seedCompany();
+    const admin = await seedUser({ company_id: company.company_id, role: 'COMPANY_ADMIN' });
+    const { token } = await loginUser(admin);
+
+    const res = await request(app)
+      .get('/api/permissions/roles')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(Array.isArray(res.body.roles)).toBe(true);
+    const foreman = res.body.roles.find((r) => r.role_key === 'FOREMAN');
+    expect(foreman).toBeDefined();
+    expect(foreman.rank).toBe(40);
+    expect(foreman.category).toBe('supervision');
+    // Sorted senior→junior: the first role outranks the last.
+    expect(res.body.roles[0].rank).toBeGreaterThanOrEqual(
+      res.body.roles[res.body.roles.length - 1].rank
+    );
+  });
+
+  test('GET /roles without settings.permissions returns 403', async () => {
+    const company = await seedCompany();
+    const worker = await seedUser({ company_id: company.company_id, role: 'WORKER' });
+    const { token } = await loginUser(worker);
+
+    const res = await request(app)
+      .get('/api/permissions/roles')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(403);
+  });
+});
