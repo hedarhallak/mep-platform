@@ -16287,3 +16287,15 @@ Shipped the **dispatcher review screen** (Stage 2): `mep-frontend/src/pages/assi
 **Method 4 is now functionally complete end-to-end:** foreman submits (Stage 1) → PENDING → dispatcher reviews/approves/edits (Stage 2) → APPROVED → §144 distance+allowance. Deploy needs a frontend rebuild (Pitfall #41).
 
 **Remaining (polish, later):** carry-forward pre-fill of the foreman screen with "today's team on this project" (needs `requested_for_employee_id` exposed on `GET /requests` or a small endpoint); the per-company "assignment method" enable/disable setting (so a company sees only its chosen method(s) of the 1–4 catalog).
+
+### 147.8 — Phase 1 SHIPPED: Project Staffing page (demand UI + coverage red/green)
+
+`mep-frontend/src/pages/projects/ProjectStaffingPage.jsx` — the project-centric view that makes Phase 0's demand model visible. Pick a project (`GET /projects`) + a date → two sections:
+- **Coverage** (`GET /projects/:id/coverage?date=`) — per trade: required vs assigned, with a color-coded gap pill (**red = short N**, green = covered, amber = over N) + a totals line. This is "is this project fully staffed?" at a glance.
+- **Requirements (demand)** — the project's time-phased rows (`GET /:id/requirements`), with add/edit/delete via a modal (trade chips [real trades, no ALL] + count + from/to + note → `POST`/`PATCH`/`DELETE`). Create/edit gated on `assignments.create`/`.edit`.
+
+Route `/projects/staffing` (RequirePermission `assignments.view`), nav "Project Staffing" (Target icon), i18n `projectStaffing.*` + `nav.projectStaffing` EN+FR (parity-guarded), test (loads projects → select → coverage shows the gap + fetches requirements & coverage for the chosen project/date).
+
+⚠️ **DEPLOY DEPENDENCY:** this is the FIRST consumer of Phase 0 — so **migration 034 MUST be applied on prod before/with this deploy** (`sudo -u postgres psql mepdb -f migrations/034_project_labor_requirements.sql`), otherwise the requirements/coverage endpoints 500. (Until then the page loads but shows an error when a project is selected.)
+
+**Method 1 (project-centric planning) is now usable:** define a project's phased demand → see coverage gaps → fill via any assignment method. Next Phase 2 = "fill the gap" action directly from this page (assign people/crew against a red gap, with nearest-available suggestions reusing §144 distance + allowance).

@@ -10,7 +10,7 @@ import {
   Settings, LogOut, Building2, BarChart2,
   CalendarCheck, Inbox, Package, Truck, FileText, Shield, Send,
   Download, WifiOff, RefreshCw, Receipt, CreditCard, Recycle, Wrench, ReceiptText, HardHat,
-  ClipboardCheck
+  ClipboardCheck, Target
 } from 'lucide-react'
 
 // Section 50: nav items reference i18n keys instead of inline EN strings.
@@ -22,6 +22,7 @@ const mainNav = [
   { to: '/suppliers',        icon: Truck,           labelKey: 'nav.suppliers',        permission: { module: 'suppliers',       action: 'view'           } },
   { to: '/assignments',      icon: ClipboardList,   labelKey: 'nav.assignments',      permission: { module: 'assignments',     action: 'view'           } },
   { to: '/crews',            icon: HardHat,         labelKey: 'nav.crews',            permission: { module: 'assignments',     action: 'view'           } },
+  { to: '/projects/staffing', icon: Target,         labelKey: 'nav.projectStaffing',  permission: { module: 'assignments',     action: 'view'           } },
   { to: '/assignments/submit',   icon: Send,            labelKey: 'nav.foremanRequest',   permission: { module: 'assignments',     action: 'create'         } },
   { to: '/assignments/requests', icon: ClipboardCheck, labelKey: 'nav.pendingRequests', permission: { module: 'assignments',  action: 'edit'           } },
   { to: '/attendance',       icon: CalendarCheck,   labelKey: 'nav.attendance',       permission: { module: 'attendance',      action: 'view_self'      } },
