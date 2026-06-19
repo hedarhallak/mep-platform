@@ -16397,3 +16397,7 @@ Hedar approved the per-role permission intent (§148.2 plan); implemented as `li
 ### 148.10 — Permissions page restyled to the light theme
 
 Hedar: "ألوان صفحة الصلاحيات مزعجة لازم تكون الخلفية أريح للعين." Root cause: `PermissionsPage.jsx` was the **only dark page** (`min-h-screen bg-slate-950`) in an otherwise light app — the AppLayout `<main>` is `bg-slate-50` and every other page (Settings, Staffing, etc.) uses white cards on it. Converted the whole page to the light system: dropped the full-screen dark wrapper (just `p-6` now, lets the layout bg show), white cards (`bg-white border-slate-200 shadow-sm`), slate-800 headings, soft category accents (`bg-*-50 border-*-200`), emerald-50 "on" chips, amber-50 banners. Zero logic change — only classNames + the CATEGORY_COLORS map. Test still green.
+
+### 148.11 — apply_role_defaults.js: load dotenv (standalone-run fix)
+
+Running `node scripts/apply_role_defaults.js` on prod failed with `SASL: client password must be a string` — db.js reads `DATABASE_URL`/`DATABASE_URL_SUPER` at require-time, and a manual `node` invocation (unlike pm2) doesn't inherit the app env. Fix: `require('dotenv').config()` BEFORE `require('../db')` (the convention used by seed.js / scripts/migrate.js). Immediate prod workaround that needed no redeploy: `node -r dotenv/config scripts/apply_role_defaults.js`.
