@@ -11,6 +11,11 @@
 // Run on prod after deploy:  node scripts/apply_role_defaults.js
 // (A true wipe-and-reset is the per-role "Reset to defaults" button in the UI.)
 
+// Load .env BEFORE requiring db.js — db.js reads DATABASE_URL / DATABASE_URL_SUPER
+// at require-time, and a standalone `node scripts/...` invocation (unlike pm2)
+// does not get the app's env otherwise. Without this the pool connects with an
+// undefined password → "SASL: client password must be a string".
+require('dotenv').config();
 const { pool, superPool } = require('../db');
 const { ROLE_DEFAULT_PERMISSIONS } = require('../lib/role_defaults');
 
