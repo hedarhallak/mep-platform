@@ -12,77 +12,48 @@ import {
 } from 'lucide-react';
 import api from '@/lib/api';
 
-// Role keys + colors only — labels come from i18n at render time.
-const ROLES = [
-  { key: 'SUPER_ADMIN',           color: 'text-red-400',    bg: 'bg-red-500/10    border-red-500/30'    },
-  { key: 'IT_ADMIN',              color: 'text-orange-400', bg: 'bg-orange-500/10 border-orange-500/30' },
-  { key: 'COMPANY_ADMIN',         color: 'text-yellow-400', bg: 'bg-yellow-500/10 border-yellow-500/30' },
-  { key: 'TRADE_PROJECT_MANAGER', color: 'text-blue-400',   bg: 'bg-blue-500/10   border-blue-500/30'   },
-  { key: 'TRADE_ADMIN',           color: 'text-cyan-400',   bg: 'bg-cyan-500/10   border-cyan-500/30'   },
-  { key: 'FOREMAN',               color: 'text-teal-400',   bg: 'bg-teal-500/10   border-teal-500/30'   },
-  { key: 'JOURNEYMAN',            color: 'text-green-400',  bg: 'bg-green-500/10  border-green-500/30'  },
-  { key: 'APPRENTICE_4',          color: 'text-lime-400',   bg: 'bg-lime-500/10   border-lime-500/30'   },
-  { key: 'APPRENTICE_3',          color: 'text-lime-400',   bg: 'bg-lime-500/10   border-lime-500/30'   },
-  { key: 'APPRENTICE_2',          color: 'text-lime-400',   bg: 'bg-lime-500/10   border-lime-500/30'   },
-  { key: 'APPRENTICE_1',          color: 'text-lime-400',   bg: 'bg-lime-500/10   border-lime-500/30'   },
-  { key: 'WORKER',                color: 'text-slate-400',  bg: 'bg-slate-500/10  border-slate-500/30'  },
-  { key: 'DRIVER',                color: 'text-violet-400', bg: 'bg-violet-500/10 border-violet-500/30' },
-];
+// §148 Phase 2 — the role list, modules and actions are ALL data-driven now:
+// roles come from GET /permissions/roles (rank + category), and the modules ×
+// actions come from GET /permissions/matrix's `catalog`. Nothing here is
+// hardcoded, so a new role or a new permission appears automatically.
 
-const MODULE_KEYS = [
-  'dashboard',
-  'projects',
-  'employees',
-  'assignments',
-  'attendance',
-  'material_requests',
-  'purchase_orders',
-  'suppliers',
-  'workforce_planner',
-  'reports',
-  'permissions',
-  'settings',
-];
-
-const ACTIONS = ['view', 'create', 'edit', 'delete', 'approve'];
-
-const ACTION_COLORS = {
-  view:    'text-slate-300',
-  create:  'text-emerald-400',
-  edit:    'text-blue-400',
-  delete:  'text-red-400',
-  approve: 'text-purple-400',
+// Category → accent colors for the role sidebar (the only presentation map left).
+const CATEGORY_COLORS = {
+  platform:    { color: 'text-red-400',    bg: 'bg-red-500/10 border-red-500/30' },
+  governance:  { color: 'text-orange-400', bg: 'bg-orange-500/10 border-orange-500/30' },
+  management:  { color: 'text-blue-400',   bg: 'bg-blue-500/10 border-blue-500/30' },
+  engineering: { color: 'text-cyan-400',   bg: 'bg-cyan-500/10 border-cyan-500/30' },
+  supervision: { color: 'text-teal-400',   bg: 'bg-teal-500/10 border-teal-500/30' },
+  field:       { color: 'text-green-400',  bg: 'bg-green-500/10 border-green-500/30' },
 };
+const catColor = (cat) => CATEGORY_COLORS[cat] || { color: 'text-slate-300', bg: 'bg-slate-500/10 border-slate-500/30' };
 
-function buildEmptyMatrix() {
-  const m = {};
-  for (const role of ROLES) {
-    m[role.key] = {};
-    for (const modKey of MODULE_KEYS) {
-      m[role.key][modKey] = {};
-      for (const action of ACTIONS) {
-        m[role.key][modKey][action] = false;
-      }
-    }
-  }
-  return m;
-}
+// "smart_assign" → "Smart Assign" — fallback label for codes with no i18n key.
+const humanize = (key) =>
+  String(key || '')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 
 function Toast({ message, type, onClose }) {
   useEffect(() => {
-    const t = setTimeout(onClose, 3500);
-    return () => clearTimeout(t);
+    const tid = setTimeout(onClose, 3500);
+    return () => clearTimeout(tid);
   }, [onClose]);
 
   return (
-    <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3 rounded-lg border shadow-xl text-sm font-medium
-      ${type === 'success'
-        ? 'bg-emerald-950 border-emerald-500/40 text-emerald-300'
-        : 'bg-red-950 border-red-500/40 text-red-300'
-      }`}>
-      {type === 'success'
-        ? <Check className="w-4 h-4 text-emerald-400" />
-        : <X className="w-4 h-4 text-red-400" />}
+    <div
+      className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3 rounded-lg border shadow-xl text-sm font-medium
+      ${
+        type === 'success'
+          ? 'bg-emerald-950 border-emerald-500/40 text-emerald-300'
+          : 'bg-red-950 border-red-500/40 text-red-300'
+      }`}
+    >
+      {type === 'success' ? (
+        <Check className="w-4 h-4 text-emerald-400" />
+      ) : (
+        <X className="w-4 h-4 text-red-400" />
+      )}
       {message}
     </div>
   );
@@ -90,17 +61,19 @@ function Toast({ message, type, onClose }) {
 
 function AuditLog({ logs, loading }) {
   const { t } = useTranslation();
-  if (loading) return <div className="text-center py-8 text-slate-500 text-sm">{t('permissions.audit.loading')}</div>;
-  if (!logs.length) return <div className="text-center py-8 text-slate-500 text-sm">{t('permissions.audit.empty')}</div>;
+  if (loading)
+    return <div className="text-center py-8 text-slate-500 text-sm">{t('permissions.audit.loading')}</div>;
+  if (!logs.length)
+    return <div className="text-center py-8 text-slate-500 text-sm">{t('permissions.audit.empty')}</div>;
   return (
     <div className="divide-y divide-slate-800">
-      {logs.map(entry => (
+      {logs.map((entry) => (
         <div key={entry.id} className="flex items-start gap-4 py-3 px-1">
           <Clock className="w-4 h-4 text-slate-500 mt-0.5 flex-shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-sm text-slate-300">
-              <span className="text-slate-100 font-medium">{entry.changed_by}</span>
-              {' '}{t('permissions.audit.updatedFor')}{' '}
+              <span className="text-slate-100 font-medium">{entry.changed_by}</span>{' '}
+              {t('permissions.audit.updatedFor')}{' '}
               <span className="font-mono text-xs bg-slate-800 px-1.5 py-0.5 rounded text-amber-300">
                 {entry.details?.role || '—'}
               </span>
@@ -115,75 +88,76 @@ function AuditLog({ logs, loading }) {
   );
 }
 
-function PermissionCheckbox({ checked, disabled, onChange, action }) {
-  const { t } = useTranslation();
-  const tip = `${t(`permissions.actions.${action}`)}${disabled ? ' ' + t('permissions.actions.lockedSuffix') : ''}`;
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={() => !disabled && onChange(!checked)}
-      className={`w-7 h-7 rounded flex items-center justify-center border transition-all duration-150
-        ${disabled ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer hover:scale-110'}
-        ${checked
-          ? 'bg-emerald-500/20 border-emerald-500/60 text-emerald-400'
-          : 'bg-slate-800/60 border-slate-700 text-slate-600 hover:border-slate-500'
-        }`}
-      title={tip}
-    >
-      {checked
-        ? <Check className="w-3.5 h-3.5" />
-        : <span className="w-2 h-2 rounded-full bg-current opacity-30" />
-      }
-    </button>
-  );
-}
-
 export default function PermissionsPage() {
   const { t } = useTranslation();
-  const [selectedRole, setSelectedRole]     = useState('COMPANY_ADMIN');
-  const [matrix, setMatrix]                 = useState(buildEmptyMatrix());
-  const [originalMatrix, setOriginalMatrix] = useState(buildEmptyMatrix());
-  const [loading, setLoading]               = useState(true);
-  const [saving, setSaving]                 = useState(false);
-  const [resetting, setResetting]           = useState(false);
-  const [toast, setToast]                   = useState(null);
-  const [auditLogs, setAuditLogs]           = useState([]);
-  const [auditLoading, setAuditLoading]     = useState(false);
-  const [showAudit, setShowAudit]           = useState(false);
 
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
-  const callerRank  = { SUPER_ADMIN: 0, IT_ADMIN: 1, COMPANY_ADMIN: 2, TRADE_PROJECT_MANAGER: 3, TRADE_ADMIN: 4, FOREMAN: 5, JOURNEYMAN: 6, APPRENTICE_4: 7, APPRENTICE_3: 7, APPRENTICE_2: 7, APPRENTICE_1: 7, WORKER: 8, DRIVER: 8 };
-  const roleInfo    = ROLES.find(r => r.key === selectedRole);
-  const roleLabel   = t(`permissions.roles.${selectedRole}`, { defaultValue: selectedRole });
-  const isEditable  = callerRank[currentUser.role] < callerRank[selectedRole];
+
+  const [roleList, setRoleList] = useState([]); // [{ role_key, label, rank, category }]
+  const [catalog, setCatalog] = useState({}); //  { module: [action, ...] }
+  const [selectedRole, setSelectedRole] = useState('');
+  const [matrix, setMatrix] = useState({}); //         { role: { module: { action: bool } } }
+  const [originalMatrix, setOriginalMatrix] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [showAudit, setShowAudit] = useState(false);
+
+  const rankOf = useCallback(
+    (roleKey) => roleList.find((r) => r.role_key === roleKey)?.rank ?? 0,
+    [roleList]
+  );
+  const myRank = rankOf(currentUser.role);
+  // §148 rank-lock: you may edit ONLY a role ranked strictly below yours.
+  const isEditable = myRank > rankOf(selectedRole);
+  const selectedRoleObj = roleList.find((r) => r.role_key === selectedRole);
+  const roleLabel =
+    selectedRoleObj?.label ||
+    t(`permissions.roles.${selectedRole}`, { defaultValue: humanize(selectedRole) });
+  const moduleKeys = Object.keys(catalog).sort();
 
   const showToast = (message, type = 'success') => setToast({ message, type });
 
-  const fetchMatrix = useCallback(async () => {
+  const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await api.get('/permissions/matrix');
-      const built = buildEmptyMatrix();
-      for (const roleKey of Object.keys(data.matrix)) {
-        for (const mod of Object.keys(data.matrix[roleKey])) {
-          for (const action of Object.keys(data.matrix[roleKey][mod])) {
-            if (built[roleKey]?.[mod] !== undefined) {
-              built[roleKey][mod][action] = data.matrix[roleKey][mod][action];
-            }
-          }
-        }
-      }
+      const [rolesRes, matrixRes] = await Promise.all([
+        api.get('/permissions/roles'),
+        api.get('/permissions/matrix'),
+      ]);
+      const roles = rolesRes.data?.roles || [];
+      setRoleList(roles);
+      setCatalog(matrixRes.data?.catalog || {});
+
+      const built = {};
+      const m = matrixRes.data?.matrix || {};
+      for (const roleKey of Object.keys(m)) built[roleKey] = m[roleKey];
       setMatrix(JSON.parse(JSON.stringify(built)));
       setOriginalMatrix(JSON.parse(JSON.stringify(built)));
+
+      // §134/§148 UX: open on the most-senior role we can actually EDIT (the
+      // first ranked below us) instead of our own (locked) role — otherwise the
+      // matrix opens read-only and looks broken. `roles` is sorted senior→junior.
+      setSelectedRole((cur) => {
+        if (cur) return cur;
+        const mine = roles.find((r) => r.role_key === currentUser.role)?.rank ?? 0;
+        const firstEditable = roles.find((r) => mine > (r.rank ?? 0));
+        return firstEditable?.role_key || currentUser.role || roles[0]?.role_key || '';
+      });
     } catch {
       showToast(t('permissions.toast.loadFailed'), 'error');
     } finally {
       setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [t]);
 
-  useEffect(() => { fetchMatrix(); }, [fetchMatrix]);
+  useEffect(() => {
+    fetchAll();
+  }, [fetchAll]);
 
   const fetchAudit = useCallback(async () => {
     if (!showAudit) return;
@@ -198,45 +172,53 @@ export default function PermissionsPage() {
     }
   }, [showAudit, t]);
 
-  useEffect(() => { fetchAudit(); }, [fetchAudit]);
+  useEffect(() => {
+    fetchAudit();
+  }, [fetchAudit]);
 
-  const hasChanges = JSON.stringify(matrix[selectedRole]) !== JSON.stringify(originalMatrix[selectedRole]);
+  const isOn = (mod, action) => !!matrix[selectedRole]?.[mod]?.[action];
+  const hasChanges =
+    JSON.stringify(matrix[selectedRole] || {}) !== JSON.stringify(originalMatrix[selectedRole] || {});
 
-  const togglePermission = (mod, action, value) => {
+  const setOne = (mod, action, value) => {
     if (!isEditable) return;
-    setMatrix(prev => ({
-      ...prev,
-      [selectedRole]: { ...prev[selectedRole], [mod]: { ...prev[selectedRole][mod], [action]: value } }
-    }));
+    setMatrix((prev) => {
+      const role = { ...(prev[selectedRole] || {}) };
+      role[mod] = { ...(role[mod] || {}), [action]: value };
+      return { ...prev, [selectedRole]: role };
+    });
   };
 
   const toggleModule = (mod, value) => {
     if (!isEditable) return;
-    const updated = {};
-    for (const action of ACTIONS) updated[action] = value;
-    setMatrix(prev => ({ ...prev, [selectedRole]: { ...prev[selectedRole], [mod]: updated } }));
-  };
-
-  const toggleAction = (action, value) => {
-    if (!isEditable) return;
-    const updated = { ...matrix[selectedRole] };
-    for (const modKey of MODULE_KEYS) updated[modKey] = { ...updated[modKey], [action]: value };
-    setMatrix(prev => ({ ...prev, [selectedRole]: updated }));
+    setMatrix((prev) => {
+      const role = { ...(prev[selectedRole] || {}) };
+      const updated = {};
+      for (const action of catalog[mod] || []) updated[action] = value;
+      role[mod] = updated;
+      return { ...prev, [selectedRole]: role };
+    });
   };
 
   const discardChanges = () => {
-    setMatrix(prev => ({ ...prev, [selectedRole]: JSON.parse(JSON.stringify(originalMatrix[selectedRole])) }));
+    setMatrix((prev) => ({
+      ...prev,
+      [selectedRole]: JSON.parse(JSON.stringify(originalMatrix[selectedRole] || {})),
+    }));
   };
 
   const savePermissions = async () => {
     setSaving(true);
     try {
       const permissions = [];
-      for (const modKey of MODULE_KEYS)
-        for (const action of ACTIONS)
-          permissions.push({ module: modKey, action, allowed: matrix[selectedRole][modKey][action] });
+      for (const mod of moduleKeys)
+        for (const action of catalog[mod] || [])
+          permissions.push({ module: mod, action, allowed: isOn(mod, action) });
       await api.put(`/permissions/role/${selectedRole}`, { permissions });
-      setOriginalMatrix(prev => ({ ...prev, [selectedRole]: JSON.parse(JSON.stringify(matrix[selectedRole])) }));
+      setOriginalMatrix((prev) => ({
+        ...prev,
+        [selectedRole]: JSON.parse(JSON.stringify(matrix[selectedRole] || {})),
+      }));
       showToast(t('permissions.toast.saved', { role: roleLabel }));
     } catch (err) {
       showToast(err.response?.data?.error || t('permissions.toast.saveFailed'), 'error');
@@ -251,7 +233,7 @@ export default function PermissionsPage() {
     try {
       await api.post(`/permissions/reset/${selectedRole}`);
       showToast(t('permissions.toast.resetDone', { role: roleLabel }));
-      await fetchMatrix();
+      await fetchAll();
     } catch (err) {
       showToast(err.response?.data?.error || t('permissions.toast.resetFailed'), 'error');
     } finally {
@@ -259,13 +241,13 @@ export default function PermissionsPage() {
     }
   };
 
-  const moduleAllChecked = (modKey) => ACTIONS.every(a => matrix[selectedRole]?.[modKey]?.[a]);
-  const modulePartial    = (modKey) => ACTIONS.some(a => matrix[selectedRole]?.[modKey]?.[a]) && !moduleAllChecked(modKey);
+  const moduleAllChecked = (mod) => (catalog[mod] || []).every((a) => isOn(mod, a));
+  const modulePartial = (mod) =>
+    (catalog[mod] || []).some((a) => isOn(mod, a)) && !moduleAllChecked(mod);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 p-6">
       <div className="max-w-7xl mx-auto space-y-6">
-
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -280,7 +262,7 @@ export default function PermissionsPage() {
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setShowAudit(v => !v)}
+              onClick={() => setShowAudit((v) => !v)}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-slate-800 border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500 transition-colors"
             >
               <Clock className="w-3.5 h-3.5" />
@@ -288,7 +270,7 @@ export default function PermissionsPage() {
               {showAudit ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
             </button>
 
-            {['SUPER_ADMIN', 'IT_ADMIN'].includes(currentUser.role) && (
+            {['SUPER_ADMIN', 'IT_ADMIN'].includes(currentUser.role) && isEditable && (
               <button
                 onClick={resetToDefaults}
                 disabled={resetting || loading}
@@ -313,7 +295,11 @@ export default function PermissionsPage() {
                   disabled={saving}
                   className="flex items-center gap-1.5 px-4 py-1.5 text-xs rounded-lg font-medium bg-amber-500 hover:bg-amber-400 text-slate-950 disabled:opacity-50 transition-colors shadow-lg shadow-amber-500/20"
                 >
-                  {saving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                  {saving ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Check className="w-3.5 h-3.5" />
+                  )}
                   {saving ? t('permissions.saving') : t('permissions.save')}
                 </button>
               </>
@@ -341,63 +327,52 @@ export default function PermissionsPage() {
         )}
 
         <div className="grid grid-cols-[240px_1fr] gap-6">
-
-          {/* Role Selector */}
+          {/* Role selector — data-driven, grouped senior→junior */}
           <div className="space-y-2">
-            <p className="text-xs font-medium text-slate-500 uppercase tracking-widest mb-3">{t('permissions.sidebar.heading')}</p>
-            {ROLES.map(role => {
-              const locked     = callerRank[currentUser.role] >= callerRank[role.key];
-              const isSelected = selectedRole === role.key;
+            <p className="text-xs font-medium text-slate-500 uppercase tracking-widest mb-3">
+              {t('permissions.sidebar.heading')}
+            </p>
+            {roleList.map((role) => {
+              const locked = myRank <= (role.rank ?? 0);
+              const isSelected = selectedRole === role.role_key;
+              const c = catColor(role.category);
+              const label =
+                role.label || t(`permissions.roles.${role.role_key}`, { defaultValue: humanize(role.role_key) });
               return (
                 <button
-                  key={role.key}
-                  onClick={() => setSelectedRole(role.key)}
+                  key={role.role_key}
+                  onClick={() => setSelectedRole(role.role_key)}
                   className={`w-full text-left px-3 py-2.5 rounded-lg border text-sm transition-all duration-150 flex items-center justify-between
-                    ${isSelected
-                      ? `${role.bg} ${role.color} font-medium`
-                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-600 hover:text-slate-200'
+                    ${
+                      isSelected
+                        ? `${c.bg} ${c.color} font-medium`
+                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-600 hover:text-slate-200'
                     }`}
                 >
-                  <span>{t(`permissions.roles.${role.key}`)}</span>
-                  {locked && <span className="text-[10px] text-slate-600">{t('permissions.sidebar.locked')}</span>}
+                  <span>{label}</span>
+                  {locked && (
+                    <span className="text-[10px] text-slate-600">{t('permissions.sidebar.locked')}</span>
+                  )}
                 </button>
               );
             })}
           </div>
 
-          {/* Matrix */}
+          {/* Matrix — one card per module, each with ITS OWN actions as chips */}
           <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-
-            <div className="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className={`text-sm font-semibold ${roleInfo?.color}`}>{roleLabel}</span>
-                {!isEditable && (
-                  <span className="text-[10px] px-2 py-0.5 bg-slate-800 rounded-full text-slate-500 border border-slate-700">{t('permissions.matrix.readOnly')}</span>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-600 mr-1">{t('permissions.matrix.toggleColumn')}</span>
-                {ACTIONS.map(action => {
-                  const allOn = MODULE_KEYS.every(k => matrix[selectedRole]?.[k]?.[action]);
-                  return (
-                    <button
-                      key={action}
-                      disabled={!isEditable}
-                      onClick={() => toggleAction(action, !allOn)}
-                      className={`text-xs px-2 py-1 rounded border transition-all
-                        ${allOn ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400' : 'bg-slate-800 border-slate-700 text-slate-500 hover:text-slate-300'}
-                        ${!isEditable ? 'opacity-40 cursor-not-allowed' : 'hover:border-slate-500'}`}
-                    >
-                      {t(`permissions.actions.${action}`)}
-                    </button>
-                  );
-                })}
-              </div>
+            <div className="px-5 py-3.5 border-b border-slate-800 flex items-center gap-2">
+              <span className={`text-sm font-semibold ${catColor(selectedRoleObj?.category).color}`}>
+                {roleLabel}
+              </span>
+              {!isEditable && (
+                <span className="text-[10px] px-2 py-0.5 bg-slate-800 rounded-full text-slate-500 border border-slate-700">
+                  {t('permissions.matrix.readOnly')}
+                </span>
+              )}
             </div>
 
-            {/* Section 134: explain WHY a role is read-only — you can only
-                edit roles ranked below your own (privilege-escalation guard).
-                Without this the page "looks broken" on your own role. */}
+            {/* §134: explain WHY a role is read-only — you can edit only roles
+                ranked below your own (privilege-escalation guard). */}
             {!isEditable && (
               <div className="px-5 py-2 bg-amber-500/5 border-b border-amber-500/20 text-[11px] text-amber-400/80">
                 {t('permissions.matrix.readOnlyHint')}
@@ -410,76 +385,71 @@ export default function PermissionsPage() {
                 {t('permissions.matrix.loading')}
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-800">
-                      <th className="text-left px-5 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wider w-52">{t('permissions.matrix.module')}</th>
-                      {ACTIONS.map(action => (
-                        <th key={action} className={`text-center px-3 py-2.5 text-xs font-medium uppercase tracking-wider ${ACTION_COLORS[action]}`}>
-                          {t(`permissions.actions.${action}`)}
-                        </th>
-                      ))}
-                      <th className="text-center px-3 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wider w-20">{t('permissions.matrix.all')}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/70">
-                    {MODULE_KEYS.map((modKey, idx) => {
-                      const allChecked = moduleAllChecked(modKey);
-                      const partial    = modulePartial(modKey);
-                      return (
-                        <tr key={modKey} className={`transition-colors hover:bg-slate-800/40 ${idx % 2 === 0 ? 'bg-slate-900' : 'bg-slate-900/50'}`}>
-                          <td className="px-5 py-3">
-                            <span className={`text-sm ${allChecked ? 'text-slate-200' : partial ? 'text-slate-300' : 'text-slate-500'}`}>
-                              {t(`permissions.modules.${modKey}`)}
+              <div className="divide-y divide-slate-800/70">
+                {moduleKeys.map((mod) => {
+                  const actions = catalog[mod] || [];
+                  const allChecked = moduleAllChecked(mod);
+                  const partial = modulePartial(mod);
+                  return (
+                    <div key={mod} className="px-5 py-3.5 hover:bg-slate-800/30 transition-colors">
+                      <div className="flex items-center justify-between mb-2">
+                        <span
+                          className={`text-sm font-medium ${
+                            allChecked ? 'text-slate-100' : partial ? 'text-slate-300' : 'text-slate-500'
+                          }`}
+                        >
+                          {t(`permissions.modules.${mod}`, { defaultValue: humanize(mod) })}
+                          {partial && (
+                            <span className="ml-2 text-[10px] text-amber-500/70">
+                              {t('permissions.matrix.partial')}
                             </span>
-                            {partial && <span className="ml-2 text-[10px] text-amber-500/70">{t('permissions.matrix.partial')}</span>}
-                          </td>
-                          {ACTIONS.map(action => (
-                            <td key={action} className="text-center px-3 py-3">
-                              <div className="flex justify-center">
-                                <PermissionCheckbox
-                                  checked={matrix[selectedRole]?.[modKey]?.[action] || false}
-                                  disabled={!isEditable}
-                                  action={action}
-                                  onChange={(val) => togglePermission(modKey, action, val)}
-                                />
-                              </div>
-                            </td>
-                          ))}
-                          <td className="text-center px-3 py-3">
-                            <div className="flex justify-center">
-                              <button
-                                disabled={!isEditable}
-                                onClick={() => toggleModule(modKey, !allChecked)}
-                                className={`w-7 h-7 rounded flex items-center justify-center border text-xs font-bold transition-all
-                                  ${!isEditable ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer hover:scale-110'}
-                                  ${allChecked
-                                    ? 'bg-amber-500/20 border-amber-500/50 text-amber-400'
-                                    : 'bg-slate-800 border-slate-700 text-slate-500 hover:border-slate-500'
-                                  }`}
-                              >
-                                {allChecked ? '✓' : '○'}
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {!loading && (
-              <div className="px-5 py-3 border-t border-slate-800 flex items-center justify-between text-xs text-slate-500">
-                <span>
-                  {t('permissions.matrix.footerCount', {
-                    enabled: MODULE_KEYS.reduce((sum, k) => sum + ACTIONS.filter(a => matrix[selectedRole]?.[k]?.[a]).length, 0),
-                    total: MODULE_KEYS.length * ACTIONS.length,
-                  })}
-                </span>
-                <span className={roleInfo?.color}>{roleLabel}</span>
+                          )}
+                        </span>
+                        <button
+                          disabled={!isEditable}
+                          onClick={() => toggleModule(mod, !allChecked)}
+                          className={`text-[10px] px-2 py-0.5 rounded border transition-all
+                            ${!isEditable ? 'opacity-30 cursor-not-allowed' : 'hover:scale-105'}
+                            ${
+                              allChecked
+                                ? 'bg-amber-500/20 border-amber-500/50 text-amber-400'
+                                : 'bg-slate-800 border-slate-700 text-slate-500 hover:border-slate-500'
+                            }`}
+                        >
+                          {t('permissions.matrix.all')}
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {actions.map((action) => {
+                          const on = isOn(mod, action);
+                          return (
+                            <button
+                              key={action}
+                              type="button"
+                              disabled={!isEditable}
+                              onClick={() => setOne(mod, action, !on)}
+                              title={action}
+                              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs transition-all
+                                ${!isEditable ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:scale-[1.03]'}
+                                ${
+                                  on
+                                    ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-300'
+                                    : 'bg-slate-800/60 border-slate-700 text-slate-500 hover:border-slate-500'
+                                }`}
+                            >
+                              {on ? (
+                                <Check className="w-3 h-3" />
+                              ) : (
+                                <span className="w-2 h-2 rounded-full bg-current opacity-30" />
+                              )}
+                              {t(`permissions.actions.${action}`, { defaultValue: humanize(action) })}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
