@@ -423,7 +423,6 @@ router.put('/user/:userId', can('settings.permissions'), async (req, res) => {
 
     const companyId = req.user.company_id ? Number(req.user.company_id) : null;
     const inheritedSet = await inheritedRoleSet(req.db, t.user.role, companyId);
-    const grantedBy = req.user.user_id ? Number(req.user.user_id) : null;
 
     for (const perm of permissions) {
       const { module, action, allowed } = perm;
@@ -435,12 +434,15 @@ router.put('/user/:userId', can('settings.permissions'), async (req, res) => {
           [userId, code]
         );
       } else {
+        // granted_by is intentionally omitted — it isn't present in every
+        // environment's user_permissions schema, and logAudit already records
+        // who made the change.
         await req.db.query(
-          `INSERT INTO public.user_permissions (user_id, permission_code, granted, granted_by)
-           SELECT $1, $2, $3, $4 WHERE EXISTS (SELECT 1 FROM public.permissions WHERE code = $2)
+          `INSERT INTO public.user_permissions (user_id, permission_code, granted)
+           SELECT $1, $2, $3 WHERE EXISTS (SELECT 1 FROM public.permissions WHERE code = $2)
            ON CONFLICT (user_id, permission_code)
-           DO UPDATE SET granted = EXCLUDED.granted, granted_by = EXCLUDED.granted_by`,
-          [userId, code, desired, grantedBy]
+           DO UPDATE SET granted = EXCLUDED.granted`,
+          [userId, code, desired]
         );
       }
     }
