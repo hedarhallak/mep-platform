@@ -64,11 +64,12 @@ async function getRolePermissions(role) {
 
 /**
  * Check if a user has a specific permission.
- * Order of precedence:
+ * Order of precedence (§148 Phase 3 — layered resolution):
  *   1. SUPER_ADMIN → always granted
- *   2. user_permissions.granted = false → explicitly denied
- *   3. user_permissions.granted = true  → explicitly granted
- *   4. role_permissions                 → default
+ *   2. user_permissions          → per-user override (granted true/false)
+ *   3. company_role_permissions  → per-company role tune (granted true/false)
+ *   4. role_permissions          → global default
+ * The first layer that has a row for this code wins; absence falls through.
  *
  * @param {number|null} userId
  * @param {string} role
@@ -76,17 +77,20 @@ async function getRolePermissions(role) {
  * @param {{query: function}} [db] - request-scoped client (req.db) when
  *   called from middleware. Defaults to the global pool for backward
  *   compatibility (tests, scripts). Under Stage 3 strict RLS the
- *   default-pool path will return zero rows for user_permissions
- *   lookups — callers must pass req.db (or any client with
- *   `app.company_id` GUC set).
+ *   default-pool path will return zero rows for user_permissions /
+ *   company_role_permissions lookups — callers must pass req.db (or any
+ *   client with `app.company_id` GUC set).
+ * @param {number|null} [companyId] - the caller's company; enables the
+ *   per-company layer. When null/omitted the company layer is skipped and
+ *   resolution is user → global default (the pre-Phase-3 behaviour).
  */
-async function userHasPermission(userId, role, permissionCode, db = pool) {
+async function userHasPermission(userId, role, permissionCode, db = pool, companyId = null) {
   const normalizedRole = normalizeRole(role);
 
   // SUPER_ADMIN always passes
   if (normalizedRole === 'SUPER_ADMIN') return true;
 
-  // Check user-level override first
+  // 2. Per-user override — most specific.
   if (userId) {
     const { rows } = await db.query(
       `SELECT granted FROM public.user_permissions
@@ -99,7 +103,21 @@ async function userHasPermission(userId, role, permissionCode, db = pool) {
     }
   }
 
-  // Fall back to role default
+  // 3. Per-company tune of the role — §148 Phase 3. Absent rows fall through
+  // to the global default, so an empty table = pre-Phase-3 behaviour.
+  if (companyId) {
+    const { rows } = await db.query(
+      `SELECT granted FROM public.company_role_permissions
+       WHERE company_id = $1 AND role = $2 AND permission_code = $3
+       LIMIT 1`,
+      [companyId, normalizedRole, permissionCode]
+    );
+    if (rows.length > 0) {
+      return rows[0].granted === true;
+    }
+  }
+
+  // 4. Global role default.
   const rolePerms = await getRolePermissions(normalizedRole);
   return rolePerms.has(permissionCode);
 }
@@ -127,8 +145,9 @@ function can(permissionCode) {
       const userId = req.user.user_id ? Number(req.user.user_id) : null;
       const role = req.user.role;
       const db = req.db || pool;
+      const companyId = req.user.company_id ? Number(req.user.company_id) : null;
 
-      const allowed = await userHasPermission(userId, role, permissionCode, db);
+      const allowed = await userHasPermission(userId, role, permissionCode, db, companyId);
 
       if (!allowed) {
         return res.status(403).json({
@@ -160,9 +179,10 @@ function canAny(permissionCodes) {
       const userId = req.user.user_id ? Number(req.user.user_id) : null;
       const role = req.user.role;
       const db = req.db || pool;
+      const companyId = req.user.company_id ? Number(req.user.company_id) : null;
 
       for (const code of permissionCodes) {
-        const allowed = await userHasPermission(userId, role, code, db);
+        const allowed = await userHasPermission(userId, role, code, db, companyId);
         if (allowed) return next();
       }
 

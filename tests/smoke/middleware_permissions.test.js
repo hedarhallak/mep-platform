@@ -127,6 +127,66 @@ describe('middleware/permissions — userHasPermission', () => {
   });
 });
 
+describe('middleware/permissions — §148 Phase 3 company layer', () => {
+  test('company_role_permissions grant=true wins over the global default', async () => {
+    mockQueryImpl
+      .mockResolvedValueOnce({ rows: [] }) // user_permissions empty
+      .mockResolvedValueOnce({ rows: [{ granted: true }] }); // company grants
+
+    const result = await userHasPermission(42, 'FOREMAN', 'reports.view', undefined, 7);
+
+    expect(result).toBe(true);
+    // user + company only — never loads the global role_permissions
+    expect(mockQueryImpl).toHaveBeenCalledTimes(2);
+    expect(mockQueryImpl.mock.calls[1][0]).toMatch(/company_role_permissions/);
+    expect(mockQueryImpl.mock.calls[1][1]).toEqual([7, 'FOREMAN', 'reports.view']);
+  });
+
+  test('company_role_permissions grant=false denies even if the global default grants', async () => {
+    mockQueryImpl
+      .mockResolvedValueOnce({ rows: [] }) // user_permissions empty
+      .mockResolvedValueOnce({ rows: [{ granted: false }] }); // company denies
+
+    const result = await userHasPermission(42, 'FOREMAN', 'projects.view', undefined, 7);
+
+    expect(result).toBe(false);
+    expect(mockQueryImpl).toHaveBeenCalledTimes(2); // stops at the company layer
+  });
+
+  test('absent company row falls through to the global default', async () => {
+    mockQueryImpl
+      .mockResolvedValueOnce({ rows: [] }) // user_permissions empty
+      .mockResolvedValueOnce({ rows: [] }) // company_role_permissions empty
+      .mockResolvedValueOnce({ rows: [{ role: 'FOREMAN', permission_code: 'projects.view' }] });
+
+    const result = await userHasPermission(42, 'FOREMAN', 'projects.view', undefined, 7);
+
+    expect(result).toBe(true);
+    expect(mockQueryImpl).toHaveBeenCalledTimes(3);
+  });
+
+  test('user_permissions still outranks the company layer', async () => {
+    mockQueryImpl.mockResolvedValueOnce({ rows: [{ granted: true }] }); // user grants
+
+    const result = await userHasPermission(42, 'FOREMAN', 'projects.view', undefined, 7);
+
+    expect(result).toBe(true);
+    expect(mockQueryImpl).toHaveBeenCalledTimes(1); // never reaches the company query
+  });
+
+  test('null companyId skips the company layer (pre-Phase-3 behaviour)', async () => {
+    mockQueryImpl
+      .mockResolvedValueOnce({ rows: [] }) // user_permissions empty
+      .mockResolvedValueOnce({ rows: [{ role: 'FOREMAN', permission_code: 'projects.view' }] });
+
+    const result = await userHasPermission(42, 'FOREMAN', 'projects.view'); // no companyId
+
+    expect(result).toBe(true);
+    // user + role load only — NO company_role_permissions query
+    expect(mockQueryImpl).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('middleware/permissions — can()', () => {
   test('responds 401 UNAUTHENTICATED when req.user is missing', async () => {
     const guard = can('employees.view');
