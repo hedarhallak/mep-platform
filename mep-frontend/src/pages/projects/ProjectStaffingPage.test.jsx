@@ -46,6 +46,7 @@ describe('ProjectStaffingPage', () => {
         return Promise.resolve({
           data: { coverage: [{ trade_code: 'PLUMBING', required: 2, assigned: 1, gap: 1 }], totals: { required: 2, assigned: 1, gap: 1 } },
         })
+      if (url === '/hub/workers') return Promise.resolve({ data: { workers: [] } })
       return Promise.resolve({ data: {} })
     })
 
@@ -59,5 +60,28 @@ describe('ProjectStaffingPage', () => {
     await waitFor(() => expect(screen.getByText('projectStaffing.short:1')).toBeInTheDocument())
     expect(apiGet).toHaveBeenCalledWith('/projects/5/requirements')
     expect(apiGet).toHaveBeenCalledWith('/projects/5/coverage?date=' + new Date().toISOString().slice(0, 10))
+  })
+
+  test('a red gap shows a Fill button that opens the fill modal', async () => {
+    apiGet.mockImplementation((url) => {
+      if (url === '/projects')
+        return Promise.resolve({ data: { projects: [{ id: 5, project_code: 'P-5', project_name: 'Tower' }] } })
+      if (url.includes('/requirements')) return Promise.resolve({ data: { requirements: [] } })
+      if (url.includes('/coverage'))
+        return Promise.resolve({
+          data: { coverage: [{ trade_code: 'PLUMBING', required: 2, assigned: 1, gap: 1 }], totals: { required: 2, assigned: 1, gap: 1 } },
+        })
+      if (url === '/hub/workers') return Promise.resolve({ data: { workers: [] } })
+      return Promise.resolve({ data: {} })
+    })
+
+    render(<ProjectStaffingPage />)
+    await waitFor(() => expect(screen.getByText(/P-5/)).toBeInTheDocument())
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '5' } })
+
+    const fillBtn = await screen.findByText('projectStaffing.fill')
+    fireEvent.click(fillBtn)
+    // Modal title interpolates the gap count (n=1) via the test t() mock.
+    expect(screen.getByText('projectStaffing.fillModal.title:1')).toBeInTheDocument()
   })
 })
