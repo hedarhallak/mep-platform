@@ -41,8 +41,9 @@ describe('middleware/roles — normalizeRole', () => {
   test('maps legacy aliases to canonical roles', () => {
     expect(normalizeRole('ADMIN')).toBe('COMPANY_ADMIN');
     expect(normalizeRole('PM')).toBe('TRADE_PROJECT_MANAGER');
-    expect(normalizeRole('PROJECT_MANAGER')).toBe('TRADE_PROJECT_MANAGER');
     expect(normalizeRole('PURCHASING')).toBe('TRADE_ADMIN');
+    // §148 Phase 4: PROJECT_MANAGER is now a first-class role, not an alias.
+    expect(normalizeRole('PROJECT_MANAGER')).toBe('PROJECT_MANAGER');
   });
 
   test('passes through unknown roles unchanged (uppercased)', () => {

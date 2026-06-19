@@ -51,4 +51,52 @@ describe('ROLE_DEFAULT_PERMISSIONS (§148 canonical defaults)', () => {
     }
     expect(ROLE_DEFAULT_PERMISSIONS.SUPER_ADMIN).toBeUndefined();
   });
+
+  // §148 Phase 4 — expanded catalog (migration 038).
+  describe('Phase 4 expanded catalog', () => {
+    const NEW_ROLES = [
+      'CONSTRUCTION_MANAGER',
+      'PROJECT_MANAGER',
+      'SUPERINTENDENT',
+      'MEP_ENGINEER',
+      'ESTIMATOR',
+      'PROJECT_ENGINEER',
+      'SITE_ENGINEER',
+      'ACCOUNTANT',
+      'BIM_COORDINATOR',
+      'HR_OFFICER',
+      'GENERAL_FOREMAN',
+      'DISPATCHER',
+      'PROCUREMENT_OFFICER',
+      'SAFETY_OFFICER',
+      'QA_QC_OFFICER',
+      'PAYROLL_OFFICER',
+      'OFFICE_CLERK',
+      'OPERATOR',
+    ];
+
+    test('all 18 new roles have a default set with dashboard.view', () => {
+      for (const r of NEW_ROLES) {
+        expect(Array.isArray(ROLE_DEFAULT_PERMISSIONS[r])).toBe(true);
+        expect(ROLE_DEFAULT_PERMISSIONS[r]).toContain('dashboard.view');
+      }
+    });
+
+    test('no new role gets audit.view (OWNER-only, §132)', () => {
+      for (const r of NEW_ROLES) {
+        expect(ROLE_DEFAULT_PERMISSIONS[r]).not.toContain('audit.view');
+      }
+    });
+
+    test('no new role gets settings.* (governance stays with admins)', () => {
+      for (const r of NEW_ROLES) {
+        expect(ROLE_DEFAULT_PERMISSIONS[r].some((c) => c.startsWith('settings.'))).toBe(false);
+      }
+    });
+
+    test('OPERATOR shares the field-worker baseline; ACCOUNTANT can approve expenses', () => {
+      expect(ROLE_DEFAULT_PERMISSIONS.OPERATOR).toEqual(FIELD_WORKER);
+      expect(ROLE_DEFAULT_PERMISSIONS.ACCOUNTANT).toContain('expense_claims.approve');
+    });
+  });
 });

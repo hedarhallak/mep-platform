@@ -22,14 +22,18 @@
  * Legacy aliases (kept for backward compatibility):
  * ADMIN       → COMPANY_ADMIN
  * PM          → TRADE_PROJECT_MANAGER
- * PROJECT_MANAGER → TRADE_PROJECT_MANAGER
  * PURCHASING  → TRADE_ADMIN
+ *
+ * §148 Phase 4: the `PROJECT_MANAGER → TRADE_PROJECT_MANAGER` alias was REMOVED
+ * — `PROJECT_MANAGER` is now a first-class catalog role (a cross-trade PM,
+ * migration 038), distinct from the trade-scoped TRADE_PROJECT_MANAGER. Safe to
+ * drop: migration 036's FK (app_users.role → roles.role_key) means no user ever
+ * held the legacy literal, and it was never in the roles catalog until now.
  */
 
 const ROLE_ALIASES = {
   ADMIN: 'COMPANY_ADMIN',
   PM: 'TRADE_PROJECT_MANAGER',
-  PROJECT_MANAGER: 'TRADE_PROJECT_MANAGER',
   PURCHASING: 'TRADE_ADMIN',
 };
 
