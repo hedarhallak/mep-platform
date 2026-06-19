@@ -16329,3 +16329,18 @@ Two friction points on the staffing page:
 2. **Old requirements clutter** — the list showed the project's full multi-phase plan regardless of the viewed date (so June rows appeared while viewing July). Now the list **filters to phases active on the viewed date by default**, with a **"Show all (N)" / "Filter to date"** toggle to reveal the full plan. New i18n `projectStaffing.noneForDate/showAll/showForDate` EN+FR.
 
 Frontend-only (`ProjectStaffingPage.jsx` + locales); no migration/route.
+
+### 147.12 — Trade-scoping (users by trade): backend auto-filters demand/coverage/pickers by the user's specialty
+
+Hedar's point while testing Phase 2: *"a plumbing foreman has nothing to do with electrical — the program must filter by specialty."* Built the **final model directly** (Hedar: "no time-wasting on an interim filter"). **No migration / no new column** — the login + refresh queries already LEFT JOIN `employee_profiles`, so a user's specialty is **derived from their employee profile** (`ep.trade_code`) and carried on the JWT (`buildTokenPayload` now includes `trade_code`).
+
+**The scope rule** = `middleware/roles.js` `tradeScopeFor(user)`:
+- **Company-level roles** (SUPER_ADMIN / OWNER / IT_ADMIN / COMPANY_ADMIN) → **null = see ALL trades** (these are the dispatchers/admins). Their own personal trade_code, if any, is ignored.
+- **Trade-level roles** (TRADE_PROJECT_MANAGER / TRADE_ADMIN / FOREMAN / workers) → scoped to their `trade_code` (uppercased); null trade → unscoped.
+
+**Applied (backend filters; the frontend pages auto-scope with zero UI change):**
+- `routes/project_requirements.js` — `GET /requirements` + `GET /coverage` filter rows to the scope trade (`($N IS NULL OR trade_code = $N)`), on both the required and assigned sides of coverage.
+- `routes/assignments.js` `GET /available` — a trade-level user's scope **OVERRIDES** any client `?trade=` param (a foreman can't pull other trades into a Fill/Submit picker). Company-level roles still filter freely.
+- `routes/assignments.js` `GET /requests` — a trade-level reviewer sees only their specialty's pending requests (by the requested employee's trade); company-level roles (the dispatcher) see all.
+
+Unit test `tests/smoke/trade_scope.test.js` pins the role matrix (5 cases). Backend-only PR, no migration — deploy = pull + restart. **Note:** a foreman must have an `employee_profiles.trade_code` for scoping to engage; if unset they're unscoped (see-all) — acceptable fail-open for a non-security filter (it's UX focus, not tenant isolation, which RLS still enforces). **Future (optional):** an explicit `app_users.trade_code` column would let a company-level admin be scoped to a trade, or decouple a manager's oversight-trade from their personal trade — not needed for the domain today.

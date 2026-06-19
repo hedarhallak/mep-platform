@@ -199,7 +199,7 @@ async function fireNotifyEmails({ a, team }) {
 }
 
 // ── Role helpers ──────────────────────────────────────────────────
-const { normalizeRole } = require('../middleware/roles');
+const { normalizeRole, tradeScopeFor } = require('../middleware/roles');
 
 // NOTE: a local requireRoles + ADMIN_ONLY + ADMIN_PM guards were
 // previously defined here but never wired into any route — orphan from
@@ -326,7 +326,11 @@ router.get('/available', can('assignments.view'), async (req, res) => {
   try {
     const companyId = req.user.company_id;
     const date = req.query.date || new Date().toISOString().slice(0, 10);
-    const trade = req.query.trade ? String(req.query.trade).toUpperCase() : null;
+    // §147 trade-scoping: a trade-level user can only pull workers of their own
+    // specialty — their scope OVERRIDES any client-supplied trade param.
+    // Company-level roles (scope=null) may filter freely via ?trade=.
+    const scope = tradeScopeFor(req.user);
+    const trade = scope || (req.query.trade ? String(req.query.trade).toUpperCase() : null);
 
     const { rows } = await req.db.query(
       `SELECT e.id            AS id,
@@ -445,6 +449,14 @@ router.get('/requests', can('assignments.view'), async (req, res) => {
     if (normalizeRole(req.user.role) === 'TRADE_PROJECT_MANAGER') {
       params.push(req.user.user_id);
       query += ` AND ar.requested_by_user_id = $${params.length}`;
+    }
+
+    // §147 trade-scoping: a trade-level reviewer sees only their specialty's
+    // requests (by the requested employee's trade). Company-level roles see all.
+    const scope = tradeScopeFor(req.user);
+    if (scope) {
+      params.push(scope);
+      query += ` AND ep.trade_code = $${params.length}`;
     }
 
     query += ' ORDER BY ar.created_at DESC';
