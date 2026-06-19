@@ -21,6 +21,7 @@
 const express = require('express');
 const router = express.Router();
 const { can, logAudit } = require('../middleware/permissions');
+const { normalizeRole } = require('../middleware/roles');
 
 // Splits 'employees.view' → { module: 'employees', action: 'view' }
 function parseCode(code) {
@@ -164,22 +165,11 @@ router.get('/my-permissions', async (req, res) => {
 router.get('/role/:role', can('settings.permissions'), async (req, res) => {
   try {
     const { role } = req.params;
-    const validRoles = [
-      'SUPER_ADMIN',
-      'IT_ADMIN',
-      'COMPANY_ADMIN',
-      'TRADE_PROJECT_MANAGER',
-      'TRADE_ADMIN',
-      'FOREMAN',
-      'JOURNEYMAN',
-      'APPRENTICE_4',
-      'APPRENTICE_3',
-      'APPRENTICE_2',
-      'APPRENTICE_1',
-      'WORKER',
-      'DRIVER',
-    ];
-    if (!validRoles.includes(role)) return res.status(400).json({ error: 'Invalid role' });
+    // §148 — validate against the data-driven roles catalog (was a hardcoded list).
+    const { rows: rExists } = await req.db.query(`SELECT 1 FROM public.roles WHERE role_key = $1`, [
+      role,
+    ]);
+    if (!rExists.length) return res.status(400).json({ error: 'Invalid role' });
 
     const result = await req.db.query(
       `
@@ -211,43 +201,23 @@ router.put('/role/:role', can('settings.permissions'), async (req, res) => {
     const { role } = req.params;
     const { permissions } = req.body;
 
-    const validRoles = [
-      'SUPER_ADMIN',
-      'IT_ADMIN',
-      'COMPANY_ADMIN',
-      'TRADE_PROJECT_MANAGER',
-      'TRADE_ADMIN',
-      'FOREMAN',
-      'JOURNEYMAN',
-      'APPRENTICE_4',
-      'APPRENTICE_3',
-      'APPRENTICE_2',
-      'APPRENTICE_1',
-      'WORKER',
-      'DRIVER',
-    ];
-    if (!validRoles.includes(role)) return res.status(400).json({ error: 'Invalid role' });
-
     if (!Array.isArray(permissions) || permissions.length === 0) {
       return res.status(400).json({ error: 'permissions array is required' });
     }
 
-    const callerRank = {
-      SUPER_ADMIN: 0,
-      IT_ADMIN: 1,
-      COMPANY_ADMIN: 2,
-      TRADE_PROJECT_MANAGER: 3,
-      TRADE_ADMIN: 4,
-      FOREMAN: 5,
-      JOURNEYMAN: 6,
-      APPRENTICE_4: 7,
-      APPRENTICE_3: 7,
-      APPRENTICE_2: 7,
-      APPRENTICE_1: 7,
-      WORKER: 8,
-      DRIVER: 8,
-    };
-    if (callerRank[req.user.role] >= callerRank[role]) {
+    // §148 — validate the role + enforce the rank-lock from the data-driven
+    // `roles` catalog (roles.rank: HIGHER = more senior). You may edit ONLY a
+    // role ranked strictly below yours. SUPER_ADMIN passes can() anyway and
+    // (rank 100) outranks every role. normalizeRole maps any legacy alias.
+    const callerKey = normalizeRole(req.user.role);
+    const { rows: rk } = await req.db.query(
+      `SELECT role_key, rank FROM public.roles WHERE role_key = ANY($1::text[])`,
+      [[role, callerKey]]
+    );
+    const target = rk.find((r) => r.role_key === role);
+    if (!target) return res.status(400).json({ error: 'Invalid role' });
+    const callerRank = rk.find((r) => r.role_key === callerKey)?.rank ?? 0;
+    if (callerRank <= (target.rank ?? 0)) {
       return res
         .status(403)
         .json({ error: 'Cannot edit permissions for a role equal or higher than yours' });
@@ -295,22 +265,11 @@ router.post('/reset/:role', can('settings.permissions'), async (req, res) => {
     }
 
     const { role } = req.params;
-    const validRoles = [
-      'SUPER_ADMIN',
-      'IT_ADMIN',
-      'COMPANY_ADMIN',
-      'TRADE_PROJECT_MANAGER',
-      'TRADE_ADMIN',
-      'FOREMAN',
-      'JOURNEYMAN',
-      'APPRENTICE_4',
-      'APPRENTICE_3',
-      'APPRENTICE_2',
-      'APPRENTICE_1',
-      'WORKER',
-      'DRIVER',
-    ];
-    if (!validRoles.includes(role)) return res.status(400).json({ error: 'Invalid role' });
+    // §148 — validate against the data-driven roles catalog (was a hardcoded list).
+    const { rows: rExists } = await req.db.query(`SELECT 1 FROM public.roles WHERE role_key = $1`, [
+      role,
+    ]);
+    if (!rExists.length) return res.status(400).json({ error: 'Invalid role' });
 
     const defaults = {
       IT_ADMIN: [
@@ -506,6 +465,14 @@ router.post('/reset/:role', can('settings.permissions'), async (req, res) => {
         'tasks.view',
       ],
     };
+
+    // §148 guard: don't silently WIPE a role that has no hardcoded default set
+    // (e.g. OWNER, or any future catalog role) — `defaults[role] || []` would
+    // delete-then-insert-nothing. Reset is only meaningful for roles with a
+    // defined default. SUPER_ADMIN resets to the full catalog.
+    if (role !== 'SUPER_ADMIN' && !defaults[role]) {
+      return res.status(400).json({ error: 'No default permission set defined for this role' });
+    }
 
     await req.db.query(`DELETE FROM public.role_permissions WHERE role = $1`, [role]);
 

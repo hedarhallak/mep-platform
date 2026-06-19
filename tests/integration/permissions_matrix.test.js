@@ -61,6 +61,29 @@ describeIfDb('Permissions matrix — /api/permissions/matrix', () => {
     expect(a.indexOf('view')).toBeLessThan(a.indexOf('smart_assign'));
   });
 
+  // §148 Phase 2 — data-driven rank-lock on PUT (from roles.rank, not a
+  // hardcoded map). These 403s fire before any mutation, so they don't touch
+  // the global role_permissions table.
+  test('PUT /role rank-lock: COMPANY_ADMIN cannot edit an equal-or-higher role (403)', async () => {
+    const company = await seedCompany();
+    const admin = await seedUser({ company_id: company.company_id, role: 'COMPANY_ADMIN' });
+    const { token } = await loginUser(admin);
+
+    const body = { permissions: [{ module: 'dashboard', action: 'view', allowed: true }] };
+
+    const equalRole = await request(app)
+      .put('/api/permissions/role/COMPANY_ADMIN')
+      .set('Authorization', `Bearer ${token}`)
+      .send(body);
+    expect(equalRole.statusCode).toBe(403);
+
+    const higherRole = await request(app)
+      .put('/api/permissions/role/SUPER_ADMIN')
+      .set('Authorization', `Bearer ${token}`)
+      .send(body);
+    expect(higherRole.statusCode).toBe(403);
+  });
+
   test('GET /matrix without settings.permissions returns 403', async () => {
     const company = await seedCompany();
     const worker = await seedUser({ company_id: company.company_id, role: 'WORKER' });
