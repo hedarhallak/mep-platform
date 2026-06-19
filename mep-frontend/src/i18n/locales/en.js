@@ -121,6 +121,14 @@ export default {
     addRequirement: 'Add requirement',
     noRequirements: 'No requirements yet.',
     confirmDelete: 'Delete this requirement?',
+    fill: 'Fill',
+    fillModal: {
+      title: 'Fill {{trade}} — need {{n}} on {{date}}',
+      hint: 'Pick the workers to assign. Tip: filter by trade, then select.',
+      assign: 'Assign ({{count}})',
+      assigned: '{{count}} assigned ✓',
+      skipped: '{{count}} skipped (already assigned)',
+    },
     modal: {
       titleNew: 'Add Requirement',
       titleEdit: 'Edit Requirement',

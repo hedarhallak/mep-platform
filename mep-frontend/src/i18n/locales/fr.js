@@ -121,6 +121,14 @@ export default {
     addRequirement: 'Ajouter une exigence',
     noRequirements: 'Aucune exigence pour le moment.',
     confirmDelete: 'Supprimer cette exigence ?',
+    fill: 'Combler',
+    fillModal: {
+      title: 'Combler {{trade}} — besoin de {{n}} le {{date}}',
+      hint: 'Choisissez les travailleurs à affecter. Astuce : filtrez par métier, puis sélectionnez.',
+      assign: 'Affecter ({{count}})',
+      assigned: '{{count}} affecté(s) ✓',
+      skipped: '{{count}} ignoré(s) (déjà affecté)',
+    },
     modal: {
       titleNew: 'Ajouter une exigence',
       titleEdit: 'Modifier l’exigence',
