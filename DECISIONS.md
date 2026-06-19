@@ -16429,3 +16429,16 @@ The `company_role_permissions` table + the resolution layer that reads it — th
 - **test** — 5 new cases in middleware_permissions.test.js: company grant=true wins, grant=false denies over a granting default, absent row falls through, user layer still outranks company, null companyId skips the layer. 29/29 green.
 
 DEPLOY ORDER (migration-bearing PR, per deploy.yml): **apply 037 on prod FIRST**, then merge so the auto-deploy ships code that finds the table. `can()` queries the table on every check once company_id is set, so a missing table would 500 — the table must exist before the code lands. CI applies all `migrations/*.sql` to its testdb automatically, so it validates green on its own. Phase 3b (next): the matrix UI writes a company's edits to this table instead of the global defaults.
+
+### 148.13 — Phase 3b: the matrix writes per-company
+
+The permissions UI is now company-aware. A **company admin** (OWNER / COMPANY_ADMIN / IT_ADMIN) edits THEIR company's overrides; a **SUPER_ADMIN** (platform) still edits the global defaults. All in `routes/permissions.js`:
+
+- **PUT /role/:role** — branches on `isPlatform`. Platform: unchanged global DELETE+reinsert. Company admin: writes `company_role_permissions` as a **DIFF vs the global default** — a value matching the default removes the override (falls through), a differing value is upserted (`ON CONFLICT … DO UPDATE`). Keeps the table minimal; the body can be partial (only changed codes). New audit action `UPDATE_COMPANY_PERMISSIONS`.
+- **GET /matrix** — overlays the caller's company overrides on the global defaults, so the matrix shows that company's EFFECTIVE permissions (granted=true adds, granted=false removes). Platform sees the raw globals.
+- **GET /my-permissions** — same overlay for the logged-in user's role, so the UI menu matches what `can()` (Phase 3a resolution) actually enforces.
+- **POST /reset/:role** — platform resets the global default (unchanged); a company admin's reset DELETEs their company's override rows for the role → reverts to the global default. New audit action `RESET_COMPANY_PERMISSIONS`. Guard widened from SUPER_ADMIN/IT_ADMIN to also OWNER/COMPANY_ADMIN.
+- **Frontend** — the Reset button now shows for OWNER/COMPANY_ADMIN too (they can reset their own overrides).
+- **Test** — integration: COMPANY_ADMIN@A flips FOREMAN's projects.view; A sees the change, B (same global default) does NOT (proves per-company isolation), reset reverts A. Robust to whatever the seeded global default is.
+
+No migration (the table shipped in 148.12). With company_role_permissions empty, behaviour is identical to before — the change only manifests once an admin tunes a role. Phase 4 (catalog expansion) / Phase 5 (per-user overrides UI) remain.

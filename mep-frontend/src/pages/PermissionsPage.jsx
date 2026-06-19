@@ -279,7 +279,7 @@ export default function PermissionsPage() {
               {showAudit ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
             </button>
 
-            {['SUPER_ADMIN', 'IT_ADMIN'].includes(currentUserRole) && isEditable && (
+            {['SUPER_ADMIN', 'IT_ADMIN', 'OWNER', 'COMPANY_ADMIN'].includes(currentUserRole) && isEditable && (
               <button
                 onClick={resetToDefaults}
                 disabled={resetting || loading}
