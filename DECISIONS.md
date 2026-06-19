@@ -16319,3 +16319,13 @@ Fix — new backend endpoint **`GET /api/assignments/available?date=&trade=`** (
 - **CrewsPage** normalizes `/hub/workers` rows to `id = employee_id` (crews aren't date-scoped, so no availability filter) — fixes crew member/foreman id.
 
 i18n `projectStaffing.fillModal.noneAvailable` + reworded hint, EN+FR. Tests updated to the `/available` source. Backend route + frontend only (no migration). **This is what actually closes the loop end-to-end** — before it, the Fill button posted the wrong id and silently no-op'd.
+
+**Loop verified LIVE (June 19):** the "can't assign" Hedar hit was NOT a bug — the seed had all 10 plumbers booked through end-June, so `/available` correctly returned 0 (no double-booking, exactly the gated guarantee). On a date with free people (e.g. 2026-07-15 → 9 free plumbers), Fill shows them and assigns. Confirmed by direct DB checks per date.
+
+### 147.11 — Project Staffing UX refinements (Hedar feedback)
+
+Two friction points on the staffing page:
+1. **Double date entry** — the top date (the day you're viewing coverage for) vs the requirement's own from→to range (a phase can span days/weeks). Kept the distinction (phases need their own range) but the **Add-requirement modal now defaults from/to to the currently-viewed date**, so you don't retype it.
+2. **Old requirements clutter** — the list showed the project's full multi-phase plan regardless of the viewed date (so June rows appeared while viewing July). Now the list **filters to phases active on the viewed date by default**, with a **"Show all (N)" / "Filter to date"** toggle to reveal the full plan. New i18n `projectStaffing.noneForDate/showAll/showForDate` EN+FR.
+
+Frontend-only (`ProjectStaffingPage.jsx` + locales); no migration/route.
