@@ -17,17 +17,21 @@ import { useAuth } from '@/hooks/useAuth';
 // roles come from GET /permissions/roles (rank + category), and the modules ×
 // actions come from GET /permissions/matrix's `catalog`. Nothing here is
 // hardcoded, so a new role or a new permission appears automatically.
+//
+// §148.10 — restyled to the app's LIGHT theme (was the only dark `bg-slate-950`
+// page in an otherwise light app, which read as jarring). Cards are now white on
+// the AppLayout's slate-50 background, matching Settings / Staffing / etc.
 
-// Category → accent colors for the role sidebar (the only presentation map left).
+// Category → soft accent for the role sidebar (the only presentation map left).
 const CATEGORY_COLORS = {
-  platform:    { color: 'text-red-400',    bg: 'bg-red-500/10 border-red-500/30' },
-  governance:  { color: 'text-orange-400', bg: 'bg-orange-500/10 border-orange-500/30' },
-  management:  { color: 'text-blue-400',   bg: 'bg-blue-500/10 border-blue-500/30' },
-  engineering: { color: 'text-cyan-400',   bg: 'bg-cyan-500/10 border-cyan-500/30' },
-  supervision: { color: 'text-teal-400',   bg: 'bg-teal-500/10 border-teal-500/30' },
-  field:       { color: 'text-green-400',  bg: 'bg-green-500/10 border-green-500/30' },
+  platform:    { color: 'text-red-600',    bg: 'bg-red-50 border-red-200' },
+  governance:  { color: 'text-amber-600',  bg: 'bg-amber-50 border-amber-200' },
+  management:  { color: 'text-blue-600',   bg: 'bg-blue-50 border-blue-200' },
+  engineering: { color: 'text-cyan-600',   bg: 'bg-cyan-50 border-cyan-200' },
+  supervision: { color: 'text-teal-600',   bg: 'bg-teal-50 border-teal-200' },
+  field:       { color: 'text-green-600',  bg: 'bg-green-50 border-green-200' },
 };
-const catColor = (cat) => CATEGORY_COLORS[cat] || { color: 'text-slate-300', bg: 'bg-slate-500/10 border-slate-500/30' };
+const catColor = (cat) => CATEGORY_COLORS[cat] || { color: 'text-slate-600', bg: 'bg-slate-100 border-slate-200' };
 
 // "smart_assign" → "Smart Assign" — fallback label for codes with no i18n key.
 const humanize = (key) =>
@@ -43,17 +47,17 @@ function Toast({ message, type, onClose }) {
 
   return (
     <div
-      className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3 rounded-lg border shadow-xl text-sm font-medium
+      className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3 rounded-xl border shadow-lg text-sm font-medium
       ${
         type === 'success'
-          ? 'bg-emerald-950 border-emerald-500/40 text-emerald-300'
-          : 'bg-red-950 border-red-500/40 text-red-300'
+          ? 'bg-white border-emerald-200 text-emerald-700'
+          : 'bg-white border-red-200 text-red-600'
       }`}
     >
       {type === 'success' ? (
-        <Check className="w-4 h-4 text-emerald-400" />
+        <Check className="w-4 h-4 text-emerald-500" />
       ) : (
-        <X className="w-4 h-4 text-red-400" />
+        <X className="w-4 h-4 text-red-500" />
       )}
       {message}
     </div>
@@ -63,23 +67,23 @@ function Toast({ message, type, onClose }) {
 function AuditLog({ logs, loading }) {
   const { t } = useTranslation();
   if (loading)
-    return <div className="text-center py-8 text-slate-500 text-sm">{t('permissions.audit.loading')}</div>;
+    return <div className="text-center py-8 text-slate-400 text-sm">{t('permissions.audit.loading')}</div>;
   if (!logs.length)
-    return <div className="text-center py-8 text-slate-500 text-sm">{t('permissions.audit.empty')}</div>;
+    return <div className="text-center py-8 text-slate-400 text-sm">{t('permissions.audit.empty')}</div>;
   return (
-    <div className="divide-y divide-slate-800">
+    <div className="divide-y divide-slate-100">
       {logs.map((entry) => (
         <div key={entry.id} className="flex items-start gap-4 py-3 px-1">
-          <Clock className="w-4 h-4 text-slate-500 mt-0.5 flex-shrink-0" />
+          <Clock className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
           <div className="flex-1 min-w-0">
-            <p className="text-sm text-slate-300">
-              <span className="text-slate-100 font-medium">{entry.changed_by}</span>{' '}
+            <p className="text-sm text-slate-600">
+              <span className="text-slate-800 font-medium">{entry.changed_by}</span>{' '}
               {t('permissions.audit.updatedFor')}{' '}
-              <span className="font-mono text-xs bg-slate-800 px-1.5 py-0.5 rounded text-amber-300">
+              <span className="font-mono text-xs bg-slate-100 px-1.5 py-0.5 rounded text-amber-700">
                 {entry.details?.role || '—'}
               </span>
             </p>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-slate-400 mt-0.5">
               {new Date(entry.created_at).toLocaleString()} · {entry.changer_role}
             </p>
           </div>
@@ -251,24 +255,24 @@ export default function PermissionsPage() {
     (catalog[mod] || []).some((a) => isOn(mod, a)) && !moduleAllChecked(mod);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200 p-6">
+    <div className="p-6">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-amber-500/10 rounded-lg border border-amber-500/20">
-              <Shield className="w-6 h-6 text-amber-400" />
+            <div className="w-10 h-10 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center">
+              <Shield className="w-5 h-5 text-amber-600" />
             </div>
             <div>
-              <h1 className="text-xl font-semibold text-slate-100">{t('permissions.title')}</h1>
-              <p className="text-xs text-slate-500 mt-0.5">{t('permissions.subtitle')}</p>
+              <h1 className="text-xl font-bold text-slate-800">{t('permissions.title')}</h1>
+              <p className="text-xs text-slate-400 mt-0.5">{t('permissions.subtitle')}</p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowAudit((v) => !v)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-slate-800 border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-white border border-slate-200 text-slate-500 hover:text-slate-700 hover:border-slate-300 transition-colors"
             >
               <Clock className="w-3.5 h-3.5" />
               {t('permissions.auditLog')}
@@ -279,7 +283,7 @@ export default function PermissionsPage() {
               <button
                 onClick={resetToDefaults}
                 disabled={resetting || loading}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-slate-800 border border-slate-700 text-slate-400 hover:text-red-300 hover:border-red-500/40 transition-colors disabled:opacity-40"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-white border border-slate-200 text-slate-500 hover:text-red-600 hover:border-red-300 transition-colors disabled:opacity-40"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${resetting ? 'animate-spin' : ''}`} />
                 {t('permissions.resetDefaults')}
@@ -290,7 +294,7 @@ export default function PermissionsPage() {
               <>
                 <button
                   onClick={discardChanges}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-slate-800 border border-slate-700 text-slate-400 hover:text-slate-200 transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-white border border-slate-200 text-slate-500 hover:text-slate-700 hover:border-slate-300 transition-colors"
                 >
                   <X className="w-3.5 h-3.5" />
                   {t('permissions.discard')}
@@ -298,7 +302,7 @@ export default function PermissionsPage() {
                 <button
                   onClick={savePermissions}
                   disabled={saving}
-                  className="flex items-center gap-1.5 px-4 py-1.5 text-xs rounded-lg font-medium bg-amber-500 hover:bg-amber-400 text-slate-950 disabled:opacity-50 transition-colors shadow-lg shadow-amber-500/20"
+                  className="flex items-center gap-1.5 px-4 py-1.5 text-xs rounded-lg font-medium bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-50 transition-colors shadow-sm shadow-amber-500/20"
                 >
                   {saving ? (
                     <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -314,8 +318,8 @@ export default function PermissionsPage() {
 
         {/* Audit Panel */}
         {showAudit && (
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-            <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+            <h3 className="text-sm font-medium text-slate-700 mb-3 flex items-center gap-2">
               <Clock className="w-4 h-4 text-slate-400" />
               {t('permissions.recentChanges')}
             </h3>
@@ -325,7 +329,7 @@ export default function PermissionsPage() {
 
         {/* Unsaved banner */}
         {hasChanges && isEditable && (
-          <div className="flex items-center gap-2 px-4 py-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg text-xs text-amber-300">
+          <div className="flex items-center gap-2 px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
             <ShieldAlert className="w-4 h-4" />
             {t('permissions.unsavedBanner', { role: roleLabel })}
           </div>
@@ -334,7 +338,7 @@ export default function PermissionsPage() {
         <div className="grid grid-cols-[240px_1fr] gap-6">
           {/* Role selector — data-driven, grouped senior→junior */}
           <div className="space-y-2">
-            <p className="text-xs font-medium text-slate-500 uppercase tracking-widest mb-3">
+            <p className="text-xs font-medium text-slate-400 uppercase tracking-widest mb-3">
               {t('permissions.sidebar.heading')}
             </p>
             {roleList.map((role) => {
@@ -350,13 +354,13 @@ export default function PermissionsPage() {
                   className={`w-full text-left px-3 py-2.5 rounded-lg border text-sm transition-all duration-150 flex items-center justify-between
                     ${
                       isSelected
-                        ? `${c.bg} ${c.color} font-medium`
-                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-600 hover:text-slate-200'
+                        ? `${c.bg} ${c.color} font-semibold`
+                        : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-700'
                     }`}
                 >
                   <span>{label}</span>
                   {locked && (
-                    <span className="text-[10px] text-slate-600">{t('permissions.sidebar.locked')}</span>
+                    <span className="text-[10px] text-slate-300">{t('permissions.sidebar.locked')}</span>
                   )}
                 </button>
               );
@@ -364,13 +368,13 @@ export default function PermissionsPage() {
           </div>
 
           {/* Matrix — one card per module, each with ITS OWN actions as chips */}
-          <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-            <div className="px-5 py-3.5 border-b border-slate-800 flex items-center gap-2">
+          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+            <div className="px-5 py-3.5 border-b border-slate-100 flex items-center gap-2">
               <span className={`text-sm font-semibold ${catColor(selectedRoleObj?.category).color}`}>
                 {roleLabel}
               </span>
               {!isEditable && (
-                <span className="text-[10px] px-2 py-0.5 bg-slate-800 rounded-full text-slate-500 border border-slate-700">
+                <span className="text-[10px] px-2 py-0.5 bg-slate-100 rounded-full text-slate-500 border border-slate-200">
                   {t('permissions.matrix.readOnly')}
                 </span>
               )}
@@ -379,33 +383,33 @@ export default function PermissionsPage() {
             {/* §134: explain WHY a role is read-only — you can edit only roles
                 ranked below your own (privilege-escalation guard). */}
             {!isEditable && (
-              <div className="px-5 py-2 bg-amber-500/5 border-b border-amber-500/20 text-[11px] text-amber-400/80">
+              <div className="px-5 py-2 bg-amber-50 border-b border-amber-100 text-[11px] text-amber-700">
                 {t('permissions.matrix.readOnlyHint')}
               </div>
             )}
 
             {loading ? (
-              <div className="flex items-center justify-center py-20 text-slate-500 text-sm">
+              <div className="flex items-center justify-center py-20 text-slate-400 text-sm">
                 <RefreshCw className="w-5 h-5 animate-spin mr-2" />
                 {t('permissions.matrix.loading')}
               </div>
             ) : (
-              <div className="divide-y divide-slate-800/70">
+              <div className="divide-y divide-slate-100">
                 {moduleKeys.map((mod) => {
                   const actions = catalog[mod] || [];
                   const allChecked = moduleAllChecked(mod);
                   const partial = modulePartial(mod);
                   return (
-                    <div key={mod} className="px-5 py-3.5 hover:bg-slate-800/30 transition-colors">
+                    <div key={mod} className="px-5 py-3.5 hover:bg-slate-50 transition-colors">
                       <div className="flex items-center justify-between mb-2">
                         <span
                           className={`text-sm font-medium ${
-                            allChecked ? 'text-slate-100' : partial ? 'text-slate-300' : 'text-slate-500'
+                            allChecked ? 'text-slate-800' : partial ? 'text-slate-600' : 'text-slate-400'
                           }`}
                         >
                           {t(`permissions.modules.${mod}`, { defaultValue: humanize(mod) })}
                           {partial && (
-                            <span className="ml-2 text-[10px] text-amber-500/70">
+                            <span className="ml-2 text-[10px] text-amber-600">
                               {t('permissions.matrix.partial')}
                             </span>
                           )}
@@ -417,8 +421,8 @@ export default function PermissionsPage() {
                             ${!isEditable ? 'opacity-30 cursor-not-allowed' : 'hover:scale-105'}
                             ${
                               allChecked
-                                ? 'bg-amber-500/20 border-amber-500/50 text-amber-400'
-                                : 'bg-slate-800 border-slate-700 text-slate-500 hover:border-slate-500'
+                                ? 'bg-amber-100 border-amber-300 text-amber-700'
+                                : 'bg-slate-50 border-slate-200 text-slate-500 hover:border-slate-300'
                             }`}
                         >
                           {t('permissions.matrix.all')}
@@ -438,8 +442,8 @@ export default function PermissionsPage() {
                                 ${!isEditable ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:scale-[1.03]'}
                                 ${
                                   on
-                                    ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-300'
-                                    : 'bg-slate-800/60 border-slate-700 text-slate-500 hover:border-slate-500'
+                                    ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                                    : 'bg-slate-50 border-slate-200 text-slate-500 hover:border-slate-300'
                                 }`}
                             >
                               {on ? (
