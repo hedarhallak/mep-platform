@@ -124,7 +124,8 @@ export default {
     fill: 'Fill',
     fillModal: {
       title: 'Fill {{trade}} — need {{n}} on {{date}}',
-      hint: 'Pick the workers to assign. Tip: filter by trade, then select.',
+      hint: 'Only employees free on this date are shown.',
+      noneAvailable: 'No available employees of this trade for this date.',
       assign: 'Assign ({{count}})',
       assigned: '{{count}} assigned ✓',
       skipped: '{{count}} skipped (already assigned)',

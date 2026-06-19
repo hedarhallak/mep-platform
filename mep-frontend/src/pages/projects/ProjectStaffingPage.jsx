@@ -185,14 +185,26 @@ function RequirementModal({ projectId, requirement, onClose, onSaved }) {
 }
 
 // §147 Phase 2 — fill a red coverage gap by assigning people for this trade on
-// the viewed date. Reuses POST /assignments/requests (admins auto-approve →
-// §144 distance+allowance computed). The MemberSelector carries its own trade
-// filter, so the manager narrows to the gap's trade in one click.
-function FillGapModal({ projectId, date, trade, gap, workers, onClose, onFilled }) {
+// the viewed date. Fetches ONLY available employees (not already assigned that
+// day) for the gap's trade via /assignments/available, so the manager never
+// re-picks someone already placed. Reuses POST /assignments/requests (admins
+// auto-approve → §144 distance+allowance). `available` rows carry id = employee_id.
+function FillGapModal({ projectId, date, trade, gap, onClose, onFilled }) {
   const { t } = useTranslation()
+  const [available, setAvailable] = useState([])
   const [members, setMembers] = useState([])
+  const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState(null)
+
+  useEffect(() => {
+    setLoading(true)
+    api
+      .get(`/assignments/available?date=${encodeURIComponent(date)}&trade=${encodeURIComponent(trade)}`)
+      .then((r) => setAvailable(r.data.workers || []))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [date, trade])
 
   const submit = async () => {
     if (!members.length) return
@@ -215,6 +227,8 @@ function FillGapModal({ projectId, date, trade, gap, workers, onClose, onFilled 
     setResult({ created, skipped: outcomes.length - created })
     setSubmitting(false)
     if (created > 0) {
+      const picked = new Set(members.map((m) => m.id))
+      setAvailable((a) => a.filter((w) => !picked.has(w.id))) // drop just-assigned
       setMembers([])
       onFilled()
     }
@@ -236,7 +250,15 @@ function FillGapModal({ projectId, date, trade, gap, workers, onClose, onFilled 
         </div>
         <div className="px-6 py-4 space-y-3 max-h-[65vh] overflow-y-auto">
           <p className="text-xs text-slate-400">{t('projectStaffing.fillModal.hint')}</p>
-          <MemberSelector workers={workers} value={members} onChange={setMembers} />
+          {loading ? (
+            <div className="flex justify-center py-6">
+              <Loader2 className="w-5 h-5 animate-spin text-slate-300" />
+            </div>
+          ) : available.length === 0 ? (
+            <p className="text-center text-xs text-slate-400 py-6">{t('projectStaffing.fillModal.noneAvailable')}</p>
+          ) : (
+            <MemberSelector workers={available} value={members} onChange={setMembers} />
+          )}
           {result && (
             <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-xs text-emerald-700 font-semibold">
               <Check className="w-4 h-4 flex-shrink-0" />
@@ -274,7 +296,6 @@ export default function ProjectStaffingPage() {
   const [loading, setLoading] = useState(false)
   const [modal, setModal] = useState(null) // null | 'new' | requirement
   const [fillGap, setFillGap] = useState(null) // null | { trade_code, gap }
-  const [workers, setWorkers] = useState([])
   const [error, setError] = useState('')
 
   const canCreate = can('assignments', 'create')
@@ -282,7 +303,6 @@ export default function ProjectStaffingPage() {
 
   useEffect(() => {
     api.get('/projects').then((r) => setProjects(r.data.projects || [])).catch(() => {})
-    api.get('/hub/workers').then((r) => setWorkers(r.data.workers || [])).catch(() => {})
   }, [])
 
   const loadRequirements = async (pid) => {
@@ -525,7 +545,6 @@ export default function ProjectStaffingPage() {
           date={date}
           trade={fillGap.trade_code}
           gap={fillGap.gap}
-          workers={workers}
           onClose={() => setFillGap(null)}
           onFilled={() => loadCoverage(projectId, date)}
         />
