@@ -42,7 +42,7 @@ describe('ForemanRequestPage', () => {
     render(<ForemanRequestPage />)
     await waitFor(() => expect(screen.getByText('Ali H')).toBeInTheDocument())
     expect(apiGet).toHaveBeenCalledWith('/hub/my-projects')
-    expect(apiGet).toHaveBeenCalledWith('/hub/workers')
+    expect(apiGet).toHaveBeenCalledWith(expect.stringContaining('/assignments/available'))
   })
 
   test('submitting posts one PENDING request per chosen member', async () => {
