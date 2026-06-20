@@ -52,5 +52,5 @@ export default function HubMenuScreen() {
     }] : []),
   ];
 
-  return <SubMenuScreen title="My Hub" items={items} />;
+  return <SubMenuScreen title={t('modules.myHub')} items={items} />;
 }

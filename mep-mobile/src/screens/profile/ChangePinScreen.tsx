@@ -13,11 +13,13 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { apiClient } from '../../api/client';
 import Colors from '../../theme/colors';
 
 export default function ChangePinScreen() {
   const navigation = useNavigation();
+  const { t } = useTranslation();
   const [currentPin, setCurrentPin] = useState('');
   const [newPin, setNewPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
@@ -28,19 +30,19 @@ export default function ChangePinScreen() {
 
   const handleChange = async () => {
     if (!currentPin || !newPin || !confirmPin) {
-      Alert.alert('Error', 'Please fill all fields.');
+      Alert.alert(t('common.error'), t('auth.fillAllFields'));
       return;
     }
     if (newPin !== confirmPin) {
-      Alert.alert('Error', 'New PIN and confirmation do not match.');
+      Alert.alert(t('common.error'), t('auth.pinMismatch'));
       return;
     }
     if (newPin.length < 4 || newPin.length > 8) {
-      Alert.alert('Error', 'New PIN must be 4-8 characters.');
+      Alert.alert(t('common.error'), t('auth.pinLength'));
       return;
     }
     if (currentPin === newPin) {
-      Alert.alert('Error', 'New PIN must be different from current PIN.');
+      Alert.alert(t('common.error'), t('auth.pinSameAsCurrent'));
       return;
     }
 
@@ -50,17 +52,17 @@ export default function ChangePinScreen() {
         current_pin: currentPin,
         new_pin: newPin,
       });
-      Alert.alert('Success', 'PIN changed successfully!', [
-        { text: 'OK', onPress: () => navigation.goBack() },
+      Alert.alert(t('common.success'), t('auth.pinChangedBang'), [
+        { text: t('common.ok'), onPress: () => navigation.goBack() },
       ]);
     } catch (err: any) {
       const error = err.response?.data?.error;
       const msg = error === 'WRONG_CURRENT_PIN'
-        ? 'Current PIN is incorrect.'
+        ? t('auth.wrongCurrentPin')
         : error === 'SAME_PIN'
-        ? 'New PIN must be different from current PIN.'
-        : err.response?.data?.message || 'Failed to change PIN.';
-      Alert.alert('Error', msg);
+        ? t('auth.pinSameAsCurrent')
+        : err.response?.data?.message || t('auth.changePinFailed');
+      Alert.alert(t('common.error'), msg);
     } finally {
       setLoading(false);
     }
@@ -75,15 +77,15 @@ export default function ChangePinScreen() {
 
         <View style={styles.infoCard}>
           <Ionicons name="information-circle-outline" size={20} color="#2563eb" />
-          <Text style={styles.infoText}>PIN must be 4-8 characters.</Text>
+          <Text style={styles.infoText}>{t('auth.pinHint')}</Text>
         </View>
 
         <View style={styles.formCard}>
-          <Text style={styles.fieldLabel}>Current PIN</Text>
+          <Text style={styles.fieldLabel}>{t('auth.currentPin')}</Text>
           <View style={styles.inputRow}>
             <TextInput
               style={styles.input}
-              placeholder="Enter current PIN"
+              placeholder={t('auth.currentPinPlaceholder')}
               placeholderTextColor="#9ca3af"
               secureTextEntry={!showCurrent}
               keyboardType="number-pad"
@@ -95,11 +97,11 @@ export default function ChangePinScreen() {
             </TouchableOpacity>
           </View>
 
-          <Text style={[styles.fieldLabel, { marginTop: 16 }]}>New PIN</Text>
+          <Text style={[styles.fieldLabel, { marginTop: 16 }]}>{t('auth.newPin')}</Text>
           <View style={styles.inputRow}>
             <TextInput
               style={styles.input}
-              placeholder="Enter new PIN"
+              placeholder={t('auth.newPinPlaceholder')}
               placeholderTextColor="#9ca3af"
               secureTextEntry={!showNew}
               keyboardType="number-pad"
@@ -111,11 +113,11 @@ export default function ChangePinScreen() {
             </TouchableOpacity>
           </View>
 
-          <Text style={[styles.fieldLabel, { marginTop: 16 }]}>Confirm New PIN</Text>
+          <Text style={[styles.fieldLabel, { marginTop: 16 }]}>{t('auth.confirmPin')}</Text>
           <View style={styles.inputRow}>
             <TextInput
               style={styles.input}
-              placeholder="Confirm new PIN"
+              placeholder={t('auth.confirmPinPlaceholder')}
               placeholderTextColor="#9ca3af"
               secureTextEntry={!showConfirm}
               keyboardType="number-pad"
@@ -138,7 +140,7 @@ export default function ChangePinScreen() {
           ) : (
             <>
               <Ionicons name="key-outline" size={20} color="#ffffff" />
-              <Text style={styles.submitText}>Change PIN</Text>
+              <Text style={styles.submitText}>{t('auth.changePin')}</Text>
             </>
           )}
         </TouchableOpacity>

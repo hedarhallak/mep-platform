@@ -48,13 +48,14 @@ function getDaysInMonth(y: number, m: number) { return new Date(y, m+1, 0).getDa
 function getFirstDay(y: number, m: number) { return new Date(y, m, 1).getDay(); }
 
 function ImageViewer({ uri, onClose }: { uri: string; onClose: () => void }) {
+  const { t } = useTranslation();
   return (
     <Modal visible transparent animationType="fade">
       <View style={{ flex:1, backgroundColor:'rgba(0,0,0,0.97)' }}>
         <TouchableOpacity style={{ position:'absolute', top:50, right:20, zIndex:10, padding:10, backgroundColor:'rgba(255,255,255,0.15)', borderRadius:20 }} onPress={onClose}>
           <Ionicons name="close" size={24} color="#fff" />
         </TouchableOpacity>
-        <Text style={{ position:'absolute', top:56, left:0, right:0, textAlign:'center', color:'rgba(255,255,255,0.4)', fontSize:12, zIndex:5 }}>Pinch to zoom Â· Double tap to reset</Text>
+        <Text style={{ position:'absolute', top:56, left:0, right:0, textAlign:'center', color:'rgba(255,255,255,0.4)', fontSize:12, zIndex:5 }}>{t('hub.zoomHint')}</Text>
         <ScrollView
           style={{ flex:1 }}
           contentContainerStyle={{ flex:1, justifyContent:'center', alignItems:'center' }}
@@ -133,7 +134,7 @@ export default function MyHubScreen() {
     try {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!perm.granted) {
-        Alert.alert('Permission required', 'Please allow photo access to attach a completion image.');
+        Alert.alert(t('common.error'), t('hub.photoPermission'));
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -147,7 +148,7 @@ export default function MyHubScreen() {
       const type = asset.mimeType || 'image/jpeg';
       setCompletionFile({ uri: asset.uri, name, type });
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Failed to pick image.');
+      Alert.alert(t('common.error'), e?.message || t('hub.pickImageFailed'));
     }
   };
 
@@ -165,7 +166,7 @@ export default function MyHubScreen() {
       setMessages(p=>p.map(m=>m.id===id?{...m,acknowledged_at:new Date().toISOString()}:m));
       setCompletionFile(null); setCompletionNote('');
     } catch (e:any) {
-      Alert.alert('Error', e.response?.data?.error||'Failed to complete task.');
+      Alert.alert(t('common.error'), e.response?.data?.error||t('hub.completeFailed'));
     } finally { setCompletingId(null); }
   };
 
@@ -209,8 +210,8 @@ export default function MyHubScreen() {
                       <View style={[s.pBadge,{backgroundColor:priorityColor(msg.priority)+'20'}]}>
                         <Text style={[s.pText,{color:priorityColor(msg.priority)}]}>{msg.priority}</Text>
                       </View>
-                      {isNew&&<View style={s.newBadge}><Text style={s.newBadgeText}>NEW</Text></View>}
-                      {isDone&&<View style={s.doneBadge}><Text style={s.doneBadgeText}>Done</Text></View>}
+                      {isNew&&<View style={s.newBadge}><Text style={s.newBadgeText}>{t('common.new')}</Text></View>}
+                      {isDone&&<View style={s.doneBadge}><Text style={s.doneBadgeText}>{t('common.done')}</Text></View>}
                     </View>
                     <View style={s.row}>
                       {isNew&&<View style={s.dot}/>}
@@ -228,17 +229,17 @@ export default function MyHubScreen() {
                 {isOpen&&(
                   <View style={s.msgExpanded}>
                     {msg.body?<Text style={s.msgBodyFull}>{msg.body}</Text>:null}
-                    {msg.due_date&&<View style={s.dueRow}><Ionicons name="calendar-outline" size={14} color={Colors.danger}/><Text style={s.dueText}>Due: {fmtDueDate(msg.due_date!)}</Text></View>}
+                    {msg.due_date&&<View style={s.dueRow}><Ionicons name="calendar-outline" size={14} color={Colors.danger}/><Text style={s.dueText}>{t('tasks.due')}: {fmtDueDate(msg.due_date!)}</Text></View>}
                     {msg.file_url&&(
                       <TouchableOpacity onPress={()=>setFullScreenImg(`https://app.constrai.ca/uploads${msg.file_url}`)}><Image source={{uri:`https://app.constrai.ca/uploads${msg.file_url}`}} style={s.inboxImg} resizeMode="cover"/></TouchableOpacity>
                     )}
                     {!isDone&&(
                       <View style={{gap:8}}>
-                        <TextInput style={[s.input,{marginBottom:0}]} placeholder="Completion notes (optional)..." placeholderTextColor={Colors.textLight} value={completionNote} onChangeText={setCompletionNote} multiline numberOfLines={2}/>
+                        <TextInput style={[s.input,{marginBottom:0}]} placeholder={t('hub.completionNote')} placeholderTextColor={Colors.textLight} value={completionNote} onChangeText={setCompletionNote} multiline numberOfLines={2}/>
                         <TouchableOpacity style={s.completionPhotoBtn} onPress={pickCompletionImage}>
                           <Ionicons name="camera-outline" size={18} color={Colors.primary}/>
                           <Text style={[s.completionPhotoBtnText, !completionFile&&{color:Colors.textLight}]}>
-                            {completionFile ? completionFile.name : 'Add completion photo (optional)'}
+                            {completionFile ? completionFile.name : t('hub.addCompletionPhoto')}
                           </Text>
                           {completionFile&&<TouchableOpacity onPress={()=>setCompletionFile(null)}><Ionicons name="close-circle" size={16} color={Colors.danger}/></TouchableOpacity>}
                         </TouchableOpacity>
