@@ -16594,3 +16594,12 @@ Two more field screens toward web parity (both permission-gated via §149.3, EN/
 - Wired into `MainStackNavigator`; two new Dashboard modules; i18n EN/FR (`expenses.*`, `surplus.*`, `modules.expenses`). Amounts entered in dollars → `amount_cents`.
 
 Verified: tsc clean, `expo export` bundles (1558 modules). Remaining batches: C (Tools + Crews + Project Staffing), D (Standup + Employees/Suppliers/Projects incl. create). Excluded from mobile: Permissions matrix, BI, Billing.
+
+### 149.6 — Mobile Batch C: Tools + Crews
+
+Two more screens (permission-gated via §149.3, EN/FR):
+- **ToolsScreen** — request a tool: project picker + tool-catalog picker modal (`GET /api/tools/catalog`) + qty + note → `POST /api/tools/requests`; "My Requests" list (`GET /api/tools/requests`). Dashboard module gated by `materials.request_submit`.
+- **CrewsScreen** — read-only: crews list (`GET /api/crews` → name, foreman, member count, trade) + tap → detail modal with members (`GET /api/crews/:id`). Create/deploy stay on web for now. Dashboard module gated by `assignments.view`.
+- Wired into `MainStackNavigator`; two new Dashboard modules; i18n EN/FR (`tools.*`, `crews.*`, `modules.tools`, `modules.crews`).
+
+Verified: tsc clean, `expo export` bundles (1560 modules). Mobile now has 12 modules (was 6). Remaining: Batch D (Project Staffing read/coverage + Standup + Employees/Suppliers/Projects incl. create) + crew create/deploy. Excluded: Permissions matrix, BI, Billing.

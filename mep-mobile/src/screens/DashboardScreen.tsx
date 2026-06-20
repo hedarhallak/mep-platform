@@ -66,6 +66,8 @@ export default function DashboardScreen() {
     { id: 'purchase_orders', label: t('modules.purchaseOrders'), icon: 'document-text-outline', color: '#6d28d9', bg: '#f5f3ff', screen: 'PurchaseOrders', perms: [['purchase_orders', 'view'], ['purchase_orders', 'view_own']] },
     { id: 'expenses', label: t('modules.expenses'), icon: 'receipt-outline', color: '#ea580c', bg: '#fff7ed', screen: 'Expenses', perms: [['expense_claims', 'submit'], ['expense_claims', 'view']] },
     { id: 'surplus', label: t('modules.surplus'), icon: 'repeat-outline', color: '#0d9488', bg: '#f0fdfa', screen: 'Surplus', perms: [['materials', 'surplus_view'], ['materials', 'surplus_declare']] },
+    { id: 'tools', label: t('modules.tools'), icon: 'construct-outline', color: '#b45309', bg: '#fffbeb', screen: 'Tools', perms: [['materials', 'request_submit']] },
+    { id: 'crews', label: t('modules.crews'), icon: 'people-circle-outline', color: '#7c3aed', bg: '#f5f3ff', screen: 'Crews', perms: [['assignments', 'view']] },
   ];
   const canAny = usePermsStore(s => s.canAny);
   const permsLoaded = usePermsStore(s => s.loaded);
