@@ -16619,7 +16619,7 @@ Fixed (every user-visible string now goes through `t()`):
 New keys (added symmetrically to **both** `en.ts` and `fr.ts`): a batch under `auth.*` (PIN flow), `tasks.*`, `hub.*`, `profile.*`, and four `materials.*` (`mergedItems`, `sendOrderCount`, `mergeSendConfirm`, `mergeSendCount`). Final count **353 = 353**.
 
 Deliberately left:
-- `hub/TasksScreen.tsx` — **dead code** (not imported/routed anywhere; the live task flow is `TasksMenu → NewTask → SentTasks`). Its ~27 hardcoded strings never render. Flagged for separate deletion.
+- `hub/TasksScreen.tsx` — **dead code** (not imported/routed anywhere; the live task flow is `TasksMenu → NewTask → SentTasks`). Its ~27 hardcoded strings never render. Flagged for separate deletion → **deleted in PR #428** (560 lines, tsc-verified, separate session).
 - `ExpensesScreen` `placeholder="0.00"` — numeric format hint, locale-neutral (a FR `0,00` would break `Number()` parsing).
 
 Permanent guard: added **`src/i18n/parity.test.ts`** (mobile finally gets what web already had) — fails CI if an EN key lacks its FR twin (or vice-versa) or any value is empty. Mirrors the web `parity.test.js` philosophy.
