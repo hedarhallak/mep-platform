@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
 import { apiClient } from '../api/client';
+import { usePermsStore } from './usePermsStore';
 
 interface User {
   id: number;
@@ -32,6 +33,9 @@ export const useAuthStore = create<AuthStore>((set) => ({
       await SecureStore.setItemAsync('mep_refresh_token', refreshToken);
     }
     set({ user, token });
+    // §149: load the user's effective permissions so the Dashboard gates icons
+    // by permission (not a hardcoded role list).
+    usePermsStore.getState().fetchPerms();
   },
 
   logout: async () => {
@@ -47,6 +51,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     await SecureStore.deleteItemAsync('mep_token');
     await SecureStore.deleteItemAsync('mep_refresh_token');
     await SecureStore.deleteItemAsync('mep_user');
+    usePermsStore.getState().clear();
     set({ user: null, token: null });
   },
 
@@ -56,6 +61,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
       const userStr = await SecureStore.getItemAsync('mep_user');
       if (token && userStr) {
         set({ user: JSON.parse(userStr), token });
+        usePermsStore.getState().fetchPerms();
       }
     } catch (e) {
       // ignore

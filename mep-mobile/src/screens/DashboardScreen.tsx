@@ -1,4 +1,4 @@
-﻿import React from 'react';
+﻿import React, { useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,10 +7,12 @@ import {
   ScrollView,
   StatusBar,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useAuthStore } from '../store/useAuthStore';
+import { usePermsStore } from '../store/usePermsStore';
 import { useTranslation } from 'react-i18next';
 import Colors from '../theme/colors';
 
@@ -23,7 +25,9 @@ interface Module {
   color: string;
   bg: string;
   screen: string | null;
-  roles: string[];
+  // §149: visible when the user holds ANY of these [module, action] permissions
+  // (empty = always visible). Mirrors the web AppLayout's permission gating.
+  perms: [string, string][];
 }
 
 function getDisplayName(user: any): string {
@@ -52,20 +56,23 @@ export default function DashboardScreen() {
   const user = useAuthStore(s => s.user);
 
   const ALL_MODULES: Module[] = [
-    { id: 'attendance', label: t('modules.attendance'), icon: 'location-outline', color: Colors.primary, bg: Colors.primaryPale, screen: 'Attendance', roles: ['ALL'] },
-    { id: 'materials', label: t('modules.materials'), icon: 'cube-outline', color: '#0891b2', bg: '#ecfeff', screen: 'Materials', roles: ['ALL'] },
-    { id: 'report', label: t('modules.report'), icon: 'bar-chart-outline', color: '#7c3aed', bg: '#f5f3ff', screen: 'Report', roles: ['ALL'] },
-    { id: 'tasks', label: t('modules.tasks'), icon: 'checkmark-circle-outline', color: Colors.danger, bg: Colors.dangerBg, screen: 'Tasks', roles: ['FOREMAN', 'TRADE_ADMIN', 'TRADE_PROJECT_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN', 'IT_ADMIN'] },
-    { id: 'assignments', label: t('modules.assignments'), icon: 'clipboard-outline', color: '#d97706', bg: '#fffbeb', screen: 'SubmitRequest', roles: ['FOREMAN', 'TRADE_ADMIN', 'TRADE_PROJECT_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN', 'IT_ADMIN'] },
-    { id: 'standup', label: t('modules.standup'), icon: 'people-outline', color: '#059669', bg: '#ecfdf5', screen: null, roles: ['FOREMAN', 'TRADE_ADMIN', 'TRADE_PROJECT_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN'] },
-    { id: 'purchase_orders', label: t('modules.purchaseOrders'), icon: 'document-text-outline', color: '#6d28d9', bg: '#f5f3ff', screen: null, roles: ['FOREMAN', 'TRADE_ADMIN', 'TRADE_PROJECT_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN', 'IT_ADMIN'] },
+    { id: 'attendance', label: t('modules.attendance'), icon: 'location-outline', color: Colors.primary, bg: Colors.primaryPale, screen: 'Attendance', perms: [['attendance', 'view_self'], ['attendance', 'view'], ['attendance', 'checkin']] },
+    { id: 'materials', label: t('modules.materials'), icon: 'cube-outline', color: '#0891b2', bg: '#ecfeff', screen: 'Materials', perms: [['materials', 'request_submit'], ['materials', 'request_view_own'], ['materials', 'catalog_view']] },
+    { id: 'report', label: t('modules.report'), icon: 'bar-chart-outline', color: '#7c3aed', bg: '#f5f3ff', screen: 'Report', perms: [['reports', 'view_self'], ['reports', 'view']] },
+    { id: 'tasks', label: t('modules.tasks'), icon: 'checkmark-circle-outline', color: Colors.danger, bg: Colors.dangerBg, screen: 'Tasks', perms: [['hub', 'send_tasks']] },
+    { id: 'assignments', label: t('modules.assignments'), icon: 'clipboard-outline', color: '#d97706', bg: '#fffbeb', screen: 'SubmitRequest', perms: [['assignments', 'create']] },
+    { id: 'standup', label: t('modules.standup'), icon: 'people-outline', color: '#059669', bg: '#ecfdf5', screen: null, perms: [['standup', 'manage']] },
+    { id: 'purchase_orders', label: t('modules.purchaseOrders'), icon: 'document-text-outline', color: '#6d28d9', bg: '#f5f3ff', screen: null, perms: [['purchase_orders', 'view'], ['purchase_orders', 'view_own']] },
   ];
+  const canAny = usePermsStore(s => s.canAny);
+  const permsLoaded = usePermsStore(s => s.loaded);
+  const fetchPerms = usePermsStore(s => s.fetchPerms);
+  // Refresh permissions when the Dashboard mounts (covers a failed login-time
+  // fetch + reflects any company/user permission change since last load).
+  useEffect(() => { fetchPerms(); }, [fetchPerms]);
+
+  const modules = ALL_MODULES.filter(m => m.perms.length === 0 || canAny(m.perms));
   const role = user?.role || 'WORKER';
-  const modules = ALL_MODULES.filter(m => {
-    const r = role.toUpperCase();
-    if (m.roles.includes('ALL')) return true;
-    return m.roles.map((x: string) => x.toUpperCase()).includes(r);
-  });
   const displayName = getDisplayName(user);
 
   const handleModulePress = (mod: Module) => {
@@ -99,6 +106,9 @@ export default function DashboardScreen() {
       >
         <Text style={styles.sectionTitle}>{t('dashboard.quickAccess')}</Text>
 
+        {!permsLoaded ? (
+          <ActivityIndicator color={Colors.primary} style={{ marginTop: 40 }} />
+        ) : (
         <View style={styles.modulesGrid}>
           {modules.map(mod => (
             <TouchableOpacity
@@ -119,6 +129,7 @@ export default function DashboardScreen() {
             </TouchableOpacity>
           ))}
         </View>
+        )}
       </ScrollView>
     </View>
   );

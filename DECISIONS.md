@@ -16564,3 +16564,13 @@ The first EAS build of Phase 1 failed at the "Bundle JavaScript" phase — NOT f
 Fix: `npx expo install --fix` realigned most to SDK-54 versions; then manually corrected the leftovers — removed the duplicate `babel-preset-expo` from dependencies + set devDeps to `~54.0.10`, `@types/react` → `~19.1.10`, and REMOVED the redundant direct `@react-native/jest-preset` (jest uses the `jest-expo` preset, which pulls the right one). Deleted node_modules + package-lock and clean-installed (also dropped a stale `react-native-windows` that was forcing an ERESOLVE). Verified: `react-native 0.81.5`, `expo export` bundles the iOS JS cleanly (4.67 MB), `tsc --noEmit` clean, jest 9/9. EAS build should now succeed.
 
 FOLLOW-UP: configure Dependabot to IGNORE the Expo-pinned packages (react-native, react, babel-preset-expo, react-native-*, @types/react) so it stops re-breaking the build — these must track the Expo SDK, not latest.
+
+### 149.3 — Mobile Dashboard is now permission-driven (reflects §148 web permissions)
+
+Hedar (testing on device, logged in as admin): noticed the mobile icons were gated by HARDCODED role lists, not the actual §148 permissions — so they didn't reflect what the web shows (and ignored per-company/per-user tuning). Fixed:
+
+- **`src/store/usePermsStore.ts`** (new, zustand) — fetches `/api/permissions/my-permissions` (the same endpoint the web uses; it already applies user ▸ company ▸ role resolution and grants SUPER_ADMIN everything) and exposes `can(module, action)` + `canAny([[m,a],...])`. Fails closed.
+- **`useAuthStore`** — calls `fetchPerms()` after login + on `loadFromStorage` (app restart); `clear()` on logout.
+- **`DashboardScreen`** — each module now carries `perms: [[module, action], ...]` (canAny) instead of a `roles: [...]` list; the grid filters by `canAny`, and re-fetches perms on mount (covers a failed login-time fetch + reflects permission changes). Shows a spinner until perms load. Mapping mirrors the web AppLayout (attendance.view_self, materials.request_submit, reports.view_self, hub.send_tasks, assignments.create, standup.manage, purchase_orders.view).
+
+Now mobile icons === the user's effective web permissions. Every future mobile screen gates itself by permission automatically. (standup + purchase_orders still show "Coming Soon" when permitted — they're just not BUILT yet, Phase 5+.) Verified: tsc clean, `expo export` bundles, jest 9/9.
