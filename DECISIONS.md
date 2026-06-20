@@ -16491,3 +16491,9 @@ Fix — made the role lists data-driven (same source as the matrix):
 - **test** — `/roles` is 200 for a settings.user_management-only holder.
 
 Note (latent, separate): `routes/user_management.js` PATCH `/:id/role` still uses a hardcoded inverted `ROLE_RANK` map with `?? 99`, so the new roles are all treated as least-senior for the assign rank-check — assignment works but the rank ordering among new roles isn't enforced there. Data-driving that map (like the matrix) is a follow-up.
+
+### 148.18 — Bugfix: role change rejected new/non-legacy roles (INVALID_ROLE)
+
+Hedar (testing): changing a user from Apprentice 3 → Apprentice 4 failed with "Invalid role selected". Root cause: `routes/user_management.js` PATCH `/:id/role` validated `newRole` against a hardcoded `ALLOWED_ROLES` list of just 5 roles (IT_ADMIN, COMPANY_ADMIN, TRADE_PROJECT_MANAGER, TRADE_ADMIN, WORKER) — so FOREMAN, JOURNEYMAN, APPRENTICE_1-4, DRIVER, OWNER and all 18 Phase-4 roles were rejected as INVALID_ROLE. (Same hardcoded-list disease as 148.17, on the write side.)
+
+Fix: validation is now data-driven — `SELECT 1 FROM public.roles WHERE role_key = $1 AND is_active = true`; any active catalog role is assignable, the rank-lock still gates who-assigns-what. Removed `ALLOWED_ROLES`. The `ROLE_RANK` map stays (also used by the deactivate handler) — fine, since new roles fall to the least-senior default and all sit below COMPANY_ADMIN, and only company-level admins reach user management. Updated the phase75f test (FOREMAN now 200; a bogus role still 400). Fully data-driving `ROLE_RANK` (so rank ordering among the new roles is exact) remains the 148.17 follow-up.
