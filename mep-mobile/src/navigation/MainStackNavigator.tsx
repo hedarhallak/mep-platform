@@ -22,6 +22,11 @@ import ExpensesScreen from '../screens/materials/ExpensesScreen';
 import SurplusScreen from '../screens/materials/SurplusScreen';
 import ToolsScreen from '../screens/materials/ToolsScreen';
 import CrewsScreen from '../screens/assignments/CrewsScreen';
+import ProjectStaffingScreen from '../screens/projects/ProjectStaffingScreen';
+import StandupScreen from '../screens/standup/StandupScreen';
+import EmployeesScreen from '../screens/employees/EmployeesScreen';
+import SuppliersScreen from '../screens/suppliers/SuppliersScreen';
+import ProjectsScreen from '../screens/projects/ProjectsScreen';
 
 const Stack = createStackNavigator();
 
@@ -58,6 +63,20 @@ export default function MainStackNavigator() {
         options={{ ...headerOptions, headerShown: true, title: t('tools.title') }} />
       <Stack.Screen name="Crews" component={CrewsScreen}
         options={{ ...headerOptions, headerShown: true, title: t('crews.title') }} />
+
+      {/* §149 Batch D — Project Staffing + Standup */}
+      <Stack.Screen name="ProjectStaffing" component={ProjectStaffingScreen}
+        options={{ ...headerOptions, headerShown: true, title: t('projectStaffing.title') }} />
+      <Stack.Screen name="Standup" component={StandupScreen}
+        options={{ ...headerOptions, headerShown: true, title: t('standup.title') }} />
+
+      {/* §149 Batch D — Employees + Suppliers + Projects (list + create) */}
+      <Stack.Screen name="Employees" component={EmployeesScreen}
+        options={{ ...headerOptions, headerShown: true, title: t('modules.employees') }} />
+      <Stack.Screen name="Suppliers" component={SuppliersScreen}
+        options={{ ...headerOptions, headerShown: true, title: t('modules.suppliers') }} />
+      <Stack.Screen name="Projects" component={ProjectsScreen}
+        options={{ ...headerOptions, headerShown: true, title: t('modules.projects') }} />
 
       {/* Materials */}
       <Stack.Screen name="Materials" component={MaterialsMenuScreen}
