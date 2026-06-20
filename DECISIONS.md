@@ -16625,3 +16625,19 @@ Deliberately left:
 Permanent guard: added **`src/i18n/parity.test.ts`** (mobile finally gets what web already had) — fails CI if an EN key lacks its FR twin (or vice-versa) or any value is empty. Mirrors the web `parity.test.js` philosophy.
 
 Verified: `npx tsc --noEmit` clean, parity script 353=353, `jest src/i18n/parity.test.ts` 4/4 green. Hedar to run the EAS build + device test.
+
+### 149.8 — Mobile Batch D (part 1): Project Staffing + Standup + Employees/Suppliers/Projects (with create)
+
+Five new mobile screens toward web parity, all permission-gated via the §149.3 store and EN/FR from day one. Backend contracts were verified against the route handlers first (the recon flagged several "inferred" endpoints in `routes/projects.js` that don't exist — the requirements/coverage routes actually live in `routes/project_requirements.js`, mounted under `/api/projects`).
+
+- **ProjectStaffingScreen** (`screens/projects/`) — read/coverage: project chips + date picker → `GET /api/projects/:id/coverage?date=` table (required / assigned / gap per trade + totals, gap shown red) + `GET /api/projects/:id/requirements` planned-phase list. Trade-scoped by the backend. Dashboard module `project_staffing` gated by `assignments.view`/`edit`.
+- **StandupScreen** (`screens/standup/`) — foreman tomorrow view: `GET /api/standup/tomorrow` → per-project cards (approved WORKER roster + shift, tomorrow's material request items read-only, session status) + "mark standup done" (`POST /standup/session` then `/session/:id/complete`). Wired the existing `standup` Dashboard module (was Coming-Soon) to the screen. Gated by `standup.manage`.
+- **EmployeesScreen** (`screens/employees/`) — list (`GET /api/employees`) + search + **invite** (`POST /api/invite-employee` { first_name, last_name, email, role, trade_type_id? }). Invite roles are the hardcoded invitable set (WORKER/FOREMAN/JOURNEYMAN/TRADE_ADMIN/TRADE_PROJECT_MANAGER — mirrors web `INVITE_ROLES_KEYS`, because `/permissions/roles` needs an admin perm the inviter may lack). Trade list from `/projects/meta` (trade optional). Invite button gated by `employees.invite`; module by `employees.view`.
+- **SuppliersScreen** (`screens/suppliers/`) — list + search + **create** (`POST /api/suppliers`); trade picker from `/projects/meta` codes + ALL. FAB + create gated by `suppliers.create`; module by `suppliers.view`.
+- **ProjectsScreen** (`screens/projects/`) — list + search + **create** (`POST /api/projects`); trade/status/client pickers from `/projects/meta`, CCQ-sector chips. **Mobile create omits the map/geocode step** (address is plain text, no lat/lng) — deliberate simplification. Gated by `projects.create` / `projects.view`.
+
+New i18n: `projectStaffing.*`, `standup.*`, `employees.*`, `suppliers.*`, `projects.*` (+ `modules.*` labels), symmetric in both locales. Count **412 = 412**.
+
+Mobile now exposes ~17 modules (was 12). **Still pending in Batch D: crew create/deploy** (the existing `CrewsScreen` stays read-only for now — the `/crews/:id/plan` deploy/confirm flow is the most complex and is deferred to a follow-up). Excluded as agreed: Permissions matrix, BI, Billing.
+
+Verified: `npx tsc --noEmit` clean, parity 412=412, `jest src/i18n/parity.test.ts` 4/4 green. Hedar to run the EAS build + device test.
