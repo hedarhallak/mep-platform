@@ -16480,3 +16480,14 @@ The admin surface for the Phase 5a backend. In `UserManagementPage.jsx`, each us
 - New UI strings use `t(key, {defaultValue})` so NO locale keys are added → the §145 EN/FR parity test stays green. Reuses existing `permissions.modules.*` / `permissions.actions.*` labels.
 
 **§148 is now COMPLETE end-to-end:** data-driven roles (1) → dynamic matrix (2) → per-company layer + writes (3a/3b) → expanded catalog (4) → per-user overrides (5a/5b). Resolution everywhere: user_permissions ▸ company_role_permissions ▸ role_permissions, with audit.view OWNER-only throughout. No migration (Phase 5 reuses the existing user_permissions table).
+
+### 148.17 — Bugfix: User Management role dropdown was hardcoded to 5 roles
+
+Hedar (testing live): the "Change Role" dropdown showed only Worker / Trade Admin / Trade Project Manager / Company Admin / IT Admin — so Foreman, Journeyman, Apprentice 1-4, Driver, Owner AND all 18 Phase-4 roles were unselectable (you couldn't promote an apprentice → journeyman → foreman). Root cause: `UserManagementPage.jsx` had a hardcoded `ROLE_VALUES` array that never tracked the §148 data-driven catalog.
+
+Fix — made the role lists data-driven (same source as the matrix):
+- **frontend** — the page fetches `GET /permissions/roles`; the Change Role dropdown shows the **assignable** roles (catalog rank strictly below the admin's, SUPER_ADMIN = all, current role always included so it displays), and the filter dropdown shows the full catalog. Labels come from the catalog (`roleLabelOf`), so RoleBadge + dropdowns render proper names for the new roles. Removed the hardcoded `ROLE_VALUES`.
+- **backend** — `GET /permissions/roles` gate widened from `can('settings.permissions')` to `canAny(['settings.permissions','settings.user_management'])` so a user-manager who (via Phase 3b) lost settings.permissions can still load the dropdown.
+- **test** — `/roles` is 200 for a settings.user_management-only holder.
+
+Note (latent, separate): `routes/user_management.js` PATCH `/:id/role` still uses a hardcoded inverted `ROLE_RANK` map with `?? 99`, so the new roles are all treated as least-senior for the assign rank-check — assignment works but the rank ordering among new roles isn't enforced there. Data-driving that map (like the matrix) is a follow-up.
