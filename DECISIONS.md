@@ -16529,3 +16529,7 @@ Hedar asked to verify everything is EN/FR. Audit (read-only subagent) found: **0
 - **Precedence flip** (important): role labels were resolved as `dbLabel || t(key)` — the English DB `roles.label` always won over the i18n key. Flipped to `t(key, { defaultValue: dbLabel || humanize })` in PermissionsPage (×2) + UserManagementPage `roleLabelOf` (now points at the canonical `permissions.roles.*` namespace), so FR translations actually show.
 
 The `i18n/locales/parity.test.js` (EN/FR key parity) stays green — every key added to both. Base app was already EN/FR (§145); this closes the §148 gap. Verified: parity 4/4, PermissionsPage test green.
+
+### 148.22 — In-app language switcher (FR/EN toggle in the sidebar)
+
+Hedar: switching language should be possible from inside the app, not only at login, for flexibility moving between FR/EN. The `LanguageSwitcher` component already existed (a FR/EN pill that calls `i18n.changeLanguage` + persists to localStorage `constrai_language`) but was only on a few pages + the login screen. Added it to `AppLayout` (the sidebar user footer, above the company/profile row) so it's reachable from EVERY authenticated page. One-line change effectively — import + render the existing component. (The scattered per-page switchers are left as-is; harmless.)
