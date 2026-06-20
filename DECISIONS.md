@@ -16517,3 +16517,15 @@ Hedar: the per-user Permissions modal needed a reset that reverts THIS EMPLOYEE 
 - **test** — grant a WORKER an override, DELETE, GET shows `overrides == {}`.
 
 No migration. Two distinct resets now exist: matrix Reset (role default, §148.13) vs per-user Reset (clear this user's overrides, §148.20).
+
+### 148.21 — i18n: translate the §148 UI to French (it was English-only)
+
+Hedar asked to verify everything is EN/FR. Audit (read-only subagent) found: **0 hardcoded JSX strings** (all wrapped in `t()`), but the §148 work added strings that bypassed the locales — they used `t(key, {defaultValue})` with the keys absent from en.js/fr.js, so they showed ENGLISH even in FR mode. This matters: the app's primary users are francophone (Québec construction). Gaps fixed:
+
+- **`userPerms.*`** (11 keys, the per-user permissions modal) — added to both locales with FR translations.
+- **`permissions.roles.*`** — expanded from 13 → 31 roles (the 18 Phase-4 roles were missing); FR labels (e.g. CONSTRUCTION_MANAGER = "Directeur de construction", ESTIMATOR = "Estimateur", DISPATCHER = "Répartiteur", QA_QC_OFFICER = "Agent AQ/CQ").
+- **`permissions.modules.*`** — added audit, bi, hub, tasks, materials, expense_claims (were falling to humanize = English).
+- **`permissions.actions.*`** — expanded from 5 → ~37 actions (smart_assign, view_own_trade, checkin, catalog_view, request_*, surplus_*, access_*, send_tasks, etc.) — these are what the data-driven matrix renders.
+- **Precedence flip** (important): role labels were resolved as `dbLabel || t(key)` — the English DB `roles.label` always won over the i18n key. Flipped to `t(key, { defaultValue: dbLabel || humanize })` in PermissionsPage (×2) + UserManagementPage `roleLabelOf` (now points at the canonical `permissions.roles.*` namespace), so FR translations actually show.
+
+The `i18n/locales/parity.test.js` (EN/FR key parity) stays green — every key added to both. Base app was already EN/FR (§145); this closes the §148 gap. Verified: parity 4/4, PermissionsPage test green.

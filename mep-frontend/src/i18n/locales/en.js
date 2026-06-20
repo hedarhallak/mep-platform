@@ -151,7 +151,8 @@ export default {
 
   foremanRequest: {
     title: 'Submit a Staffing Request',
-    subtitle: 'Pick your project, date, and the team you need — sent to the dispatcher for approval',
+    subtitle:
+      'Pick your project, date, and the team you need — sent to the dispatcher for approval',
     project: 'Project',
     selectProject: 'Select a project…',
     noProjects: 'You have no projects assigned yet.',
@@ -181,11 +182,17 @@ export default {
     subtitle: 'Request tools from the warehouse and track where each one is',
     tabs: { request: 'Request', assets: 'Assets' },
     trades: {
-      GENERAL: 'General', ELECTRICAL: 'Electrical', PLUMBING: 'Plumbing',
-      MECHANICAL: 'Mechanical', LAYOUT: 'Layout',
+      GENERAL: 'General',
+      ELECTRICAL: 'Electrical',
+      PLUMBING: 'Plumbing',
+      MECHANICAL: 'Mechanical',
+      LAYOUT: 'Layout',
     },
     assetStatus: {
-      AVAILABLE: 'Available', ASSIGNED: 'On site', MAINTENANCE: 'Maintenance', RETIRED: 'Retired',
+      AVAILABLE: 'Available',
+      ASSIGNED: 'On site',
+      MAINTENANCE: 'Maintenance',
+      RETIRED: 'Retired',
     },
     request: {
       project: 'Project',
@@ -218,7 +225,10 @@ export default {
     subtitle: 'Bought something urgent for the site? Upload the receipt here',
     tabs: { submit: 'Submit', claims: 'Claims' },
     status: {
-      PENDING: 'Pending', APPROVED: 'Reviewed', REJECTED: 'Objection', PAID: 'Reimbursed',
+      PENDING: 'Pending',
+      APPROVED: 'Reviewed',
+      REJECTED: 'Objection',
+      PAID: 'Reimbursed',
     },
     submit: {
       project: 'Project',
@@ -246,8 +256,12 @@ export default {
       view: 'View',
       reason: 'Reason',
       th: {
-        date: 'Date', vendor: 'Vendor', project: 'Project',
-        amount: 'Amount', status: 'Status', receipt: 'Receipt',
+        date: 'Date',
+        vendor: 'Vendor',
+        project: 'Project',
+        amount: 'Amount',
+        status: 'Status',
+        receipt: 'Receipt',
       },
     },
     actions: {
@@ -261,7 +275,8 @@ export default {
 
   ownerAudit: {
     title: 'Sensitive-Edit Audit',
-    subtitle: 'Owner-only view of high-risk changes (project location, assignments, attendance, company settings) — old → new.',
+    subtitle:
+      'Owner-only view of high-risk changes (project location, assignments, attendance, company settings) — old → new.',
     loading: 'Loading audit…',
     loadError: 'Failed to load the audit.',
     empty: 'No sensitive edits recorded yet.',
@@ -326,7 +341,8 @@ export default {
     title: 'Billing & Invoices',
     subtitle: 'All invoices issued to your company',
     loadError: 'Could not load invoices',
-    empty: 'No invoices yet. Subscription, training, and custom-demand invoices will appear here as they are issued.',
+    empty:
+      'No invoices yet. Subscription, training, and custom-demand invoices will appear here as they are issued.',
     totalCount: '{{count}} invoice(s) total',
     filters: {
       typeLabel: 'Type',
@@ -384,7 +400,8 @@ export default {
     seatsRemainingHelp: '{{count}} seats remaining before the limit.',
     trialEndsAt: 'Trial ends',
     nextBillingAt: 'Next billing',
-    cancelAtPeriodEnd: 'Your subscription is set to cancel at the end of the current billing period.',
+    cancelAtPeriodEnd:
+      'Your subscription is set to cancel at the end of the current billing period.',
     requestChanges: 'Request changes',
     requestExplanation:
       'Submit a request below. Your request will be recorded in our audit log and your email client will open with a pre-filled message to billing@constrai.ca for you to send. We process all requests within one business day.',
@@ -1078,7 +1095,8 @@ export default {
         sent: '📬 Sent',
       },
       pendingBanner_one: '{{count}} recipient will receive this task once assigned to the project',
-      pendingBanner_other: '{{count}} recipients will receive this task once assigned to the project',
+      pendingBanner_other:
+        '{{count}} recipients will receive this task once assigned to the project',
       attachedHasFile: 'File',
       dueLabel: 'Due {{date}}',
       recipientsSuffix_one: '{{count}} recipient',
@@ -1280,7 +1298,8 @@ export default {
         allDays: 'All Days',
         only41plus: '🚗 41km+ (T2200)',
       },
-      banner41plus: 'Showing only days where your worksite was 41km+ from home — eligible for T2200 tax declaration or company travel allowance.',
+      banner41plus:
+        'Showing only days where your worksite was 41km+ from home — eligible for T2200 tax declaration or company travel allowance.',
       stats: {
         daysWorked: 'Days Worked',
         regular: 'Regular Hours',
@@ -1306,7 +1325,8 @@ export default {
       empty41plus: 'No days with 41km+ distance for this period',
       emptyAll: 'No attendance records for this period',
       promptRun: 'Select a date range and press Run',
-      disclaimer: 'This report is generated from your confirmed attendance records. Hours marked as "Pending" may still be adjusted by your foreman. For official documentation, please contact your HR department.',
+      disclaimer:
+        'This report is generated from your confirmed attendance records. Hours marked as "Pending" may still be adjusted by your foreman. For official documentation, please contact your HR department.',
     },
   },
 
@@ -1390,7 +1410,8 @@ export default {
 
     matrix: {
       readOnly: 'Read-only',
-      readOnlyHint: 'You can only edit roles ranked below your own — this prevents anyone from raising their own access.',
+      readOnlyHint:
+        'You can only edit roles ranked below your own — this prevents anyone from raising their own access.',
       toggleColumn: 'Toggle column:',
       module: 'Module',
       all: 'All',
@@ -1405,6 +1426,37 @@ export default {
       edit: 'Edit',
       delete: 'Delete',
       approve: 'Approve',
+      submit: 'Submit',
+      invite: 'Invite',
+      print: 'Print',
+      send: 'Send',
+      access: 'Access',
+      manage: 'Manage',
+      checkin: 'Check-in',
+      smart_assign: 'Smart Assign',
+      view_self: 'View Self',
+      view_own: 'View Own',
+      view_own_trade: 'View Own Trade',
+      overtime_approve: 'Overtime Approve',
+      catalog_view: 'Catalog View',
+      request_submit: 'Request Submit',
+      request_view_all: 'Request View All',
+      request_view_own: 'Request View Own',
+      request_view_own_trade: 'Request View Own Trade',
+      surplus_declare: 'Surplus Declare',
+      surplus_view: 'Surplus View',
+      attendance_approval: 'Attendance Approval',
+      materials_inbox: 'Materials Inbox',
+      materials_merge_send: 'Materials Merge & Send',
+      receive_tasks: 'Receive Tasks',
+      send_tasks: 'Send Tasks',
+      access_full: 'Access Full',
+      access_own_trade: 'Access Own Trade',
+      workforce_planner: 'Workforce Planner',
+      company: 'Company',
+      permissions: 'Permissions',
+      system: 'System',
+      user_management: 'User Management',
       lockedSuffix: '(locked)',
     },
 
@@ -1414,27 +1466,52 @@ export default {
       employees: 'Employees',
       assignments: 'Assignments',
       attendance: 'Attendance',
+      materials: 'Materials',
       material_requests: 'Material Requests',
       purchase_orders: 'Purchase Orders',
       suppliers: 'Suppliers',
+      reports: 'Reports',
+      bi: 'BI',
+      hub: 'Hub',
+      tasks: 'Tasks',
+      audit: 'Audit',
+      expense_claims: 'Expense Claims',
       workforce_planner: 'Workforce Planner',
-      reports: 'Reports / BI',
       permissions: 'Permissions',
       settings: 'Settings',
     },
 
     roles: {
       SUPER_ADMIN: 'Super Admin',
+      OWNER: 'Owner',
       IT_ADMIN: 'IT Admin',
       COMPANY_ADMIN: 'Company Admin',
-      TRADE_PROJECT_MANAGER: 'Project Manager',
+      CONSTRUCTION_MANAGER: 'Construction Manager',
+      PROJECT_MANAGER: 'Project Manager',
+      TRADE_PROJECT_MANAGER: 'Trade Project Manager',
+      SUPERINTENDENT: 'Superintendent',
+      MEP_ENGINEER: 'MEP Engineer',
+      ESTIMATOR: 'Estimator',
+      PROJECT_ENGINEER: 'Project Engineer',
+      SITE_ENGINEER: 'Site Engineer',
+      ACCOUNTANT: 'Accountant',
+      BIM_COORDINATOR: 'BIM Coordinator',
+      HR_OFFICER: 'HR Officer',
       TRADE_ADMIN: 'Trade Admin',
+      GENERAL_FOREMAN: 'General Foreman',
       FOREMAN: 'Foreman',
+      DISPATCHER: 'Dispatcher',
+      PROCUREMENT_OFFICER: 'Procurement Officer',
+      SAFETY_OFFICER: 'Safety Officer',
+      QA_QC_OFFICER: 'QA/QC Officer',
+      PAYROLL_OFFICER: 'Payroll Officer',
+      OFFICE_CLERK: 'Office Clerk',
       JOURNEYMAN: 'Journeyman',
       APPRENTICE_4: 'Apprentice 4',
       APPRENTICE_3: 'Apprentice 3',
       APPRENTICE_2: 'Apprentice 2',
       APPRENTICE_1: 'Apprentice 1',
+      OPERATOR: 'Operator',
       WORKER: 'Worker',
       DRIVER: 'Driver',
     },
@@ -1447,6 +1524,21 @@ export default {
       saveFailed: 'Save failed',
       resetFailed: 'Reset failed',
     },
+  },
+
+  // §148 Phase 5b — per-user permission overrides (User Management modal).
+  userPerms: {
+    action: 'Permissions',
+    tooltip: "Edit this user's permissions",
+    heading: 'Permissions',
+    hint: 'Inherited from the role; an amber dot marks a personal override for this user.',
+    reset: 'Reset to default',
+    resetTooltip: 'Clear personal overrides — back to the role default',
+    confirmReset: 'Reset {{name}} to their role default? This clears all personal overrides.',
+    locked: 'You can only edit users whose role ranks below yours.',
+    loadFailed: 'Failed to load.',
+    saveFailed: 'Save failed',
+    resetFailed: 'Reset failed',
   },
 
   taskRequest: {
@@ -1648,7 +1740,8 @@ export default {
       username: 'Username',
       role: 'Role',
       adminAccountTitle: 'Admin Account',
-      adminAccountBody: 'This is an admin account without an employee profile. You can manage employees from the {{employeesLink}} page.',
+      adminAccountBody:
+        'This is an admin account without an employee profile. You can manage employees from the {{employeesLink}} page.',
       employees: 'Employees',
     },
 
@@ -1756,7 +1849,8 @@ export default {
         targetDate: 'Target date',
         generate: 'Generate plan',
         emptyTitle: 'Pick a date and generate a plan',
-        emptySubtitle: 'The system carries over today’s crews, fills gaps and staffs new projects by distance',
+        emptySubtitle:
+          'The system carries over today’s crews, fills gaps and staffs new projects by distance',
         noProjects: 'No active projects to plan',
         noSuggestions: 'No suggestions for this project',
         todayCount: '{{count}} working today',

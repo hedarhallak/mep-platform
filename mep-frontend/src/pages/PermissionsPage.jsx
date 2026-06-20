@@ -130,9 +130,9 @@ export default function PermissionsPage() {
   // §148 rank-lock: you may edit ONLY a role ranked strictly below yours.
   const isEditable = myRank > rankOf(selectedRole);
   const selectedRoleObj = roleList.find((r) => r.role_key === selectedRole);
-  const roleLabel =
-    selectedRoleObj?.label ||
-    t(`permissions.roles.${selectedRole}`, { defaultValue: humanize(selectedRole) });
+  const roleLabel = t(`permissions.roles.${selectedRole}`, {
+    defaultValue: selectedRoleObj?.label || humanize(selectedRole),
+  });
   const moduleKeys = Object.keys(catalog).sort();
 
   const showToast = (message, type = 'success') => setToast({ message, type });
@@ -354,9 +354,9 @@ export default function PermissionsPage() {
               const locked = myRank <= (role.rank ?? 0);
               const isSelected = selectedRole === role.role_key;
               const c = catColor(role.category);
-              const label =
-                role.label ||
-                t(`permissions.roles.${role.role_key}`, { defaultValue: humanize(role.role_key) });
+              const label = t(`permissions.roles.${role.role_key}`, {
+                defaultValue: role.label || humanize(role.role_key),
+              });
               return (
                 <button
                   key={role.role_key}
