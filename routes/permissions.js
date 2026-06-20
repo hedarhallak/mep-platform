@@ -554,6 +554,28 @@ router.put('/user/:userId', can('settings.permissions'), async (req, res) => {
   }
 });
 
+// DELETE /api/permissions/user/:userId — clear ALL of this user's personal
+// overrides, reverting them to their role + company baseline (per-user reset).
+router.delete('/user/:userId', can('settings.permissions'), async (req, res) => {
+  try {
+    const userId = Number(req.params.userId);
+    if (!Number.isInteger(userId) || userId <= 0)
+      return res.status(400).json({ error: 'Invalid user id' });
+
+    const t = await loadEditableTargetUser(req, userId);
+    if (t.error) return res.status(t.status).json({ error: t.error });
+
+    await req.db.query(`DELETE FROM public.user_permissions WHERE user_id = $1`, [userId]);
+    await logAudit(req, 'RESET_USER_PERMISSIONS', 'user_permissions', userId, null, {
+      user_id: userId,
+    });
+    res.json({ success: true, message: `Permissions reset for user ${t.user.name}` });
+  } catch (err) {
+    console.error('DELETE /permissions/user/:userId error:', err);
+    res.status(500).json({ error: 'Failed to reset user permissions' });
+  }
+});
+
 // ─────────────────────────────────────────────────────────────────
 // GET /api/permissions/audit
 // Tenant-scoped — only this endpoint actually benefits from RLS.

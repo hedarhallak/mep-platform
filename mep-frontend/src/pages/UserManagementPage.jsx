@@ -19,6 +19,7 @@ import {
   Ban,
   SlidersHorizontal,
   Check,
+  RefreshCw,
 } from 'lucide-react';
 
 // "smart_assign" → "Smart Assign" — fallback label for codes with no i18n key.
@@ -284,6 +285,22 @@ function UserPermissionsModal({ user, onClose }) {
       ),
   });
 
+  // Clears THIS user's personal overrides → reverts them to the role/company
+  // baseline (distinct from the matrix "Reset" which resets the role default).
+  const reset = useMutation({
+    mutationFn: () => api.delete(`/permissions/user/${user.id}`),
+    onSuccess: () => {
+      qc.invalidateQueries(['users']);
+      onClose();
+    },
+    onError: (err) =>
+      setError(
+        err.response?.data?.error || t('userPerms.resetFailed', { defaultValue: 'Reset failed' })
+      ),
+  });
+
+  const hasOverrides = data && Object.keys(data.overrides || {}).length > 0;
+
   const name = user.first_name ? `${user.first_name} ${user.last_name}` : user.username;
   const lockMsg =
     qErr?.response?.status === 403
@@ -379,6 +396,31 @@ function UserPermissionsModal({ user, onClose }) {
               </div>
             )}
             <div className="flex gap-3 px-6 py-4 border-t border-slate-100">
+              {/* Reset THIS user to their role/company default (clear overrides) */}
+              <button
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      t('userPerms.confirmReset', {
+                        defaultValue: `Reset ${name} to their role default? This clears all personal overrides.`,
+                      })
+                    )
+                  )
+                    reset.mutate();
+                }}
+                disabled={reset.isPending || !hasOverrides}
+                title={t('userPerms.resetTooltip', {
+                  defaultValue: 'Clear personal overrides — back to the role default',
+                })}
+                className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm font-medium text-slate-500 hover:text-red-600 hover:border-red-300 disabled:opacity-40 flex items-center gap-1.5"
+              >
+                {reset.isPending ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <RefreshCw size={14} />
+                )}
+                {t('userPerms.reset', { defaultValue: 'Reset to default' })}
+              </button>
               <button
                 onClick={onClose}
                 className="flex-1 px-4 py-2.5 border border-slate-200 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50"
