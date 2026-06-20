@@ -151,7 +151,8 @@ export default {
 
   foremanRequest: {
     title: 'Soumettre une demande de personnel',
-    subtitle: 'Choisissez votre projet, la date et l’équipe voulue — envoyée au répartiteur pour approbation',
+    subtitle:
+      'Choisissez votre projet, la date et l’équipe voulue — envoyée au répartiteur pour approbation',
     project: 'Projet',
     selectProject: 'Choisir un projet…',
     noProjects: 'Aucun projet ne vous est assigné pour le moment.',
@@ -181,11 +182,17 @@ export default {
     subtitle: 'Demandez des outils du dépôt et suivez où se trouve chacun',
     tabs: { request: 'Demander', assets: 'Inventaire' },
     trades: {
-      GENERAL: 'Général', ELECTRICAL: 'Électricité', PLUMBING: 'Plomberie',
-      MECHANICAL: 'Mécanique', LAYOUT: 'Traçage',
+      GENERAL: 'Général',
+      ELECTRICAL: 'Électricité',
+      PLUMBING: 'Plomberie',
+      MECHANICAL: 'Mécanique',
+      LAYOUT: 'Traçage',
     },
     assetStatus: {
-      AVAILABLE: 'Disponible', ASSIGNED: 'Sur le chantier', MAINTENANCE: 'Entretien', RETIRED: 'Retiré',
+      AVAILABLE: 'Disponible',
+      ASSIGNED: 'Sur le chantier',
+      MAINTENANCE: 'Entretien',
+      RETIRED: 'Retiré',
     },
     request: {
       project: 'Projet',
@@ -206,8 +213,8 @@ export default {
       },
     },
     assets: {
-      count: '{{count}} unité(s) d\'outil',
-      empty: 'Aucune unité d\'outil enregistrée',
+      count: "{{count}} unité(s) d'outil",
+      empty: "Aucune unité d'outil enregistrée",
       warehouse: 'Dépôt',
       th: { tool: 'Outil', tag: 'Étiquette', status: 'Statut', location: 'Emplacement' },
     },
@@ -218,7 +225,10 @@ export default {
     subtitle: 'Achat urgent pour le chantier ? Téléversez la facture ici',
     tabs: { submit: 'Soumettre', claims: 'Réclamations' },
     status: {
-      PENDING: 'En attente', APPROVED: 'Vérifiée', REJECTED: 'Objection', PAID: 'Remboursée',
+      PENDING: 'En attente',
+      APPROVED: 'Vérifiée',
+      REJECTED: 'Objection',
+      PAID: 'Remboursée',
     },
     submit: {
       project: 'Projet',
@@ -246,8 +256,12 @@ export default {
       view: 'Voir',
       reason: 'Motif',
       th: {
-        date: 'Date', vendor: 'Fournisseur', project: 'Projet',
-        amount: 'Montant', status: 'Statut', receipt: 'Facture',
+        date: 'Date',
+        vendor: 'Fournisseur',
+        project: 'Projet',
+        amount: 'Montant',
+        status: 'Statut',
+        receipt: 'Facture',
       },
     },
     actions: {
@@ -261,7 +275,8 @@ export default {
 
   ownerAudit: {
     title: 'Audit des modifications sensibles',
-    subtitle: 'Vue réservée au propriétaire des changements à risque (emplacement de projet, affectations, présences, paramètres) — ancien → nouveau.',
+    subtitle:
+      'Vue réservée au propriétaire des changements à risque (emplacement de projet, affectations, présences, paramètres) — ancien → nouveau.',
     loading: 'Chargement de l’audit…',
     loadError: 'Échec du chargement de l’audit.',
     empty: 'Aucune modification sensible enregistrée pour l’instant.',
@@ -275,7 +290,8 @@ export default {
     code: 'Code',
     plan: 'Forfait',
     defaultShift: 'Quart par défaut',
-    defaultShiftHint: 'Utilisé comme heure de début/fin par défaut lors de la création d’affectations.',
+    defaultShiftHint:
+      'Utilisé comme heure de début/fin par défaut lors de la création d’affectations.',
     phone: 'Téléphone',
     procurementEmail: 'Courriel des achats',
     address: 'Adresse',
@@ -326,7 +342,8 @@ export default {
     title: 'Facturation et factures',
     subtitle: 'Toutes les factures émises à votre entreprise',
     loadError: 'Impossible de charger les factures',
-    empty: 'Aucune facture pour le moment. Les factures d\'abonnement, de formation et de travaux sur mesure apparaîtront ici dès leur émission.',
+    empty:
+      "Aucune facture pour le moment. Les factures d'abonnement, de formation et de travaux sur mesure apparaîtront ici dès leur émission.",
     totalCount: '{{count}} facture(s) au total',
     filters: {
       typeLabel: 'Type',
@@ -367,8 +384,7 @@ export default {
       INVALID_TYPE: 'Filtre de type de facture invalide.',
       INVALID_STATUS: 'Filtre de statut de facture invalide.',
       INVALID_PAGINATION: 'Paramètres de pagination invalides.',
-      SERVER_ERROR:
-        'Une erreur est survenue. Veuillez réessayer ou contacter billing@constrai.ca.',
+      SERVER_ERROR: 'Une erreur est survenue. Veuillez réessayer ou contacter billing@constrai.ca.',
     },
   },
 
@@ -384,13 +400,13 @@ export default {
     atCapacityHelp:
       'Les nouvelles invitations seront refusées (HTTP 402) tant que des sièges ne sont pas ajoutés.',
     seatsRemainingHelp: '{{count}} sièges restants avant la limite.',
-    trialEndsAt: 'Fin de l\'essai',
+    trialEndsAt: "Fin de l'essai",
     nextBillingAt: 'Prochaine facturation',
     cancelAtPeriodEnd:
       'Votre abonnement est programmé pour être annulé à la fin de la période de facturation actuelle.',
     requestChanges: 'Demander un changement',
     requestExplanation:
-      'Soumettez une demande ci-dessous. Votre demande sera enregistrée dans notre journal d\'audit et votre client de messagerie ouvrira un message pré-rempli destiné à billing@constrai.ca. Nous traitons toutes les demandes dans un délai d\'un jour ouvrable.',
+      "Soumettez une demande ci-dessous. Votre demande sera enregistrée dans notre journal d'audit et votre client de messagerie ouvrira un message pré-rempli destiné à billing@constrai.ca. Nous traitons toutes les demandes dans un délai d'un jour ouvrable.",
     actions: {
       requestSeatChange: 'Demander un changement de sièges',
       requestPlanUpgrade: 'Demander un changement de forfait',
@@ -418,15 +434,13 @@ export default {
       DELETED: 'Supprimé',
     },
     errors: {
-      INVALID_REQUESTED_SEATS:
-        'Veuillez saisir un nombre de sièges valide entre 1 et 10000.',
+      INVALID_REQUESTED_SEATS: 'Veuillez saisir un nombre de sièges valide entre 1 et 10000.',
       NO_CHANGE:
         'La valeur demandée correspond à votre valeur actuelle — aucun changement à faire.',
       REASON_TOO_LONG: 'La raison est trop longue (max 1000 caractères).',
-      SUBSCRIPTION_NOT_FOUND: 'Aucun abonnement n\'est rattaché à votre entreprise.',
+      SUBSCRIPTION_NOT_FOUND: "Aucun abonnement n'est rattaché à votre entreprise.",
       INVALID_PLAN_TYPE: 'Veuillez choisir un type de forfait valide.',
-      SERVER_ERROR:
-        'Une erreur est survenue. Veuillez réessayer ou contacter billing@constrai.ca.',
+      SERVER_ERROR: 'Une erreur est survenue. Veuillez réessayer ou contacter billing@constrai.ca.',
     },
   },
 
@@ -750,22 +764,26 @@ export default {
       q3: 'Quelles optimisations ?',
       basis: {
         repeat: "Répéter aujourd'hui",
-        repeatHint: "Reconduit les équipes du jour vers la date cible — aucun nouveau chantier.",
+        repeatHint: 'Reconduit les équipes du jour vers la date cible — aucun nouveau chantier.',
         full: 'Tout planifier',
-        fullHint: 'Tous les projets actifs : reconductions, remplacements et dotation des chantiers vides.',
+        fullHint:
+          'Tous les projets actifs : reconductions, remplacements et dotation des chantiers vides.',
         project: 'Un projet précis',
         projectHint: 'Planifier ou doter un seul projet.',
         crew: 'Déployer une équipe',
-        crewHint: 'Envoyer une équipe enregistrée (contremaître + membres) sur un projet pour la journée.',
+        crewHint:
+          'Envoyer une équipe enregistrée (contremaître + membres) sur un projet pour la journée.',
       },
       selectProject: 'Sélectionnez un projet…',
       selectCrew: 'Sélectionnez une équipe…',
       noCrews: "Aucune équipe — créez-en une d'abord.",
       opt: {
         distance: 'Distance et frais de déplacement',
-        distanceHint: 'Privilégie les travailleurs les plus proches — minimise les frais de déplacement CCQ.',
+        distanceHint:
+          'Privilégie les travailleurs les plus proches — minimise les frais de déplacement CCQ.',
         gaps: 'Combler les manques par des remplacements',
-        gapsHint: "Si quelqu'un est occupé ailleurs, propose un remplaçant disponible du même métier.",
+        gapsHint:
+          "Si quelqu'un est occupé ailleurs, propose un remplaçant disponible du même métier.",
       },
       allowanceTotal: 'Frais de déplacement estimés : {{amount}}/jour',
       allowanceHint: 'Taux CCQ · distance routière estimée domicile↔chantier (~×1,3)',
@@ -888,7 +906,7 @@ export default {
     moveModal: {
       title: 'Déplacer vers un projet',
       subtitle: 'Déplacement de {{employee}} depuis {{project}}',
-      empty: "Aucun autre projet actif",
+      empty: 'Aucun autre projet actif',
     },
   },
 
@@ -1069,7 +1087,8 @@ export default {
         sendFailed: "Échec de l'envoi",
       },
       sentToast: 'Envoyé à {{count}} travailleur(s) ✓',
-      sentToastPending: 'Envoyé à {{count}} travailleur(s) ✓ — {{pending}} en attente d\'affectation',
+      sentToastPending:
+        "Envoyé à {{count}} travailleur(s) ✓ — {{pending}} en attente d'affectation",
       empty: 'Aucune tâche envoyée pour le moment',
       emptyHint: 'Créez une tâche à envoyer à votre équipe',
       doneSuffix: 'terminés',
@@ -1081,7 +1100,8 @@ export default {
         sent: '📬 Envoyé',
       },
       pendingBanner_one: '{{count}} destinataire recevra cette tâche une fois affecté au projet',
-      pendingBanner_other: '{{count}} destinataires recevront cette tâche une fois affectés au projet',
+      pendingBanner_other:
+        '{{count}} destinataires recevront cette tâche une fois affectés au projet',
       attachedHasFile: 'Fichier',
       dueLabel: 'Échéance {{date}}',
       recipientsSuffix_one: '{{count}} destinataire',
@@ -1274,7 +1294,7 @@ export default {
         t2200Form: 'Formulaire T2200',
         payAllowance: "Verser l'indemnité",
       },
-      empty: "Aucun employé à 41 km+ pour cette période",
+      empty: 'Aucun employé à 41 km+ pour cette période',
       emptyHint: "La distance est calculée au moment de l'affectation via Mapbox",
     },
 
@@ -1283,7 +1303,8 @@ export default {
         allDays: 'Tous les jours',
         only41plus: '🚗 41 km+ (T2200)',
       },
-      banner41plus: "Affichage uniquement des jours où votre chantier était à 41 km+ de votre domicile — éligibles à la déclaration fiscale T2200 ou à l'indemnité de déplacement de l'entreprise.",
+      banner41plus:
+        "Affichage uniquement des jours où votre chantier était à 41 km+ de votre domicile — éligibles à la déclaration fiscale T2200 ou à l'indemnité de déplacement de l'entreprise.",
       stats: {
         daysWorked: 'Jours travaillés',
         regular: 'Heures régulières',
@@ -1306,10 +1327,11 @@ export default {
         adjusted: '✓ Ajusté',
         pending: 'En attente',
       },
-      empty41plus: "Aucun jour à 41 km+ pour cette période",
+      empty41plus: 'Aucun jour à 41 km+ pour cette période',
       emptyAll: 'Aucune présence enregistrée pour cette période',
       promptRun: 'Sélectionnez une période puis cliquez sur Exécuter',
-      disclaimer: 'Ce rapport est généré à partir de vos présences confirmées. Les heures marquées "En attente" peuvent encore être ajustées par votre contremaître. Pour la documentation officielle, contactez votre service RH.',
+      disclaimer:
+        'Ce rapport est généré à partir de vos présences confirmées. Les heures marquées "En attente" peuvent encore être ajustées par votre contremaître. Pour la documentation officielle, contactez votre service RH.',
     },
   },
 
@@ -1368,7 +1390,8 @@ export default {
 
   permissions: {
     title: 'Matrice de permissions',
-    subtitle: "Contrôle d'accès basé sur les rôles · Les changements s'appliquent à l'échelle de l'entreprise",
+    subtitle:
+      "Contrôle d'accès basé sur les rôles · Les changements s'appliquent à l'échelle de l'entreprise",
 
     auditLog: "Journal d'audit",
     resetDefaults: 'Réinitialiser aux valeurs par défaut',
@@ -1377,7 +1400,8 @@ export default {
     saving: 'Enregistrement…',
 
     confirmReset: 'Réinitialiser "{{role}}" aux valeurs par défaut du système ?',
-    unsavedBanner: 'Modifications non enregistrées pour {{role}} — cliquez sur "Enregistrer" pour appliquer.',
+    unsavedBanner:
+      'Modifications non enregistrées pour {{role}} — cliquez sur "Enregistrer" pour appliquer.',
     recentChanges: 'Modifications récentes des permissions',
 
     audit: {
@@ -1393,7 +1417,8 @@ export default {
 
     matrix: {
       readOnly: 'Lecture seule',
-      readOnlyHint: 'Vous ne pouvez modifier que les rôles de rang inférieur au vôtre — cela empêche quiconque d’élever son propre accès.',
+      readOnlyHint:
+        'Vous ne pouvez modifier que les rôles de rang inférieur au vôtre — cela empêche quiconque d’élever son propre accès.',
       toggleColumn: 'Basculer la colonne :',
       module: 'Module',
       all: 'Tous',
@@ -1408,6 +1433,37 @@ export default {
       edit: 'Modifier',
       delete: 'Supprimer',
       approve: 'Approuver',
+      submit: 'Soumettre',
+      invite: 'Inviter',
+      print: 'Imprimer',
+      send: 'Envoyer',
+      access: 'Accès',
+      manage: 'Gérer',
+      checkin: 'Pointer',
+      smart_assign: 'Affectation intelligente',
+      view_self: 'Voir les siens',
+      view_own: 'Voir les siens',
+      view_own_trade: 'Voir son métier',
+      overtime_approve: 'Approuver les heures supp.',
+      catalog_view: 'Voir le catalogue',
+      request_submit: 'Soumettre une demande',
+      request_view_all: 'Voir toutes les demandes',
+      request_view_own: 'Voir ses demandes',
+      request_view_own_trade: 'Voir les demandes de son métier',
+      surplus_declare: 'Déclarer un surplus',
+      surplus_view: 'Voir les surplus',
+      attendance_approval: 'Approbation des présences',
+      materials_inbox: 'Boîte de réception (matériaux)',
+      materials_merge_send: 'Fusionner et envoyer (matériaux)',
+      receive_tasks: 'Recevoir des tâches',
+      send_tasks: 'Envoyer des tâches',
+      access_full: 'Accès complet',
+      access_own_trade: 'Accès à son métier',
+      workforce_planner: 'Planificateur de main-d’œuvre',
+      company: 'Entreprise',
+      permissions: 'Permissions',
+      system: 'Système',
+      user_management: 'Gestion des utilisateurs',
       lockedSuffix: '(verrouillé)',
     },
 
@@ -1417,27 +1473,52 @@ export default {
       employees: 'Employés',
       assignments: 'Affectations',
       attendance: 'Présence',
+      materials: 'Matériaux',
       material_requests: 'Demandes de matériel',
       purchase_orders: "Bons d'achat",
       suppliers: 'Fournisseurs',
-      workforce_planner: "Planificateur d'effectifs",
-      reports: 'Rapports / BI',
+      reports: 'Rapports',
+      bi: 'BI',
+      hub: 'Hub',
+      tasks: 'Tâches',
+      audit: 'Audit',
+      expense_claims: 'Notes de frais',
+      workforce_planner: 'Planificateur de main-d’œuvre',
       permissions: 'Permissions',
       settings: 'Paramètres',
     },
 
     roles: {
       SUPER_ADMIN: 'Super admin',
+      OWNER: 'Propriétaire',
       IT_ADMIN: 'Admin IT',
       COMPANY_ADMIN: 'Admin entreprise',
-      TRADE_PROJECT_MANAGER: 'Chef de projet',
+      CONSTRUCTION_MANAGER: 'Directeur de construction',
+      PROJECT_MANAGER: 'Gestionnaire de projet',
+      TRADE_PROJECT_MANAGER: 'Chef de projet (métier)',
+      SUPERINTENDENT: 'Surintendant',
+      MEP_ENGINEER: 'Ingénieur MÉP',
+      ESTIMATOR: 'Estimateur',
+      PROJECT_ENGINEER: 'Ingénieur de projet',
+      SITE_ENGINEER: 'Ingénieur de chantier',
+      ACCOUNTANT: 'Comptable',
+      BIM_COORDINATOR: 'Coordonnateur BIM',
+      HR_OFFICER: 'Agent RH',
       TRADE_ADMIN: 'Admin métier',
+      GENERAL_FOREMAN: 'Contremaître général',
       FOREMAN: 'Contremaître',
+      DISPATCHER: 'Répartiteur',
+      PROCUREMENT_OFFICER: 'Agent d’approvisionnement',
+      SAFETY_OFFICER: 'Agent de sécurité',
+      QA_QC_OFFICER: 'Agent AQ/CQ',
+      PAYROLL_OFFICER: 'Agent de paie',
+      OFFICE_CLERK: 'Commis de bureau',
       JOURNEYMAN: 'Compagnon',
       APPRENTICE_4: 'Apprenti 4',
       APPRENTICE_3: 'Apprenti 3',
       APPRENTICE_2: 'Apprenti 2',
       APPRENTICE_1: 'Apprenti 1',
+      OPERATOR: 'Opérateur',
       WORKER: 'Travailleur',
       DRIVER: 'Chauffeur',
     },
@@ -1452,6 +1533,22 @@ export default {
     },
   },
 
+  // §148 Phase 5b — dérogations de permissions par utilisateur (modale Gestion des utilisateurs).
+  userPerms: {
+    action: 'Permissions',
+    tooltip: 'Modifier les permissions de cet utilisateur',
+    heading: 'Permissions',
+    hint: 'Hérité du rôle; un point ambré indique une dérogation personnelle pour cet utilisateur.',
+    reset: 'Réinitialiser par défaut',
+    resetTooltip: 'Effacer les dérogations personnelles — revenir au rôle par défaut',
+    confirmReset:
+      'Réinitialiser {{name}} au rôle par défaut? Cela efface toutes les dérogations personnelles.',
+    locked: 'Vous ne pouvez modifier que les utilisateurs dont le rôle est inférieur au vôtre.',
+    loadFailed: 'Échec du chargement.',
+    saveFailed: "Échec de l'enregistrement",
+    resetFailed: 'Échec de la réinitialisation',
+  },
+
   taskRequest: {
     title: 'Demande de tâche',
     subtitle: 'Envoyez des tâches et des plans à vos travailleurs',
@@ -1463,7 +1560,7 @@ export default {
 
     new: {
       titleLabel: 'Titre *',
-      titlePlaceholder: 'ex. Installer la conduite principale d\'eau — Section A',
+      titlePlaceholder: "ex. Installer la conduite principale d'eau — Section A",
       instructions: 'Instructions',
       instructionsOptional: '(facultatif)',
       instructionsPlaceholder: 'Décrivez la tâche en détail...',
@@ -1493,7 +1590,8 @@ export default {
         sendFailed: "Échec de l'envoi",
       },
       sentToast: 'Envoyé à {{count}} travailleur(s) ✓',
-      sentToastPending: 'Envoyé à {{count}} travailleur(s) ✓ — {{pending}} en attente d\'affectation',
+      sentToastPending:
+        "Envoyé à {{count}} travailleur(s) ✓ — {{pending}} en attente d'affectation",
     },
 
     sent: {
@@ -1513,7 +1611,8 @@ export default {
         seen: '👁 Vu',
         sent: '📬 Envoyé',
       },
-      pendingBanner: '{{count}} destinataire(s) recevront cette tâche une fois affecté(s) au projet',
+      pendingBanner:
+        '{{count}} destinataire(s) recevront cette tâche une fois affecté(s) au projet',
     },
   },
 
@@ -1534,7 +1633,7 @@ export default {
 
     statusFilter: {
       active: 'Actifs',
-      pending: 'En attente d\'activation',
+      pending: "En attente d'activation",
       disabled: 'Désactivés',
     },
 
@@ -1556,7 +1655,7 @@ export default {
     invitedPrefix: 'Invité le {{date}}',
 
     empty: 'Aucun utilisateur trouvé',
-    emptyHint: 'Essayez d\'ajuster les filtres',
+    emptyHint: "Essayez d'ajuster les filtres",
 
     actions: {
       role: 'Rôle',
@@ -1643,7 +1742,7 @@ export default {
 
     incompleteBanner: {
       title: 'Compléter votre profil',
-      body: "Veuillez remplir tous les champs obligatoires ci-dessous pour compléter votre profil. Votre administrateur a besoin de ces informations.",
+      body: 'Veuillez remplir tous les champs obligatoires ci-dessous pour compléter votre profil. Votre administrateur a besoin de ces informations.',
     },
 
     admin: {
@@ -1651,7 +1750,8 @@ export default {
       username: "Nom d'utilisateur",
       role: 'Rôle',
       adminAccountTitle: 'Compte administrateur',
-      adminAccountBody: "Ceci est un compte administrateur sans profil employé. Vous pouvez gérer les employés depuis la page {{employeesLink}}.",
+      adminAccountBody:
+        'Ceci est un compte administrateur sans profil employé. Vous pouvez gérer les employés depuis la page {{employeesLink}}.',
       employees: 'Employés',
     },
 
@@ -1702,7 +1802,7 @@ export default {
     welcome: 'Bienvenue',
     linkInvalid: {
       title: 'Lien invalide',
-      contactAdmin: "Veuillez contacter votre administrateur pour une nouvelle invitation.",
+      contactAdmin: 'Veuillez contacter votre administrateur pour une nouvelle invitation.',
     },
     errors: {
       invalidLink: "Lien d'invitation invalide",
@@ -1719,7 +1819,8 @@ export default {
     },
     done: {
       title: 'Tout est prêt ! 🎉',
-      subtitle: "Votre compte est prêt. Connectez-vous avec votre nom d'utilisateur et votre NIP pour commencer.",
+      subtitle:
+        "Votre compte est prêt. Connectez-vous avec votre nom d'utilisateur et votre NIP pour commencer.",
       goToSignIn: 'Aller à la connexion',
     },
     credentials: {
@@ -1735,13 +1836,15 @@ export default {
     },
     profile: {
       heading: 'Votre profil',
-      subheading: 'Votre adresse de domicile nous aide à vous affecter aux chantiers les plus proches.',
+      subheading:
+        'Votre adresse de domicile nous aide à vous affecter aux chantiers les plus proches.',
       phone: 'Numéro de téléphone',
       phonePlaceholder: '+1 514 000 0000',
       homeAddress: 'Adresse du domicile *',
       addressPlaceholder: 'Commencez à saisir votre adresse...',
       locationConfirmed: 'Adresse confirmée',
-      addressDisclaimer: 'Utilisée uniquement pour les affectations intelligentes — jamais partagée publiquement.',
+      addressDisclaimer:
+        'Utilisée uniquement pour les affectations intelligentes — jamais partagée publiquement.',
       back: 'Retour',
       submit: 'Terminer la configuration',
     },
@@ -1759,7 +1862,8 @@ export default {
         targetDate: 'Date cible',
         generate: 'Générer le plan',
         emptyTitle: 'Choisissez une date et générez un plan',
-        emptySubtitle: "Le système reconduit les équipes du jour, comble les manques et dote les nouveaux chantiers selon la distance",
+        emptySubtitle:
+          'Le système reconduit les équipes du jour, comble les manques et dote les nouveaux chantiers selon la distance',
         noProjects: 'Aucun projet actif à planifier',
         noSuggestions: 'Aucune suggestion pour ce projet',
         todayCount: "{{count}} au travail aujourd'hui",

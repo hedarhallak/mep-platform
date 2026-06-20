@@ -477,9 +477,11 @@ export default function UserManagementPage() {
   });
   const isSuper = me?.role === 'SUPER_ADMIN';
   const myRank = catalog.find((r) => r.role_key === me?.role)?.rank ?? 0;
+  // i18n FIRST (so FR shows French), then the catalog's DB label, then humanize.
   const roleLabelOf = (key) =>
-    catalog.find((r) => r.role_key === key)?.label ||
-    t(`userManagement.roleLabels.${key}`, { defaultValue: humanizePerm(key) });
+    t(`permissions.roles.${key}`, {
+      defaultValue: catalog.find((r) => r.role_key === key)?.label || humanizePerm(key),
+    });
   // Senior→junior; the assignable set is everything ranked below the admin
   // (the same rank-lock as the permissions matrix). SUPER_ADMIN may assign all.
   const sortedCatalog = [...catalog]
