@@ -64,6 +64,7 @@ export default {
     report: 'My Report',
     tasks: 'Tasks',
     assignments: 'Assignments',
+    pendingRequests: 'Pending Requests',
     standup: 'Standup',
     purchaseOrders: 'Purchase Orders',
     myHub: 'My Hub',
@@ -245,6 +246,26 @@ export default {
     submit: 'Submit request ({{count}})',
     doneTitle: 'Request sent',
     doneBody: '{{created}} request(s) submitted, {{skipped}} skipped (already assigned or pending).',
+  },
+
+  // §149 Batch A — Pending Requests (dispatcher review)
+  pendingRequests: {
+    title: 'Pending Requests',
+    empty: 'No pending requests.',
+    requestedBy: 'by {{name}}',
+    approve: 'Approve',
+    reject: 'Reject',
+    rejectTitle: 'Reject request',
+    reasonPlaceholder: 'Reason (optional)…',
+    actionFailed: 'Action failed. Please try again.',
+  },
+
+  // §149 Batch A — Purchase Orders (view)
+  purchaseOrders: {
+    title: 'Purchase Orders',
+    empty: 'No purchase orders yet.',
+    procurement: 'Procurement',
+    itemsCount: '{{count}} item(s)',
   },
 
   // Profile

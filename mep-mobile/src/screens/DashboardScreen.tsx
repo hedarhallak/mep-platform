@@ -61,8 +61,9 @@ export default function DashboardScreen() {
     { id: 'report', label: t('modules.report'), icon: 'bar-chart-outline', color: '#7c3aed', bg: '#f5f3ff', screen: 'Report', perms: [['reports', 'view_self'], ['reports', 'view']] },
     { id: 'tasks', label: t('modules.tasks'), icon: 'checkmark-circle-outline', color: Colors.danger, bg: Colors.dangerBg, screen: 'Tasks', perms: [['hub', 'send_tasks']] },
     { id: 'assignments', label: t('modules.assignments'), icon: 'clipboard-outline', color: '#d97706', bg: '#fffbeb', screen: 'SubmitRequest', perms: [['assignments', 'create']] },
+    { id: 'pending_requests', label: t('modules.pendingRequests'), icon: 'checkmark-done-outline', color: '#0d9488', bg: '#f0fdfa', screen: 'PendingRequests', perms: [['assignments', 'edit']] },
     { id: 'standup', label: t('modules.standup'), icon: 'people-outline', color: '#059669', bg: '#ecfdf5', screen: null, perms: [['standup', 'manage']] },
-    { id: 'purchase_orders', label: t('modules.purchaseOrders'), icon: 'document-text-outline', color: '#6d28d9', bg: '#f5f3ff', screen: null, perms: [['purchase_orders', 'view'], ['purchase_orders', 'view_own']] },
+    { id: 'purchase_orders', label: t('modules.purchaseOrders'), icon: 'document-text-outline', color: '#6d28d9', bg: '#f5f3ff', screen: 'PurchaseOrders', perms: [['purchase_orders', 'view'], ['purchase_orders', 'view_own']] },
   ];
   const canAny = usePermsStore(s => s.canAny);
   const permsLoaded = usePermsStore(s => s.loaded);
