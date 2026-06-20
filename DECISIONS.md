@@ -16574,3 +16574,14 @@ Hedar (testing on device, logged in as admin): noticed the mobile icons were gat
 - **`DashboardScreen`** — each module now carries `perms: [[module, action], ...]` (canAny) instead of a `roles: [...]` list; the grid filters by `canAny`, and re-fetches perms on mount (covers a failed login-time fetch + reflects permission changes). Shows a spinner until perms load. Mapping mirrors the web AppLayout (attendance.view_self, materials.request_submit, reports.view_self, hub.send_tasks, assignments.create, standup.manage, purchase_orders.view).
 
 Now mobile icons === the user's effective web permissions. Every future mobile screen gates itself by permission automatically. (standup + purchase_orders still show "Coming Soon" when permitted — they're just not BUILT yet, Phase 5+.) Verified: tsc clean, `expo export` bundles, jest 9/9.
+
+### 149.4 — Mobile Batch A: Purchase Orders (view) + Pending Requests (review)
+
+Hedar's directive: mobile should reach feature PARITY with the web (every operational screen, permission-gated) — only the Permissions matrix, BI/Workforce Planner, and Billing/Subscription stay desktop-first (UX/value). Building incrementally in BATCHES (multiple screens per PR → one EAS build per batch to save device-test cycles).
+
+Batch A (both backend-ready):
+- **PurchaseOrdersScreen** — read-only list from `GET /api/materials/purchase-orders` (ref, project, supplier/Procurement, items count, date; foreman sees own / admin sees all — backend-scoped). Removes the PO "Coming Soon".
+- **PendingRequestsScreen** — `GET /api/assignments/requests?status=PENDING` + approve (`PATCH …/approve`) / reject (`PATCH …/reject` with a reason modal). Trade-scoped by the backend. Completes the §147 assignment loop on mobile (foreman submits via Phase 1 → dispatcher approves here).
+- Wired into `MainStackNavigator`; Dashboard gains a `pending_requests` module (perm `assignments.edit`) and the `purchase_orders` module now opens the screen. Both are **permission-gated** via the §149.3 store, so each user only sees what they're allowed. i18n EN/FR added.
+
+Verified: tsc clean, `expo export` bundles (1556 modules). Next batches: B (Expenses + Surplus + Tools), C (Crews + Project Staffing), D (Standup + Employees/Suppliers/Projects incl. create).

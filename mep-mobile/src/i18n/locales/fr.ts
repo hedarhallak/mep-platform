@@ -64,6 +64,7 @@ export default {
     report: 'Mon rapport',
     tasks: 'Tâches',
     assignments: 'Affectations',
+    pendingRequests: 'Demandes en attente',
     standup: 'Réunion debout',
     purchaseOrders: "Bons de commande",
     myHub: 'Mon hub',
@@ -245,6 +246,26 @@ export default {
     submit: 'Soumettre la demande ({{count}})',
     doneTitle: 'Demande envoyée',
     doneBody: '{{created}} demande(s) soumise(s), {{skipped}} ignorée(s) (déjà assigné ou en attente).',
+  },
+
+  // §149 Batch A — Demandes en attente (révision du répartiteur)
+  pendingRequests: {
+    title: 'Demandes en attente',
+    empty: 'Aucune demande en attente.',
+    requestedBy: 'par {{name}}',
+    approve: 'Approuver',
+    reject: 'Rejeter',
+    rejectTitle: 'Rejeter la demande',
+    reasonPlaceholder: 'Raison (facultatif)…',
+    actionFailed: 'Échec de l’action. Réessayez.',
+  },
+
+  // §149 Batch A — Bons de commande (consultation)
+  purchaseOrders: {
+    title: 'Bons de commande',
+    empty: 'Aucun bon de commande.',
+    procurement: 'Approvisionnement',
+    itemsCount: '{{count}} article(s)',
   },
 
   // Profile

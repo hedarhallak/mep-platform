@@ -16,6 +16,8 @@ import ProfileScreen from '../screens/profile/ProfileScreen';
 import ChangePinScreen from '../screens/profile/ChangePinScreen';
 import MergeEditScreen from '../screens/materials/MergeEditScreen';
 import SubmitRequestScreen from '../screens/assignments/SubmitRequestScreen';
+import PendingRequestsScreen from '../screens/assignments/PendingRequestsScreen';
+import PurchaseOrdersScreen from '../screens/materials/PurchaseOrdersScreen';
 
 const Stack = createStackNavigator();
 
@@ -34,6 +36,12 @@ export default function MainStackNavigator() {
       {/* §147 Submit Request */}
       <Stack.Screen name="SubmitRequest" component={SubmitRequestScreen}
         options={{ ...headerOptions, headerShown: true, title: t('submitRequest.title') }} />
+
+      {/* §149 Batch A — Pending Requests + Purchase Orders */}
+      <Stack.Screen name="PendingRequests" component={PendingRequestsScreen}
+        options={{ ...headerOptions, headerShown: true, title: t('pendingRequests.title') }} />
+      <Stack.Screen name="PurchaseOrders" component={PurchaseOrdersScreen}
+        options={{ ...headerOptions, headerShown: true, title: t('purchaseOrders.title') }} />
 
       {/* Materials */}
       <Stack.Screen name="Materials" component={MaterialsMenuScreen}
