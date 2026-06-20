@@ -24,14 +24,15 @@ import { useAuth } from '@/hooks/useAuth';
 
 // Category → soft accent for the role sidebar (the only presentation map left).
 const CATEGORY_COLORS = {
-  platform:    { color: 'text-red-600',    bg: 'bg-red-50 border-red-200' },
-  governance:  { color: 'text-amber-600',  bg: 'bg-amber-50 border-amber-200' },
-  management:  { color: 'text-blue-600',   bg: 'bg-blue-50 border-blue-200' },
-  engineering: { color: 'text-cyan-600',   bg: 'bg-cyan-50 border-cyan-200' },
-  supervision: { color: 'text-teal-600',   bg: 'bg-teal-50 border-teal-200' },
-  field:       { color: 'text-green-600',  bg: 'bg-green-50 border-green-200' },
+  platform: { color: 'text-red-600', bg: 'bg-red-50 border-red-200' },
+  governance: { color: 'text-amber-600', bg: 'bg-amber-50 border-amber-200' },
+  management: { color: 'text-blue-600', bg: 'bg-blue-50 border-blue-200' },
+  engineering: { color: 'text-cyan-600', bg: 'bg-cyan-50 border-cyan-200' },
+  supervision: { color: 'text-teal-600', bg: 'bg-teal-50 border-teal-200' },
+  field: { color: 'text-green-600', bg: 'bg-green-50 border-green-200' },
 };
-const catColor = (cat) => CATEGORY_COLORS[cat] || { color: 'text-slate-600', bg: 'bg-slate-100 border-slate-200' };
+const catColor = (cat) =>
+  CATEGORY_COLORS[cat] || { color: 'text-slate-600', bg: 'bg-slate-100 border-slate-200' };
 
 // "smart_assign" → "Smart Assign" — fallback label for codes with no i18n key.
 const humanize = (key) =>
@@ -67,9 +68,15 @@ function Toast({ message, type, onClose }) {
 function AuditLog({ logs, loading }) {
   const { t } = useTranslation();
   if (loading)
-    return <div className="text-center py-8 text-slate-400 text-sm">{t('permissions.audit.loading')}</div>;
+    return (
+      <div className="text-center py-8 text-slate-400 text-sm">
+        {t('permissions.audit.loading')}
+      </div>
+    );
   if (!logs.length)
-    return <div className="text-center py-8 text-slate-400 text-sm">{t('permissions.audit.empty')}</div>;
+    return (
+      <div className="text-center py-8 text-slate-400 text-sm">{t('permissions.audit.empty')}</div>
+    );
   return (
     <div className="divide-y divide-slate-100">
       {logs.map((entry) => (
@@ -187,7 +194,8 @@ export default function PermissionsPage() {
 
   const isOn = (mod, action) => !!matrix[selectedRole]?.[mod]?.[action];
   const hasChanges =
-    JSON.stringify(matrix[selectedRole] || {}) !== JSON.stringify(originalMatrix[selectedRole] || {});
+    JSON.stringify(matrix[selectedRole] || {}) !==
+    JSON.stringify(originalMatrix[selectedRole] || {});
 
   const setOne = (mod, action, value) => {
     if (!isEditable) return;
@@ -279,16 +287,17 @@ export default function PermissionsPage() {
               {showAudit ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
             </button>
 
-            {['SUPER_ADMIN', 'IT_ADMIN'].includes(currentUserRole) && isEditable && (
-              <button
-                onClick={resetToDefaults}
-                disabled={resetting || loading}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-white border border-slate-200 text-slate-500 hover:text-red-600 hover:border-red-300 transition-colors disabled:opacity-40"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${resetting ? 'animate-spin' : ''}`} />
-                {t('permissions.resetDefaults')}
-              </button>
-            )}
+            {['SUPER_ADMIN', 'IT_ADMIN', 'OWNER', 'COMPANY_ADMIN'].includes(currentUserRole) &&
+              isEditable && (
+                <button
+                  onClick={resetToDefaults}
+                  disabled={resetting || loading}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-white border border-slate-200 text-slate-500 hover:text-red-600 hover:border-red-300 transition-colors disabled:opacity-40"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${resetting ? 'animate-spin' : ''}`} />
+                  {t('permissions.resetDefaults')}
+                </button>
+              )}
 
             {hasChanges && isEditable && (
               <>
@@ -346,7 +355,8 @@ export default function PermissionsPage() {
               const isSelected = selectedRole === role.role_key;
               const c = catColor(role.category);
               const label =
-                role.label || t(`permissions.roles.${role.role_key}`, { defaultValue: humanize(role.role_key) });
+                role.label ||
+                t(`permissions.roles.${role.role_key}`, { defaultValue: humanize(role.role_key) });
               return (
                 <button
                   key={role.role_key}
@@ -360,7 +370,9 @@ export default function PermissionsPage() {
                 >
                   <span>{label}</span>
                   {locked && (
-                    <span className="text-[10px] text-slate-300">{t('permissions.sidebar.locked')}</span>
+                    <span className="text-[10px] text-slate-300">
+                      {t('permissions.sidebar.locked')}
+                    </span>
                   )}
                 </button>
               );
@@ -370,7 +382,9 @@ export default function PermissionsPage() {
           {/* Matrix — one card per module, each with ITS OWN actions as chips */}
           <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
             <div className="px-5 py-3.5 border-b border-slate-100 flex items-center gap-2">
-              <span className={`text-sm font-semibold ${catColor(selectedRoleObj?.category).color}`}>
+              <span
+                className={`text-sm font-semibold ${catColor(selectedRoleObj?.category).color}`}
+              >
                 {roleLabel}
               </span>
               {!isEditable && (
@@ -404,7 +418,11 @@ export default function PermissionsPage() {
                       <div className="flex items-center justify-between mb-2">
                         <span
                           className={`text-sm font-medium ${
-                            allChecked ? 'text-slate-800' : partial ? 'text-slate-600' : 'text-slate-400'
+                            allChecked
+                              ? 'text-slate-800'
+                              : partial
+                                ? 'text-slate-600'
+                                : 'text-slate-400'
                           }`}
                         >
                           {t(`permissions.modules.${mod}`, { defaultValue: humanize(mod) })}
@@ -451,7 +469,9 @@ export default function PermissionsPage() {
                               ) : (
                                 <span className="w-2 h-2 rounded-full bg-current opacity-30" />
                               )}
-                              {t(`permissions.actions.${action}`, { defaultValue: humanize(action) })}
+                              {t(`permissions.actions.${action}`, {
+                                defaultValue: humanize(action),
+                              })}
                             </button>
                           );
                         })}

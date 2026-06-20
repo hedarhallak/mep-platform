@@ -85,6 +85,42 @@ describeIfDb('Permissions matrix — /api/permissions/matrix', () => {
     expect(higherRole.statusCode).toBe(403);
   });
 
+  test('§148 Phase 3b: COMPANY_ADMIN edits are per-company overrides, not global', async () => {
+    const compA = await seedCompany();
+    const adminA = await seedUser({ company_id: compA.company_id, role: 'COMPANY_ADMIN' });
+    const { token: tokenA } = await loginUser(adminA);
+
+    const compB = await seedCompany();
+    const adminB = await seedUser({ company_id: compB.company_id, role: 'COMPANY_ADMIN' });
+    const { token: tokenB } = await loginUser(adminB);
+
+    const getMatrix = (token) =>
+      request(app).get('/api/permissions/matrix').set('Authorization', `Bearer ${token}`);
+    const fmView = (res) => !!res.body.matrix?.FOREMAN?.projects?.view;
+
+    const before = fmView(await getMatrix(tokenA));
+
+    // Company A flips FOREMAN's projects.view. The company branch is diff-based,
+    // so a partial body touching just this one code is valid.
+    const put = await request(app)
+      .put('/api/permissions/role/FOREMAN')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .send({ permissions: [{ module: 'projects', action: 'view', allowed: !before }] });
+    expect(put.statusCode).toBe(200);
+
+    // A sees the override; B (same global default) is UNAFFECTED → proves the
+    // write went to company_role_permissions, not the shared role_permissions.
+    expect(fmView(await getMatrix(tokenA))).toBe(!before);
+    expect(fmView(await getMatrix(tokenB))).toBe(before);
+
+    // Reset drops A's override → back to the global default.
+    const reset = await request(app)
+      .post('/api/permissions/reset/FOREMAN')
+      .set('Authorization', `Bearer ${tokenA}`);
+    expect(reset.statusCode).toBe(200);
+    expect(fmView(await getMatrix(tokenA))).toBe(before);
+  });
+
   test('§148 Phase 5: per-user overrides — create, read-back, diff-removal, rank-lock', async () => {
     const company = await seedCompany();
     const admin = await seedUser({ company_id: company.company_id, role: 'COMPANY_ADMIN' });
