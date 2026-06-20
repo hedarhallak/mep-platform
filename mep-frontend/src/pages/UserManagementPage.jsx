@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
+import { useAuth } from '@/hooks/useAuth';
 import {
   Users,
   Search,
@@ -27,10 +28,9 @@ const humanizePerm = (key) =>
     .replace(/\b\w/g, (c) => c.toUpperCase());
 
 // ── Constants ─────────────────────────────────────────────────
-// Role values are stable; labels are looked up via t() at render time so
-// each component re-derives them in the active language.
-const ROLE_VALUES = ['WORKER', 'TRADE_ADMIN', 'TRADE_PROJECT_MANAGER', 'COMPANY_ADMIN', 'IT_ADMIN'];
-
+// Role colors are presentational only; the role LIST is data-driven from the
+// catalog (GET /permissions/roles) so every role — incl. the Phase-4 ones —
+// shows up. Unknown roles fall back to the WORKER (slate) chip.
 const ROLE_COLORS = {
   SUPER_ADMIN: 'bg-red-100    text-red-700    border-red-200',
   IT_ADMIN: 'bg-orange-100 text-orange-700 border-orange-200',
@@ -69,10 +69,12 @@ function Avatar({ name, size = 'md' }) {
   );
 }
 
-function RoleBadge({ role }) {
+function RoleBadge({ role, label: labelProp }) {
   const { t } = useTranslation();
   const cls = ROLE_COLORS[role] || ROLE_COLORS.WORKER;
-  const label = t(`userManagement.badgeLabels.${role}`, { defaultValue: role });
+  // Prefer the catalog label (covers the Phase-4 roles); fall back to the i18n
+  // key, then the raw role key.
+  const label = labelProp || t(`userManagement.badgeLabels.${role}`, { defaultValue: role });
   return (
     <span
       className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border ${cls}`}
@@ -107,11 +109,20 @@ function AccountStatus({ user }) {
 }
 
 // ── Edit Role Modal ───────────────────────────────────────────
-function EditRoleModal({ user, onClose }) {
+// `roles` is the data-driven, rank-filtered catalog of roles this admin may
+// assign (§148 — was a hardcoded 5-role list that hid Foreman/Journeyman/
+// Apprentice/Driver + all the Phase-4 positions).
+function EditRoleModal({ user, onClose, roles, roleLabelOf }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const [role, setRole] = useState(user.role);
   const [error, setError] = useState('');
+
+  // Always include the user's CURRENT role so the select can display it, even
+  // if it's not in the assignable set (e.g. equal/higher than the admin's).
+  const options = roles.some((r) => r.role_key === user.role)
+    ? roles
+    : [{ role_key: user.role, label: roleLabelOf(user.role) }, ...roles];
 
   const mutation = useMutation({
     mutationFn: (newRole) => api.patch(`/users/${user.id}/role`, { role: newRole }),
@@ -166,9 +177,9 @@ function EditRoleModal({ user, onClose }) {
               onChange={(e) => setRole(e.target.value)}
               className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
             >
-              {ROLE_VALUES.map((v) => (
-                <option key={v} value={v}>
-                  {t(`userManagement.roleLabels.${v}`)}
+              {options.map((r) => (
+                <option key={r.role_key} value={r.role_key}>
+                  {r.label || roleLabelOf(r.role_key)}
                 </option>
               ))}
             </select>
@@ -415,6 +426,25 @@ export default function UserManagementPage() {
     queryFn: () => api.get('/users').then((r) => r.data.users || []),
   });
 
+  // §148: roles are data-driven — the Change Role + filter dropdowns now come
+  // from the catalog (rank + label), not a hardcoded 5-role list.
+  const { user: me } = useAuth();
+  const { data: catalog = [] } = useQuery({
+    queryKey: ['roles-catalog'],
+    queryFn: () => api.get('/permissions/roles').then((r) => r.data.roles || []),
+  });
+  const isSuper = me?.role === 'SUPER_ADMIN';
+  const myRank = catalog.find((r) => r.role_key === me?.role)?.rank ?? 0;
+  const roleLabelOf = (key) =>
+    catalog.find((r) => r.role_key === key)?.label ||
+    t(`userManagement.roleLabels.${key}`, { defaultValue: humanizePerm(key) });
+  // Senior→junior; the assignable set is everything ranked below the admin
+  // (the same rank-lock as the permissions matrix). SUPER_ADMIN may assign all.
+  const sortedCatalog = [...catalog]
+    .filter((r) => r.is_active !== false)
+    .sort((a, b) => (b.rank ?? 0) - (a.rank ?? 0));
+  const assignableRoles = sortedCatalog.filter((r) => isSuper || (r.rank ?? 0) < myRank);
+
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3500);
@@ -552,9 +582,9 @@ export default function UserManagementPage() {
             className="pl-8 pr-8 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary appearance-none"
           >
             <option value="">{t('userManagement.allRoles')}</option>
-            {ROLE_VALUES.map((v) => (
-              <option key={v} value={v}>
-                {t(`userManagement.roleLabels.${v}`)}
+            {sortedCatalog.map((r) => (
+              <option key={r.role_key} value={r.role_key}>
+                {r.label || roleLabelOf(r.role_key)}
               </option>
             ))}
           </select>
@@ -637,7 +667,7 @@ export default function UserManagementPage() {
 
                   {/* Role */}
                   <td className="px-5 py-3.5">
-                    <RoleBadge role={u.role} />
+                    <RoleBadge role={u.role} label={roleLabelOf(u.role)} />
                   </td>
 
                   {/* Trade */}
@@ -742,7 +772,14 @@ export default function UserManagementPage() {
       </div>
 
       {/* Edit Role Modal */}
-      {editModal && <EditRoleModal user={editModal} onClose={() => setEditModal(null)} />}
+      {editModal && (
+        <EditRoleModal
+          user={editModal}
+          onClose={() => setEditModal(null)}
+          roles={assignableRoles}
+          roleLabelOf={roleLabelOf}
+        />
+      )}
 
       {/* Per-user Permissions Modal */}
       {permModal && <UserPermissionsModal user={permModal} onClose={() => setPermModal(null)} />}

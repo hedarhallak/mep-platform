@@ -20,7 +20,7 @@
 
 const express = require('express');
 const router = express.Router();
-const { can, logAudit } = require('../middleware/permissions');
+const { can, canAny, logAudit } = require('../middleware/permissions');
 const { normalizeRole } = require('../middleware/roles');
 const { ROLE_DEFAULT_PERMISSIONS } = require('../lib/role_defaults');
 
@@ -99,20 +99,26 @@ router.get('/matrix', can('settings.permissions'), async (req, res) => {
 // rank + category, ordered senior→junior. Lets the frontend render roles from
 // the DB instead of a hardcoded array, so adding a role is a data change.
 // ─────────────────────────────────────────────────────────────────
-router.get('/roles', can('settings.permissions'), async (req, res) => {
-  try {
-    const { rows } = await req.db.query(
-      `SELECT role_key, label, rank, category, is_active
+// canAny: the User Management role dropdown (settings.user_management) needs the
+// catalog too, not just the permissions matrix (settings.permissions). §148 P4.
+router.get(
+  '/roles',
+  canAny(['settings.permissions', 'settings.user_management']),
+  async (req, res) => {
+    try {
+      const { rows } = await req.db.query(
+        `SELECT role_key, label, rank, category, is_active
          FROM public.roles
         WHERE is_active = true
         ORDER BY rank DESC NULLS LAST, role_key`
-    );
-    res.json({ ok: true, roles: rows });
-  } catch (err) {
-    console.error('GET /permissions/roles error:', err);
-    res.status(500).json({ error: 'Failed to load roles' });
+      );
+      res.json({ ok: true, roles: rows });
+    } catch (err) {
+      console.error('GET /permissions/roles error:', err);
+      res.status(500).json({ error: 'Failed to load roles' });
+    }
   }
-});
+);
 
 // ─────────────────────────────────────────────────────────────────
 // GET /api/permissions/my-permissions

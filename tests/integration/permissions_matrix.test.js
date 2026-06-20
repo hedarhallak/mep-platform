@@ -12,6 +12,7 @@ const {
   closePool,
   seedCompany,
   seedUser,
+  seedUserPermission,
   cleanupTestRows,
 } = require('../helpers/db');
 
@@ -208,5 +209,21 @@ describeIfDb('Role catalog — /api/permissions/roles', () => {
       .set('Authorization', `Bearer ${token}`);
 
     expect(res.statusCode).toBe(403);
+  });
+
+  // §148 P4 fix: the User Management role dropdown needs the catalog, so /roles
+  // is allowed for a settings.user_management holder even without settings.permissions.
+  test('GET /roles is allowed for a user_management holder (canAny)', async () => {
+    const company = await seedCompany();
+    const u = await seedUser({ company_id: company.company_id, role: 'WORKER' });
+    await seedUserPermission({ user_id: u.id, permission_code: 'settings.user_management' });
+    const { token } = await loginUser(u);
+
+    const res = await request(app)
+      .get('/api/permissions/roles')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(Array.isArray(res.body.roles)).toBe(true);
   });
 });
