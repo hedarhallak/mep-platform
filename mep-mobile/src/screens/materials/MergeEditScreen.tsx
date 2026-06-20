@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { apiClient } from '../../api/client';
 import Colors from '../../theme/colors';
 
@@ -38,6 +39,7 @@ const UNITS = ['Pcs', 'Ft', 'M', 'In', 'Cm', 'Kg', 'Lb', 'Box', 'Roll', 'Bag', '
 // ================================================================ screen --
 
 export default function MergeEditScreen() {
+  const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
 
@@ -73,15 +75,15 @@ export default function MergeEditScreen() {
 
   const deleteItem = (idx: number) => {
     if (items.length === 1) {
-      Alert.alert('Cannot Delete', 'At least one item is required.');
+      Alert.alert(t('materials.cannotDelete'), t('materials.minOneItem'));
       return;
     }
     Alert.alert(
-      'Remove Item',
-      `Remove "${items[idx].item_name}"?`,
+      t('materials.removeItem'),
+      t('materials.removeItemConfirm', { name: items[idx].item_name }),
       [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Remove', style: 'destructive', onPress: () => setItems(prev => prev.filter((_, i) => i !== idx)) },
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('materials.remove'), style: 'destructive', onPress: () => setItems(prev => prev.filter((_, i) => i !== idx)) },
       ]
     );
   };
@@ -91,25 +93,25 @@ export default function MergeEditScreen() {
   const handleSend = () => {
     const validItems = items.filter(i => i.qty > 0);
     if (validItems.length === 0) {
-      Alert.alert('No Items', 'Add at least one item with a valid quantity.');
+      Alert.alert(t('materials.noItems'), t('materials.addItemHint'));
       return;
     }
     if (destination === null) {
-      Alert.alert('No Destination', 'Choose a supplier or send to procurement.');
+      Alert.alert(t('materials.noDestination'), t('materials.chooseDestination'));
       return;
     }
 
     const destLabel = destination === 'procurement'
-      ? 'Procurement department'
-      : selectedSupplier?.name ?? 'Supplier';
+      ? t('materials.procurementDept')
+      : selectedSupplier?.name ?? '';
 
     Alert.alert(
-      'Confirm Send',
-      `Send ${validItems.length} item(s) to ${destLabel}?`,
+      t('materials.confirmSend'),
+      t('materials.sendConfirm', { count: validItems.length, dest: destLabel }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Send',
+          text: t('common.send'),
           onPress: async () => {
             setSending(true);
             try {
@@ -118,11 +120,11 @@ export default function MergeEditScreen() {
                 items: validItems,
                 supplier_id: destination === 'procurement' ? 'procurement' : destination,
               });
-              Alert.alert('Sent', 'Purchase order created and sent successfully.', [
-                { text: 'OK', onPress: () => navigation.goBack() },
+              Alert.alert(t('materials.status.sent'), t('materials.orderSent'), [
+                { text: t('common.ok'), onPress: () => navigation.goBack() },
               ]);
             } catch (err: any) {
-              Alert.alert('Error', err.response?.data?.error || 'Failed to send.');
+              Alert.alert(t('common.error'), err.response?.data?.error || t('materials.sendFailed'));
             } finally {
               setSending(false);
             }
@@ -149,9 +151,9 @@ export default function MergeEditScreen() {
         {/* Items Section */}
         <View style={styles.sectionRow}>
           <Ionicons name="git-merge-outline" size={17} color={Colors.primary} />
-          <Text style={styles.sectionTitle}>Merged Items</Text>
+          <Text style={styles.sectionTitle}>{t('materials.mergedItems')}</Text>
           <View style={styles.badge}>
-            <Text style={styles.badgeText}>{items.length} items</Text>
+            <Text style={styles.badgeText}>{t('materials.itemsCount', { count: items.length })}</Text>
           </View>
         </View>
 
@@ -167,7 +169,7 @@ export default function MergeEditScreen() {
                   keyboardType="decimal-pad"
                   value={item.qty > 0 ? String(item.qty) : ''}
                   onChangeText={v => updateQty(idx, v)}
-                  placeholder="Qty"
+                  placeholder={t('materials.qty')}
                   placeholderTextColor={Colors.textLight}
                 />
                 <TouchableOpacity
@@ -191,7 +193,7 @@ export default function MergeEditScreen() {
         {/* Destination Section */}
         <View style={[styles.sectionRow, { marginTop: 16 }]}>
           <Ionicons name="send-outline" size={17} color={Colors.primary} />
-          <Text style={styles.sectionTitle}>Send To</Text>
+          <Text style={styles.sectionTitle}>{t('materials.sendTo')}</Text>
         </View>
 
         <View style={styles.destCard}>
@@ -204,9 +206,9 @@ export default function MergeEditScreen() {
               <Ionicons name="business-outline" size={22} color={destination === 'procurement' ? Colors.primary : Colors.textLight} />
               <View>
                 <Text style={[styles.destTitle, destination === 'procurement' && styles.destTitleOn]}>
-                  Procurement
+                  {t('materials.procurement')}
                 </Text>
-                <Text style={styles.destSub}>Internal purchasing department</Text>
+                <Text style={styles.destSub}>{t('materials.procurementDesc')}</Text>
               </View>
             </View>
             <View style={[styles.radio, destination === 'procurement' && styles.radioOn]}>
@@ -225,10 +227,10 @@ export default function MergeEditScreen() {
               <Ionicons name="storefront-outline" size={22} color={typeof destination === 'number' ? Colors.primary : Colors.textLight} />
               <View>
                 <Text style={[styles.destTitle, typeof destination === 'number' && styles.destTitleOn]}>
-                  {selectedSupplier ? selectedSupplier.name : 'Select Supplier'}
+                  {selectedSupplier ? selectedSupplier.name : t('materials.selectSupplier')}
                 </Text>
                 <Text style={styles.destSub}>
-                  {selectedSupplier ? selectedSupplier.email : 'Send directly to a supplier'}
+                  {selectedSupplier ? selectedSupplier.email : t('materials.selectSupplierDesc')}
                 </Text>
               </View>
             </View>
@@ -250,7 +252,7 @@ export default function MergeEditScreen() {
             <>
               <Ionicons name="paper-plane-outline" size={20} color={Colors.white} />
               <Text style={styles.sendBtnText}>
-                Send Order ({items.filter(i => i.qty > 0).length} items)
+                {t('materials.sendOrderCount', { count: items.filter(i => i.qty > 0).length })}
               </Text>
             </>
           )}
@@ -263,10 +265,10 @@ export default function MergeEditScreen() {
         <TouchableOpacity style={styles.overlay} onPress={() => setSupplierModal(false)}>
           <View style={styles.sheet}>
             <View style={styles.handle} />
-            <Text style={styles.sheetTitle}>Select Supplier</Text>
+            <Text style={styles.sheetTitle}>{t('materials.selectSupplier')}</Text>
             {suppliers.length === 0 ? (
               <View style={styles.emptyCard}>
-                <Text style={styles.emptyText}>No suppliers found</Text>
+                <Text style={styles.emptyText}>{t('common.noResults')}</Text>
               </View>
             ) : (
               <FlatList
@@ -295,7 +297,7 @@ export default function MergeEditScreen() {
         <TouchableOpacity style={styles.overlay} onPress={() => setUnitModal(false)}>
           <View style={styles.sheet}>
             <View style={styles.handle} />
-            <Text style={styles.sheetTitle}>Select Unit</Text>
+            <Text style={styles.sheetTitle}>{t('materials.selectUnit')}</Text>
             <FlatList
               data={UNITS}
               keyExtractor={u => u}

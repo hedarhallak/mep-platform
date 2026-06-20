@@ -12,6 +12,7 @@ import {
   FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { apiClient } from '../../api/client';
 import Colors from '../../theme/colors';
 
@@ -60,6 +61,7 @@ function fmtDateTime(iso: string): string {
 // ================================================================ screen --
 
 export default function ForemanWorkspaceScreen() {
+  const { t } = useTranslation();
   const [requests, setRequests]           = useState<InboxRequest[]>([]);
   const [suppliers, setSuppliers]         = useState<Supplier[]>([]);
   const [selectedIds, setSelectedIds]     = useState<Set<number>>(new Set());
@@ -129,26 +131,26 @@ export default function ForemanWorkspaceScreen() {
 
   const handleSend = () => {
     if (selectedIds.size === 0) {
-      Alert.alert('No Requests Selected', 'Select at least one request.');
+      Alert.alert(t('materials.noRequestsSelected'), t('materials.noRequestsSelectedMsg'));
       return;
     }
     if (destination === null) {
-      Alert.alert('No Destination', 'Choose a supplier or send to procurement.');
+      Alert.alert(t('materials.noDestination'), t('materials.chooseDestination'));
       return;
     }
 
     const destLabel =
       destination === 'procurement'
-        ? 'Procurement department'
-        : selectedSupplier?.name ?? 'Supplier';
+        ? t('materials.procurementDept')
+        : selectedSupplier?.name ?? '';
 
     Alert.alert(
-      'Confirm Send',
-      `Merge ${selectedIds.size} request(s) · ${mergedItems.length} item(s)\nSend to: ${destLabel}`,
+      t('materials.confirmSend'),
+      t('materials.mergeSendConfirm', { requests: selectedIds.size, items: mergedItems.length, dest: destLabel }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Send',
+          text: t('common.send'),
           onPress: async () => {
             setSending(true);
             try {
@@ -157,12 +159,12 @@ export default function ForemanWorkspaceScreen() {
                 supplier_id: destination === 'procurement' ? 'procurement' : String(destination),
               });
               await apiClient.get(`/api/materials/pdf-data?${params.toString()}`);
-              Alert.alert('Sent', 'Purchase order created and sent successfully.');
+              Alert.alert(t('materials.status.sent'), t('materials.orderSent'));
               setSelectedIds(new Set());
               setDestination(null);
               fetchAll(true);
             } catch (err: any) {
-              Alert.alert('Error', err.response?.data?.error || 'Failed to send.');
+              Alert.alert(t('common.error'), err.response?.data?.error || t('materials.sendFailed'));
             } finally {
               setSending(false);
             }
@@ -193,7 +195,7 @@ export default function ForemanWorkspaceScreen() {
         <View style={styles.sectionRow}>
           <View style={styles.titleRow}>
             <Ionicons name="people-outline" size={17} color={Colors.primary} />
-            <Text style={styles.sectionTitle}>Worker Requests</Text>
+            <Text style={styles.sectionTitle}>{t('materials.workerRequests')}</Text>
             <View style={styles.badge}>
               <Text style={styles.badgeText}>{requests.length}</Text>
             </View>
@@ -202,13 +204,13 @@ export default function ForemanWorkspaceScreen() {
           {requests.length > 0 && (
             <View style={styles.selectRow}>
               <TouchableOpacity onPress={() => setSelectedIds(new Set(requests.map(r => r.id)))}>
-                <Text style={styles.selectAllText}>Select All</Text>
+                <Text style={styles.selectAllText}>{t('materials.selectAll')}</Text>
               </TouchableOpacity>
               {selectedIds.size > 0 && (
                 <>
                   <Text style={styles.dot}>·</Text>
                   <TouchableOpacity onPress={() => setSelectedIds(new Set())}>
-                    <Text style={styles.clearText}>Clear</Text>
+                    <Text style={styles.clearText}>{t('materials.clear')}</Text>
                   </TouchableOpacity>
                 </>
               )}
@@ -219,7 +221,7 @@ export default function ForemanWorkspaceScreen() {
         {requests.length === 0 ? (
           <View style={styles.emptyCard}>
             <Ionicons name="checkmark-circle-outline" size={36} color="#d1d5db" />
-            <Text style={styles.emptyText}>No pending requests</Text>
+            <Text style={styles.emptyText}>{t('materials.noPendingRequests')}</Text>
           </View>
         ) : (
           requests.map(req => {
@@ -240,11 +242,11 @@ export default function ForemanWorkspaceScreen() {
                   <View style={styles.cardInfo}>
                     <Text style={styles.cardProject}>{req.project_name}</Text>
                     <Text style={styles.cardMeta}>
-                      {req.requester_name ?? 'Worker'}
+                      {req.requester_name ?? t('materials.worker')}
                       {req.created_at ? `  ·  ${fmtDateTime(req.created_at)}` : ''}
                     </Text>
                     <Text style={styles.cardItemCount}>
-                      {(req.items || []).length} item{(req.items || []).length !== 1 ? 's' : ''}
+                      {t('materials.itemsCount', { count: (req.items || []).length })}
                     </Text>
                   </View>
 
@@ -284,9 +286,9 @@ export default function ForemanWorkspaceScreen() {
           <>
             <View style={[styles.titleRow, { marginTop: 8 }]}>
               <Ionicons name="git-merge-outline" size={17} color={Colors.primary} />
-              <Text style={styles.sectionTitle}>Merged Preview</Text>
+              <Text style={styles.sectionTitle}>{t('materials.mergedPreview')}</Text>
               <View style={styles.badge}>
-                <Text style={styles.badgeText}>{mergedItems.length} items</Text>
+                <Text style={styles.badgeText}>{t('materials.itemsCount', { count: mergedItems.length })}</Text>
               </View>
             </View>
 
@@ -301,7 +303,7 @@ export default function ForemanWorkspaceScreen() {
 
             <View style={[styles.titleRow, { marginTop: 8 }]}>
               <Ionicons name="send-outline" size={17} color={Colors.primary} />
-              <Text style={styles.sectionTitle}>Send To</Text>
+              <Text style={styles.sectionTitle}>{t('materials.sendTo')}</Text>
             </View>
 
             <View style={styles.destCard}>
@@ -317,9 +319,9 @@ export default function ForemanWorkspaceScreen() {
                   />
                   <View>
                     <Text style={[styles.destTitle, destination === 'procurement' && styles.destTitleOn]}>
-                      Procurement
+                      {t('materials.procurement')}
                     </Text>
-                    <Text style={styles.destSub}>Internal purchasing department</Text>
+                    <Text style={styles.destSub}>{t('materials.procurementDesc')}</Text>
                   </View>
                 </View>
                 <View style={[styles.radio, destination === 'procurement' && styles.radioOn]}>
@@ -341,10 +343,10 @@ export default function ForemanWorkspaceScreen() {
                   />
                   <View>
                     <Text style={[styles.destTitle, typeof destination === 'number' && styles.destTitleOn]}>
-                      {selectedSupplier ? selectedSupplier.name : 'Select Supplier'}
+                      {selectedSupplier ? selectedSupplier.name : t('materials.selectSupplier')}
                     </Text>
                     <Text style={styles.destSub}>
-                      {selectedSupplier ? selectedSupplier.email : 'Send directly to a supplier'}
+                      {selectedSupplier ? selectedSupplier.email : t('materials.selectSupplierDesc')}
                     </Text>
                   </View>
                 </View>
@@ -366,7 +368,7 @@ export default function ForemanWorkspaceScreen() {
                 <>
                   <Ionicons name="paper-plane-outline" size={20} color={Colors.white} />
                   <Text style={styles.sendBtnText}>
-                    Merge & Send ({selectedIds.size} request{selectedIds.size !== 1 ? 's' : ''})
+                    {t('materials.mergeSendCount', { count: selectedIds.size })}
                   </Text>
                 </>
               )}
@@ -380,10 +382,10 @@ export default function ForemanWorkspaceScreen() {
         <TouchableOpacity style={styles.overlay} onPress={() => setSupplierModal(false)}>
           <View style={styles.sheet}>
             <View style={styles.handle} />
-            <Text style={styles.sheetTitle}>Select Supplier</Text>
+            <Text style={styles.sheetTitle}>{t('materials.selectSupplier')}</Text>
             {suppliers.length === 0 ? (
               <View style={styles.emptyCard}>
-                <Text style={styles.emptyText}>No suppliers found</Text>
+                <Text style={styles.emptyText}>{t('common.noResults')}</Text>
               </View>
             ) : (
               <FlatList

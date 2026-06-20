@@ -130,7 +130,7 @@ export default function NewTaskScreen() {
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') { Alert.alert('Permission needed', 'Please allow photo access.'); return; }
+    if (status !== 'granted') { Alert.alert(t('common.error'), t('tasks.photoPermission')); return; }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: false, quality: 0.7 });
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
@@ -139,8 +139,8 @@ export default function NewTaskScreen() {
   };
 
   const handleSend = async () => {
-    if (!form.title.trim()) { Alert.alert('Error', 'Title is required'); return; }
-    if (!form.recipient_ids.length) { Alert.alert('Error', 'Select at least one recipient'); return; }
+    if (!form.title.trim()) { Alert.alert(t('common.error'), t('errors.titleRequired')); return; }
+    if (!form.recipient_ids.length) { Alert.alert(t('common.error'), t('errors.selectRecipient')); return; }
     setSending(true);
     try {
       const fd = new FormData();
@@ -155,9 +155,9 @@ export default function NewTaskScreen() {
       await apiClient.post('/api/hub/messages', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       resetForm();
       fetchData(true);
-      Alert.alert(t('common.success'), `Task sent to ${form.recipient_ids.length} recipient(s).`);
+      Alert.alert(t('common.success'), t('tasks.recipientCount', { count: form.recipient_ids.length }));
     } catch (e: any) {
-      Alert.alert('Error', e.response?.data?.error || 'Failed to send task.');
+      Alert.alert(t('common.error'), e.response?.data?.error || t('tasks.sendFailed'));
     } finally { setSending(false); }
   };
 
@@ -298,26 +298,26 @@ export default function NewTaskScreen() {
         <View style={s.wrapper}>
           <View style={s.pickerHeader}>
             <View>
-              <Text style={s.pickerTitle}>Select Recipients</Text>
-              <Text style={s.pickerSub}>{form.recipient_ids.length} selected</Text>
+              <Text style={s.pickerTitle}>{t('tasks.selectRecipients')}</Text>
+              <Text style={s.pickerSub}>{t('tasks.selectedCount', { count: form.recipient_ids.length })}</Text>
             </View>
             <View style={{flexDirection:'row',alignItems:'center',gap:6}}>
-              <TouchableOpacity onPress={selectAll} style={s.selectBtn}><Text style={s.selectBtnText}>All</Text></TouchableOpacity>
-              <TouchableOpacity onPress={clearAll} style={s.selectBtn}><Text style={s.selectBtnText}>Clear</Text></TouchableOpacity>
+              <TouchableOpacity onPress={selectAll} style={s.selectBtn}><Text style={s.selectBtnText}>{t('common.all')}</Text></TouchableOpacity>
+              <TouchableOpacity onPress={clearAll} style={s.selectBtn}><Text style={s.selectBtnText}>{t('common.clear')}</Text></TouchableOpacity>
               <TouchableOpacity style={s.pickerDoneBtn} onPress={()=>setShowWorkerModal(false)}>
-                <Text style={s.pickerDoneText}>Done</Text>
+                <Text style={s.pickerDoneText}>{t('common.done')}</Text>
               </TouchableOpacity>
             </View>
           </View>
           <View style={s.pickerSearch}>
             <Ionicons name="search-outline" size={18} color="#9ca3af"/>
-            <TextInput style={s.searchInput} placeholder="Search by name, role, trade..." placeholderTextColor="#9ca3af"
+            <TextInput style={s.searchInput} placeholder={t('submitRequest.searchWorkers')} placeholderTextColor="#9ca3af"
               value={workerSearch} onChangeText={setWorkerSearch} autoFocus/>
             {workerSearch.length>0&&<TouchableOpacity onPress={()=>setWorkerSearch('')}><Ionicons name="close-circle" size={18} color="#9ca3af"/></TouchableOpacity>}
           </View>
           <ScrollView style={{flex:1,paddingHorizontal:16}}>
             {filteredWorkers.length===0?(
-              <View style={s.emptyCard}><Text style={s.emptyText}>No workers found</Text></View>
+              <View style={s.emptyCard}><Text style={s.emptyText}>{t('common.noResults')}</Text></View>
             ):filteredWorkers.map(w=>{
               const selected = form.recipient_ids.includes(w.id);
               return (
@@ -327,7 +327,7 @@ export default function NewTaskScreen() {
                   </View>
                   <View style={{flex:1}}>
                     <Text style={[s.workerName, selected&&{color:Colors.primary,fontWeight:'700'}]}>{w.first_name} {w.last_name}</Text>
-                    <Text style={s.workerRole}>{w.role} Â· {w.trade_name||'General'}{w.is_assigned?' Â· Assigned':''}</Text>
+                    <Text style={s.workerRole}>{w.role} Â· {w.trade_name||t('submitRequest.general')}</Text>
                   </View>
                   {selected?<Ionicons name="checkmark-circle" size={22} color="#1e3a5f"/>:<View style={s.emptyCheck}/>}
                 </TouchableOpacity>

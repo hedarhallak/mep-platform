@@ -31,5 +31,5 @@ export default function MaterialsMenuScreen() {
     },
   ];
 
-  return <SubMenuScreen title="Materials" items={items} />;
+  return <SubMenuScreen title={t('modules.materials')} items={items} />;
 }

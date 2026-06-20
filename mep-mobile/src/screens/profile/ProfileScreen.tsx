@@ -112,18 +112,18 @@ export default function ProfileScreen() {
       {/* Info Card */}
       <View style={styles.infoCard}>
         <Text style={styles.sectionTitle}>{t('profile.title')}</Text>
-        <InfoRow icon="mail-outline" label="Email" value={profile?.email || null} />
-        <InfoRow icon="call-outline" label={t('attendance.title')} value={profile?.phone || null} />
-        <InfoRow icon="construct-outline" label="Trade" value={profile?.trade_code || null} />
-        <InfoRow icon="ribbon-outline" label="Rank" value={profile?.rank_code || null} />
-        <InfoRow icon="location-outline" label={t('profile.title')} value={profile?.home_address || null} />
-        <InfoRow icon="car-outline" label="Distance" value={profile?.distance_km ? `${profile.distance_km} km` : null} />
-        <InfoRow icon="business-outline" label="CCQ Sector" value={profile?.ccq_sector || null} />
+        <InfoRow icon="mail-outline" label={t('profile.email')} value={profile?.email || null} />
+        <InfoRow icon="call-outline" label={t('profile.phone')} value={profile?.phone || null} />
+        <InfoRow icon="construct-outline" label={t('profile.trade')} value={profile?.trade_code || null} />
+        <InfoRow icon="ribbon-outline" label={t('profile.rank')} value={profile?.rank_code || null} />
+        <InfoRow icon="location-outline" label={t('profile.address')} value={profile?.home_address || null} />
+        <InfoRow icon="car-outline" label={t('profile.distance')} value={profile?.distance_km ? `${profile.distance_km} km` : null} />
+        <InfoRow icon="business-outline" label={t('profile.ccqSector')} value={profile?.ccq_sector || null} />
       </View>
 
       {/* Settings Card */}
       <View style={styles.actionsCard}>
-        <Text style={styles.sectionTitle}>Settings</Text>
+        <Text style={styles.sectionTitle}>{t('profile.settings')}</Text>
 
         {/* Language Selector */}
         <TouchableOpacity style={styles.actionRow} onPress={() => setLangModal(true)}>
@@ -155,7 +155,7 @@ export default function ProfileScreen() {
         <Text style={styles.logoutText}>{t('auth.logout')}</Text>
       </TouchableOpacity>
 
-      <Text style={styles.version}>MEP Platform v1.0.0</Text>
+      <Text style={styles.version}>{t('profile.appVersion')}</Text>
 
       {/* Language Modal */}
       <Modal visible={langModal} transparent animationType="slide">

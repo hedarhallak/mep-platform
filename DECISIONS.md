@@ -16603,3 +16603,25 @@ Two more screens (permission-gated via §149.3, EN/FR):
 - Wired into `MainStackNavigator`; two new Dashboard modules; i18n EN/FR (`tools.*`, `crews.*`, `modules.tools`, `modules.crews`).
 
 Verified: tsc clean, `expo export` bundles (1560 modules). Mobile now has 12 modules (was 6). Remaining: Batch D (Project Staffing read/coverage + Standup + Employees/Suppliers/Projects incl. create) + crew create/deploy. Excluded: Permissions matrix, BI, Billing.
+
+### 149.7 — Mobile EN/FR i18n completion + permanent parity guard
+
+Hedar flagged after the Batch C build: "الترجمة انكليزي فرنسي مو مكتملة" — several mobile screens still rendered hardcoded English. An Explore audit found ~104 hardcoded strings across 9 screens (new Batch A–C screens were clean; the offenders were older screens + a few menu titles).
+
+Fixed (every user-visible string now goes through `t()`):
+- **Menu screens** — `HubMenuScreen`/`TasksMenuScreen`/`MaterialsMenuScreen` `title` props were literals → `t('modules.*')`.
+- **ChangePinScreen** — had NO `useTranslation` at all; added the hook and translated every label, placeholder, info hint, button, and Alert.
+- **ProfileScreen** — translated all info-row labels + Settings + app version; also **fixed two wrong-key bugs** (phone was bound to `attendance.title`, address to `profile.title`).
+- **NewTaskScreen** — recipient-picker modal (Select Recipients / All / Clear / Done / search placeholder / no-results / General) + the send Alerts.
+- **MyHubScreen** — incl. the standalone `ImageViewer` sub-component (got its own `useTranslation`): zoom hint, NEW/Done badges, Due prefix, completion-note placeholder, completion-photo button, photo-permission/pick/complete Alerts.
+- **MergeEditScreen** + **ForemanWorkspaceScreen** — neither had `useTranslation`; added it and translated the merge/destination flow + all Alerts (Cannot Delete / Remove / No Items / No Destination / Confirm Send / Sent / Error).
+
+New keys (added symmetrically to **both** `en.ts` and `fr.ts`): a batch under `auth.*` (PIN flow), `tasks.*`, `hub.*`, `profile.*`, and four `materials.*` (`mergedItems`, `sendOrderCount`, `mergeSendConfirm`, `mergeSendCount`). Final count **353 = 353**.
+
+Deliberately left:
+- `hub/TasksScreen.tsx` — **dead code** (not imported/routed anywhere; the live task flow is `TasksMenu → NewTask → SentTasks`). Its ~27 hardcoded strings never render. Flagged for separate deletion.
+- `ExpensesScreen` `placeholder="0.00"` — numeric format hint, locale-neutral (a FR `0,00` would break `Number()` parsing).
+
+Permanent guard: added **`src/i18n/parity.test.ts`** (mobile finally gets what web already had) — fails CI if an EN key lacks its FR twin (or vice-versa) or any value is empty. Mirrors the web `parity.test.js` philosophy.
+
+Verified: `npx tsc --noEmit` clean, parity script 353=353, `jest src/i18n/parity.test.ts` 4/4 green. Hedar to run the EAS build + device test.

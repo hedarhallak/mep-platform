@@ -36,5 +36,5 @@ export default function TasksMenuScreen() {
     },
   ];
 
-  return <SubMenuScreen title="Tasks" items={items} />;
+  return <SubMenuScreen title={t('modules.tasks')} items={items} />;
 }
