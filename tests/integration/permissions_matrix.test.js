@@ -164,6 +164,28 @@ describeIfDb('Permissions matrix — /api/permissions/matrix', () => {
     expect(blocked.statusCode).toBe(403);
   });
 
+  test('§148 Phase 5: DELETE clears a user’s personal overrides (per-user reset)', async () => {
+    const company = await seedCompany();
+    const admin = await seedUser({ company_id: company.company_id, role: 'COMPANY_ADMIN' });
+    const { token } = await loginUser(admin);
+    const worker = await seedUser({ company_id: company.company_id, role: 'WORKER' });
+
+    await request(app)
+      .put(`/api/permissions/user/${worker.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ permissions: [{ module: 'projects', action: 'delete', allowed: true }] });
+
+    const del = await request(app)
+      .delete(`/api/permissions/user/${worker.id}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(del.statusCode).toBe(200);
+
+    const after = await request(app)
+      .get(`/api/permissions/user/${worker.id}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(after.body.overrides).toEqual({});
+  });
+
   test('GET /matrix without settings.permissions returns 403', async () => {
     const company = await seedCompany();
     const worker = await seedUser({ company_id: company.company_id, role: 'WORKER' });

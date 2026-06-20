@@ -16507,3 +16507,13 @@ Hedar (testing): the "Reset to defaults" button never appeared for a COMPANY_ADM
 Restored all of §148.13 in one commit: GET /matrix company overlay, PUT /role company diff-branch (`UPDATE_COMPANY_PERMISSIONS`), POST /reset company-branch + widened guard (`RESET_COMPANY_PERMISSIONS`), GET /my-permissions overlay, the frontend Reset gating (OWNER/COMPANY_ADMIN), and the per-company isolation test. Verified by marker grep (isPlatform×7 etc.) before shipping.
 
 **Lesson (extends the append-race rule):** for any multi-file feature, after the ship `grep` for 2-3 distinctive code markers on the merged main — a green CI does NOT prove the code landed if the test guarding it was lost in the same race.
+
+### 148.20 — Per-user "Reset to default" in the User Management permissions modal
+
+Hedar: the per-user Permissions modal needed a reset that reverts THIS EMPLOYEE to their role default (clears personal overrides) — distinct from the matrix "Reset" which resets the ROLE default.
+
+- **backend** — `DELETE /api/permissions/user/:userId` (`can('settings.permissions')` + the same rank-lock/company guard via `loadEditableTargetUser`): deletes every `user_permissions` row for the user → resolution falls back to company+role. Audit `RESET_USER_PERMISSIONS`.
+- **frontend** — `UserPermissionsModal` footer gets a "Reset to default" button (RefreshCw, left of Cancel/Save), `window.confirm` first, disabled when the user has no overrides. Clears + closes + invalidates the users query.
+- **test** — grant a WORKER an override, DELETE, GET shows `overrides == {}`.
+
+No migration. Two distinct resets now exist: matrix Reset (role default, §148.13) vs per-user Reset (clear this user's overrides, §148.20).
