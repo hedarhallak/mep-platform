@@ -228,6 +228,25 @@ export default {
     noRecords: 'Aucun enregistrement pour cette période',
   },
 
+  // §147 Demande de personnel (demande du contremaître)
+  submitRequest: {
+    title: 'Soumettre une demande de personnel',
+    intro: 'Choisissez votre projet, la date et l’équipe dont vous avez besoin — envoyé au répartiteur pour approbation.',
+    date: 'Date',
+    team: 'Équipe',
+    noProjects: 'Aucun projet ne vous est encore assigné.',
+    selectTeam: 'Sélectionnez l’équipe dont vous avez besoin…',
+    tapToEdit: '{{count}} sélectionné(s) — toucher pour modifier',
+    selectedCount: '{{count}} sélectionné(s)',
+    searchWorkers: 'Rechercher par nom ou métier…',
+    loadingWorkers: 'Chargement des travailleurs disponibles…',
+    noneAvailable: 'Aucun travailleur disponible pour cette date.',
+    general: 'Général',
+    submit: 'Soumettre la demande ({{count}})',
+    doneTitle: 'Demande envoyée',
+    doneBody: '{{created}} demande(s) soumise(s), {{skipped}} ignorée(s) (déjà assigné ou en attente).',
+  },
+
   // Profile
   profile: {
     title: 'Profil',

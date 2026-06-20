@@ -228,6 +228,25 @@ export default {
     noRecords: 'No records for this period',
   },
 
+  // §147 Submit Request (foreman staffing request)
+  submitRequest: {
+    title: 'Submit a Staffing Request',
+    intro: 'Pick your project, the date, and the team you need — sent to the dispatcher for approval.',
+    date: 'Date',
+    team: 'Team',
+    noProjects: 'You have no projects assigned yet.',
+    selectTeam: 'Select the team you need…',
+    tapToEdit: '{{count}} selected — tap to edit',
+    selectedCount: '{{count}} selected',
+    searchWorkers: 'Search by name or trade…',
+    loadingWorkers: 'Loading available workers…',
+    noneAvailable: 'No available workers for this date.',
+    general: 'General',
+    submit: 'Submit request ({{count}})',
+    doneTitle: 'Request sent',
+    doneBody: '{{created}} request(s) submitted, {{skipped}} skipped (already assigned or pending).',
+  },
+
   // Profile
   profile: {
     title: 'Profile',

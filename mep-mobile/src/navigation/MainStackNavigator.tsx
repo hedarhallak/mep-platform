@@ -15,6 +15,7 @@ import MyReportScreen from '../screens/reports/MyReportScreen';
 import ProfileScreen from '../screens/profile/ProfileScreen';
 import ChangePinScreen from '../screens/profile/ChangePinScreen';
 import MergeEditScreen from '../screens/materials/MergeEditScreen';
+import SubmitRequestScreen from '../screens/assignments/SubmitRequestScreen';
 
 const Stack = createStackNavigator();
 
@@ -29,6 +30,10 @@ export default function MainStackNavigator() {
       {/* Attendance */}
       <Stack.Screen name="Attendance" component={AttendanceScreen}
         options={{ ...headerOptions, headerShown: true, title: t('attendance.title') }} />
+
+      {/* §147 Submit Request */}
+      <Stack.Screen name="SubmitRequest" component={SubmitRequestScreen}
+        options={{ ...headerOptions, headerShown: true, title: t('submitRequest.title') }} />
 
       {/* Materials */}
       <Stack.Screen name="Materials" component={MaterialsMenuScreen}
