@@ -16533,3 +16533,26 @@ The `i18n/locales/parity.test.js` (EN/FR key parity) stays green — every key a
 ### 148.22 — In-app language switcher (FR/EN toggle in the sidebar)
 
 Hedar: switching language should be possible from inside the app, not only at login, for flexibility moving between FR/EN. The `LanguageSwitcher` component already existed (a FR/EN pill that calls `i18n.changeLanguage` + persists to localStorage `constrai_language`) but was only on a few pages + the login screen. Added it to `AppLayout` (the sidebar user footer, above the company/profile row) so it's reachable from EVERY authenticated page. One-line change effectively — import + render the existing component. (The scattered per-page switchers are left as-is; harmless.)
+
+## 149. Section 149 — June 20, 2026 — PROGRAM: Mobile app update (bring mep-mobile up to the current backend)
+
+The Expo/React Native app (`mep-mobile/`) is ~6 months behind. Audit (read-only Explore agent) findings:
+
+**Compatibility = mostly OK** (the existing app still works against current prod): the mobile login already handles the current `/auth/login` response incl. `trade_code`; all ~30 endpoints it calls still exist; auth/refresh flow intact. Minor MEDIUM risks: no explicit 403 handling, and a few response shapes worth spot-checking. So this is an ADDITIVE feature-gap program, not a rescue.
+
+**Mobile audience = FIELD only** (workers + foremen). Admin features (permissions matrix §148, user management, BI) are intentionally OUT of mobile scope.
+
+**Field feature gap** (backend ready for all): §147 foreman Submit Request + trade-scoping (HIGH/L), Expenses + receipt photo (M/L), Surplus/Material Returns (M/M), Crews deploy (M/M), Purchase Orders view (LOW/S), Tools (LOW/M).
+
+**Mobile specifics:** separate i18n (`mep-mobile/src/i18n/locales/en.ts`+`fr.ts`, ~70-95 new keys for the new screens); API client `mep-mobile/src/api/client.ts` (base `https://app.constrai.ca`, SecureStore tokens, 401→refresh queue); nav = bottom tabs (Home/Hub/Profile) + stacks; icon-grid `SubMenuScreen` pattern. Each phase = an EAS build + TestFlight cycle (Hedar runs builds/device tests; Claude writes the code).
+
+**Phased plan (Hedar's pick: start §147):**
+- Phase 0 — compatibility hardening (403 handling, staging-URL config) — folded into Phase 1.
+- **Phase 1 — §147 foreman Submit Request (STARTED):** new screen(s) for project + date + team → `POST /assignments/requests` (one PENDING request per worker), trade-scoped. Mirrors web `ForemanRequestPage`.
+- Phase 2 — Expenses + receipt. Phase 3 — Surplus/Returns. Phase 4 — Crews. Phase 5 — PO view. Phase 6 — Tools.
+
+### 149.1 — Mobile Phase 1 SHIPPED (code): §147 Submit Request screen
+
+`mep-mobile/src/screens/assignments/SubmitRequestScreen.tsx` — the foreman picks a project (chips from `/api/hub/my-projects`), a date (calendar, default tomorrow), and a team (multi-select modal from `/api/assignments/available?date=`, trade-scoped by the backend), then submits → one `POST /api/assignments/requests` per worker (Promise.allSettled; reports created/skipped). Adapted from the proven `NewTaskScreen` patterns (project chips + worker picker modal + calendar). Wired: registered in `MainStackNavigator`, and the Dashboard "Assignments" module (was `screen: null` / "Coming Soon") now opens it. i18n: `submitRequest.*` added to both `en.ts` + `fr.ts` (EN/FR). `tsc --noEmit` clean.
+
+NOT yet on devices: mobile ships via `eas build` + TestFlight (Hedar runs the build + tests on a device). Code is committed for version control; the build/test is the separate next step. After verification, Phase 2 (Expenses) follows.

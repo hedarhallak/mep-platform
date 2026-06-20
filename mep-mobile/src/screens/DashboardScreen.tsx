@@ -56,7 +56,7 @@ export default function DashboardScreen() {
     { id: 'materials', label: t('modules.materials'), icon: 'cube-outline', color: '#0891b2', bg: '#ecfeff', screen: 'Materials', roles: ['ALL'] },
     { id: 'report', label: t('modules.report'), icon: 'bar-chart-outline', color: '#7c3aed', bg: '#f5f3ff', screen: 'Report', roles: ['ALL'] },
     { id: 'tasks', label: t('modules.tasks'), icon: 'checkmark-circle-outline', color: Colors.danger, bg: Colors.dangerBg, screen: 'Tasks', roles: ['FOREMAN', 'TRADE_ADMIN', 'TRADE_PROJECT_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN', 'IT_ADMIN'] },
-    { id: 'assignments', label: t('modules.assignments'), icon: 'clipboard-outline', color: '#d97706', bg: '#fffbeb', screen: null, roles: ['FOREMAN', 'TRADE_ADMIN', 'TRADE_PROJECT_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN', 'IT_ADMIN'] },
+    { id: 'assignments', label: t('modules.assignments'), icon: 'clipboard-outline', color: '#d97706', bg: '#fffbeb', screen: 'SubmitRequest', roles: ['FOREMAN', 'TRADE_ADMIN', 'TRADE_PROJECT_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN', 'IT_ADMIN'] },
     { id: 'standup', label: t('modules.standup'), icon: 'people-outline', color: '#059669', bg: '#ecfdf5', screen: null, roles: ['FOREMAN', 'TRADE_ADMIN', 'TRADE_PROJECT_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN'] },
     { id: 'purchase_orders', label: t('modules.purchaseOrders'), icon: 'document-text-outline', color: '#6d28d9', bg: '#f5f3ff', screen: null, roles: ['FOREMAN', 'TRADE_ADMIN', 'TRADE_PROJECT_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN', 'IT_ADMIN'] },
   ];
