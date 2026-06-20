@@ -70,7 +70,8 @@ export default {
     myHub: 'Mon hub',
     profile: 'Profil',
     home: 'Accueil',
-    surplus: 'Surplus',
+    surplus: 'Retours de matériel',
+    expenses: 'Dépenses',
   },
 
   // Attendance
@@ -266,6 +267,49 @@ export default {
     empty: 'Aucun bon de commande.',
     procurement: 'Approvisionnement',
     itemsCount: '{{count}} article(s)',
+  },
+
+  // §149 Batch B — Dépenses / achats d'urgence
+  expenses: {
+    title: 'Dépenses',
+    newClaim: 'Nouvelle dépense',
+    myClaims: 'Mes dépenses',
+    empty: 'Aucune dépense.',
+    vendor: 'Fournisseur / magasin',
+    vendorPlaceholder: 'ex. Home Depot',
+    amount: 'Montant (CAD)',
+    description: 'Description',
+    descriptionPlaceholder: 'À quoi servait-elle?',
+    receipt: 'Photo du reçu',
+    addPhoto: 'Ajouter une photo',
+    photoPermission: 'Veuillez autoriser l’accès aux photos.',
+    submit: 'Soumettre',
+    submitted: 'Dépense soumise ✓',
+    submitFailed: 'Échec de la soumission. Réessayez.',
+    selectProject: 'Veuillez choisir un projet.',
+    vendorRequired: 'Le fournisseur est requis.',
+    amountRequired: 'Entrez un montant valide.',
+    status: { PENDING: 'En attente', APPROVED: 'Révisée', REJECTED: 'Rejetée', PAID: 'Remboursée' },
+  },
+
+  // §149 Batch B — Surplus / Retours de matériel
+  surplus: {
+    title: 'Retours de matériel',
+    declare: 'Déclarer un retour',
+    myReturns: 'Mes retours',
+    empty: 'Aucun retour déclaré.',
+    items: 'Articles',
+    itemName: 'Article',
+    qty: 'Qté',
+    addItemBtn: 'Ajouter un article',
+    note: 'Note',
+    notePlaceholder: 'Quelque chose à ajouter…',
+    itemsCount: '{{count}} article(s)',
+    submit: 'Déclarer',
+    submitted: 'Retour déclaré ✓',
+    submitFailed: 'Échec de la déclaration. Réessayez.',
+    selectProject: 'Veuillez choisir un projet.',
+    addItem: 'Ajoutez au moins un article avec une quantité.',
   },
 
   // Profile

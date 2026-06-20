@@ -16585,3 +16585,12 @@ Batch A (both backend-ready):
 - Wired into `MainStackNavigator`; Dashboard gains a `pending_requests` module (perm `assignments.edit`) and the `purchase_orders` module now opens the screen. Both are **permission-gated** via the §149.3 store, so each user only sees what they're allowed. i18n EN/FR added.
 
 Verified: tsc clean, `expo export` bundles (1556 modules). Next batches: B (Expenses + Surplus + Tools), C (Crews + Project Staffing), D (Standup + Employees/Suppliers/Projects incl. create).
+
+### 149.5 — Mobile Batch B: Expenses + Surplus/Material Returns
+
+Two more field screens toward web parity (both permission-gated via §149.3, EN/FR):
+- **ExpensesScreen** — emergency purchases: project picker (`/api/hub/my-projects`) + vendor + amount + description + receipt photo (`expo-image-picker` → `POST /api/expense-claims/receipt` → receipt_url, then `POST /api/expense-claims`); plus a "My Claims" list (`GET /api/expense-claims`) with status badges. Dashboard module gated by `expense_claims.submit`/`view`.
+- **SurplusScreen** — Material Returns: project + multi-item (item_name/qty) + note → `POST /api/materials/returns`; "My Returns" list (`GET /api/materials/returns`). Dashboard module gated by `materials.surplus_view`/`surplus_declare`.
+- Wired into `MainStackNavigator`; two new Dashboard modules; i18n EN/FR (`expenses.*`, `surplus.*`, `modules.expenses`). Amounts entered in dollars → `amount_cents`.
+
+Verified: tsc clean, `expo export` bundles (1558 modules). Remaining batches: C (Tools + Crews + Project Staffing), D (Standup + Employees/Suppliers/Projects incl. create). Excluded from mobile: Permissions matrix, BI, Billing.

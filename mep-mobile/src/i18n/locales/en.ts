@@ -70,7 +70,8 @@ export default {
     myHub: 'My Hub',
     profile: 'Profile',
     home: 'Home',
-    surplus: 'Surplus',
+    surplus: 'Material Returns',
+    expenses: 'Expenses',
   },
 
   // Attendance
@@ -266,6 +267,49 @@ export default {
     empty: 'No purchase orders yet.',
     procurement: 'Procurement',
     itemsCount: '{{count}} item(s)',
+  },
+
+  // §149 Batch B — Expenses / emergency purchases
+  expenses: {
+    title: 'Expenses',
+    newClaim: 'New Expense',
+    myClaims: 'My Claims',
+    empty: 'No expense claims yet.',
+    vendor: 'Vendor / store',
+    vendorPlaceholder: 'e.g. Home Depot',
+    amount: 'Amount (CAD)',
+    description: 'Description',
+    descriptionPlaceholder: 'What was it for?',
+    receipt: 'Receipt photo',
+    addPhoto: 'Add a photo',
+    photoPermission: 'Please allow photo access.',
+    submit: 'Submit claim',
+    submitted: 'Expense submitted ✓',
+    submitFailed: 'Failed to submit. Please try again.',
+    selectProject: 'Please select a project.',
+    vendorRequired: 'Vendor is required.',
+    amountRequired: 'Enter a valid amount.',
+    status: { PENDING: 'Pending', APPROVED: 'Reviewed', REJECTED: 'Rejected', PAID: 'Reimbursed' },
+  },
+
+  // §149 Batch B — Surplus / Material Returns
+  surplus: {
+    title: 'Material Returns',
+    declare: 'Declare a Return',
+    myReturns: 'My Returns',
+    empty: 'No returns declared yet.',
+    items: 'Items',
+    itemName: 'Item',
+    qty: 'Qty',
+    addItemBtn: 'Add item',
+    note: 'Note',
+    notePlaceholder: 'Anything to add…',
+    itemsCount: '{{count}} item(s)',
+    submit: 'Declare',
+    submitted: 'Return declared ✓',
+    submitFailed: 'Failed to declare. Please try again.',
+    selectProject: 'Please select a project.',
+    addItem: 'Add at least one item with a quantity.',
   },
 
   // Profile

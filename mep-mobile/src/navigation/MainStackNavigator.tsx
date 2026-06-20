@@ -18,6 +18,8 @@ import MergeEditScreen from '../screens/materials/MergeEditScreen';
 import SubmitRequestScreen from '../screens/assignments/SubmitRequestScreen';
 import PendingRequestsScreen from '../screens/assignments/PendingRequestsScreen';
 import PurchaseOrdersScreen from '../screens/materials/PurchaseOrdersScreen';
+import ExpensesScreen from '../screens/materials/ExpensesScreen';
+import SurplusScreen from '../screens/materials/SurplusScreen';
 
 const Stack = createStackNavigator();
 
@@ -42,6 +44,12 @@ export default function MainStackNavigator() {
         options={{ ...headerOptions, headerShown: true, title: t('pendingRequests.title') }} />
       <Stack.Screen name="PurchaseOrders" component={PurchaseOrdersScreen}
         options={{ ...headerOptions, headerShown: true, title: t('purchaseOrders.title') }} />
+
+      {/* §149 Batch B — Expenses + Surplus */}
+      <Stack.Screen name="Expenses" component={ExpensesScreen}
+        options={{ ...headerOptions, headerShown: true, title: t('expenses.title') }} />
+      <Stack.Screen name="Surplus" component={SurplusScreen}
+        options={{ ...headerOptions, headerShown: true, title: t('surplus.title') }} />
 
       {/* Materials */}
       <Stack.Screen name="Materials" component={MaterialsMenuScreen}
