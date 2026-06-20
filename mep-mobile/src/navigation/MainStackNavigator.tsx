@@ -20,6 +20,8 @@ import PendingRequestsScreen from '../screens/assignments/PendingRequestsScreen'
 import PurchaseOrdersScreen from '../screens/materials/PurchaseOrdersScreen';
 import ExpensesScreen from '../screens/materials/ExpensesScreen';
 import SurplusScreen from '../screens/materials/SurplusScreen';
+import ToolsScreen from '../screens/materials/ToolsScreen';
+import CrewsScreen from '../screens/assignments/CrewsScreen';
 
 const Stack = createStackNavigator();
 
@@ -50,6 +52,12 @@ export default function MainStackNavigator() {
         options={{ ...headerOptions, headerShown: true, title: t('expenses.title') }} />
       <Stack.Screen name="Surplus" component={SurplusScreen}
         options={{ ...headerOptions, headerShown: true, title: t('surplus.title') }} />
+
+      {/* §149 Batch C — Tools + Crews */}
+      <Stack.Screen name="Tools" component={ToolsScreen}
+        options={{ ...headerOptions, headerShown: true, title: t('tools.title') }} />
+      <Stack.Screen name="Crews" component={CrewsScreen}
+        options={{ ...headerOptions, headerShown: true, title: t('crews.title') }} />
 
       {/* Materials */}
       <Stack.Screen name="Materials" component={MaterialsMenuScreen}

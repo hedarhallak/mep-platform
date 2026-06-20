@@ -72,6 +72,8 @@ export default {
     home: 'Home',
     surplus: 'Material Returns',
     expenses: 'Expenses',
+    tools: 'Tools',
+    crews: 'Crews',
   },
 
   // Attendance
@@ -290,6 +292,36 @@ export default {
     vendorRequired: 'Vendor is required.',
     amountRequired: 'Enter a valid amount.',
     status: { PENDING: 'Pending', APPROVED: 'Reviewed', REJECTED: 'Rejected', PAID: 'Reimbursed' },
+  },
+
+  // §149 Batch C — Tools
+  tools: {
+    title: 'Tools',
+    newRequest: 'Request a Tool',
+    myRequests: 'My Requests',
+    empty: 'No tool requests yet.',
+    tool: 'Tool',
+    selectTool: 'Select a tool…',
+    searchTools: 'Search tools…',
+    noTools: 'No tools found.',
+    qty: 'Quantity',
+    note: 'Note',
+    notePlaceholder: 'Anything the warehouse should know…',
+    submit: 'Request tool',
+    submitted: 'Tool requested ✓',
+    submitFailed: 'Failed to request. Please try again.',
+    selectProject: 'Please select a project.',
+    qtyRequired: 'Enter a valid quantity.',
+  },
+
+  // §149 Batch C — Crews
+  crews: {
+    title: 'Crews',
+    empty: 'No crews yet.',
+    inactive: 'Inactive',
+    memberCount: '{{count}} members',
+    members: 'Members',
+    noMembers: 'No members in this crew.',
   },
 
   // §149 Batch B — Surplus / Material Returns

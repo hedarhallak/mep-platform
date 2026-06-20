@@ -72,6 +72,8 @@ export default {
     home: 'Accueil',
     surplus: 'Retours de matériel',
     expenses: 'Dépenses',
+    tools: 'Outils',
+    crews: 'Équipes',
   },
 
   // Attendance
@@ -290,6 +292,36 @@ export default {
     vendorRequired: 'Le fournisseur est requis.',
     amountRequired: 'Entrez un montant valide.',
     status: { PENDING: 'En attente', APPROVED: 'Révisée', REJECTED: 'Rejetée', PAID: 'Remboursée' },
+  },
+
+  // §149 Batch C — Outils
+  tools: {
+    title: 'Outils',
+    newRequest: 'Demander un outil',
+    myRequests: 'Mes demandes',
+    empty: 'Aucune demande d’outil.',
+    tool: 'Outil',
+    selectTool: 'Choisir un outil…',
+    searchTools: 'Rechercher des outils…',
+    noTools: 'Aucun outil trouvé.',
+    qty: 'Quantité',
+    note: 'Note',
+    notePlaceholder: 'Information pour l’entrepôt…',
+    submit: 'Demander',
+    submitted: 'Outil demandé ✓',
+    submitFailed: 'Échec de la demande. Réessayez.',
+    selectProject: 'Veuillez choisir un projet.',
+    qtyRequired: 'Entrez une quantité valide.',
+  },
+
+  // §149 Batch C — Équipes
+  crews: {
+    title: 'Équipes',
+    empty: 'Aucune équipe.',
+    inactive: 'Inactive',
+    memberCount: '{{count}} membres',
+    members: 'Membres',
+    noMembers: 'Aucun membre dans cette équipe.',
   },
 
   // §149 Batch B — Surplus / Retours de matériel
