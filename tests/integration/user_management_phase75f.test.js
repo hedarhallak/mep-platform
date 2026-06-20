@@ -89,7 +89,10 @@ describeIfDb('PATCH /api/users/:id/role', () => {
     await closePool();
   });
 
-  test('400 INVALID_ROLE when role is not in ALLOWED_ROLES (e.g. FOREMAN)', async () => {
+  // §148.18: role validation is data-driven now — FOREMAN (and every Phase-4
+  // role) is a valid catalog role, so assigning it SUCCEEDS (was a hardcoded
+  // ALLOWED_ROLES reject). A genuinely unknown role still 400s.
+  test('200 — a non-legacy catalog role (FOREMAN) is now assignable (§148.18)', async () => {
     const company = await seedCompany();
     const admin = await seedAdmin(company.company_id);
     const target = await seedTargetUser(company.company_id, 'WORKER');
@@ -100,9 +103,23 @@ describeIfDb('PATCH /api/users/:id/role', () => {
       .set('Authorization', `Bearer ${token}`)
       .send({ role: 'FOREMAN' });
 
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({ ok: true });
+  });
+
+  test('400 INVALID_ROLE for a role not in the catalog', async () => {
+    const company = await seedCompany();
+    const admin = await seedAdmin(company.company_id);
+    const target = await seedTargetUser(company.company_id, 'WORKER');
+    const { token } = await loginUser(admin);
+
+    const res = await request(app)
+      .patch(`/api/users/${target.id}/role`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ role: 'NOT_A_REAL_ROLE' });
+
     expect(res.statusCode).toBe(400);
     expect(res.body).toMatchObject({ ok: false, error: 'INVALID_ROLE' });
-    expect(Array.isArray(res.body.allowed)).toBe(true);
   });
 
   test('404 USER_NOT_FOUND for non-existent target', async () => {

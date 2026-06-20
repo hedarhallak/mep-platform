@@ -29,14 +29,12 @@ const { escapeHtml } = require('../lib/email');
 // WHERE company_id clauses are kept for defense-in-depth — RLS does the
 // actual filtering at the DB layer once tenant_db sets the GUC.
 
-const ALLOWED_ROLES = [
-  'IT_ADMIN',
-  'COMPANY_ADMIN',
-  'TRADE_PROJECT_MANAGER',
-  'TRADE_ADMIN',
-  'WORKER',
-];
-
+// §148.18: role VALIDATION is data-driven (a roles-catalog lookup in the role
+// PATCH handler) — the old hardcoded ALLOWED_ROLES list rejected Foreman /
+// Journeyman / Apprentice / Driver and every Phase-4 role. ROLE_RANK stays for
+// the rank-lock (new roles fall to the least-senior default, which is correct:
+// every catalog role added in Phase 4 sits below COMPANY_ADMIN, and only
+// company-level admins can reach user management).
 const ROLE_RANK = {
   SUPER_ADMIN: 0,
   // §132 OWNER ranks just below SUPER_ADMIN so the existing rank checks block
@@ -111,8 +109,15 @@ router.patch('/:id/role', can('settings.user_management'), async (req, res) => {
     const newRole = normalizeRole(req.body?.role);
     const companyId = req.user.company_id;
 
-    if (!ALLOWED_ROLES.includes(newRole)) {
-      return res.status(400).json({ ok: false, error: 'INVALID_ROLE', allowed: ALLOWED_ROLES });
+    // §148.18 — validate against the data-driven roles catalog (replaces the
+    // hardcoded ALLOWED_ROLES). Any active role in the catalog is assignable
+    // here; the rank-lock below still gates WHO can assign WHAT.
+    const { rows: roleExists } = await req.db.query(
+      `SELECT 1 FROM public.roles WHERE role_key = $1 AND is_active = true`,
+      [newRole]
+    );
+    if (!roleExists.length) {
+      return res.status(400).json({ ok: false, error: 'INVALID_ROLE' });
     }
 
     // Load target user
