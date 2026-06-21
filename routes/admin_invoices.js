@@ -173,6 +173,83 @@ router.get('/', async (req, res) => {
   }
 });
 
+// ── GET /:id ── §150.3: single invoice detail (line items + payments) ────────
+// Scoped by company_id (+ RLS). Returns the customer-safe invoice row including
+// `details` (JSONB, what's on the PDF) plus its payment history. Withholds
+// internal_notes / approved_by / pdf_url.
+router.get('/:id', async (req, res) => {
+  try {
+    const companyId = req.user?.company_id;
+    if (!companyId) {
+      return res.status(401).json({ ok: false, error: 'NO_TENANT' });
+    }
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ ok: false, error: 'INVALID_ID' });
+    }
+
+    const { rows } = await req.db.query(
+      `SELECT id, invoice_number, type, status,
+              subtotal_cents, qst_cents, gst_cents, total_cents,
+              amount_paid_cents, currency,
+              issue_date, due_date, paid_date, quote_expires_at,
+              customer_notes, details, created_at
+         FROM public.invoices
+        WHERE id = $1 AND company_id = $2
+        LIMIT 1`,
+      [id, companyId]
+    );
+    if (!rows.length) {
+      return res.status(404).json({ ok: false, error: 'INVOICE_NOT_FOUND' });
+    }
+    const r = rows[0];
+
+    // Payment history (the invoice is already scoped to this tenant).
+    const { rows: payments } = await req.db.query(
+      `SELECT id, amount_cents, currency, method, status, paid_at, is_partial, created_at
+         FROM public.payments
+        WHERE invoice_id = $1
+        ORDER BY COALESCE(paid_at, created_at) DESC, id DESC`,
+      [id]
+    );
+
+    return res.json({
+      ok: true,
+      invoice: {
+        id: Number(r.id),
+        invoice_number: r.invoice_number,
+        type: r.type,
+        status: r.status,
+        subtotal_cents: Number(r.subtotal_cents),
+        qst_cents: Number(r.qst_cents),
+        gst_cents: Number(r.gst_cents),
+        total_cents: Number(r.total_cents),
+        amount_paid_cents: Number(r.amount_paid_cents),
+        currency: r.currency,
+        issue_date: r.issue_date,
+        due_date: r.due_date,
+        paid_date: r.paid_date,
+        quote_expires_at: r.quote_expires_at,
+        customer_notes: r.customer_notes,
+        details: r.details || {},
+        created_at: r.created_at,
+      },
+      payments: payments.map((p) => ({
+        id: Number(p.id),
+        amount_cents: Number(p.amount_cents),
+        currency: p.currency,
+        method: p.method,
+        status: p.status,
+        paid_at: p.paid_at,
+        is_partial: p.is_partial,
+      })),
+    });
+  } catch (err) {
+    console.error('GET /admin/invoices/:id error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
+  }
+});
+
 // ── GET /:id/pdf ── §150.2: on-demand customer invoice PDF download ──────────
 // Scoped by company_id (+ RLS). Regenerates the PDF from the stored row (no
 // pdf_url is persisted). 404 if the invoice isn't the caller's; 503 if no

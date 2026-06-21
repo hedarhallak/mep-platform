@@ -16699,3 +16699,15 @@ The monthly cron emails a branded PDF but never persists `pdf_url`, so a custome
 - **Tests** — `tests/integration/admin_invoices.test.js` gained a `:id/pdf` block (mocks `buildInvoicePdfBuffer` so CI needs no real puppeteer): 200 streams pdf + builder gets `company_name`, 404 cross-tenant (builder never called), 400 non-numeric id, 503 when builder returns null, 401 unauth.
 
 Verified: web vitest 11/11 + parity; backend suite parses + DB-skips locally (CI runs it live). Frontend+backend change — reaches prod on the next `bash scripts/deploy.sh`. Remaining: PR 3 = in-app invoice detail view.
+
+### 150.3 — PR 3: in-app invoice detail view (closes Phase 6-D-5 polish)
+
+The Invoices list was list-only; customers had no in-app breakdown (only the emailed/downloaded PDF). Added a detail modal.
+
+- **`routes/admin_invoices.js`** — new `GET /:id` (COMPANY_ADMIN_UP): returns the customer-safe invoice row **including `details` (JSONB)** plus its **payment history** from `public.payments` (the `payments` table from migration 018; ordered newest-first). Scoped by `company_id` (+ RLS). Withholds `internal_notes`/`approved_by`/`pdf_url`. `400 INVALID_ID`, `404 INVOICE_NOT_FOUND`. Route ordering is safe — `/:id` matches one segment so it never shadows `/:id/pdf`.
+- **`InvoicesPage.jsx`** — added an Eye "view" action per row → `InvoiceDetailModal` (TanStack Query `['admin-invoice', id]`, fetched on open): header (number + status badge), meta (type/issue/due/paid dates), line item (from `details` — seats×unit when present, else the type), tax breakdown (subtotal/QST/GST/total/amount-paid/balance-due), customer notes, and a **payment-history list** (method + status + date + amount). Download button reused inside the modal. New i18n `billing.table.view` + `billing.detail.*` + `billing.paymentMethods.*` + `billing.paymentStatuses.*` (EN+FR).
+- **Tests** — backend `GET /:id` block (200 invoice+payments with internal-field-leak guard, 404 cross-tenant, 400 bad id); frontend test (clicking View opens the modal, shows line items + payment history, hits the detail endpoint).
+
+Verified: web vitest **12/12** + parity; backend suite parses + DB-skips locally (CI runs the 12 admin_invoices tests live).
+
+**Phase 6-D-5 polish is COMPLETE** — all three picked gaps shipped (PR1 status-filter + request-confirmation; PR2 PDF download; PR3 detail view). The whole billing UI track (build was already done pre-§150) is now feature-complete. **Deploy dependency:** PRs 2+3 add backend routes + frontend — a single `bash scripts/deploy.sh` publishes all of §150 to prod. No migration needed (reads existing tables).
