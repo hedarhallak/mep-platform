@@ -6,8 +6,17 @@
 
 'use strict';
 
+// Mock only the on-demand PDF builder so the download endpoint is testable
+// without a real puppeteer browser in CI. Everything else in lib/email is the
+// real module (requireActual) — login/other flows are unaffected.
+jest.mock('../../lib/email', () => {
+  const actual = jest.requireActual('../../lib/email');
+  return { ...actual, buildInvoicePdfBuffer: jest.fn() };
+});
+
 const request = require('supertest');
 const app = require('../../app');
+const { buildInvoicePdfBuffer } = require('../../lib/email');
 const {
   describeIfDb,
   closePool,
@@ -168,6 +177,98 @@ describeIfDb('GET /api/admin/invoices', () => {
 
   test('rejects unauthenticated request with 401', async () => {
     const res = await request(app).get('/api/admin/invoices');
+    expect([401, 403]).toContain(res.statusCode);
+  });
+});
+
+// =============================================================================
+// GET /api/admin/invoices/:id/pdf  (§150.2)
+// =============================================================================
+
+describeIfDb('GET /api/admin/invoices/:id/pdf', () => {
+  beforeEach(() => buildInvoicePdfBuffer.mockReset());
+  afterAll(async () => {
+    await cleanupTestRows();
+    await closePool();
+  });
+
+  test('streams the PDF for the caller’s own invoice → 200 application/pdf', async () => {
+    const pool = getPool();
+    const ctx = await seedTenantAdmin();
+    const inv = await insertInvoice(pool, {
+      companyId: ctx.company.company_id,
+      type: 'SUBSCRIPTION_RECURRING',
+      status: 'APPROVED',
+      totalCents: 13500,
+      daysAgo: 2,
+    });
+    buildInvoicePdfBuffer.mockResolvedValue(Buffer.from('%PDF-1.4 fake'));
+
+    const res = await request(app)
+      .get(`/api/admin/invoices/${inv.id}/pdf`)
+      .set('Authorization', `Bearer ${ctx.token}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toMatch(/application\/pdf/);
+    expect(res.headers['content-disposition']).toContain('.pdf');
+    expect(buildInvoicePdfBuffer).toHaveBeenCalledTimes(1);
+    // the builder received the joined company_name
+    expect(buildInvoicePdfBuffer.mock.calls[0][0]).toHaveProperty('company_name');
+  });
+
+  test('404 for an invoice belonging to another company (no cross-tenant leak)', async () => {
+    const pool = getPool();
+    const ctx = await seedTenantAdmin();
+    const other = await seedCompany();
+    const foreign = await insertInvoice(pool, {
+      companyId: other.company_id,
+      type: 'OTHER',
+      status: 'PAID',
+      totalCents: 500,
+      daysAgo: 0,
+    });
+    buildInvoicePdfBuffer.mockResolvedValue(Buffer.from('%PDF'));
+
+    const res = await request(app)
+      .get(`/api/admin/invoices/${foreign.id}/pdf`)
+      .set('Authorization', `Bearer ${ctx.token}`);
+
+    expect(res.statusCode).toBe(404);
+    expect(res.body.error).toBe('INVOICE_NOT_FOUND');
+    expect(buildInvoicePdfBuffer).not.toHaveBeenCalled(); // never even rendered
+  });
+
+  test('400 for a non-numeric id', async () => {
+    const ctx = await seedTenantAdmin();
+    const res = await request(app)
+      .get('/api/admin/invoices/not-a-number/pdf')
+      .set('Authorization', `Bearer ${ctx.token}`);
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error).toBe('INVALID_ID');
+  });
+
+  test('503 when no browser is available to render the PDF', async () => {
+    const pool = getPool();
+    const ctx = await seedTenantAdmin();
+    const inv = await insertInvoice(pool, {
+      companyId: ctx.company.company_id,
+      type: 'TRAINING',
+      status: 'PAID',
+      totalCents: 80000,
+      daysAgo: 1,
+    });
+    buildInvoicePdfBuffer.mockResolvedValue(null); // simulate headless-less env
+
+    const res = await request(app)
+      .get(`/api/admin/invoices/${inv.id}/pdf`)
+      .set('Authorization', `Bearer ${ctx.token}`);
+
+    expect(res.statusCode).toBe(503);
+    expect(res.body.error).toBe('PDF_UNAVAILABLE');
+  });
+
+  test('rejects unauthenticated request', async () => {
+    const res = await request(app).get('/api/admin/invoices/1/pdf');
     expect([401, 403]).toContain(res.statusCode);
   });
 });

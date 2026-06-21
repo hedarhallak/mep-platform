@@ -374,7 +374,10 @@ export default {
       paid: 'Paid',
       issueDate: 'Issued',
       dueDate: 'Due',
+      actions: 'Actions',
+      download: 'Download PDF',
     },
+    downloadFailed: 'Download failed — please try again.',
     pagination: {
       prev: 'Previous',
       next: 'Next',
