@@ -16711,3 +16711,15 @@ The Invoices list was list-only; customers had no in-app breakdown (only the ema
 Verified: web vitest **12/12** + parity; backend suite parses + DB-skips locally (CI runs the 12 admin_invoices tests live).
 
 **Phase 6-D-5 polish is COMPLETE** — all three picked gaps shipped (PR1 status-filter + request-confirmation; PR2 PDF download; PR3 detail view). The whole billing UI track (build was already done pre-§150) is now feature-complete. **Deploy dependency:** PRs 2+3 add backend routes + frontend — a single `bash scripts/deploy.sh` publishes all of §150 to prod. No migration needed (reads existing tables).
+
+---
+
+## 151. Section 151 — June 21, 2026 — Test-coverage push (raise % toward the achievable ceiling)
+
+Hedar: "نكمل الـtests ونرفعها لأعلى نسبة منقدر عليها." Made CI emit the **per-file** coverage table (§150-coverage chore PR #439) and pulled the authoritative map from the main run.
+
+**Baseline (CI, w/ live PG):** Statements 68.88 / Branches 60.27 / Functions 70.49 / Lines 70.11 (thresholds 59/50/59/60). The gap lives almost entirely in `routes/*` — biggest uncovered chunks: `assignments.js` (~490 lines), `daily_dispatch.js` (~400), `auto_assign.js` (~300), `profile.js` (~250), `reports.js` (~250), `hub.js` (~240), `standup.js` (~200), `activate.js` (~170), `bi.js` (~120, PostGIS-hard), `ccq_rates.js` (~100). Plan: batch route-by-route (easiest/highest-value first), verify via CI (no local DB → describeIfDb skips locally), ratchet thresholds at the end.
+
+### 151.1 — profile.js (24% → targeted ~85%)
+
+`routes/profile.js` was 24% lines — almost all of the big `POST /` handler (geocode + dynamic upsert, lines ~302-526) plus helpers were untested; the existing `profile.test.js` only covered `GET /dropdowns` + `GET /me`. Added 4 tests: `POST /` 401 (admin/no employee_id), 400 (missing required fields + asserts the `required` list), **200 success** (full body → mocked Mapbox geocode → upsert → round-trips via `GET /me` showing `exists:true` + saved canonical fields), and 400 ("unable to locate" when geocoding returns no feature). Mapbox is mocked by stubbing `https.get` (the route calls it directly) via `jest.requireActual('https')` + a `get` override toggled by a `mockGeo` fixture — no network/token needed. Parses + DB-skips locally; CI runs them live.
