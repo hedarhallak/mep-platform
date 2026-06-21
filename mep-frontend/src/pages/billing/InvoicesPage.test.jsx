@@ -34,6 +34,21 @@ const I18N_MAP = {
   'billing.table.paid': 'Paid',
   'billing.table.issueDate': 'Issued',
   'billing.table.dueDate': 'Due',
+  'billing.table.view': 'View',
+  'billing.table.download': 'Download PDF',
+  'billing.detail.lineItems': 'Line items',
+  'billing.detail.subtotal': 'Subtotal',
+  'billing.detail.qst': 'QST',
+  'billing.detail.gst': 'GST',
+  'billing.detail.total': 'Total',
+  'billing.detail.amountPaid': 'Amount paid',
+  'billing.detail.balanceDue': 'Balance due',
+  'billing.detail.payments': 'Payments',
+  'billing.detail.noPayments': 'No payments recorded.',
+  'billing.detail.paidOn': 'Paid on',
+  'billing.paymentMethods.BANK_TRANSFER': 'Bank transfer',
+  'billing.paymentStatuses.SUCCEEDED': 'Succeeded',
+  'common.close': 'Close',
   'billing.pagination.prev': 'Previous',
   'billing.pagination.next': 'Next',
 }
@@ -164,6 +179,45 @@ describe('<InvoicesPage />', () => {
       const calls = mockApi.get.mock.calls.map((c) => c[0])
       expect(calls.some((url) => url.includes('type=TRAINING'))).toBe(true)
     })
+  })
+
+  test('clicking View opens the detail modal with line items + payment history', async () => {
+    const user = userEvent.setup()
+    mockApi.get.mockImplementation((url) => {
+      if (/\/admin\/invoices\/1$/.test(url)) {
+        return Promise.resolve({
+          status: 200,
+          data: {
+            ok: true,
+            invoice: { ...INVOICES_FIXTURE.invoices[0], details: {} },
+            payments: [
+              {
+                id: 1,
+                amount_cents: 91980,
+                currency: 'CAD',
+                method: 'BANK_TRANSFER',
+                status: 'SUCCEEDED',
+                paid_at: '2026-05-21',
+                is_partial: false,
+              },
+            ],
+          },
+        })
+      }
+      return Promise.resolve({ data: INVOICES_FIXTURE, status: 200, ok: true })
+    })
+
+    renderPage()
+    await waitFor(() => expect(screen.getByText('CONS-2026-0001')).toBeInTheDocument())
+
+    const viewButtons = screen.getAllByRole('button', { name: /^View$/i })
+    await user.click(viewButtons[0])
+
+    await waitFor(() => expect(screen.getByText('Line items')).toBeInTheDocument())
+    expect(screen.getByText('Payments')).toBeInTheDocument()
+    expect(screen.getByText('Bank transfer')).toBeInTheDocument()
+    // detail endpoint was hit
+    expect(mockApi.get.mock.calls.some((c) => /\/admin\/invoices\/1$/.test(c[0]))).toBe(true)
   })
 
   test('renders empty state when invoices list is empty', async () => {

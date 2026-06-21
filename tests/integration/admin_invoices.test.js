@@ -182,6 +182,80 @@ describeIfDb('GET /api/admin/invoices', () => {
 });
 
 // =============================================================================
+// GET /api/admin/invoices/:id  (§150.3 — detail + payments)
+// =============================================================================
+
+describeIfDb('GET /api/admin/invoices/:id', () => {
+  afterAll(async () => {
+    await cleanupTestRows();
+    await closePool();
+  });
+
+  test('returns the caller’s invoice + its payment history → 200', async () => {
+    const pool = getPool();
+    const ctx = await seedTenantAdmin();
+    const inv = await insertInvoice(pool, {
+      companyId: ctx.company.company_id,
+      type: 'TRAINING',
+      status: 'PARTIAL_PAID',
+      totalCents: 80000,
+      daysAgo: 3,
+    });
+    await pool.query(
+      `INSERT INTO public.payments (invoice_id, amount_cents, method, status, paid_at)
+       VALUES ($1, 40000, 'BANK_TRANSFER', 'SUCCEEDED', NOW())`,
+      [inv.id]
+    );
+
+    const res = await request(app)
+      .get(`/api/admin/invoices/${inv.id}`)
+      .set('Authorization', `Bearer ${ctx.token}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.invoice.id).toBe(Number(inv.id));
+    expect(res.body.invoice).toHaveProperty('details');
+    expect(Array.isArray(res.body.payments)).toBe(true);
+    expect(res.body.payments).toHaveLength(1);
+    expect(res.body.payments[0]).toMatchObject({
+      amount_cents: 40000,
+      method: 'BANK_TRANSFER',
+      status: 'SUCCEEDED',
+    });
+    // internal fields never leak
+    expect(res.body.invoice).not.toHaveProperty('internal_notes');
+    expect(res.body.invoice).not.toHaveProperty('approved_by');
+  });
+
+  test('404 for another company’s invoice', async () => {
+    const pool = getPool();
+    const ctx = await seedTenantAdmin();
+    const other = await seedCompany();
+    const foreign = await insertInvoice(pool, {
+      companyId: other.company_id,
+      type: 'OTHER',
+      status: 'PAID',
+      totalCents: 500,
+      daysAgo: 0,
+    });
+    const res = await request(app)
+      .get(`/api/admin/invoices/${foreign.id}`)
+      .set('Authorization', `Bearer ${ctx.token}`);
+    expect(res.statusCode).toBe(404);
+    expect(res.body.error).toBe('INVOICE_NOT_FOUND');
+  });
+
+  test('400 for a non-numeric id', async () => {
+    const ctx = await seedTenantAdmin();
+    const res = await request(app)
+      .get('/api/admin/invoices/xyz')
+      .set('Authorization', `Bearer ${ctx.token}`);
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error).toBe('INVALID_ID');
+  });
+});
+
+// =============================================================================
 // GET /api/admin/invoices/:id/pdf  (§150.2)
 // =============================================================================
 
