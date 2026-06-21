@@ -9,6 +9,7 @@ const app = require('../../app');
 const {
   describeIfDb,
   closePool,
+  getPool,
   seedCompany,
   seedUser,
   seedProject,
@@ -188,9 +189,8 @@ describeIfDb('Standup — session + materials happy paths', () => {
     expect(again.statusCode).toBe(200);
   });
 
-  test('GET /materials creates the request once (created:true) then returns it (created:false)', async () => {
+  test('GET /materials creates a new request for tomorrow (created:true, empty items)', async () => {
     const { project, token } = await adminCtx();
-
     const first = await request(app)
       .get(`/api/standup/materials/${project.id}`)
       .set('Authorization', `Bearer ${token}`);
@@ -198,12 +198,25 @@ describeIfDb('Standup — session + materials happy paths', () => {
     expect(first.body.created).toBe(true);
     expect(first.body.request).toHaveProperty('id');
     expect(first.body.request.items).toEqual([]);
+  });
 
-    const second = await request(app)
+  test('GET /materials returns an EXISTING tomorrow-dated request (created:false)', async () => {
+    // The handler keys the "existing" lookup on DATE(created_at) = tomorrow, so a
+    // request created today never matches — seed one stamped tomorrow to hit it.
+    const pool = getPool();
+    const { company, admin, project, token } = await adminCtx();
+    await pool.query(
+      `INSERT INTO public.material_requests
+         (company_id, project_id, requested_by, status, note, created_at)
+       VALUES ($1, $2, $3, 'PENDING', 'seed-tomorrow', CURRENT_DATE + INTERVAL '1 day')`,
+      [company.company_id, project.id, admin.id]
+    );
+    const res = await request(app)
       .get(`/api/standup/materials/${project.id}`)
       .set('Authorization', `Bearer ${token}`);
-    expect(second.statusCode).toBe(200);
-    expect(second.body.created).toBe(false);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.created).toBe(false);
+    expect(res.body.request).toHaveProperty('id');
   });
 
   test('material item lifecycle: add → edit → delete', async () => {
