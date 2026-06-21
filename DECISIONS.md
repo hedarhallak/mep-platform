@@ -16660,3 +16660,16 @@ New `crews.*` i18n (both locales): addCrew, editCrew, name, namePlaceholder, for
 **Batch D is now complete.** Deliberately NOT built (matches web): crew deploy/plan flow. Excluded as agreed: Permissions matrix, BI, Billing.
 
 Verified: `npx tsc --noEmit` clean, parity 425=425, `jest src/i18n/parity.test.ts` 4/4 green. Hedar to run the EAS build + device test.
+
+### 149.10 — Test-coverage completion, part 1: mobile store + api-client logic
+
+After §149 wrapped, Hedar asked to "complete the tests before billing." Investigation (no local DB, so by reading code + CI's authoritative numbers, not a flaky local run) found:
+- **Backend billing/super-admin routes are already well covered** — all 13 endpoints across the 6 suspect routes (`admin_subscription_requests`, `super_payments`, `super_training_quotes`, `super_custom_demands`, `super_admin_branding`, `super_subscription_lifecycle`) have happy-path AND error-path tests (e.g. `super_training_payments.test.js` alone has 13 positive / 15 negative status assertions). Two earlier filename/grep heuristics over-reported the gap; the real picture came from reading the tests. Current backend coverage (latest main CI run): **Statements 69.1 / Branches 60.6 / Functions 70.6 / Lines 70.3** — healthy, ~10pp over the 59/50/59/60 thresholds. **Pitfall reconfirmed (§4.6):** running `jest --coverage` locally without a reachable `TEST_DATABASE_URL` skips every `describeIfDb` integration suite and reports a misleading ~11% for `routes/` — only CI's numbers (live PG) are real.
+- **The genuine test gap is the mobile app**, which had only `colors.test.ts` + `parity.test.ts` despite ~15 new screens, two zustand stores, and the axios client. So we pivoted there (Hedar: "1 then 2" → backend branches then mobile; backend turned out already-done, so straight to mobile).
+
+Added (`mep-mobile`, jest-expo preset, mocks instead of real RN/SecureStore/axios runtime):
+- **`src/store/usePermsStore.test.ts`** (9 tests) — `can`/`canAny` truth table, `fetchPerms` success/shape-defaults, **fail-closed on error** (marks loaded, grants nothing), `clear` on logout.
+- **`src/store/useAuthStore.test.ts`** — `setAuth` persists token/user/refresh + triggers perms fetch; `logout` revokes server-side (best-effort, survives a failed call) + wipes SecureStore + clears perms; `loadFromStorage` restores/【skips】+ always stops loading.
+- **`src/api/client.test.ts`** (6 tests) — Bearer auto-attach; non-401 passthrough; **the full 401→refresh rotation** (persists rotated tokens, retries with the fresh token via a stateful SecureStore mock); session-clear when refresh fails; no refresh on the login endpoint. Tested with no extra deps by swapping `apiClient.defaults.adapter` for a controllable mock + spying `axios.post`.
+
+Mobile suite: **13 → 34 tests** (5 suites), all green; `tsc --noEmit` clean. Next (part 2, optional): screen smoke tests + a mobile `coverageThreshold` floor. Backend branch-grinding on the big business routes (assignments/dispatch/auto_assign) is deferred — marginal ROI vs. CI already guarding 60/50/59/60.
