@@ -64,12 +64,54 @@ function statusBadge(status) {
 
 // ─── Request forms ──────────────────────────────────────────────────────
 
+// §117.4 step 4: after the request is recorded server-side + the mailto fires,
+// show a confirmation (instead of silently closing) so the customer knows the
+// request is logged and that SENDING the email is the action that completes it.
+function RequestSuccess({ mailtoUrl, onClose }) {
+  const { t } = useTranslation()
+  return (
+    <div className="mt-4 space-y-3 border-t border-slate-200 pt-4">
+      <div className="flex items-start gap-2 bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+        <CheckCircle size={16} className="text-emerald-600 flex-shrink-0 mt-0.5" />
+        <div>
+          <div className="text-sm font-semibold text-emerald-800">
+            {t('subscription.forms.requestRecorded')}
+          </div>
+          <div className="text-xs text-emerald-700 mt-1">
+            {t('subscription.forms.requestRecordedHelp')}
+          </div>
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        {mailtoUrl && (
+          <a
+            href={mailtoUrl}
+            className="px-3 py-1.5 bg-primary hover:bg-primary-dark text-white text-xs font-semibold rounded-lg flex items-center gap-1.5"
+          >
+            <Mail size={13} />
+            {t('subscription.forms.reopenEmail')}
+          </a>
+        )}
+        <button
+          type="button"
+          onClick={onClose}
+          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg"
+        >
+          {t('common.close')}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function SeatChangeForm({ subscription, onClose }) {
   const { t } = useTranslation()
   const [requestedSeats, setRequestedSeats] = useState(subscription.subscribed_seats)
   const [reason, setReason] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
+  const [done, setDone] = useState(false)
+  const [mailtoUrl, setMailtoUrl] = useState(null)
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -80,10 +122,12 @@ function SeatChangeForm({ subscription, onClose }) {
         requested_seats: Number(requestedSeats),
         reason: reason.trim() || undefined,
       })
-      if (r.data?.mailto_url) {
-        window.location.href = r.data.mailto_url
+      const url = r.data?.mailto_url
+      if (url) {
+        setMailtoUrl(url)
+        window.location.href = url
       }
-      onClose()
+      setDone(true)
     } catch (err) {
       const code = err?.response?.data?.error || 'SERVER_ERROR'
       setError(t(`subscription.errors.${code}`, t('subscription.errors.SERVER_ERROR')))
@@ -91,6 +135,8 @@ function SeatChangeForm({ subscription, onClose }) {
       setSubmitting(false)
     }
   }
+
+  if (done) return <RequestSuccess mailtoUrl={mailtoUrl} onClose={onClose} />
 
   return (
     <form onSubmit={handleSubmit} className="mt-4 space-y-3 border-t border-slate-200 pt-4">
@@ -159,6 +205,8 @@ function CancelRequestForm({ onClose }) {
   const [reason, setReason] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
+  const [done, setDone] = useState(false)
+  const [mailtoUrl, setMailtoUrl] = useState(null)
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -169,10 +217,12 @@ function CancelRequestForm({ onClose }) {
         cancel_at_period_end: !cancelImmediately,
         reason: reason.trim() || undefined,
       })
-      if (r.data?.mailto_url) {
-        window.location.href = r.data.mailto_url
+      const url = r.data?.mailto_url
+      if (url) {
+        setMailtoUrl(url)
+        window.location.href = url
       }
-      onClose()
+      setDone(true)
     } catch (err) {
       const code = err?.response?.data?.error || 'SERVER_ERROR'
       setError(t(`subscription.errors.${code}`, t('subscription.errors.SERVER_ERROR')))
@@ -180,6 +230,8 @@ function CancelRequestForm({ onClose }) {
       setSubmitting(false)
     }
   }
+
+  if (done) return <RequestSuccess mailtoUrl={mailtoUrl} onClose={onClose} />
 
   return (
     <form onSubmit={handleSubmit} className="mt-4 space-y-3 border-t border-slate-200 pt-4">
@@ -241,6 +293,8 @@ function PlanUpgradeRequestForm({ subscription, onClose }) {
   const [reason, setReason] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
+  const [done, setDone] = useState(false)
+  const [mailtoUrl, setMailtoUrl] = useState(null)
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -251,10 +305,12 @@ function PlanUpgradeRequestForm({ subscription, onClose }) {
         requested_plan_type: targetPlan,
         reason: reason.trim() || undefined,
       })
-      if (r.data?.mailto_url) {
-        window.location.href = r.data.mailto_url
+      const url = r.data?.mailto_url
+      if (url) {
+        setMailtoUrl(url)
+        window.location.href = url
       }
-      onClose()
+      setDone(true)
     } catch (err) {
       const code = err?.response?.data?.error || 'SERVER_ERROR'
       setError(t(`subscription.errors.${code}`, t('subscription.errors.SERVER_ERROR')))
@@ -262,6 +318,8 @@ function PlanUpgradeRequestForm({ subscription, onClose }) {
       setSubmitting(false)
     }
   }
+
+  if (done) return <RequestSuccess mailtoUrl={mailtoUrl} onClose={onClose} />
 
   return (
     <form onSubmit={handleSubmit} className="mt-4 space-y-3 border-t border-slate-200 pt-4">

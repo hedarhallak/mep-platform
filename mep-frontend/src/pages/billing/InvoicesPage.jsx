@@ -29,6 +29,19 @@ const TYPES = [
   { value: 'OTHER',                  labelKey: 'billing.types.OTHER' },
 ]
 
+// Status filter — backend supports ?status=; labels reuse the badge keys.
+const STATUSES = [
+  { value: '',             labelKey: 'billing.filters.allStatuses' },
+  { value: 'DRAFT',        labelKey: 'billing.statuses.DRAFT' },
+  { value: 'QUOTE_SENT',   labelKey: 'billing.statuses.QUOTE_SENT' },
+  { value: 'APPROVED',     labelKey: 'billing.statuses.APPROVED' },
+  { value: 'PARTIAL_PAID', labelKey: 'billing.statuses.PARTIAL_PAID' },
+  { value: 'PAID',         labelKey: 'billing.statuses.PAID' },
+  { value: 'OVERDUE',      labelKey: 'billing.statuses.OVERDUE' },
+  { value: 'VOID',         labelKey: 'billing.statuses.VOID' },
+  { value: 'REFUNDED',     labelKey: 'billing.statuses.REFUNDED' },
+]
+
 const PAGE_SIZE = 20
 
 // ─── Helpers ────────────────────────────────────────────────────────────
@@ -72,12 +85,14 @@ export default function InvoicesPage() {
   const { t } = useTranslation()
   const [page, setPage] = useState(1)
   const [typeFilter, setTypeFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
 
   const { data, isLoading, error, isFetching } = useQuery({
-    queryKey: ['admin-invoices', page, typeFilter],
+    queryKey: ['admin-invoices', page, typeFilter, statusFilter],
     queryFn: async () => {
       const qs = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) })
       if (typeFilter) qs.set('type', typeFilter)
+      if (statusFilter) qs.set('status', statusFilter)
       const r = await api.get(`/admin/invoices?${qs.toString()}`)
       return r.data
     },
@@ -88,6 +103,11 @@ export default function InvoicesPage() {
   function handleTypeChange(newType) {
     setTypeFilter(newType)
     setPage(1) // reset to first page on filter change
+  }
+
+  function handleStatusChange(newStatus) {
+    setStatusFilter(newStatus)
+    setPage(1)
   }
 
   if (isLoading) {
@@ -144,6 +164,21 @@ export default function InvoicesPage() {
           {TYPES.map((tt) => (
             <option key={tt.value || 'all'} value={tt.value}>
               {t(tt.labelKey)}
+            </option>
+          ))}
+        </select>
+        <label htmlFor="invoice-status-filter" className="text-xs font-semibold text-slate-600">
+          {t('billing.filters.statusLabel')}:
+        </label>
+        <select
+          id="invoice-status-filter"
+          value={statusFilter}
+          onChange={(e) => handleStatusChange(e.target.value)}
+          className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+        >
+          {STATUSES.map((st) => (
+            <option key={st.value || 'all'} value={st.value}>
+              {t(st.labelKey)}
             </option>
           ))}
         </select>
