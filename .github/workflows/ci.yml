@@ -139,10 +139,13 @@ jobs:
         # Tests that don't need DB (smoke, pure helpers) ignore DATABASE_URL.
         # §141: coverage instrumentation slows the suite noticeably and is only
         # informational (no threshold). Run it on push-to-main (drift watching)
-        # but run PRs PLAIN for faster feedback + auto-merge.
+        # + manual workflow_dispatch, but run PRs PLAIN for faster feedback +
+        # auto-merge. §150-coverage track: emit the full PER-FILE table (jest.config
+        # coverageReporters = text + text-summary + lcov) so we can target the
+        # lowest-covered routes from the CI log, not just the global summary.
         run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            npm test -- --coverage --coverageReporters=text-summary
+          if [ "${{ github.event_name }}" = "push" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            npm test -- --coverage
           else
             npm test
           fi
