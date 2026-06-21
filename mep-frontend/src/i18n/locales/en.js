@@ -347,6 +347,8 @@ export default {
     filters: {
       typeLabel: 'Type',
       allTypes: 'All types',
+      statusLabel: 'Status',
+      allStatuses: 'All statuses',
     },
     types: {
       SUBSCRIPTION_RECURRING: 'Subscription',
@@ -416,6 +418,9 @@ export default {
       submitAndEmail: 'Submit + open email',
       cancelImmediately: 'Cancel immediately (not at end of billing period)',
       targetPlan: 'Target plan',
+      requestRecorded: 'Request recorded',
+      requestRecordedHelp: 'Your request is logged. Please complete it by sending the email that just opened — that email is what notifies our billing team.',
+      reopenEmail: 'Reopen email',
     },
     plans: {
       BASIC: 'Basic',

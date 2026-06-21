@@ -348,6 +348,8 @@ export default {
     filters: {
       typeLabel: 'Type',
       allTypes: 'Tous les types',
+      statusLabel: 'Statut',
+      allStatuses: 'Tous les statuts',
     },
     types: {
       SUBSCRIPTION_RECURRING: 'Abonnement',
@@ -418,6 +420,9 @@ export default {
       submitAndEmail: 'Soumettre + ouvrir le courriel',
       cancelImmediately: 'Annuler immédiatement (pas à la fin de la période)',
       targetPlan: 'Forfait cible',
+      requestRecorded: 'Demande enregistrée',
+      requestRecordedHelp: 'Votre demande est enregistrée. Veuillez la compléter en envoyant le courriel qui vient de s’ouvrir — c’est ce courriel qui avertit notre équipe de facturation.',
+      reopenEmail: 'Rouvrir le courriel',
     },
     plans: {
       BASIC: 'De base',

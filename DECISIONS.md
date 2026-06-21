@@ -16675,3 +16675,16 @@ Added (`mep-mobile`, jest-expo preset, mocks instead of real RN/SecureStore/axio
 Mobile suite: **13 → 34 tests** (5 suites), all green; `tsc --noEmit` clean. Backend branch-grinding on the big business routes (assignments/dispatch/auto_assign) is deferred — marginal ROI vs. CI already guarding 60/50/59/60.
 
 **Coverage guard added (closes the test track):** `mep-mobile/package.json` now scopes `collectCoverageFrom` to the genuinely-tested logic dirs (`src/store`, `src/api`, `src/theme` — screens excluded so they don't drag the global to ~0 or demand RNTL tests yet) and sets a `coverageThreshold` floor of **83/70/78/85** (stmts/branches/funcs/lines), ~3pp under the measured **86.58/74.19/82.35/88.31** (per §4.6 — never 1pp). `npm test` now runs `jest --coverage` so the floor is enforced in the Mobile CI job (which runs `npm test`); `npm run test:fast` stays for a quick no-coverage local run. This prevents the store/api logic coverage from silently regressing as the app grows. Screen smoke tests remain an optional future add (RNTL is brittle/lower-ROI). Test track done; next up is billing (Phase 6-D-5).
+
+---
+
+## 150. Section 150 — June 21, 2026 — Phase 6-D-5 completion: customer Billing UI polish (PR 1)
+
+Returning to billing after the §149 mobile track. A Plan-agent audit found **Phase 6-D-5 (customer Subscription + Invoices UI) was already built, wired, tested, and live** (`SubscriptionPage.jsx`, `InvoicesPage.jsx`, routes/nav permission-gated `settings.company`, i18n `subscription.*`/`billing.*` at parity, migrations 018-023 on prod). The stale MASTER_README header had implied it was the next *build*; it was actually done. The only genuine remaining work was a short polish list (5 gaps). Hedar chose to do three of them; this section ships them, smallest-first.
+
+### 150.1 — PR 1: invoice status filter + §117.4 "request recorded" confirmation (frontend-only)
+
+- **InvoicesPage** — added a **status filter** dropdown next to the existing type filter. Backend `GET /api/admin/invoices` already accepted `?status=` (8 values) but the UI never exposed it. New `STATUSES` const reuses the existing `billing.statuses.*` badge keys; `statusFilter` state joins the query key + querystring; changing it resets to page 1. New i18n: `billing.filters.statusLabel` + `billing.filters.allStatuses` (EN+FR).
+- **SubscriptionPage** — implemented the §117.4 step-4 acceptance criterion the original code skipped: the three request forms (seat / cancel / plan) used to fire the `mailto:` then immediately `onClose()`, giving no confirmation. Added a shared `RequestSuccess` component shown after a successful submit ("✅ Request recorded" + help text that *sending* the email is what completes it + a "Reopen email" link reusing the returned `mailto_url` + Close). Each form gained `done`/`mailtoUrl` state and an early return. New i18n: `subscription.forms.requestRecorded` / `requestRecordedHelp` / `reopenEmail` (EN+FR).
+
+Frontend-only — no backend/migration change. Verified: web i18n `parity.test.js` 4/4, `SubscriptionPage.test.jsx` (added a 4th test asserting the confirmation panel replaces the form) + `InvoicesPage.test.jsx` green = **11/11**. Needs a frontend build+deploy (`bash scripts/deploy.sh`) to reach prod. Remaining picked gaps: PR 2 = customer invoice PDF download (new endpoint), PR 3 = in-app invoice detail view.
