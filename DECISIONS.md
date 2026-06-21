@@ -16641,3 +16641,22 @@ New i18n: `projectStaffing.*`, `standup.*`, `employees.*`, `suppliers.*`, `proje
 Mobile now exposes ~17 modules (was 12). **Still pending in Batch D: crew create/deploy** (the existing `CrewsScreen` stays read-only for now — the `/crews/:id/plan` deploy/confirm flow is the most complex and is deferred to a follow-up). Excluded as agreed: Permissions matrix, BI, Billing.
 
 Verified: `npx tsc --noEmit` clean, parity 412=412, `jest src/i18n/parity.test.ts` 4/4 green. Hedar to run the EAS build + device test.
+
+### 149.9 — Mobile Batch D (part 2): Crews CRUD — closes Batch D
+
+Hedar tested the Batch-D build and asked why he couldn't create a crew on mobile (`CrewsScreen` was read-only since Batch C). Answer: by-design-for-now, it was the one deferred piece. He asked for it "like the web."
+
+Key discovery: the web `CrewsPage.jsx` exposes **CRUD only** — create / edit / delete / list. It does **NOT** wire the `/crews/:id/plan` (deploy) endpoint at all. So "like the web" = CRUD, no deploy. Mobile now matches exactly.
+
+Rewrote `screens/assignments/CrewsScreen.tsx` (was list+detail read-only) to add:
+- **Create** (FAB, gated `assignments.create`) and **Edit/Delete** (per-card icons, gated `assignments.edit`) — mirrors the web's `canCreate`/`canEdit` split.
+- Form modal: name + trade chips (ALL→null + trade_types from `/projects/meta`) + **foreman** (single-select worker picker) + **members** (multi-select worker picker).
+- Workers from `/api/hub/workers`, **normalized so `id === employee_id`** (exactly as the web does at CrewsPage line 233 — the picker id must be the employee_id used in `member_ids`/`foreman_employee_id`).
+- On edit: fetch `GET /crews/:id` to prefill foreman + members. Payload `{ name, foreman_employee_id|null, trade_code: ALL?null:code, member_ids:[] }` → `POST`/`PATCH /crews`. 409 `NAME_TAKEN` handled. Delete via confirm Alert → `DELETE /crews/:id`.
+- Read-only member detail (tap a card) preserved.
+
+New `crews.*` i18n (both locales): addCrew, editCrew, name, namePlaceholder, foreman, selectForeman, nameRequired, nameTaken, created, updated, confirmDelete, saveFailed, deleteFailed. Count **425 = 425**.
+
+**Batch D is now complete.** Deliberately NOT built (matches web): crew deploy/plan flow. Excluded as agreed: Permissions matrix, BI, Billing.
+
+Verified: `npx tsc --noEmit` clean, parity 425=425, `jest src/i18n/parity.test.ts` 4/4 green. Hedar to run the EAS build + device test.
