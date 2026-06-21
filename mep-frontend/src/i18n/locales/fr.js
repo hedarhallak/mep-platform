@@ -375,7 +375,10 @@ export default {
       paid: 'Payé',
       issueDate: 'Émise',
       dueDate: 'Échéance',
+      actions: 'Actions',
+      download: 'Télécharger le PDF',
     },
+    downloadFailed: 'Échec du téléchargement — veuillez réessayer.',
     pagination: {
       prev: 'Précédent',
       next: 'Suivant',

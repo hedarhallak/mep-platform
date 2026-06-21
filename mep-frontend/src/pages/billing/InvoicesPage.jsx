@@ -16,7 +16,7 @@ import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import api from '@/lib/api'
 import {
-  FileText, AlertCircle, Loader2, ChevronLeft, ChevronRight, Filter,
+  FileText, AlertCircle, Loader2, ChevronLeft, ChevronRight, Filter, Download,
 } from 'lucide-react'
 
 // ─── Constants ──────────────────────────────────────────────────────────
@@ -86,6 +86,8 @@ export default function InvoicesPage() {
   const [page, setPage] = useState(1)
   const [typeFilter, setTypeFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
+  const [downloadingId, setDownloadingId] = useState(null)
+  const [downloadError, setDownloadError] = useState(null)
 
   const { data, isLoading, error, isFetching } = useQuery({
     queryKey: ['admin-invoices', page, typeFilter, statusFilter],
@@ -108,6 +110,29 @@ export default function InvoicesPage() {
   function handleStatusChange(newStatus) {
     setStatusFilter(newStatus)
     setPage(1)
+  }
+
+  // Download a single invoice PDF. The API client authenticates via the
+  // Authorization header (not a cookie), so a plain <a href> won't work —
+  // fetch the PDF as a blob and trigger a client-side download.
+  async function handleDownload(inv) {
+    setDownloadError(null)
+    setDownloadingId(inv.id)
+    try {
+      const r = await api.get(`/admin/invoices/${inv.id}/pdf`, { responseType: 'blob' })
+      const url = URL.createObjectURL(new Blob([r.data], { type: 'application/pdf' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${inv.invoice_number || 'invoice'}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch {
+      setDownloadError(inv.id)
+    } finally {
+      setDownloadingId(null)
+    }
   }
 
   if (isLoading) {
@@ -205,6 +230,7 @@ export default function InvoicesPage() {
                   <th className="px-4 py-3 text-right">{t('billing.table.paid')}</th>
                   <th className="px-4 py-3">{t('billing.table.issueDate')}</th>
                   <th className="px-4 py-3">{t('billing.table.dueDate')}</th>
+                  <th className="px-4 py-3 text-right">{t('billing.table.actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -231,6 +257,24 @@ export default function InvoicesPage() {
                     </td>
                     <td className="px-4 py-3 text-slate-600">{formatDate(inv.issue_date)}</td>
                     <td className="px-4 py-3 text-slate-600">{formatDate(inv.due_date)}</td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => handleDownload(inv)}
+                        disabled={downloadingId === inv.id}
+                        aria-label={t('billing.table.download')}
+                        title={downloadError === inv.id ? t('billing.downloadFailed') : t('billing.table.download')}
+                        className={`inline-flex items-center justify-center p-1.5 rounded-lg hover:bg-slate-100 disabled:opacity-50 ${
+                          downloadError === inv.id ? 'text-red-500' : 'text-slate-500 hover:text-primary'
+                        }`}
+                      >
+                        {downloadingId === inv.id ? (
+                          <Loader2 size={15} className="animate-spin" />
+                        ) : (
+                          <Download size={15} />
+                        )}
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>

@@ -48,6 +48,7 @@ const express = require('express');
 const router = express.Router();
 
 const { COMPANY_ADMIN_UP } = require('../middleware/roles');
+const { buildInvoicePdfBuffer } = require('../lib/email');
 router.use(COMPANY_ADMIN_UP);
 
 const VALID_TYPES = ['SUBSCRIPTION_RECURRING', 'TRAINING', 'CUSTOM_DEMAND', 'OTHER'];
@@ -168,6 +169,54 @@ router.get('/', async (req, res) => {
     });
   } catch (err) {
     console.error('GET /admin/invoices error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
+  }
+});
+
+// ── GET /:id/pdf ── §150.2: on-demand customer invoice PDF download ──────────
+// Scoped by company_id (+ RLS). Regenerates the PDF from the stored row (no
+// pdf_url is persisted). 404 if the invoice isn't the caller's; 503 if no
+// browser is available to render (graceful — same posture as the email job).
+router.get('/:id/pdf', async (req, res) => {
+  try {
+    const companyId = req.user?.company_id;
+    if (!companyId) {
+      return res.status(401).json({ ok: false, error: 'NO_TENANT' });
+    }
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ ok: false, error: 'INVALID_ID' });
+    }
+
+    const { rows } = await req.db.query(
+      `SELECT i.invoice_number, i.type, i.issue_date, i.due_date,
+              i.subtotal_cents, i.qst_cents, i.gst_cents, i.total_cents,
+              i.amount_paid_cents, i.currency, i.customer_notes, i.details,
+              c.name AS company_name
+         FROM public.invoices i
+         JOIN public.companies c ON c.company_id = i.company_id
+        WHERE i.id = $1 AND i.company_id = $2
+        LIMIT 1`,
+      [id, companyId]
+    );
+    if (!rows.length) {
+      return res.status(404).json({ ok: false, error: 'INVOICE_NOT_FOUND' });
+    }
+    const invoice = rows[0];
+
+    const pdf = await buildInvoicePdfBuffer(invoice);
+    if (!pdf) {
+      return res.status(503).json({ ok: false, error: 'PDF_UNAVAILABLE' });
+    }
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${String(invoice.invoice_number || 'invoice').replace(/[^A-Za-z0-9._-]/g, '_')}.pdf"`
+    );
+    return res.send(Buffer.from(pdf));
+  } catch (err) {
+    console.error('GET /admin/invoices/:id/pdf error:', err);
     return res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
   }
 });
