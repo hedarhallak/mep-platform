@@ -16799,3 +16799,16 @@ Stopping the §151 grind here by decision. Status:
 - **To resume (fresh session, clean context for the complex fixtures):** pick one of the 3 files, build a fixture factory (seed a project with labor requirements + a pool of available employees on a date), then cover the main handler's happy path + key branches. Each file is its own multi-PR effort. Realistic: lines → 80%, branches likely settle ~66-70%.
 
 Higher-value alternatives before resuming the grind: the **pending prod deploy** (§150 billing UI + §151.3 standup fix + migration 039 — see §152) and the **Android build** (Expo codebase ready, Google Play account in place).
+
+---
+
+## 153. Section 153 — June 22, 2026 — Android build live (APK installed)
+
+Mobile is now cross-platform. Built and installed the Android app via `eas build --platform android --profile preview` (direct-install APK; EAS auto-generated the Android keystore). Same Expo codebase as iOS (bundle/package `ca.constrai.app`), no code changes — the §149 mobile app now runs on **iOS (TestFlight) and Android (APK)**.
+
+Pending Android follow-ups (not blockers):
+- **Play Store publish:** `eas build --platform android --profile production` (AAB) → `eas submit --platform android --latest`. Needs a Google Play **service-account JSON** (Play Console → Setup → API access) — one-time setup on Hedar's Play account.
+- **Push on Android:** requires FCM (`google-services.json`) wiring — separate task; not needed for build/install.
+- **Device QA:** verify Android-specific behaviour (image picker / camera permission, date pickers, hardware back button, safe-area insets) matches iOS.
+
+Next tracks (Hedar's call): Android device QA + Play submit · the sales deck improvements (§ deck — "acceptable in principle, needs many improvements") · pending prod deploy (§152) · coverage to 80% (§151.9).
