@@ -56,7 +56,7 @@ jobs:
 
       - name: Deploy over SSH (runs scripts/deploy.sh on the droplet)
         if: steps.guard.outputs.configured == 'true'
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
