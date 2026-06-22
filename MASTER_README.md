@@ -1,14 +1,14 @@
 # MEP Platform — Master Project README
-> Last updated: June 21, 2026 | Maintainer: Hedar Hallak
+> Last updated: June 22, 2026 | Maintainer: Hedar Hallak
 > Production: https://app.constrai.ca
 > Website: https://www.constrai.ca (Coming Soon landing page)
 > Server: root@143.110.218.84
-> Latest DECISIONS section: **Section 150** (June 21, 2026 — Phase 6-D-5 customer Billing UI polish, COMPLETE: invoice status filter + §117.4 request-recorded confirmation, on-demand invoice PDF download `GET /admin/invoices/:id/pdf`, in-app invoice detail modal `GET /admin/invoices/:id` with line items/taxes/payments — EN/FR + tests; frontend+backend, deploy via `scripts/deploy.sh`, no migration). Earlier: §149 = mobile app brought to web parity (Batch A-D + permission-driven dashboard + EN/FR parity test); §149.10 = mobile store/api unit tests + coverage floor; §147 = project-centric assignment redesign; §148 = data-driven permissions; §116-118/§125 = Phase 6-D billing backend.
-> Active program: **Test-coverage push (§150-coverage track, June 21+).** Backend at ~69/61/71/70 (stmts/branch/func/lines, CI w/ DB) over thresholds 59/50/59/60 — raising it via tests on the big under-covered business routes (assignments/daily_dispatch/auto_assign/material_requests/reports), then ratcheting. CI now emits per-file coverage on push/dispatch to target the gaps. Mobile store/api covered (floor 83/70/78/85). Deferred tracks: mobile crew deploy, web i18n Tier 3.
+> Latest DECISIONS section: **Section 153** (June 22, 2026 — Android build live: `eas build --platform android --profile preview` APK installed; mobile now runs on iOS (TestFlight) + Android, same Expo codebase, no code change). Recent chain: §152 = session checkpoint; §151 = test-coverage push (~69→~74% lines, thresholds ratcheted to 68/58/70/69, + standup duplicate-request bug fix w/ migration 039) PAUSED at ~74% (remainder = the 3 algorithmic files); §150 = customer Billing UI polish COMPLETE (status filter, §117.4 confirmation, invoice PDF download, invoice detail modal); §149 = mobile brought to web parity (Batch A-D + permission-driven dashboard + EN/FR parity test + store/api tests).
+> Active program: **None mid-flight as of June 22 — Hedar's pick.** Candidates: (1) **Android device QA + Play Store submit** (`eas build --profile production` → `eas submit`; needs a Google Play service-account JSON); (2) the **sales deck** improvements (FR+EN, 18 slides, on Desktop — "acceptable in principle, needs work"); (3) resume **coverage → 80%** (§151.9: daily_dispatch / assignments / auto_assign, fresh session); (4) **PENDING PROD DEPLOY** — §150 + §151.3 are merged to main but NOT on prod (see below). Deferred: mobile crew deploy, web i18n Tier 3, Android FCM push.
 > Multi-tenant migration: Phases 1-5 ✅ Done. Phase 4 strict RLS rolled back in 90-G then re-applied via Stage 2 GUC + Stage 3 strict on prod (sections 90-G + Phase 6 onward). Pattern B (SUPER_ADMIN portal split via `admin.constrai.ca`) verified end-to-end.
 > Web Tier 1 + Tier 2 DONE (10/10). ~509 i18n keys live. Tier 3 i18n deferred to Phase 6-D-5.
 > **Customer #1 status:** still unsigned. Conference demo + sales materials target = September 2026 (hard deadline).
-> **Prod is in sync with main**. Latest deploy: PR #268 (May 26, 2026) — Phase 6-D-4 PR 5.
+> **⚠️ Prod is BEHIND main (deploy pending).** §150 (customer Billing UI: backend routes + frontend) + §151.3 (standup fix) are merged to main but NOT deployed. To ship: `cd /var/www/mep && git pull origin main && sudo -u postgres psql -d mepdb -f migrations/039_material_requests_standup_date.sql && bash scripts/deploy.sh`. (§151 test PRs + §153 Android need no web deploy.) Last web deploy: PR #268 (May 26, 2026).
 > **Deploy command** (after `ssh root@143.110.218.84`): `bash /var/www/mep/scripts/deploy.sh` — see Section 53/54 for behavior. Migrations require manual `sudo -u postgres psql -f` (Pitfall #45).
 > **Monitoring posture:** UptimeRobot pinging `/api/health/deep` ✅. Sentry alert rule (new issue → email Hedar) ✅.
 > Coverage thresholds: **58 / 49 / 58 / 59** (ratcheted in Section 80; latest measured ~67/57/65/66 on PR #268).
@@ -203,7 +203,7 @@ Permission matrix: 284 mappings — see DECISIONS.md for full matrix.
 > i18n: react-i18next — default FR, EN secondary (user picks from Profile)
 > Theme: Centralized via src/theme/colors.ts — dark blue (#1e3a5f) primary
 > Auth: JWT refresh token rotation + expo-secure-store (encrypted storage)
-> Last Build: June 20, 2026 — §149 mobile update: permission-driven dashboard + §147 Submit Request + Batch A–D screens (16 modules) + complete EN/FR i18n + parity test
+> Last Build: June 22, 2026 — §153: **Android APK live** (`eas build --platform android --profile preview`) + iOS (TestFlight). Same codebase: §149 mobile update (permission-driven dashboard + §147 Submit Request + Batch A–D, ~16 modules + complete EN/FR i18n + parity test + store/api unit tests).
 
 ### Navigation Structure (Unified Icon Grid — Dashboard is permission-driven, §149.3)
 ```
