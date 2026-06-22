@@ -16780,3 +16780,9 @@ bash scripts/deploy.sh
 (§151 test PRs need no deploy — CI-only.)
 
 **Next session pick-up:** continue §151 coverage batches toward 80% lines (employees/material_requests/expense_claims), OR do the Android build/submit, OR run the pending prod deploy — Hedar's call.
+
+---
+
+### 151.7 — employees.js PATCH /:id (65% → targeted ~85%)
+
+(Logged after §152; belongs to the §151 coverage program.) The employees list + detail GETs were covered, but `PATCH /api/employees/:id` — the big partial-update handler (~150 lines: fans across `employees` + `employee_profiles` with create-if-missing, then syncs role/is_active to the linked `app_users` row, with the §140 OWNER guard) — was untested. Added `employees_patch.test.js`: 400 INVALID_ID, 404 EMPLOYEE_NOT_FOUND, a valid multi-field update verified via GET /:id (creates the profile, sets trade/rank), role-change synced to app_users, is_active=false synced to app_users, and the OWNER guard → 403 OWNER_ROLE_RESTRICTED. Parses + DB-skips locally; CI runs live.
