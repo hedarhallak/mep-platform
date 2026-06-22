@@ -87,6 +87,10 @@ export default {
     expenses: 'Expenses',
     tools: 'Tools',
     crews: 'Crews',
+    projectStaffing: 'Project Staffing',
+    employees: 'Employees',
+    suppliers: 'Suppliers',
+    projects: 'Projects',
   },
 
   // Attendance
@@ -359,6 +363,19 @@ export default {
     memberCount: '{{count}} members',
     members: 'Members',
     noMembers: 'No members in this crew.',
+    addCrew: 'New Crew',
+    editCrew: 'Edit Crew',
+    name: 'Crew name',
+    namePlaceholder: 'e.g. Plumbing Team A',
+    foreman: 'Foreman',
+    selectForeman: 'Select a foreman…',
+    nameRequired: 'Crew name is required.',
+    nameTaken: 'A crew with this name already exists.',
+    created: 'Crew created ✓',
+    updated: 'Crew updated ✓',
+    confirmDelete: 'Remove this crew?',
+    saveFailed: 'Failed to save. Please try again.',
+    deleteFailed: 'Failed to remove. Please try again.',
   },
 
   // §149 Batch B — Surplus / Material Returns
@@ -379,6 +396,79 @@ export default {
     submitFailed: 'Failed to declare. Please try again.',
     selectProject: 'Please select a project.',
     addItem: 'Add at least one item with a quantity.',
+  },
+
+  // §149 Batch D — Project Staffing (coverage, read)
+  projectStaffing: {
+    title: 'Project Staffing',
+    coverage: 'Coverage',
+    trade: 'Trade',
+    required: 'Required',
+    assigned: 'Assigned',
+    gap: 'Gap',
+    total: 'Total',
+    fullyCovered: 'Fully staffed for this date.',
+    noRequirements: 'No staffing requirements for this date.',
+    phases: 'Planned phases',
+  },
+
+  // §149 Batch D — Standup (foreman, tomorrow)
+  standup: {
+    title: 'Standup',
+    tomorrow: 'Tomorrow',
+    empty: 'No projects scheduled for tomorrow.',
+    team: 'Team',
+    noTeam: 'No workers assigned yet.',
+    materials: 'Materials',
+    noMaterials: 'No material request for tomorrow.',
+    markComplete: 'Mark Standup Done',
+    completed: 'Done',
+    completeFailed: 'Failed to complete standup.',
+  },
+
+  // §149 Batch D — Employees (list + invite)
+  employees: {
+    empty: 'No employees yet.',
+    invite: 'Invite Employee',
+    sendInvite: 'Send Invitation',
+    invited: 'Invitation sent ✓',
+    inviteNoEmail: 'Employee created, but the email could not be sent. Invite link:\n{{url}}',
+    inviteHint: 'An onboarding email with a secure invite link will be sent so the employee can set their PIN.',
+    firstName: 'First name',
+    lastName: 'Last name',
+    firstNameRequired: 'First name is required.',
+    lastNameRequired: 'Last name is required.',
+    emailRequired: 'A valid email is required.',
+    saveFailed: 'Failed to invite. Please try again.',
+  },
+
+  // §149 Batch D — Suppliers (list + create)
+  suppliers: {
+    empty: 'No suppliers yet.',
+    newSupplier: 'New Supplier',
+    name: 'Supplier name',
+    created: 'Supplier created ✓',
+    exists: 'A supplier with this name already exists.',
+    nameRequired: 'Supplier name is required.',
+    emailRequired: 'Email is required.',
+    phoneRequired: 'Phone is required.',
+    saveFailed: 'Failed to save. Please try again.',
+  },
+
+  // §149 Batch D — Projects (list + create)
+  projects: {
+    empty: 'No projects yet.',
+    newProject: 'New Project',
+    name: 'Project name',
+    status: 'Status',
+    client: 'Client',
+    sector: 'CCQ Sector',
+    sectors: { IC: 'Commercial / Institutional', INDUSTRIAL: 'Industrial', RESIDENTIAL: 'Residential' },
+    created: 'Project created ✓',
+    nameRequired: 'Project name is required.',
+    tradeRequired: 'Please select a trade.',
+    assignedCount: '{{count}} assigned',
+    saveFailed: 'Failed to save. Please try again.',
   },
 
   // Profile

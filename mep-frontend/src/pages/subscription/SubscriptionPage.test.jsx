@@ -43,6 +43,10 @@ const I18N_MAP = {
   'subscription.forms.submitAndEmail': 'Submit + open email',
   'subscription.forms.cancelImmediately': 'Cancel immediately',
   'subscription.forms.targetPlan': 'Target plan',
+  'subscription.forms.requestRecorded': 'Request recorded',
+  'subscription.forms.requestRecordedHelp': 'Your request is logged. Please send the email.',
+  'subscription.forms.reopenEmail': 'Reopen email',
+  'common.close': 'Close',
   'subscription.plans.MONTHLY': 'Monthly',
   'subscription.plans.ANNUAL': 'Annual',
   'subscription.plans.ENTERPRISE': 'Enterprise',
@@ -222,5 +226,29 @@ describe('<SubscriptionPage />', () => {
     expect(hrefSetter).toHaveBeenCalledWith(
       'mailto:billing@constrai.ca?subject=Seat%20change'
     )
+  })
+
+  test('shows the "request recorded" confirmation (§117.4) after a successful submit', async () => {
+    const user = userEvent.setup()
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: { ...window.location, set href(_v) {} },
+    })
+    mockApi.post.mockResolvedValue({
+      data: { ok: true, request_audit_id: 1, mailto_url: 'mailto:billing@constrai.ca?subject=x' },
+      status: 200,
+      ok: true,
+    })
+
+    renderPage()
+    await waitFor(() => expect(screen.getByText('Acme Mechanical')).toBeInTheDocument())
+    await user.click(await screen.findByRole('button', { name: /Request seat change/i }))
+    await user.click(screen.getByRole('button', { name: /Submit \+ open email/i }))
+
+    // The form is replaced by the confirmation panel.
+    await waitFor(() => expect(screen.getByText('Request recorded')).toBeInTheDocument())
+    expect(screen.getByRole('link', { name: /Reopen email/i })).toBeInTheDocument()
+    // form input is gone now
+    expect(screen.queryByLabelText(/New seat count/i)).not.toBeInTheDocument()
   })
 })

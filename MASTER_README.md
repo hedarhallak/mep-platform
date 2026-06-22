@@ -1,14 +1,14 @@
 # MEP Platform — Master Project README
-> Last updated: May 26, 2026 | Maintainer: Hedar Hallak
+> Last updated: June 22, 2026 | Maintainer: Hedar Hallak
 > Production: https://app.constrai.ca
 > Website: https://www.constrai.ca (Coming Soon landing page)
 > Server: root@143.110.218.84
-> Latest DECISIONS section: **Section 118** (May 26, 2026 — Phase 6-D-4 COMPLETE — all 5 PRs of the billing schema implementation phase shipped + deployed + verified; Pitfalls #50/#51 captured; ci.yml gained `workflow_dispatch:` trigger). Recent context: Section 115 = per-seat metered pricing lock + bracket ladder $27/$25/$24/$23/$22. Section 116 = subscription + billing schema design. Section 117 = PR 1+2 closeout + 3 strategic revisions to S115 + Pitfall #49 (postgres-owned tables need explicit GRANTs). Section 118 = PR 3/4/5 closeout (migration 020 grants + seat-change endpoints + training/custom-demands/payments + migration 021 GST scale normalization).
-> Active program: **Phase 6-D-4 COMPLETE.** Next is **Phase 6-D-5** (customer-facing Subscription/Billing UI) — Subscription page with Request seat change form (hybrid workflow per Section 117.4), Invoices list page, bracket + per-seat price display, bilingual EN/FR. Estimated 1-2 weeks per the September 2026 conference roadmap.
+> Latest DECISIONS section: **Section 153** (June 22, 2026 — Android build live: `eas build --platform android --profile preview` APK installed; mobile now runs on iOS (TestFlight) + Android, same Expo codebase, no code change). Recent chain: §152 = session checkpoint; §151 = test-coverage push (~69→~74% lines, thresholds ratcheted to 68/58/70/69, + standup duplicate-request bug fix w/ migration 039) PAUSED at ~74% (remainder = the 3 algorithmic files); §150 = customer Billing UI polish COMPLETE (status filter, §117.4 confirmation, invoice PDF download, invoice detail modal); §149 = mobile brought to web parity (Batch A-D + permission-driven dashboard + EN/FR parity test + store/api tests).
+> Active program: **None mid-flight as of June 22 — Hedar's pick.** Candidates: (1) **Android device QA + Play Store submit** (`eas build --profile production` → `eas submit`; needs a Google Play service-account JSON); (2) the **sales deck** improvements (FR+EN, 18 slides, on Desktop — "acceptable in principle, needs work"); (3) resume **coverage → 80%** (§151.9: daily_dispatch / assignments / auto_assign, fresh session); (4) **PENDING PROD DEPLOY** — §150 + §151.3 are merged to main but NOT on prod (see below). Deferred: mobile crew deploy, web i18n Tier 3, Android FCM push.
 > Multi-tenant migration: Phases 1-5 ✅ Done. Phase 4 strict RLS rolled back in 90-G then re-applied via Stage 2 GUC + Stage 3 strict on prod (sections 90-G + Phase 6 onward). Pattern B (SUPER_ADMIN portal split via `admin.constrai.ca`) verified end-to-end.
 > Web Tier 1 + Tier 2 DONE (10/10). ~509 i18n keys live. Tier 3 i18n deferred to Phase 6-D-5.
 > **Customer #1 status:** still unsigned. Conference demo + sales materials target = September 2026 (hard deadline).
-> **Prod is in sync with main**. Latest deploy: PR #268 (May 26, 2026) — Phase 6-D-4 PR 5.
+> **⚠️ Prod is BEHIND main (deploy pending).** §150 (customer Billing UI: backend routes + frontend) + §151.3 (standup fix) are merged to main but NOT deployed. To ship: `cd /var/www/mep && git pull origin main && sudo -u postgres psql -d mepdb -f migrations/039_material_requests_standup_date.sql && bash scripts/deploy.sh`. (§151 test PRs + §153 Android need no web deploy.) Last web deploy: PR #268 (May 26, 2026).
 > **Deploy command** (after `ssh root@143.110.218.84`): `bash /var/www/mep/scripts/deploy.sh` — see Section 53/54 for behavior. Migrations require manual `sudo -u postgres psql -f` (Pitfall #45).
 > **Monitoring posture:** UptimeRobot pinging `/api/health/deep` ✅. Sentry alert rule (new issue → email Hedar) ✅.
 > Coverage thresholds: **58 / 49 / 58 / 59** (ratcheted in Section 80; latest measured ~67/57/65/66 on PR #268).
@@ -203,36 +203,39 @@ Permission matrix: 284 mappings — see DECISIONS.md for full matrix.
 > i18n: react-i18next — default FR, EN secondary (user picks from Profile)
 > Theme: Centralized via src/theme/colors.ts — dark blue (#1e3a5f) primary
 > Auth: JWT refresh token rotation + expo-secure-store (encrypted storage)
-> Last Build: April 16, 2026 — includes centralized color theme + full i18n + secure auth
+> Last Build: June 22, 2026 — §153: **Android APK live** (`eas build --platform android --profile preview`) + iOS (TestFlight). Same codebase: §149 mobile update (permission-driven dashboard + §147 Submit Request + Batch A–D, ~16 modules + complete EN/FR i18n + parity test + store/api unit tests).
 
-### Navigation Structure (Unified Icon Grid — April 2026)
+### Navigation Structure (Unified Icon Grid — Dashboard is permission-driven, §149.3)
 ```
 Bottom Bar: Home · Hub · Profile
 
-Home → DashboardScreen (icon grid, role-aware)
-  → Attendance (direct screen)
-  → Materials → MaterialsMenuScreen
-      → New Request → MaterialRequestScreen
-      → My Requests → MyRequestsScreen
-  → Tasks (FOREMAN+) → TasksMenuScreen
-      → New Task → NewTaskScreen
-      → Sent Tasks → SentTasksScreen
-  → Report → ReportMenuScreen
-      → This Week → MyReportScreen (period=this_week)
-      → Last Week → MyReportScreen (period=last_week)
-      → Custom Date → MyReportScreen (period=custom)
-  → Assignments (Soon)
-  → Standup (Soon)
-  → Purchase Orders (Soon)
+Home → DashboardScreen (icon grid; each module shown only if the user holds the
+       required [module,action] permission — fetched from /api/permissions/my-permissions)
+  → Attendance
+  → Materials → MaterialsMenuScreen → New Request / My Requests
+  → Report → ReportMenuScreen → This/Last/Custom → MyReportScreen
+  → Tasks (FOREMAN+) → TasksMenuScreen → New Task / Sent Tasks
+  → Assignments → SubmitRequest (§147 foreman staffing request)
+  → Pending Requests → PendingRequestsScreen (dispatcher review)        [Batch A]
+  → Purchase Orders → PurchaseOrdersScreen                             [Batch A]
+  → Standup → StandupScreen (tomorrow roster + complete)              [Batch D]
+  → Project Staffing → ProjectStaffingScreen (coverage, read)        [Batch D]
+  → Expenses → ExpensesScreen                                         [Batch B]
+  → Surplus → SurplusScreen (material returns)                        [Batch B]
+  → Tools → ToolsScreen                                               [Batch C]
+  → Crews → CrewsScreen (read-only list+detail; create/deploy = TODO) [Batch C]
+  → Employees → EmployeesScreen (list + invite)                       [Batch D]
+  → Suppliers → SuppliersScreen (list + create)                       [Batch D]
+  → Projects → ProjectsScreen (list + create, no geocode)            [Batch D]
 
 Hub → HubMenuScreen (icon grid)
   → Inbox → MyHubScreen
-  → Material Requests (FOREMAN+) → ForemanMaterialsTab
+  → Material Requests (FOREMAN+) → ForemanWorkspaceScreen
       → Merge & Edit → MergeEditScreen
 
-Profile → ProfileNavigator
-  → ProfileScreen
-  → ChangePinScreen
+Profile → ProfileScreen → ChangePinScreen + in-app FR/EN language switcher
+
+Desktop-only (NOT on mobile, by design): Permissions matrix, BI/Workforce Planner, Billing.
 ```
 
 ### Mobile Screens Status
@@ -251,13 +254,22 @@ Profile → ProfileNavigator
 | MyReportScreen (period param) | ✅ | ✅ |
 | HubMenuScreen (icon grid) | ✅ | ✅ |
 | MyHubScreen (Inbox only) | ✅ | ✅ |
-| ForemanMaterialsTab + MergeEditScreen | ✅ | ✅ |
+| ForemanWorkspaceScreen + MergeEditScreen | ✅ | ✅ |
 | Profile + Change PIN | ✅ | ✅ |
 | Navigation Headers (all stacks) | ✅ | ✅ |
+| SubmitRequest (§147 foreman staffing) | ✅ | ✅ |
+| PendingRequests / PurchaseOrders (Batch A) | ✅ | ✅ |
+| Expenses / Surplus (Batch B) | ✅ | ✅ |
+| Tools / Crews — read-only (Batch C) | ✅ | ✅ |
+| ProjectStaffing / Standup (Batch D) | ✅ | ✅ |
+| Employees (invite) / Suppliers / Projects (Batch D) | ✅ | ✅ |
+| Crew create/deploy | ⬜ TODO | — |
+
+> Dashboard is permission-gated (§149.3): icons reflect the user's effective permissions, mirroring the web. Create actions (FAB buttons) appear only with the matching create/invite permission.
 
 ### Centralized Theme
 - `src/theme/colors.ts` — single source of truth for all colors across the app
-- All 23 screen files import from Colors — zero hardcoded color values
+- All screen files import from Colors — zero hardcoded color values
 - Palette: Dark Blue primary (#1e3a5f) + Blue accent (#3b82f6)
 - Includes: primaryDark, primaryLight, primaryBright, primaryPale, accent, accentDark, accentLight, accentPale
 - Convenience export: `headerColors` for navigation headers
@@ -268,9 +280,10 @@ Profile → ProfileNavigator
 ### i18n Structure
 - `src/i18n/index.ts` — i18next init with AsyncStorage language detector (key: `mep_language`)
 - `src/i18n/locales/en.ts` + `src/i18n/locales/fr.ts` — all UI strings
-- Sections: common, auth, dashboard, modules, attendance, materials, tasks, hub, report, profile, roles, errors
+- Sections: common, auth, dashboard, modules, attendance, materials, tasks, hub, report, submitRequest, pendingRequests, purchaseOrders, expenses, tools, crews, surplus, projectStaffing, standup, employees, suppliers, projects, profile, roles, errors
 - Date/time locale switches dynamically via `i18n.language` (`fr-CA` or `en-CA`)
-- User switches language from Profile → Language
+- User switches language from Profile → Language (and in-app sidebar on web)
+- **Parity guard:** `src/i18n/parity.test.ts` fails CI if an EN key lacks its FR twin (or vice-versa) or any value is empty. Current count: 412 = 412 (§149.8).
 
 ### Testing
 ```powershell

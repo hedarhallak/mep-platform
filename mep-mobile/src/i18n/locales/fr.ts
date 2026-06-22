@@ -87,6 +87,10 @@ export default {
     expenses: 'Dépenses',
     tools: 'Outils',
     crews: 'Équipes',
+    projectStaffing: 'Personnel du projet',
+    employees: 'Employés',
+    suppliers: 'Fournisseurs',
+    projects: 'Projets',
   },
 
   // Attendance
@@ -359,6 +363,19 @@ export default {
     memberCount: '{{count}} membres',
     members: 'Membres',
     noMembers: 'Aucun membre dans cette équipe.',
+    addCrew: 'Nouvelle équipe',
+    editCrew: 'Modifier l’équipe',
+    name: 'Nom de l’équipe',
+    namePlaceholder: 'ex. Équipe plomberie A',
+    foreman: 'Contremaître',
+    selectForeman: 'Choisir un contremaître…',
+    nameRequired: 'Le nom de l’équipe est requis.',
+    nameTaken: 'Une équipe portant ce nom existe déjà.',
+    created: 'Équipe créée ✓',
+    updated: 'Équipe mise à jour ✓',
+    confirmDelete: 'Supprimer cette équipe?',
+    saveFailed: 'Échec de l’enregistrement. Veuillez réessayer.',
+    deleteFailed: 'Échec de la suppression. Veuillez réessayer.',
   },
 
   // §149 Batch B — Surplus / Retours de matériel
@@ -379,6 +396,79 @@ export default {
     submitFailed: 'Échec de la déclaration. Réessayez.',
     selectProject: 'Veuillez choisir un projet.',
     addItem: 'Ajoutez au moins un article avec une quantité.',
+  },
+
+  // §149 Batch D — Project Staffing (coverage, read)
+  projectStaffing: {
+    title: 'Personnel du projet',
+    coverage: 'Couverture',
+    trade: 'Métier',
+    required: 'Requis',
+    assigned: 'Affectés',
+    gap: 'Écart',
+    total: 'Total',
+    fullyCovered: 'Effectif complet pour cette date.',
+    noRequirements: 'Aucun besoin en personnel pour cette date.',
+    phases: 'Phases planifiées',
+  },
+
+  // §149 Batch D — Standup (foreman, tomorrow)
+  standup: {
+    title: 'Briefing',
+    tomorrow: 'Demain',
+    empty: 'Aucun projet prévu pour demain.',
+    team: 'Équipe',
+    noTeam: 'Aucun travailleur affecté pour l’instant.',
+    materials: 'Matériaux',
+    noMaterials: 'Aucune demande de matériel pour demain.',
+    markComplete: 'Marquer le briefing terminé',
+    completed: 'Terminé',
+    completeFailed: 'Échec de la finalisation du briefing.',
+  },
+
+  // §149 Batch D — Employees (list + invite)
+  employees: {
+    empty: 'Aucun employé pour l’instant.',
+    invite: 'Inviter un employé',
+    sendInvite: 'Envoyer l’invitation',
+    invited: 'Invitation envoyée ✓',
+    inviteNoEmail: 'Employé créé, mais l’e-mail n’a pas pu être envoyé. Lien d’invitation :\n{{url}}',
+    inviteHint: 'Un e-mail d’intégration avec un lien d’invitation sécurisé sera envoyé pour que l’employé définisse son NIP.',
+    firstName: 'Prénom',
+    lastName: 'Nom',
+    firstNameRequired: 'Le prénom est requis.',
+    lastNameRequired: 'Le nom est requis.',
+    emailRequired: 'Un e-mail valide est requis.',
+    saveFailed: 'Échec de l’invitation. Veuillez réessayer.',
+  },
+
+  // §149 Batch D — Suppliers (list + create)
+  suppliers: {
+    empty: 'Aucun fournisseur pour l’instant.',
+    newSupplier: 'Nouveau fournisseur',
+    name: 'Nom du fournisseur',
+    created: 'Fournisseur créé ✓',
+    exists: 'Un fournisseur portant ce nom existe déjà.',
+    nameRequired: 'Le nom du fournisseur est requis.',
+    emailRequired: 'L’e-mail est requis.',
+    phoneRequired: 'Le téléphone est requis.',
+    saveFailed: 'Échec de l’enregistrement. Veuillez réessayer.',
+  },
+
+  // §149 Batch D — Projects (list + create)
+  projects: {
+    empty: 'Aucun projet pour l’instant.',
+    newProject: 'Nouveau projet',
+    name: 'Nom du projet',
+    status: 'Statut',
+    client: 'Client',
+    sector: 'Secteur CCQ',
+    sectors: { IC: 'Commercial / Institutionnel', INDUSTRIAL: 'Industriel', RESIDENTIAL: 'Résidentiel' },
+    created: 'Projet créé ✓',
+    nameRequired: 'Le nom du projet est requis.',
+    tradeRequired: 'Veuillez sélectionner un métier.',
+    assignedCount: '{{count}} affecté(s)',
+    saveFailed: 'Échec de l’enregistrement. Veuillez réessayer.',
   },
 
   // Profile

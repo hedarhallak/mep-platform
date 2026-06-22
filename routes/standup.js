@@ -138,7 +138,7 @@ router.get('/tomorrow', can('standup.manage'), async (req, res) => {
         LEFT JOIN public.material_request_items mri ON mri.request_id = mr.id
         WHERE mr.project_id = $1
           AND mr.company_id = $2
-          AND DATE(mr.created_at) = $3::date
+          AND mr.standup_date = $3::date
           AND mr.status IN ('PENDING','REVIEWED')
         GROUP BY mr.id
         ORDER BY mr.created_at DESC
@@ -254,7 +254,7 @@ router.get('/materials/:project_id', can('standup.manage'), async (req, res) => 
       LEFT JOIN public.material_request_items mri ON mri.request_id = mr.id
       WHERE mr.project_id = $1
         AND mr.company_id = $2
-        AND DATE(mr.created_at) = $3::date
+        AND mr.standup_date = $3::date
         AND mr.status IN ('PENDING','REVIEWED')
       GROUP BY mr.id
       ORDER BY mr.created_at DESC
@@ -286,11 +286,11 @@ router.get('/materials/:project_id', can('standup.manage'), async (req, res) => 
     const newReq = await req.db.query(
       `
       INSERT INTO public.material_requests
-        (company_id, project_id, requested_by, foreman_employee_id, status, note)
-      VALUES ($1, $2, $3, $4, 'PENDING', $5)
+        (company_id, project_id, requested_by, foreman_employee_id, status, note, standup_date)
+      VALUES ($1, $2, $3, $4, 'PENDING', $5, $6)
       RETURNING id, status, note
     `,
-      [companyId, projectId, req.user.user_id, foremanId, 'Daily standup â€” ' + tmrw]
+      [companyId, projectId, req.user.user_id, foremanId, 'Daily standup â€” ' + tmrw, tmrw]
     );
 
     res.json({ ok: true, request: { ...newReq.rows[0], items: [] }, created: true });

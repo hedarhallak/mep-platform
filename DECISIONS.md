@@ -16619,9 +16619,196 @@ Fixed (every user-visible string now goes through `t()`):
 New keys (added symmetrically to **both** `en.ts` and `fr.ts`): a batch under `auth.*` (PIN flow), `tasks.*`, `hub.*`, `profile.*`, and four `materials.*` (`mergedItems`, `sendOrderCount`, `mergeSendConfirm`, `mergeSendCount`). Final count **353 = 353**.
 
 Deliberately left:
-- `hub/TasksScreen.tsx` — **dead code** (not imported/routed anywhere; the live task flow is `TasksMenu → NewTask → SentTasks`). Its ~27 hardcoded strings never render. Flagged for separate deletion.
+- `hub/TasksScreen.tsx` — **dead code** (not imported/routed anywhere; the live task flow is `TasksMenu → NewTask → SentTasks`). Its ~27 hardcoded strings never render. Flagged for separate deletion → **deleted in PR #428** (560 lines, tsc-verified, separate session).
 - `ExpensesScreen` `placeholder="0.00"` — numeric format hint, locale-neutral (a FR `0,00` would break `Number()` parsing).
 
 Permanent guard: added **`src/i18n/parity.test.ts`** (mobile finally gets what web already had) — fails CI if an EN key lacks its FR twin (or vice-versa) or any value is empty. Mirrors the web `parity.test.js` philosophy.
 
 Verified: `npx tsc --noEmit` clean, parity script 353=353, `jest src/i18n/parity.test.ts` 4/4 green. Hedar to run the EAS build + device test.
+
+### 149.8 — Mobile Batch D (part 1): Project Staffing + Standup + Employees/Suppliers/Projects (with create)
+
+Five new mobile screens toward web parity, all permission-gated via the §149.3 store and EN/FR from day one. Backend contracts were verified against the route handlers first (the recon flagged several "inferred" endpoints in `routes/projects.js` that don't exist — the requirements/coverage routes actually live in `routes/project_requirements.js`, mounted under `/api/projects`).
+
+- **ProjectStaffingScreen** (`screens/projects/`) — read/coverage: project chips + date picker → `GET /api/projects/:id/coverage?date=` table (required / assigned / gap per trade + totals, gap shown red) + `GET /api/projects/:id/requirements` planned-phase list. Trade-scoped by the backend. Dashboard module `project_staffing` gated by `assignments.view`/`edit`.
+- **StandupScreen** (`screens/standup/`) — foreman tomorrow view: `GET /api/standup/tomorrow` → per-project cards (approved WORKER roster + shift, tomorrow's material request items read-only, session status) + "mark standup done" (`POST /standup/session` then `/session/:id/complete`). Wired the existing `standup` Dashboard module (was Coming-Soon) to the screen. Gated by `standup.manage`.
+- **EmployeesScreen** (`screens/employees/`) — list (`GET /api/employees`) + search + **invite** (`POST /api/invite-employee` { first_name, last_name, email, role, trade_type_id? }). Invite roles are the hardcoded invitable set (WORKER/FOREMAN/JOURNEYMAN/TRADE_ADMIN/TRADE_PROJECT_MANAGER — mirrors web `INVITE_ROLES_KEYS`, because `/permissions/roles` needs an admin perm the inviter may lack). Trade list from `/projects/meta` (trade optional). Invite button gated by `employees.invite`; module by `employees.view`.
+- **SuppliersScreen** (`screens/suppliers/`) — list + search + **create** (`POST /api/suppliers`); trade picker from `/projects/meta` codes + ALL. FAB + create gated by `suppliers.create`; module by `suppliers.view`.
+- **ProjectsScreen** (`screens/projects/`) — list + search + **create** (`POST /api/projects`); trade/status/client pickers from `/projects/meta`, CCQ-sector chips. **Mobile create omits the map/geocode step** (address is plain text, no lat/lng) — deliberate simplification. Gated by `projects.create` / `projects.view`.
+
+New i18n: `projectStaffing.*`, `standup.*`, `employees.*`, `suppliers.*`, `projects.*` (+ `modules.*` labels), symmetric in both locales. Count **412 = 412**.
+
+Mobile now exposes ~17 modules (was 12). **Still pending in Batch D: crew create/deploy** (the existing `CrewsScreen` stays read-only for now — the `/crews/:id/plan` deploy/confirm flow is the most complex and is deferred to a follow-up). Excluded as agreed: Permissions matrix, BI, Billing.
+
+Verified: `npx tsc --noEmit` clean, parity 412=412, `jest src/i18n/parity.test.ts` 4/4 green. Hedar to run the EAS build + device test.
+
+### 149.9 — Mobile Batch D (part 2): Crews CRUD — closes Batch D
+
+Hedar tested the Batch-D build and asked why he couldn't create a crew on mobile (`CrewsScreen` was read-only since Batch C). Answer: by-design-for-now, it was the one deferred piece. He asked for it "like the web."
+
+Key discovery: the web `CrewsPage.jsx` exposes **CRUD only** — create / edit / delete / list. It does **NOT** wire the `/crews/:id/plan` (deploy) endpoint at all. So "like the web" = CRUD, no deploy. Mobile now matches exactly.
+
+Rewrote `screens/assignments/CrewsScreen.tsx` (was list+detail read-only) to add:
+- **Create** (FAB, gated `assignments.create`) and **Edit/Delete** (per-card icons, gated `assignments.edit`) — mirrors the web's `canCreate`/`canEdit` split.
+- Form modal: name + trade chips (ALL→null + trade_types from `/projects/meta`) + **foreman** (single-select worker picker) + **members** (multi-select worker picker).
+- Workers from `/api/hub/workers`, **normalized so `id === employee_id`** (exactly as the web does at CrewsPage line 233 — the picker id must be the employee_id used in `member_ids`/`foreman_employee_id`).
+- On edit: fetch `GET /crews/:id` to prefill foreman + members. Payload `{ name, foreman_employee_id|null, trade_code: ALL?null:code, member_ids:[] }` → `POST`/`PATCH /crews`. 409 `NAME_TAKEN` handled. Delete via confirm Alert → `DELETE /crews/:id`.
+- Read-only member detail (tap a card) preserved.
+
+New `crews.*` i18n (both locales): addCrew, editCrew, name, namePlaceholder, foreman, selectForeman, nameRequired, nameTaken, created, updated, confirmDelete, saveFailed, deleteFailed. Count **425 = 425**.
+
+**Batch D is now complete.** Deliberately NOT built (matches web): crew deploy/plan flow. Excluded as agreed: Permissions matrix, BI, Billing.
+
+Verified: `npx tsc --noEmit` clean, parity 425=425, `jest src/i18n/parity.test.ts` 4/4 green. Hedar to run the EAS build + device test.
+
+### 149.10 — Test-coverage completion, part 1: mobile store + api-client logic
+
+After §149 wrapped, Hedar asked to "complete the tests before billing." Investigation (no local DB, so by reading code + CI's authoritative numbers, not a flaky local run) found:
+- **Backend billing/super-admin routes are already well covered** — all 13 endpoints across the 6 suspect routes (`admin_subscription_requests`, `super_payments`, `super_training_quotes`, `super_custom_demands`, `super_admin_branding`, `super_subscription_lifecycle`) have happy-path AND error-path tests (e.g. `super_training_payments.test.js` alone has 13 positive / 15 negative status assertions). Two earlier filename/grep heuristics over-reported the gap; the real picture came from reading the tests. Current backend coverage (latest main CI run): **Statements 69.1 / Branches 60.6 / Functions 70.6 / Lines 70.3** — healthy, ~10pp over the 59/50/59/60 thresholds. **Pitfall reconfirmed (§4.6):** running `jest --coverage` locally without a reachable `TEST_DATABASE_URL` skips every `describeIfDb` integration suite and reports a misleading ~11% for `routes/` — only CI's numbers (live PG) are real.
+- **The genuine test gap is the mobile app**, which had only `colors.test.ts` + `parity.test.ts` despite ~15 new screens, two zustand stores, and the axios client. So we pivoted there (Hedar: "1 then 2" → backend branches then mobile; backend turned out already-done, so straight to mobile).
+
+Added (`mep-mobile`, jest-expo preset, mocks instead of real RN/SecureStore/axios runtime):
+- **`src/store/usePermsStore.test.ts`** (9 tests) — `can`/`canAny` truth table, `fetchPerms` success/shape-defaults, **fail-closed on error** (marks loaded, grants nothing), `clear` on logout.
+- **`src/store/useAuthStore.test.ts`** — `setAuth` persists token/user/refresh + triggers perms fetch; `logout` revokes server-side (best-effort, survives a failed call) + wipes SecureStore + clears perms; `loadFromStorage` restores/【skips】+ always stops loading.
+- **`src/api/client.test.ts`** (6 tests) — Bearer auto-attach; non-401 passthrough; **the full 401→refresh rotation** (persists rotated tokens, retries with the fresh token via a stateful SecureStore mock); session-clear when refresh fails; no refresh on the login endpoint. Tested with no extra deps by swapping `apiClient.defaults.adapter` for a controllable mock + spying `axios.post`.
+
+Mobile suite: **13 → 34 tests** (5 suites), all green; `tsc --noEmit` clean. Backend branch-grinding on the big business routes (assignments/dispatch/auto_assign) is deferred — marginal ROI vs. CI already guarding 60/50/59/60.
+
+**Coverage guard added (closes the test track):** `mep-mobile/package.json` now scopes `collectCoverageFrom` to the genuinely-tested logic dirs (`src/store`, `src/api`, `src/theme` — screens excluded so they don't drag the global to ~0 or demand RNTL tests yet) and sets a `coverageThreshold` floor of **83/70/78/85** (stmts/branches/funcs/lines), ~3pp under the measured **86.58/74.19/82.35/88.31** (per §4.6 — never 1pp). `npm test` now runs `jest --coverage` so the floor is enforced in the Mobile CI job (which runs `npm test`); `npm run test:fast` stays for a quick no-coverage local run. This prevents the store/api logic coverage from silently regressing as the app grows. Screen smoke tests remain an optional future add (RNTL is brittle/lower-ROI). Test track done; next up is billing (Phase 6-D-5).
+
+---
+
+## 150. Section 150 — June 21, 2026 — Phase 6-D-5 completion: customer Billing UI polish (PR 1)
+
+Returning to billing after the §149 mobile track. A Plan-agent audit found **Phase 6-D-5 (customer Subscription + Invoices UI) was already built, wired, tested, and live** (`SubscriptionPage.jsx`, `InvoicesPage.jsx`, routes/nav permission-gated `settings.company`, i18n `subscription.*`/`billing.*` at parity, migrations 018-023 on prod). The stale MASTER_README header had implied it was the next *build*; it was actually done. The only genuine remaining work was a short polish list (5 gaps). Hedar chose to do three of them; this section ships them, smallest-first.
+
+### 150.1 — PR 1: invoice status filter + §117.4 "request recorded" confirmation (frontend-only)
+
+- **InvoicesPage** — added a **status filter** dropdown next to the existing type filter. Backend `GET /api/admin/invoices` already accepted `?status=` (8 values) but the UI never exposed it. New `STATUSES` const reuses the existing `billing.statuses.*` badge keys; `statusFilter` state joins the query key + querystring; changing it resets to page 1. New i18n: `billing.filters.statusLabel` + `billing.filters.allStatuses` (EN+FR).
+- **SubscriptionPage** — implemented the §117.4 step-4 acceptance criterion the original code skipped: the three request forms (seat / cancel / plan) used to fire the `mailto:` then immediately `onClose()`, giving no confirmation. Added a shared `RequestSuccess` component shown after a successful submit ("✅ Request recorded" + help text that *sending* the email is what completes it + a "Reopen email" link reusing the returned `mailto_url` + Close). Each form gained `done`/`mailtoUrl` state and an early return. New i18n: `subscription.forms.requestRecorded` / `requestRecordedHelp` / `reopenEmail` (EN+FR).
+
+Frontend-only — no backend/migration change. Verified: web i18n `parity.test.js` 4/4, `SubscriptionPage.test.jsx` (added a 4th test asserting the confirmation panel replaces the form) + `InvoicesPage.test.jsx` green = **11/11**. Needs a frontend build+deploy (`bash scripts/deploy.sh`) to reach prod. Remaining picked gaps: PR 2 = customer invoice PDF download (new endpoint), PR 3 = in-app invoice detail view.
+
+### 150.2 — PR 2: customer invoice PDF download (on-demand)
+
+The monthly cron emails a branded PDF but never persists `pdf_url`, so a customer had no way to retrieve a past invoice from the app. Added on-demand generation + download.
+
+- **`lib/email.js`** — new exported `buildInvoicePdfBuffer(invoice)`: a **generic** A4 invoice renderer (works for any `invoice_type`, not just subscription) built from the STORED invoice row (subtotal/qst/gst/total + company_name + type-based line description; reads `details` JSONB for the seats×unit line when present). Reuses the existing `getBrowser()`/`e`/`fmtDate`/`APP_NAME`; returns `null` (not throw) if no browser, so callers degrade gracefully. The email job's `sendSubscriptionInvoice` was left untouched (lower risk).
+- **`routes/admin_invoices.js`** — new `GET /:id/pdf` (COMPANY_ADMIN_UP): fetches the invoice scoped by `company_id` (+ RLS) joined to `companies.name`, renders via `buildInvoicePdfBuffer`, streams `application/pdf` as an attachment. `400 INVALID_ID`, `404 INVOICE_NOT_FOUND` (cross-tenant safe), `503 PDF_UNAVAILABLE` (no browser).
+- **`InvoicesPage.jsx`** — per-row download button. Because the API client authenticates via the `Authorization` header (not a cookie), a plain `<a href>` can't carry the JWT — so it fetches the PDF as a blob via the api client and triggers a client-side download (object URL → anchor click). Per-row spinner + error state. New i18n `billing.table.actions`/`download` + `billing.downloadFailed` (EN+FR).
+- **Tests** — `tests/integration/admin_invoices.test.js` gained a `:id/pdf` block (mocks `buildInvoicePdfBuffer` so CI needs no real puppeteer): 200 streams pdf + builder gets `company_name`, 404 cross-tenant (builder never called), 400 non-numeric id, 503 when builder returns null, 401 unauth.
+
+Verified: web vitest 11/11 + parity; backend suite parses + DB-skips locally (CI runs it live). Frontend+backend change — reaches prod on the next `bash scripts/deploy.sh`. Remaining: PR 3 = in-app invoice detail view.
+
+### 150.3 — PR 3: in-app invoice detail view (closes Phase 6-D-5 polish)
+
+The Invoices list was list-only; customers had no in-app breakdown (only the emailed/downloaded PDF). Added a detail modal.
+
+- **`routes/admin_invoices.js`** — new `GET /:id` (COMPANY_ADMIN_UP): returns the customer-safe invoice row **including `details` (JSONB)** plus its **payment history** from `public.payments` (the `payments` table from migration 018; ordered newest-first). Scoped by `company_id` (+ RLS). Withholds `internal_notes`/`approved_by`/`pdf_url`. `400 INVALID_ID`, `404 INVOICE_NOT_FOUND`. Route ordering is safe — `/:id` matches one segment so it never shadows `/:id/pdf`.
+- **`InvoicesPage.jsx`** — added an Eye "view" action per row → `InvoiceDetailModal` (TanStack Query `['admin-invoice', id]`, fetched on open): header (number + status badge), meta (type/issue/due/paid dates), line item (from `details` — seats×unit when present, else the type), tax breakdown (subtotal/QST/GST/total/amount-paid/balance-due), customer notes, and a **payment-history list** (method + status + date + amount). Download button reused inside the modal. New i18n `billing.table.view` + `billing.detail.*` + `billing.paymentMethods.*` + `billing.paymentStatuses.*` (EN+FR).
+- **Tests** — backend `GET /:id` block (200 invoice+payments with internal-field-leak guard, 404 cross-tenant, 400 bad id); frontend test (clicking View opens the modal, shows line items + payment history, hits the detail endpoint).
+
+Verified: web vitest **12/12** + parity; backend suite parses + DB-skips locally (CI runs the 12 admin_invoices tests live).
+
+**Phase 6-D-5 polish is COMPLETE** — all three picked gaps shipped (PR1 status-filter + request-confirmation; PR2 PDF download; PR3 detail view). The whole billing UI track (build was already done pre-§150) is now feature-complete. **Deploy dependency:** PRs 2+3 add backend routes + frontend — a single `bash scripts/deploy.sh` publishes all of §150 to prod. No migration needed (reads existing tables).
+
+---
+
+## 151. Section 151 — June 21, 2026 — Test-coverage push (raise % toward the achievable ceiling)
+
+Hedar: "نكمل الـtests ونرفعها لأعلى نسبة منقدر عليها." Made CI emit the **per-file** coverage table (§150-coverage chore PR #439) and pulled the authoritative map from the main run.
+
+**Baseline (CI, w/ live PG):** Statements 68.88 / Branches 60.27 / Functions 70.49 / Lines 70.11 (thresholds 59/50/59/60). The gap lives almost entirely in `routes/*` — biggest uncovered chunks: `assignments.js` (~490 lines), `daily_dispatch.js` (~400), `auto_assign.js` (~300), `profile.js` (~250), `reports.js` (~250), `hub.js` (~240), `standup.js` (~200), `activate.js` (~170), `bi.js` (~120, PostGIS-hard), `ccq_rates.js` (~100). Plan: batch route-by-route (easiest/highest-value first), verify via CI (no local DB → describeIfDb skips locally), ratchet thresholds at the end.
+
+### 151.1 — profile.js (24% → targeted ~85%)
+
+`routes/profile.js` was 24% lines — almost all of the big `POST /` handler (geocode + dynamic upsert, lines ~302-526) plus helpers were untested; the existing `profile.test.js` only covered `GET /dropdowns` + `GET /me`. Added 4 tests: `POST /` 401 (admin/no employee_id), 400 (missing required fields + asserts the `required` list), **200 success** (full body → mocked Mapbox geocode → upsert → round-trips via `GET /me` showing `exists:true` + saved canonical fields), and 400 ("unable to locate" when geocoding returns no feature). Mapbox is mocked by stubbing `https.get` (the route calls it directly) via `jest.requireActual('https')` + a `get` override toggled by a `mockGeo` fixture — no network/token needed. Parses + DB-skips locally; CI runs them live.
+
+### 151.2 — standup.js (33% → targeted ~80%)
+
+`routes/standup.js` was 33% — the existing test only pinned RBAC denials + two not-found branches ("happy paths left to e2e"). Added a happy-path block (COMPANY_ADMIN holds `standup.manage`, seeded project): `POST /session` creates an OPEN session + `/complete` → COMPLETED (+ the ON-CONFLICT upsert re-post), `GET /materials/:project_id` creates the request once (`created:true`) then returns it (`created:false`), the material-item lifecycle add→edit→delete, add-item validation (ITEM_NAME_REQUIRED / INVALID_QUANTITY / UNIT_REQUIRED), and 404 REQUEST_NOT_FOUND. Covers the session + materials handlers (~150 lines) that the RBAC-only tests skipped. Parses + DB-skips locally; CI runs live.
+
+### 151.3 — Bug fix: standup "tomorrow materials" duplicate-on-refresh (migration 039)
+
+Surfaced while writing §151.2 coverage. `GET /api/standup/materials/:project_id` (and the `/tomorrow` huddle view) looked up an existing request with `DATE(mr.created_at) = tomorrow`, but created rows with the default `created_at = NOW()` (today). So a foreman opening the standup screen TODAY to prep TOMORROW's materials never matched the row just created → every refresh spawned a duplicate PENDING `material_requests` row.
+
+Fix:
+- **migration 039** — `material_requests` gains a nullable `standup_date DATE` (+ partial index on `(company_id, project_id, standup_date) WHERE standup_date IS NOT NULL`). Only the standup flow sets it; the normal materials flow leaves it NULL and is unaffected.
+- **routes/standup.js** — the create INSERT now stamps `standup_date = tomorrow`; both the `/materials` existing-lookup and the `/tomorrow` material lookup match on `mr.standup_date = $3::date` instead of `DATE(mr.created_at)`.
+- **standup.test.js** — replaced the seed-a-tomorrow-row test with a real idempotency test: two same-day GETs → first `created:true`, second `created:false` reusing the same id, and asserts exactly ONE row exists (no duplicate).
+
+**DEPLOY DEPENDENCY:** migration 039 must be applied on prod before/with this deploy (`sudo -u postgres psql -d mepdb -f migrations/039_material_requests_standup_date.sql`), else the standup material queries reference a missing column and 500. Verified: parses + DB-skips locally; CI runs live.
+
+### 151.4 — ccq_rates.js (21% → targeted ~90%)
+
+`routes/ccq_rates.js` (SUPER_ADMIN, `/api/super/ccq-rates`) was 21% — the existing test only hit `GET /` + `GET /expiring` + the 403; the entire write surface (POST/PATCH/DELETE, ~110 lines) was untested. Added (via the `adminRequest` super-admin harness): a POST→PATCH→DELETE lifecycle (201/200/200, then 404 on re-delete), POST validation for every error code (INVALID_TRADE_CODE / INVALID_SECTOR / MIN_KM_REQUIRED / RATE_REQUIRED / DATES_REQUIRED / INVALID_DATE_RANGE), and PATCH NOTHING_TO_UPDATE (400) + non-existent (404). Self-cleaning (the lifecycle deletes its row; validation tests insert nothing). Parses + DB-skips locally; CI runs live.
+
+> reports.js was evaluated and SKIPPED as a target: all 6 endpoints are already hit by existing tests (17 tests) — its 58% is scattered internal branches (low ROI per test), not whole untested handlers.
+
+### 151.5 — Ratchet thresholds 59/50/59/60 → 68/58/70/69
+
+After §151.1-.4, measured coverage rose to **71.42 / 62.01 / 73.11 / 72.71** (stmts/branches/funcs/lines; run 27939472290, before ccq_rates §151.4 which only adds more). Bumped `jest.config.js coverageThreshold` from 59/50/59/60 to **68/58/70/69** — ~3-4pp below measured per §4.6 (absorbs the ~1.5pp build flake). The new floor is enforced on the push-to-main coverage run (PRs still run plain for speed). Locks the §151 gains against regression; further batches (employees/hub/activate/...) can ratchet again.
+
+### 151.6 — activate.js (18% → targeted ~90%)
+
+`routes/activate.js` (the public `/activate` email-invite flow, runs on `authPool`) was 18% — the existing test only pinned the no-token 400. Added the real token flow via `seedUserInvite` (returns the raw token): GET unknown→400, expired→400, valid→200 (Set-PIN form), and POST /set-pin mismatch→400, too-short→400, unknown-token→400, plus the **happy path** — valid POST → 302 `/login?activated=1`, asserts the app_user was created (active + pin set) and the invite consumed (`used_at`), then a second GET+POST are rejected as already-used. Covers both handlers (~170 lines) end-to-end. Parses + DB-skips locally; CI runs live.
+
+> hub.js + reports.js evaluated and SKIPPED as targets: their endpoints are already hit by existing tests; the remaining gap is scattered internal branches (low ROI per test), not whole untested handlers.
+
+---
+
+## 152. Section 152 — June 22, 2026 — Session Log + checkpoint (billing UI done · coverage push · Android planned)
+
+Checkpoint for the next session. Three tracks moved this session:
+
+**1. §150 — Customer Billing UI (Phase 6-D-5) COMPLETE.** Discovered the pages were already built/live; shipped the 3 polish gaps: invoice status filter + §117.4 "request recorded" confirmation (PR #436), on-demand invoice PDF download `GET /admin/invoices/:id/pdf` (PR #437), in-app invoice detail modal `GET /admin/invoices/:id` with line items/taxes/payments (PR #438). All EN/FR + tested.
+
+**2. §151 — Test-coverage push (ongoing).** Made CI emit per-file coverage (#439), then covered the lowest tractable routes: profile.js 24→~85 (#440), standup.js 33→~80 (#441), ccq_rates.js write paths 21→~90 (#443), activate.js 18→~90 (#446). Found+fixed a real bug along the way (#442, §151.3): standup "tomorrow materials" spawned a duplicate request on every refresh (looked up by `DATE(created_at)=tomorrow` but stamped today) → **migration 039** adds `material_requests.standup_date` and the route now keys on it. Ratcheted thresholds 59/50/59/60 → **68/58/70/69** (#444, §151.5). Coverage now ~**71/62/73/73** (stmts/branch/func/lines), up from 69/60/70/70.
+   - **Roadmap to 80% lines** (Hedar's target): need ~+436 covered lines (~7pp). Plan: mid-size route batches — employees (~150 uncovered), material_requests (~260), expense_claims (~125), some auth/attendance. AVOID the hard algorithmic routes (daily_dispatch/auto_assign/bi). **Branches to 80% is a much bigger lift** (+~800) with a practical ceiling ~70-75% — expect lines to hit 80 while branches lands ~68-72.
+
+**3. Mobile §149 done (earlier this session); Android is the next mobile track.** The app is at web parity (Batch A-D + permission-driven dashboard + EN/FR + store/api tests + coverage floor), built for iOS via TestFlight. **Hedar has now created a Google Play account** → Android build is unblocked. Same Expo codebase: `eas build --platform android --profile production` (or `--profile preview` for a direct-install APK). Bundle `ca.constrai.app`. No code changes expected — it's a build/submit track.
+
+**⚠️ PENDING PROD DEPLOY (prod is BEHIND main).** §150 (billing UI: backend routes + frontend) + §151.3 (standup fix) are merged to main but NOT deployed. To ship:
+```
+ssh root@143.110.218.84
+```
+```bash
+cd /var/www/mep && git pull origin main
+sudo -u postgres psql -d mepdb -f migrations/039_material_requests_standup_date.sql
+bash scripts/deploy.sh
+```
+(§151 test PRs need no deploy — CI-only.)
+
+**Next session pick-up:** continue §151 coverage batches toward 80% lines (employees/material_requests/expense_claims), OR do the Android build/submit, OR run the pending prod deploy — Hedar's call.
+
+---
+
+### 151.7 — employees.js PATCH /:id (65% → targeted ~85%)
+
+(Logged after §152; belongs to the §151 coverage program.) The employees list + detail GETs were covered, but `PATCH /api/employees/:id` — the big partial-update handler (~150 lines: fans across `employees` + `employee_profiles` with create-if-missing, then syncs role/is_active to the linked `app_users` row, with the §140 OWNER guard) — was untested. Added `employees_patch.test.js`: 400 INVALID_ID, 404 EMPLOYEE_NOT_FOUND, a valid multi-field update verified via GET /:id (creates the profile, sets trade/rank), role-change synced to app_users, is_active=false synced to app_users, and the OWNER guard → 403 OWNER_ROLE_RESTRICTED. Parses + DB-skips locally; CI runs live.
+
+### 151.8 — material_requests.js send-order happy path (69% → +)
+
+(§151 program.) `POST /api/materials/send-order` had only its 2 validation guards tested; the ~100-line handler tail (company/foreman/project/supplier lookups → `purchase_orders` insert → mark requests SENT → fire-and-forget PO email) was untested. Added 2 happy-path tests to `material_requests_phase75b.test.js`: to **procurement** (asserts 200 + `PO-` ref, a `purchase_orders` row with `is_procurement=true` + null supplier, and the source request flipped to `SENT`) and to **a supplier** (asserts `is_procurement=false` + the supplier_id referenced). The email path degrades gracefully (fire-and-forget `.catch`), so no mocking needed. Parses + DB-skips locally; CI runs live.
+
+### 151.9 — Coverage push paused at ~74% lines (clean wins done; remainder = 3 algorithmic files)
+
+Stopping the §151 grind here by decision. Status:
+- **Done (§151.1-.8):** every tractable "whole untested handler" covered — profile, standup (+ the §151.3 bug fix), ccq_rates write paths, activate invite flow, employees PATCH, material_requests send-order. Thresholds ratcheted to 68/58/70/69 (§151.5). Coverage rose ~69→**~74% lines**.
+- **Why pausing:** all remaining mid-size routes (attendance, hub, reports, expense_claims, material_requests) already have their endpoints hit — their gaps are scattered single-branch lines (very low ROI per test). The remaining ~+400 lines needed for 80% live almost entirely in **3 complex algorithmic files**: `daily_dispatch.js` (~510 uncovered, 35% — prepare/commit/preview), `assignments.js` (~490, 66% — the 227-line POST /requests + reassign/move/repeat handlers), `auto_assign.js` (~305, 66% — auto-suggest/confirm). These need rich multi-table fixtures (projects + employees + dates + assignments) and careful assertions, verified CI-only.
+- **To resume (fresh session, clean context for the complex fixtures):** pick one of the 3 files, build a fixture factory (seed a project with labor requirements + a pool of available employees on a date), then cover the main handler's happy path + key branches. Each file is its own multi-PR effort. Realistic: lines → 80%, branches likely settle ~66-70%.
+
+Higher-value alternatives before resuming the grind: the **pending prod deploy** (§150 billing UI + §151.3 standup fix + migration 039 — see §152) and the **Android build** (Expo codebase ready, Google Play account in place).
+
+---
+
+## 153. Section 153 — June 22, 2026 — Android build live (APK installed)
+
+Mobile is now cross-platform. Built and installed the Android app via `eas build --platform android --profile preview` (direct-install APK; EAS auto-generated the Android keystore). Same Expo codebase as iOS (bundle/package `ca.constrai.app`), no code changes — the §149 mobile app now runs on **iOS (TestFlight) and Android (APK)**.
+
+Pending Android follow-ups (not blockers):
+- **Play Store publish:** `eas build --platform android --profile production` (AAB) → `eas submit --platform android --latest`. Needs a Google Play **service-account JSON** (Play Console → Setup → API access) — one-time setup on Hedar's Play account.
+- **Push on Android:** requires FCM (`google-services.json`) wiring — separate task; not needed for build/install.
+- **Device QA:** verify Android-specific behaviour (image picker / camera permission, date pickers, hardware back button, safe-area insets) matches iOS.
+
+Next tracks (Hedar's call): Android device QA + Play submit · the sales deck improvements (§ deck — "acceptable in principle, needs many improvements") · pending prod deploy (§152) · coverage to 80% (§151.9).
