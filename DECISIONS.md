@@ -16744,3 +16744,7 @@ Fix:
 `routes/ccq_rates.js` (SUPER_ADMIN, `/api/super/ccq-rates`) was 21% — the existing test only hit `GET /` + `GET /expiring` + the 403; the entire write surface (POST/PATCH/DELETE, ~110 lines) was untested. Added (via the `adminRequest` super-admin harness): a POST→PATCH→DELETE lifecycle (201/200/200, then 404 on re-delete), POST validation for every error code (INVALID_TRADE_CODE / INVALID_SECTOR / MIN_KM_REQUIRED / RATE_REQUIRED / DATES_REQUIRED / INVALID_DATE_RANGE), and PATCH NOTHING_TO_UPDATE (400) + non-existent (404). Self-cleaning (the lifecycle deletes its row; validation tests insert nothing). Parses + DB-skips locally; CI runs live.
 
 > reports.js was evaluated and SKIPPED as a target: all 6 endpoints are already hit by existing tests (17 tests) — its 58% is scattered internal branches (low ROI per test), not whole untested handlers.
+
+### 151.5 — Ratchet thresholds 59/50/59/60 → 68/58/70/69
+
+After §151.1-.4, measured coverage rose to **71.42 / 62.01 / 73.11 / 72.71** (stmts/branches/funcs/lines; run 27939472290, before ccq_rates §151.4 which only adds more). Bumped `jest.config.js coverageThreshold` from 59/50/59/60 to **68/58/70/69** — ~3-4pp below measured per §4.6 (absorbs the ~1.5pp build flake). The new floor is enforced on the push-to-main coverage run (PRs still run plain for speed). Locks the §151 gains against regression; further batches (employees/hub/activate/...) can ratchet again.
