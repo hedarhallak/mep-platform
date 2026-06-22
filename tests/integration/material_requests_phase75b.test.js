@@ -30,6 +30,7 @@ const {
   seedEmployeeProfile,
   seedProject,
   seedMaterialRequest,
+  seedSupplier,
   cleanupTestRows,
 } = require('../helpers/db');
 
@@ -531,5 +532,76 @@ describeIfDb('POST /api/materials/send-order', () => {
 
     expect(res.statusCode).toBe(400);
     expect(res.body).toMatchObject({ ok: false, error: 'ITEMS_REQUIRED' });
+  });
+
+  // §151.8 — send-order happy paths (the ~100-line handler tail was untested:
+  // company/foreman/project/supplier lookups → PO insert → mark SENT → email).
+  test('to procurement: inserts a PO (is_procurement) + marks requests SENT → 200 + ref', async () => {
+    const pool = getPool();
+    const company = await seedCompany();
+    const { admin } = await seedAdminWithEmployee(company.company_id);
+    const project = await seedProject({ company_id: company.company_id });
+    const mr = await seedMaterialRequest({
+      company_id: company.company_id,
+      project_id: project.id,
+    });
+    const { token } = await loginUser(admin);
+
+    const res = await request(app)
+      .post('/api/materials/send-order')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        request_ids: [mr.id],
+        items: [{ item_name: 'Copper pipe', quantity: 5, unit: 'm' }],
+        supplier_id: 'procurement',
+      });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.ref).toMatch(/^PO-/);
+
+    const { rows: pos } = await pool.query(
+      `SELECT ref, is_procurement, supplier_id FROM public.purchase_orders WHERE ref = $1`,
+      [res.body.ref]
+    );
+    expect(pos).toHaveLength(1);
+    expect(pos[0].is_procurement).toBe(true);
+    expect(pos[0].supplier_id).toBeNull();
+
+    const { rows: m } = await pool.query(
+      `SELECT status FROM public.material_requests WHERE id = $1`,
+      [mr.id]
+    );
+    expect(m[0].status).toBe('SENT');
+  });
+
+  test('to a supplier: PO references the supplier + is_procurement=false', async () => {
+    const pool = getPool();
+    const company = await seedCompany();
+    const { admin } = await seedAdminWithEmployee(company.company_id);
+    const project = await seedProject({ company_id: company.company_id });
+    const mr = await seedMaterialRequest({
+      company_id: company.company_id,
+      project_id: project.id,
+    });
+    const supplier = await seedSupplier({ company_id: company.company_id });
+    const { token } = await loginUser(admin);
+
+    const res = await request(app)
+      .post('/api/materials/send-order')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        request_ids: [mr.id],
+        items: [{ item_name: 'Wire', quantity: 100, unit: 'm' }],
+        supplier_id: supplier.id,
+      });
+
+    expect(res.statusCode).toBe(200);
+    const { rows: pos } = await pool.query(
+      `SELECT is_procurement, supplier_id FROM public.purchase_orders WHERE ref = $1`,
+      [res.body.ref]
+    );
+    expect(pos[0].is_procurement).toBe(false);
+    expect(Number(pos[0].supplier_id)).toBe(supplier.id);
   });
 });

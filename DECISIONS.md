@@ -16786,3 +16786,7 @@ bash scripts/deploy.sh
 ### 151.7 — employees.js PATCH /:id (65% → targeted ~85%)
 
 (Logged after §152; belongs to the §151 coverage program.) The employees list + detail GETs were covered, but `PATCH /api/employees/:id` — the big partial-update handler (~150 lines: fans across `employees` + `employee_profiles` with create-if-missing, then syncs role/is_active to the linked `app_users` row, with the §140 OWNER guard) — was untested. Added `employees_patch.test.js`: 400 INVALID_ID, 404 EMPLOYEE_NOT_FOUND, a valid multi-field update verified via GET /:id (creates the profile, sets trade/rank), role-change synced to app_users, is_active=false synced to app_users, and the OWNER guard → 403 OWNER_ROLE_RESTRICTED. Parses + DB-skips locally; CI runs live.
+
+### 151.8 — material_requests.js send-order happy path (69% → +)
+
+(§151 program.) `POST /api/materials/send-order` had only its 2 validation guards tested; the ~100-line handler tail (company/foreman/project/supplier lookups → `purchase_orders` insert → mark requests SENT → fire-and-forget PO email) was untested. Added 2 happy-path tests to `material_requests_phase75b.test.js`: to **procurement** (asserts 200 + `PO-` ref, a `purchase_orders` row with `is_procurement=true` + null supplier, and the source request flipped to `SENT`) and to **a supplier** (asserts `is_procurement=false` + the supplier_id referenced). The email path degrades gracefully (fire-and-forget `.catch`), so no mocking needed. Parses + DB-skips locally; CI runs live.
