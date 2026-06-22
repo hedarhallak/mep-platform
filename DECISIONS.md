@@ -16790,3 +16790,12 @@ bash scripts/deploy.sh
 ### 151.8 — material_requests.js send-order happy path (69% → +)
 
 (§151 program.) `POST /api/materials/send-order` had only its 2 validation guards tested; the ~100-line handler tail (company/foreman/project/supplier lookups → `purchase_orders` insert → mark requests SENT → fire-and-forget PO email) was untested. Added 2 happy-path tests to `material_requests_phase75b.test.js`: to **procurement** (asserts 200 + `PO-` ref, a `purchase_orders` row with `is_procurement=true` + null supplier, and the source request flipped to `SENT`) and to **a supplier** (asserts `is_procurement=false` + the supplier_id referenced). The email path degrades gracefully (fire-and-forget `.catch`), so no mocking needed. Parses + DB-skips locally; CI runs live.
+
+### 151.9 — Coverage push paused at ~74% lines (clean wins done; remainder = 3 algorithmic files)
+
+Stopping the §151 grind here by decision. Status:
+- **Done (§151.1-.8):** every tractable "whole untested handler" covered — profile, standup (+ the §151.3 bug fix), ccq_rates write paths, activate invite flow, employees PATCH, material_requests send-order. Thresholds ratcheted to 68/58/70/69 (§151.5). Coverage rose ~69→**~74% lines**.
+- **Why pausing:** all remaining mid-size routes (attendance, hub, reports, expense_claims, material_requests) already have their endpoints hit — their gaps are scattered single-branch lines (very low ROI per test). The remaining ~+400 lines needed for 80% live almost entirely in **3 complex algorithmic files**: `daily_dispatch.js` (~510 uncovered, 35% — prepare/commit/preview), `assignments.js` (~490, 66% — the 227-line POST /requests + reassign/move/repeat handlers), `auto_assign.js` (~305, 66% — auto-suggest/confirm). These need rich multi-table fixtures (projects + employees + dates + assignments) and careful assertions, verified CI-only.
+- **To resume (fresh session, clean context for the complex fixtures):** pick one of the 3 files, build a fixture factory (seed a project with labor requirements + a pool of available employees on a date), then cover the main handler's happy path + key branches. Each file is its own multi-PR effort. Realistic: lines → 80%, branches likely settle ~66-70%.
+
+Higher-value alternatives before resuming the grind: the **pending prod deploy** (§150 billing UI + §151.3 standup fix + migration 039 — see §152) and the **Android build** (Expo codebase ready, Google Play account in place).
