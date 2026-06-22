@@ -16738,3 +16738,9 @@ Fix:
 - **standup.test.js** — replaced the seed-a-tomorrow-row test with a real idempotency test: two same-day GETs → first `created:true`, second `created:false` reusing the same id, and asserts exactly ONE row exists (no duplicate).
 
 **DEPLOY DEPENDENCY:** migration 039 must be applied on prod before/with this deploy (`sudo -u postgres psql -d mepdb -f migrations/039_material_requests_standup_date.sql`), else the standup material queries reference a missing column and 500. Verified: parses + DB-skips locally; CI runs live.
+
+### 151.4 — ccq_rates.js (21% → targeted ~90%)
+
+`routes/ccq_rates.js` (SUPER_ADMIN, `/api/super/ccq-rates`) was 21% — the existing test only hit `GET /` + `GET /expiring` + the 403; the entire write surface (POST/PATCH/DELETE, ~110 lines) was untested. Added (via the `adminRequest` super-admin harness): a POST→PATCH→DELETE lifecycle (201/200/200, then 404 on re-delete), POST validation for every error code (INVALID_TRADE_CODE / INVALID_SECTOR / MIN_KM_REQUIRED / RATE_REQUIRED / DATES_REQUIRED / INVALID_DATE_RANGE), and PATCH NOTHING_TO_UPDATE (400) + non-existent (404). Self-cleaning (the lifecycle deletes its row; validation tests insert nothing). Parses + DB-skips locally; CI runs live.
+
+> reports.js was evaluated and SKIPPED as a target: all 6 endpoints are already hit by existing tests (17 tests) — its 58% is scattered internal branches (low ROI per test), not whole untested handlers.
