@@ -16812,3 +16812,31 @@ Pending Android follow-ups (not blockers):
 - **Device QA:** verify Android-specific behaviour (image picker / camera permission, date pickers, hardware back button, safe-area insets) matches iOS.
 
 Next tracks (Hedar's call): Android device QA + Play submit · the sales deck improvements (§ deck — "acceptable in principle, needs many improvements") · pending prod deploy (§152) · coverage to 80% (§151.9).
+
+## 154. Section 154 — June 22, 2026 — Android on Google Play (internal testing track live) + dead-code PR #428
+
+Two pieces of work this session.
+
+### A) Dead-code cleanup — PR #428
+Removed `mep-mobile/src/screens/hub/TasksScreen.tsx` — never imported or routed anywhere. The live task flow is **TasksMenuScreen → NewTaskScreen → SentTasksScreen** (registered in `MainStackNavigator.tsx`). The file still held ~27 hardcoded English strings skipped during the §149.7 i18n cleanup because they never render. Verified: `grep TasksScreen` across `mep-mobile/src` shows no import/route (only `SentTasksScreen` + the file's own def); `npx tsc --noEmit` passes. Branch `chore/mobile-remove-dead-tasksscreen` → PR #428.
+
+### B) Android Play Store — Internal testing track is LIVE (Option 1 from §153 follow-ups)
+Picked Option 1 (Android device QA + Play submit). Outcome: the app is published to the **Internal testing** track. Production publish is gated by Google policy (see below).
+
+- **Play Developer account:** HEDAR AL-HALLAK, *personal* account, Account ID `4827001457660124025`. Legal name/address (Laval, QC), contact email + phone all verified ✅. Account-level banner still says "finish setting up your developer account" (full identity verification pending) — does NOT block internal testing.
+- **App entry created:** name `Constrai`, package **`ca.constrai.app`** (MUST match `app.json` — caught Hedar typing "Constrai" as the package; corrected). Default store language en-US, Free app.
+- **Production AAB built:** `eas build --platform android --profile production --non-interactive` → versionCode auto-incremented 1→2, signed with existing EAS keystore (Build Credentials `NHVfDa15kT`, the one auto-generated in §153). Build ID `bc9a4a6c-cd05-4514-97f0-08b447f88f9d`. Artifact downloaded to `Desktop/constrai-v1-build2.aab` (54 MB).
+- **First upload = MANUAL** to Internal testing (deliberately skipped the service-account JSON for the first release — `eas submit` automation deferred). Review showed only 2 benign warnings: no testers yet + no deobfuscation/R8 mapping file. Published.
+- **Testers:** created email list "Hedar" with `hedar.hallak@gmail.com`, opted in via the join link on Android. First "item not found" on Download test app was just first-release **propagation** (~minutes; not an error). **VERIFIED e2e:** after propagation the Play Store listing went live ("First internal build", Last updated Jun 22), uninstalled the side-loaded §153 preview APK (different signature — Play App Signing re-signs with Google's key, can't update in place), **installed from Play Store + logged in successfully**. Android is now delivered via Play (internal track) on iOS + Android.
+
+**Android pending follow-ups (carried + new):**
+- **Production publish** needs a **closed test (≥12 testers, 14 days)** + apply for production access — Google's policy for new personal accounts (confirmed by the Play Console dashboard message). Internal testing has no such gate.
+- **`eas submit` automation:** create Google Play **service-account JSON** (Play Console → API access → link GCP service account → grant release perms) for future automated submits. Deferred; manual upload used this time.
+- **Android push:** FCM `google-services.json` wiring (separate task).
+- **Device QA:** back button / image picker / date pickers / safe-area insets — checklist handed to Hedar, not yet run.
+
+### C) Branch hygiene — mass cleanup (CLAUDE.md §8 "clean kitchen")
+Accumulated stale branches across many sessions were never pruned. Cleaned up: **78 local branches deleted** (only `main` remains) + **204 remote branches deleted** (199 with merged PRs → content in main; 5 superseded/orphan verified safe: `chore/s111-polish…` [PR #248 closed, superseded by s111b-recovered], `docs/s86-phase1-cloudflare` [PR #139 closed], `fix/s121-totp-window-and-claim` [PR #279 closed, superseded by the two split s121 branches], `docs/section37-phase73c` [old docs, content in main], `feat/section50-layout-i18n` [superseded — main's AppLayout already has the Section 50 i18n]). Method: classify each branch by PR merge-state (`gh pr list --state merged/open`), delete only merged-or-superseded, verify ambiguous ones individually before deleting. Remote went 211 → 7.
+**Remaining remote (7):** `main`; `chore/mobile-remove-dead-tasksscreen` (PR #428 — MERGED during this session); 4 Dependabot PRs (#452–455, Hedar's call to merge/close); `feat/s148-phase3b-matrix-percompany` (PR #408, open WIP feature).
+
+Next tracks (Hedar's call): triage the 4 Dependabot PRs + #408 · Android device QA (back button / image picker / date pickers / safe-area) · service-account JSON for `eas submit` automation · production publish (needs 12-tester × 14-day closed test) · the sales deck · pending prod deploy (§152) · coverage to 80% (§151.9).
