@@ -50,7 +50,13 @@ module.exports = {
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'text-summary', 'lcov'],
 
-  // Coverage thresholds — ratcheted at Section 82 closeout (May 5, 2026):
+  // Coverage thresholds — ratcheted at Section 151 (June 22, 2026):
+  //   Section 151 measured (post §151.1-.3, run 27939472290): Statements 71.42% / Branches 62.01%
+  //                                    / Functions 73.11% / Lines 72.71%. Driver: route happy-path +
+  //                                    error-branch tests on profile.js (24→~85), standup.js (33→~80),
+  //                                    ccq_rates.js write paths (21→~90). Floors set ~3pp below the
+  //                                    pre-ccq_rates measurement (ccq_rates §151.4 only adds more), so
+  //                                    these are safely under the true current coverage.
   //   Section 82 measured (PR #133):   Statements 61.71% / Branches 53.05% / Functions 61.64% / Lines 62.69%
   //                                    +0.84pp lines from Section 80. Driver: 57 new integration tests
   //                                    covering the last two zero-coverage route files (suppliers + projects).
@@ -78,10 +84,10 @@ module.exports = {
   // this ratchet: stmts 2.71pp / branches 3.05pp / fns 2.64pp / lines 2.69pp.
   coverageThreshold: {
     global: {
-      statements: 59,
-      branches: 50,
-      functions: 59,
-      lines: 60,
+      statements: 68,
+      branches: 58,
+      functions: 70,
+      lines: 69,
     },
   },
 
