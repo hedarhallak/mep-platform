@@ -9,8 +9,10 @@ const app = require('../../app');
 const {
   describeIfDb,
   closePool,
+  getPool,
   seedCompany,
   seedUser,
+  seedProject,
   cleanupTestRows,
 } = require('../helpers/db');
 
@@ -139,5 +141,152 @@ describeIfDb('Standup — GET /api/standup/materials/:project_id', () => {
 
     expect(res.statusCode).toBe(403);
     expect(res.body.permission).toBe('standup.manage');
+  });
+});
+
+// §151.2 — standup happy paths: session create+complete + materials request/items
+// CRUD. COMPANY_ADMIN holds standup.manage. These exercise the bulk of standup.js
+// (sessions + materials handlers) that the RBAC-only tests above skip.
+describeIfDb('Standup — session + materials happy paths', () => {
+  afterAll(async () => {
+    await cleanupTestRows();
+    await closePool();
+  });
+
+  async function adminCtx() {
+    const company = await seedCompany();
+    const admin = await seedUser({ company_id: company.company_id, role: 'COMPANY_ADMIN' });
+    const project = await seedProject({ company_id: company.company_id });
+    const { token } = await loginUser(admin);
+    return { company, admin, project, token };
+  }
+
+  test('POST /session creates an OPEN session, then /complete marks it COMPLETED', async () => {
+    const { project, token } = await adminCtx();
+
+    const open = await request(app)
+      .post('/api/standup/session')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ project_id: project.id });
+    expect(open.statusCode).toBe(200);
+    expect(open.body.ok).toBe(true);
+    expect(open.body.session.status).toBe('OPEN');
+
+    const sessionId = open.body.session.id;
+    const done = await request(app)
+      .post(`/api/standup/session/${sessionId}/complete`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ note: 'all set' });
+    expect(done.statusCode).toBe(200);
+    expect(done.body.session.status).toBe('COMPLETED');
+    expect(done.body.session.note).toBe('all set');
+
+    // ON CONFLICT path: posting the same session again returns 200 (upsert).
+    const again = await request(app)
+      .post('/api/standup/session')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ project_id: project.id });
+    expect(again.statusCode).toBe(200);
+  });
+
+  test('GET /materials creates a new request for tomorrow (created:true, empty items)', async () => {
+    const { project, token } = await adminCtx();
+    const first = await request(app)
+      .get(`/api/standup/materials/${project.id}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(first.statusCode).toBe(200);
+    expect(first.body.created).toBe(true);
+    expect(first.body.request).toHaveProperty('id');
+    expect(first.body.request.items).toEqual([]);
+  });
+
+  test('GET /materials returns an EXISTING tomorrow-dated request (created:false)', async () => {
+    // The handler keys the "existing" lookup on DATE(created_at) = tomorrow, so a
+    // request created today never matches — seed one stamped tomorrow to hit it.
+    const pool = getPool();
+    const { company, admin, project, token } = await adminCtx();
+    await pool.query(
+      `INSERT INTO public.material_requests
+         (company_id, project_id, requested_by, status, note, created_at)
+       VALUES ($1, $2, $3, 'PENDING', 'seed-tomorrow', CURRENT_DATE + INTERVAL '1 day')`,
+      [company.company_id, project.id, admin.id]
+    );
+    const res = await request(app)
+      .get(`/api/standup/materials/${project.id}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.created).toBe(false);
+    expect(res.body.request).toHaveProperty('id');
+  });
+
+  test('material item lifecycle: add → edit → delete', async () => {
+    const { project, token } = await adminCtx();
+    const reqRes = await request(app)
+      .get(`/api/standup/materials/${project.id}`)
+      .set('Authorization', `Bearer ${token}`);
+    const requestId = reqRes.body.request.id;
+
+    // add
+    const add = await request(app)
+      .post(`/api/standup/materials/${requestId}/items`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ item_name: 'Copper pipe', quantity: 10, unit: 'm', note: 'half-inch' });
+    expect(add.statusCode).toBe(200);
+    expect(add.body.item.item_name).toBe('Copper pipe');
+    const itemId = add.body.item.id;
+
+    // edit
+    const edit = await request(app)
+      .patch(`/api/standup/materials/${requestId}/items/${itemId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ quantity: 25 });
+    expect(edit.statusCode).toBe(200);
+    expect(Number(edit.body.item.quantity)).toBe(25);
+
+    // delete
+    const del = await request(app)
+      .delete(`/api/standup/materials/${requestId}/items/${itemId}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(del.statusCode).toBe(200);
+    expect(del.body.ok).toBe(true);
+  });
+
+  test('add-item validation: missing name / bad qty / missing unit → 400', async () => {
+    const { project, token } = await adminCtx();
+    const reqRes = await request(app)
+      .get(`/api/standup/materials/${project.id}`)
+      .set('Authorization', `Bearer ${token}`);
+    const requestId = reqRes.body.request.id;
+
+    const noName = await request(app)
+      .post(`/api/standup/materials/${requestId}/items`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ quantity: 1, unit: 'ea' });
+    expect(noName.statusCode).toBe(400);
+    expect(noName.body.error).toBe('ITEM_NAME_REQUIRED');
+
+    const badQty = await request(app)
+      .post(`/api/standup/materials/${requestId}/items`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ item_name: 'X', quantity: 0, unit: 'ea' });
+    expect(badQty.statusCode).toBe(400);
+    expect(badQty.body.error).toBe('INVALID_QUANTITY');
+
+    const noUnit = await request(app)
+      .post(`/api/standup/materials/${requestId}/items`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ item_name: 'X', quantity: 1 });
+    expect(noUnit.statusCode).toBe(400);
+    expect(noUnit.body.error).toBe('UNIT_REQUIRED');
+  });
+
+  test('add-item to a non-existent request → 404 REQUEST_NOT_FOUND', async () => {
+    const { token } = await adminCtx();
+    const res = await request(app)
+      .post('/api/standup/materials/9999999/items')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ item_name: 'X', quantity: 1, unit: 'ea' });
+    expect(res.statusCode).toBe(404);
+    expect(res.body.error).toBe('REQUEST_NOT_FOUND');
   });
 });
