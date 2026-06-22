@@ -16748,3 +16748,35 @@ Fix:
 ### 151.5 — Ratchet thresholds 59/50/59/60 → 68/58/70/69
 
 After §151.1-.4, measured coverage rose to **71.42 / 62.01 / 73.11 / 72.71** (stmts/branches/funcs/lines; run 27939472290, before ccq_rates §151.4 which only adds more). Bumped `jest.config.js coverageThreshold` from 59/50/59/60 to **68/58/70/69** — ~3-4pp below measured per §4.6 (absorbs the ~1.5pp build flake). The new floor is enforced on the push-to-main coverage run (PRs still run plain for speed). Locks the §151 gains against regression; further batches (employees/hub/activate/...) can ratchet again.
+
+### 151.6 — activate.js (18% → targeted ~90%)
+
+`routes/activate.js` (the public `/activate` email-invite flow, runs on `authPool`) was 18% — the existing test only pinned the no-token 400. Added the real token flow via `seedUserInvite` (returns the raw token): GET unknown→400, expired→400, valid→200 (Set-PIN form), and POST /set-pin mismatch→400, too-short→400, unknown-token→400, plus the **happy path** — valid POST → 302 `/login?activated=1`, asserts the app_user was created (active + pin set) and the invite consumed (`used_at`), then a second GET+POST are rejected as already-used. Covers both handlers (~170 lines) end-to-end. Parses + DB-skips locally; CI runs live.
+
+> hub.js + reports.js evaluated and SKIPPED as targets: their endpoints are already hit by existing tests; the remaining gap is scattered internal branches (low ROI per test), not whole untested handlers.
+
+---
+
+## 152. Section 152 — June 22, 2026 — Session Log + checkpoint (billing UI done · coverage push · Android planned)
+
+Checkpoint for the next session. Three tracks moved this session:
+
+**1. §150 — Customer Billing UI (Phase 6-D-5) COMPLETE.** Discovered the pages were already built/live; shipped the 3 polish gaps: invoice status filter + §117.4 "request recorded" confirmation (PR #436), on-demand invoice PDF download `GET /admin/invoices/:id/pdf` (PR #437), in-app invoice detail modal `GET /admin/invoices/:id` with line items/taxes/payments (PR #438). All EN/FR + tested.
+
+**2. §151 — Test-coverage push (ongoing).** Made CI emit per-file coverage (#439), then covered the lowest tractable routes: profile.js 24→~85 (#440), standup.js 33→~80 (#441), ccq_rates.js write paths 21→~90 (#443), activate.js 18→~90 (#446). Found+fixed a real bug along the way (#442, §151.3): standup "tomorrow materials" spawned a duplicate request on every refresh (looked up by `DATE(created_at)=tomorrow` but stamped today) → **migration 039** adds `material_requests.standup_date` and the route now keys on it. Ratcheted thresholds 59/50/59/60 → **68/58/70/69** (#444, §151.5). Coverage now ~**71/62/73/73** (stmts/branch/func/lines), up from 69/60/70/70.
+   - **Roadmap to 80% lines** (Hedar's target): need ~+436 covered lines (~7pp). Plan: mid-size route batches — employees (~150 uncovered), material_requests (~260), expense_claims (~125), some auth/attendance. AVOID the hard algorithmic routes (daily_dispatch/auto_assign/bi). **Branches to 80% is a much bigger lift** (+~800) with a practical ceiling ~70-75% — expect lines to hit 80 while branches lands ~68-72.
+
+**3. Mobile §149 done (earlier this session); Android is the next mobile track.** The app is at web parity (Batch A-D + permission-driven dashboard + EN/FR + store/api tests + coverage floor), built for iOS via TestFlight. **Hedar has now created a Google Play account** → Android build is unblocked. Same Expo codebase: `eas build --platform android --profile production` (or `--profile preview` for a direct-install APK). Bundle `ca.constrai.app`. No code changes expected — it's a build/submit track.
+
+**⚠️ PENDING PROD DEPLOY (prod is BEHIND main).** §150 (billing UI: backend routes + frontend) + §151.3 (standup fix) are merged to main but NOT deployed. To ship:
+```
+ssh root@143.110.218.84
+```
+```bash
+cd /var/www/mep && git pull origin main
+sudo -u postgres psql -d mepdb -f migrations/039_material_requests_standup_date.sql
+bash scripts/deploy.sh
+```
+(§151 test PRs need no deploy — CI-only.)
+
+**Next session pick-up:** continue §151 coverage batches toward 80% lines (employees/material_requests/expense_claims), OR do the Android build/submit, OR run the pending prod deploy — Hedar's call.
