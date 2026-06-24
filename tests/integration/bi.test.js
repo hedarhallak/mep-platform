@@ -64,4 +64,35 @@ describeIfDb('BI — /api/bi/workforce-suggestions', () => {
     expect(res.statusCode).toBe(403);
     expect(res.body.permission).toBe('bi.access_full');
   });
+
+  test('GET /overview on an empty company returns a zeroed structure', async () => {
+    const company = await seedCompany();
+    const admin = await seedUser({ company_id: company.company_id, role: 'COMPANY_ADMIN' });
+    const { token } = await loginUser(admin);
+
+    const res = await request(app)
+      .get('/api/bi/overview?days=30')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.period.days).toBe(30);
+    expect(res.body.workforce.assigned_today).toBe(0);
+    expect(res.body.workforce.utilization_pct).toBe(0);
+    expect(res.body.hours.total_hours).toBe(0);
+    expect(res.body.travel.over_65).toBe(0);
+    expect(res.body.coverage.active_projects).toBe(0);
+    expect(res.body.coverage.uncovered).toBe(0);
+  });
+
+  test('GET /overview without bi.access_full returns 403', async () => {
+    const company = await seedCompany();
+    const worker = await seedUser({ company_id: company.company_id, role: 'WORKER' });
+    const { token } = await loginUser(worker);
+
+    const res = await request(app).get('/api/bi/overview').set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body.permission).toBe('bi.access_full');
+  });
 });

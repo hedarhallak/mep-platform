@@ -15,6 +15,7 @@ import {
   LogOut,
   Building2,
   BarChart2,
+  BarChart3,
   CalendarCheck,
   Inbox,
   Package,
@@ -98,6 +99,12 @@ const mainNav = [
     icon: BarChart2,
     labelKey: 'nav.reports',
     permission: { module: 'reports', action: 'view_self' },
+  },
+  {
+    to: '/bi',
+    icon: BarChart3,
+    labelKey: 'nav.bi',
+    permission: { module: 'bi', action: 'access_full' },
   },
   {
     to: '/standup',
