@@ -24,9 +24,9 @@
     "prepare": "husky"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.696.0",
+    "@aws-sdk/client-s3": "^3.1073.0",
     "@sendgrid/mail": "^8.1.5",
-    "@sentry/node": "^10.52.0",
+    "@sentry/node": "^10.59.0",
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
@@ -35,18 +35,18 @@
     "express-rate-limit": "^7.4.1",
     "helmet": "^7.2.0",
     "jsonwebtoken": "^9.0.3",
-    "multer": "^2.1.1",
-    "node-cron": "^4.2.1",
-    "pg": "^8.13.3",
+    "multer": "^2.2.0",
+    "node-cron": "^4.5.0",
+    "pg": "^8.22.0",
     "puppeteer": "^24.43.1",
     "qrcode": "^1.5.4",
     "resend": "^4.8.0",
-    "sharp": "^0.34.4",
-    "swagger-jsdoc": "^6.2.8",
+    "sharp": "^0.35.2",
+    "swagger-jsdoc": "^6.3.0",
     "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {
-    "@emnapi/core": "^1.10.0",
+    "@emnapi/core": "^1.11.1",
     "@emnapi/runtime": "^1.10.0",
     "@eslint/js": "^9.39.4",
     "eslint": "^9.39.4",
@@ -55,7 +55,7 @@
     "jest": "^30.4.2",
     "knip": "^5.88.1",
     "lint-staged": "^16.4.0",
-    "prettier": "^3.8.3",
+    "prettier": "^3.8.4",
     "supertest": "^7.2.2"
   },
   "lint-staged": {
