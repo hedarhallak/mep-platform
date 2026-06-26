@@ -66,40 +66,6 @@ export default {
     logout: 'Déconnexion',
     companyFallback: 'Entreprise',
   },
-  bi: {
-    title: 'Intelligence d’affaires',
-    subtitle: 'Vues en direct : main-d’œuvre, heures, déplacement et couverture.',
-    lastNDays: '{{n}} derniers jours',
-    noData: 'Aucune donnée pour cette période.',
-    footnote: 'Heures cumulées du {{from}} au {{to}}. Main-d’œuvre, déplacement et couverture : instantané du jour.',
-    workforce: {
-      utilization: 'Utilisation',
-      assignedOfTotal: '{{a}} employés affectés sur {{n}}',
-      byTrade: 'Affectés aujourd’hui, par métier',
-    },
-    hours: {
-      totalHours: 'Heures totales',
-      otShare: '{{p}} % supplémentaires',
-      byProject: 'Heures par projet',
-      regOt: 'Rég. {{reg}}h · Supp. {{ot}}h',
-    },
-    travel: {
-      title: 'Distance de déplacement (CCQ)',
-      over65: 'Affectations 65 km+',
-      avg: 'moy. {{km}} km',
-      band4165: '41–65 km — formulaire fiscal (T2200 + TP-64.3)',
-      bandOver65: '65 km+ — indemnité payée',
-      bandUnder41: 'Moins de 41 km — non admissible',
-      avgLabel: 'Distance moyenne',
-    },
-    coverage: {
-      title: 'Couverture des projets (aujourd’hui)',
-      covered: 'Projets pourvus',
-      uncoveredN: '{{n}} sans personne affectée',
-      allStaffed: 'Tous les projets actifs sont pourvus',
-      none: 'Aucun',
-    },
-  },
 
   crews: {
     title: 'Équipes',
@@ -1920,6 +1886,38 @@ export default {
   },
 
   bi: {
+    title: 'Intelligence d’affaires',
+    subtitle: 'Vues en direct : main-d’œuvre, heures, déplacement et couverture.',
+    lastNDays: '{{n}} derniers jours',
+    noData: 'Aucune donnée pour cette période.',
+    footnote: 'Heures cumulées du {{from}} au {{to}}. Main-d’œuvre, déplacement et couverture : instantané du jour.',
+    workforce: {
+      utilization: 'Utilisation',
+      assignedOfTotal: '{{a}} employés affectés sur {{n}}',
+      byTrade: 'Affectés aujourd’hui, par métier',
+    },
+    hours: {
+      totalHours: 'Heures totales',
+      otShare: '{{p}} % supplémentaires',
+      byProject: 'Heures par projet',
+      regOt: 'Rég. {{reg}}h · Supp. {{ot}}h',
+    },
+    travel: {
+      title: 'Distance de déplacement (CCQ)',
+      over65: 'Affectations 65 km+',
+      avg: 'moy. {{km}} km',
+      band4165: '41–65 km — formulaire fiscal (T2200 + TP-64.3)',
+      bandOver65: '65 km+ — indemnité payée',
+      bandUnder41: 'Moins de 41 km — non admissible',
+      avgLabel: 'Distance moyenne',
+    },
+    coverage: {
+      title: 'Couverture des projets (aujourd’hui)',
+      covered: 'Projets pourvus',
+      uncoveredN: '{{n}} sans personne affectée',
+      allStaffed: 'Tous les projets actifs sont pourvus',
+      none: 'Aucun',
+    },
     workforcePlanner: {
       title: "Planificateur d'effectifs",
       subtitle: "Planifiez les équipes de demain et optimisez les affectations d'aujourd'hui",
