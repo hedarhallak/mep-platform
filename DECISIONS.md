@@ -16840,3 +16840,72 @@ Accumulated stale branches across many sessions were never pruned. Cleaned up: *
 **Remaining remote (7):** `main`; `chore/mobile-remove-dead-tasksscreen` (PR #428 — MERGED during this session); 4 Dependabot PRs (#452–455, Hedar's call to merge/close); `feat/s148-phase3b-matrix-percompany` (PR #408, open WIP feature).
 
 Next tracks (Hedar's call): triage the 4 Dependabot PRs + #408 · Android device QA (back button / image picker / date pickers / safe-area) · service-account JSON for `eas submit` automation · production publish (needs 12-tester × 14-day closed test) · the sales deck · pending prod deploy (§152) · coverage to 80% (§151.9).
+
+## 155. Section 155 — FEATURE SPEC & BACKLOG: Leave Management (June 22, 2026)
+
+**Status: SPEC ONLY — not built yet.** Captured from Hedar's June 22 feature note. A new requirement: employees must be able to request leave from the app, route it through their direct manager then HR, and — critically — **once approved, the employee is automatically excluded from assignments** for the leave window. The assignment-exclusion integration is why this is a native in-app feature, not an external HR SaaS (BambooHR etc.): it must hook the auto-assign / daily-dispatch / coverage engine.
+
+### Decisions locked (this session)
+- **Direct manager (1st approval)** = a NEW explicit `manager_id` (reports_to) field on the employee — stable routing independent of project assignment (chosen over deriving from current FOREMAN, which is ambiguous when unassigned / multi-assigned).
+- **HR (2nd / final approval)** = existing **COMPANY_ADMIN** role (no new HR role added — simplest; COMPANY_ADMIN already = company owner/manager).
+
+### Approval flow
+```
+[Employee] (mobile) ① submit (type + dates + reason [+ attachment])
+      │
+      ▼
+[Direct manager = app_users.manager_id] ──reject──► REJECTED (notify employee)
+      │ ② approve
+      ▼
+[HR = COMPANY_ADMIN] ──reject──► REJECTED
+      │ ③ approve
+      ▼
+   APPROVED ✅  ──► ④ employee excluded from assignments for [start_date, end_date]
+                      (auto_assign / daily_dispatch / coverage skip; manual assign warns "On leave")
+```
+
+### Leave types
+`EMERGENCY` (إجازة طارئة عادية) · `LONG` (إجازة طويلة) · `SICK` (إجازة مرضية، optional attachment for a doctor's note). (Room to add `ANNUAL`/vacation later.)
+
+### Data model (proposed — migration 040, next after 039)
+- `app_users.manager_id INT NULL REFERENCES app_users(id)` — the employee's direct manager (same `company_id`; tenant-scoped).
+- New table `leave_requests`:
+  - `id`, `company_id` (tenant), `employee_id` → app_users
+  - `leave_type` CHECK in ('EMERGENCY','LONG','SICK')
+  - `start_date`, `end_date`, `reason` TEXT, `attachment_url` NULL
+  - `status` CHECK in ('PENDING_MANAGER','PENDING_HR','APPROVED','REJECTED','CANCELLED')
+  - `manager_id`, `manager_decision_at`, `manager_comment` (snapshot of approver 1)
+  - `hr_id`, `hr_decision_at`, `hr_comment` (approver 2)
+  - `created_at`, `updated_at`
+  - Indexes: `(company_id, employee_id, status)`, `(company_id, status)`, `(employee_id, start_date, end_date)` for the exclusion lookup. RLS tenant policy like other business tables.
+
+### State machine
+`PENDING_MANAGER` → (manager approve) → `PENDING_HR` → (HR approve) → `APPROVED`. Either approver can → `REJECTED`. Employee can `CANCELLED` while still pending.
+
+### Assignment-exclusion (the key integration)
+- Helper `isOnLeave(employee_id, date)` = EXISTS row WHERE `status='APPROVED'` AND `date BETWEEN start_date AND end_date`.
+- Add a `NOT EXISTS (approved leave overlapping the target date)` filter to the candidate queries in **auto_assign**, **daily_dispatch**, and **coverage / project-staffing** (the 3 algorithmic files flagged in §151.9 — touchpoints overlap).
+- Manual assignment: don't hard-block, but surface an "On leave" warning so a dispatcher can override consciously.
+
+### Permissions (data-driven, §148 — adding rows, not code)
+- Module `leave`, actions: `request` (WORKER+), `view_own`, `view_all`, `approve_manager`, `approve_hr`.
+- `approve_manager` is gated by **role permission AND** being the request's `manager_id` (the row-level check, not role alone). `approve_hr` = COMPANY_ADMIN.
+
+### UI
+- **Mobile** (permission-gated dashboard icon "Leave / Congé"): `LeaveMenuScreen` → New Leave Request + My Leave Requests (status tracking). EN/FR i18n + parity test like every other module.
+- **Manager review queue** (mobile + web): requests where `manager_id = me` AND `status='PENDING_MANAGER'`.
+- **HR review queue** (web, COMPANY_ADMIN): `status='PENDING_HR'`.
+- **Set direct manager**: web Employees page — add a "Direct manager" dropdown (populates `manager_id`).
+
+### Notifications (reuse existing SendGrid + in-app patterns)
+On submit → manager; on manager-approve → HR (COMPANY_ADMIN); on final decision (approve/reject) → employee.
+
+### Suggested build phases (when prioritized — multi-PR)
+1. Migration 040 (`manager_id` + `leave_requests` + RLS + indexes) + permission rows seed.
+2. Backend `routes/leave.js`: create / list-own / manager-queue + approve-reject / HR-queue + approve-reject; `isOnLeave` helper. Tests.
+3. Assignment-engine hook: add the leave filter to auto_assign / daily_dispatch / coverage. Tests (this is the riskiest piece — pairs with the §151.9 algorithmic files).
+4. Web: Employees "direct manager" field + manager/HR review queues.
+5. Mobile: LeaveMenu + New Request + My Requests + EN/FR.
+6. Notifications wiring.
+
+**Open follow-up questions (defer to build kickoff):** half-day / partial-day leave? leave balances/quotas per type? overlap with already-confirmed assignments (auto-unassign vs flag)? retroactive sick leave (start_date in the past)?
