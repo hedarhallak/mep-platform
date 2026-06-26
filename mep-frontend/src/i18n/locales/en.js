@@ -66,40 +66,6 @@ export default {
     logout: 'Logout',
     companyFallback: 'Company',
   },
-  bi: {
-    title: 'Business Intelligence',
-    subtitle: 'Live workforce, hours, travel and coverage insights.',
-    lastNDays: 'Last {{n}} days',
-    noData: 'No data for this period.',
-    footnote: 'Hours summed {{from}} → {{to}}. Workforce, travel and coverage are today’s snapshot.',
-    workforce: {
-      utilization: 'Utilization',
-      assignedOfTotal: '{{a}} of {{n}} employees assigned',
-      byTrade: 'Assigned today, by trade',
-    },
-    hours: {
-      totalHours: 'Total hours',
-      otShare: '{{p}}% overtime',
-      byProject: 'Hours by project',
-      regOt: 'Reg {{reg}}h · OT {{ot}}h',
-    },
-    travel: {
-      title: 'Travel distance (CCQ)',
-      over65: 'Assignments 65 km+',
-      avg: 'avg {{km}} km',
-      band4165: '41–65 km — tax form (T2200 + TP-64.3)',
-      bandOver65: '65 km+ — paid allowance',
-      bandUnder41: 'Under 41 km — not eligible',
-      avgLabel: 'Average distance',
-    },
-    coverage: {
-      title: 'Project coverage (today)',
-      covered: 'Projects staffed',
-      uncoveredN: '{{n}} with no one assigned',
-      allStaffed: 'All active projects staffed',
-      none: 'None',
-    },
-  },
 
   crews: {
     title: 'Crews',
@@ -1907,6 +1873,38 @@ export default {
   },
 
   bi: {
+    title: 'Business Intelligence',
+    subtitle: 'Live workforce, hours, travel and coverage insights.',
+    lastNDays: 'Last {{n}} days',
+    noData: 'No data for this period.',
+    footnote: 'Hours summed {{from}} → {{to}}. Workforce, travel and coverage are today’s snapshot.',
+    workforce: {
+      utilization: 'Utilization',
+      assignedOfTotal: '{{a}} of {{n}} employees assigned',
+      byTrade: 'Assigned today, by trade',
+    },
+    hours: {
+      totalHours: 'Total hours',
+      otShare: '{{p}}% overtime',
+      byProject: 'Hours by project',
+      regOt: 'Reg {{reg}}h · OT {{ot}}h',
+    },
+    travel: {
+      title: 'Travel distance (CCQ)',
+      over65: 'Assignments 65 km+',
+      avg: 'avg {{km}} km',
+      band4165: '41–65 km — tax form (T2200 + TP-64.3)',
+      bandOver65: '65 km+ — paid allowance',
+      bandUnder41: 'Under 41 km — not eligible',
+      avgLabel: 'Average distance',
+    },
+    coverage: {
+      title: 'Project coverage (today)',
+      covered: 'Projects staffed',
+      uncoveredN: '{{n}} with no one assigned',
+      allStaffed: 'All active projects staffed',
+      none: 'None',
+    },
     workforcePlanner: {
       title: 'Workforce Planner',
       subtitle: 'Plan tomorrow’s crews and optimize today’s assignments',
