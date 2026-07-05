@@ -35,6 +35,7 @@ const UserManagementPage   = lazy(() => import('@/pages/UserManagementPage'))
 const TaskRequestPage      = lazy(() => import('@/pages/TaskRequestPage'))
 const StandupPage          = lazy(() => import('@/pages/StandupPage'))
 const ReportsPage          = lazy(() => import('@/pages/ReportsPage'))
+const BIPage               = lazy(() => import('@/pages/BIPage'))
 const ProfilePage          = lazy(() => import('@/pages/profile/ProfilePage'))
 const SubscriptionPage     = lazy(() => import('@/pages/subscription/SubscriptionPage'))
 const InvoicesPage         = lazy(() => import('@/pages/billing/InvoicesPage'))
@@ -142,6 +143,11 @@ function AppRoutes() {
               (wizard + in-context panel). Old planner routes redirect. */}
           <Route path="workforce-planner" element={<Navigate to="/assignments" replace />} />
           <Route path="bi/workforce-planner" element={<Navigate to="/assignments" replace />} />
+          <Route path="bi" element={
+            <RequirePermission module="bi" action="access_full">
+              <BIPage />
+            </RequirePermission>
+          }/>
           <Route path="standup" element={
             <RequirePermission module="standup" action="manage">
               <StandupPage />

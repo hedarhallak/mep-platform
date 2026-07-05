@@ -150,6 +150,147 @@ router.get('/workforce-suggestions', can('bi.access_full'), async (req, res) => 
   }
 });
 
+// ── GET /api/bi/overview ─────────────────────────────────────
+// Company-wide BI dashboard data in four areas:
+//   workforce (utilization), hours (& overtime), travel (CCQ distance bands),
+//   coverage (active projects staffed today). Hours are summed over the last
+//   `days` window (default 30); workforce/travel/coverage are today snapshots.
+router.get('/overview', can('bi.access_full'), async (req, res) => {
+  try {
+    const companyId = req.user.company_id;
+    const today = new Date().toISOString().split('T')[0];
+    const days = Math.min(Math.max(parseInt(req.query.days, 10) || 30, 1), 365);
+    const fromDate = new Date(Date.now() - (days - 1) * 86400000).toISOString().split('T')[0];
+
+    const [emp, assignedByTrade, hoursTotal, hoursByProject, travel, coverage] = await Promise.all([
+      // total active employees
+      req.db.query(
+        `SELECT count(*)::int AS total
+           FROM public.employees
+          WHERE company_id = $1 AND is_active = true`,
+        [companyId]
+      ),
+      // employees assigned today, grouped by trade
+      req.db.query(
+        `SELECT COALESCE(ep.trade_code, '—') AS trade,
+                count(DISTINCT ar.requested_for_employee_id)::int AS assigned
+           FROM public.assignment_requests ar
+           LEFT JOIN public.employee_profiles ep
+                  ON ep.employee_id = ar.requested_for_employee_id
+          WHERE ar.company_id = $1
+            AND ar.status      = 'APPROVED'
+            AND ar.start_date <= $2 AND ar.end_date >= $2
+          GROUP BY COALESCE(ep.trade_code, '—')
+          ORDER BY assigned DESC`,
+        [companyId, today]
+      ),
+      // hours over the window (prefer confirmed hours)
+      req.db.query(
+        `SELECT
+            COALESCE(SUM(COALESCE(confirmed_regular_hours,  regular_hours)),  0)::numeric(12,1) AS regular,
+            COALESCE(SUM(COALESCE(confirmed_overtime_hours, overtime_hours)), 0)::numeric(12,1) AS overtime
+           FROM public.attendance_records
+          WHERE company_id = $1
+            AND attendance_date >= $2 AND attendance_date <= $3`,
+        [companyId, fromDate, today]
+      ),
+      // hours by project (top 6) over the window
+      req.db.query(
+        `SELECT p.project_code, p.project_name,
+                COALESCE(SUM(
+                  COALESCE(a.confirmed_regular_hours,  a.regular_hours) +
+                  COALESCE(a.confirmed_overtime_hours, a.overtime_hours)
+                ), 0)::numeric(12,1) AS hours
+           FROM public.attendance_records a
+           JOIN public.projects p ON p.id = a.project_id
+          WHERE a.company_id = $1
+            AND a.attendance_date >= $2 AND a.attendance_date <= $3
+          GROUP BY p.project_code, p.project_name
+         HAVING COALESCE(SUM(
+                  COALESCE(a.confirmed_regular_hours,  a.regular_hours) +
+                  COALESCE(a.confirmed_overtime_hours, a.overtime_hours)
+                ), 0) > 0
+          ORDER BY hours DESC
+          LIMIT 6`,
+        [companyId, fromDate, today]
+      ),
+      // travel distance bands for assignments active today
+      req.db.query(
+        `SELECT
+            count(*) FILTER (WHERE distance_km <  41)                    ::int AS under41,
+            count(*) FILTER (WHERE distance_km >= 41 AND distance_km < 65)::int AS band_41_65,
+            count(*) FILTER (WHERE distance_km >= 65)                    ::int AS over65,
+            count(*) FILTER (WHERE distance_km IS NULL)                  ::int AS unknown,
+            ROUND(AVG(distance_km) FILTER (WHERE distance_km IS NOT NULL)::numeric, 1) AS avg_km
+           FROM public.assignment_requests
+          WHERE company_id = $1
+            AND status      = 'APPROVED'
+            AND start_date <= $2 AND end_date >= $2`,
+        [companyId, today]
+      ),
+      // active projects + headcount assigned today
+      req.db.query(
+        `SELECT p.project_code, p.project_name, p.ccq_sector,
+                count(DISTINCT ar.requested_for_employee_id) FILTER (
+                  WHERE ar.status = 'APPROVED'
+                    AND ar.start_date <= $2 AND ar.end_date >= $2
+                )::int AS assigned
+           FROM public.projects p
+           JOIN public.project_statuses ps ON ps.id = p.status_id
+           LEFT JOIN public.assignment_requests ar
+                  ON ar.project_id = p.id AND ar.company_id = p.company_id
+          WHERE p.company_id = $1 AND ps.code = 'ACTIVE'
+          GROUP BY p.project_code, p.project_name, p.ccq_sector
+          ORDER BY assigned ASC, p.project_code`,
+        [companyId, today]
+      ),
+    ]);
+
+    const totalEmployees = emp.rows[0].total;
+    const assignedToday = assignedByTrade.rows.reduce((n, r) => n + r.assigned, 0);
+    const regular = Number(hoursTotal.rows[0].regular);
+    const overtime = Number(hoursTotal.rows[0].overtime);
+    const totalHours = Math.round((regular + overtime) * 10) / 10;
+    const projects = coverage.rows;
+    const covered = projects.filter((p) => p.assigned > 0).length;
+    const t = travel.rows[0];
+
+    return res.json({
+      ok: true,
+      period: { from: fromDate, to: today, days },
+      workforce: {
+        total_employees: totalEmployees,
+        assigned_today: assignedToday,
+        utilization_pct: totalEmployees ? Math.round((assignedToday / totalEmployees) * 100) : 0,
+        by_trade: assignedByTrade.rows,
+      },
+      hours: {
+        regular_hours: regular,
+        overtime_hours: overtime,
+        total_hours: totalHours,
+        overtime_pct: totalHours ? Math.round((overtime / totalHours) * 100) : 0,
+        by_project: hoursByProject.rows.map((r) => ({ ...r, hours: Number(r.hours) })),
+      },
+      travel: {
+        under_41: t.under41,
+        band_41_65: t.band_41_65,
+        over_65: t.over65,
+        unknown: t.unknown,
+        avg_distance_km: t.avg_km === null ? null : Number(t.avg_km),
+      },
+      coverage: {
+        active_projects: projects.length,
+        covered,
+        uncovered: projects.length - covered,
+        projects,
+      },
+    });
+  } catch (err) {
+    console.error('GET /bi/overview error:', err);
+    return res.status(500).json({ ok: false, error: 'SERVER_ERROR', message: err.message });
+  }
+});
+
 // ── Haversine distance helper ────────────────────────────────
 function haversineKm(lat1, lng1, lat2, lng2) {
   const R = 6371;
