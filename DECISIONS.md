@@ -16909,3 +16909,31 @@ On submit → manager; on manager-approve → HR (COMPANY_ADMIN); on final decis
 6. Notifications wiring.
 
 **Open follow-up questions (defer to build kickoff):** half-day / partial-day leave? leave balances/quotas per type? overlap with already-confirmed assignments (auto-unassign vs flag)? retroactive sick leave (start_date in the past)?
+
+## 156. Section 156 — BI dashboard shipped + THE ORPHAN-PROCESS INCIDENT + Semgrep hardening (June 24 – July 5, 2026)
+
+Multi-session arc: built the real BI dashboard, then discovered during its rollout that **prod deploys had been silently no-ops for ~a month**.
+
+### A) Real Business Intelligence dashboard (PR #460 + #461)
+BI was a stub (one `/workforce-suggestions` endpoint; `/bi/workforce-planner` redirected to /assignments). Built the real thing, four areas (Hedar's pick — all four):
+- **Backend** `GET /api/bi/overview?days=N` (`can('bi.access_full')`, req.db/RLS): workforce (active, assigned today, utilization %, by trade) · hours (regular/overtime over window, prefers confirmed, top projects) · travel/CCQ (`distance_km` bands <41 / 41–65 tax-form / 65+ paid + avg) · coverage (active projects staffed today).
+- **Frontend** new `BIPage` at `/bi`, permission-gated, EN/FR, 30/60/90-day selector, KPI tiles + bars + CCQ bands + coverage list. Sidebar entry. +2 smoke tests.
+- **Pitfall #56 — duplicate top-level i18n key:** #460 added a second top-level `bi:` to en.js/fr.js; a pre-existing `bi:` (workforcePlanner) later in the file **shadowed it** (JS keeps the LAST duplicate key) → UI rendered raw keys. Build doesn't warn. Fixed by merging into the single existing section (PR #461). **Rule: before adding a top-level i18n section, `grep "^  <key>:"` both locale files.**
+
+### B) THE ORPHAN-PROCESS INCIDENT (prod) — why deploys were silent no-ops
+Symptom trail: /bi rendered but API 404'd + translations raw; survived Incognito, Cloudflare Dev Mode, purge; nginx config + DNS wildcard all correct; **authenticated local curl on the droplet returned 404** for a route present in the code on disk.
+**Root cause:** an orphaned node process (spawned outside pm2) held :3000 running **month-old code**. pm2's own child crash-looped on EADDRINUSE — **134,329 restarts** — so every deploy "restarted pm2" into a crash loop while the orphan kept serving. Deploy health probes PASSED because the orphan answers /health fine. Net effect: **every deploy since ~May 26 looked green but changed nothing** (§150 billing + §151.3 standup only actually reached users now).
+**Fix:** `pm2 delete mep-backend; fuser -k 3000/tcp; pkill -f index.js; pm2 start index.js --name mep-backend --update-env; pm2 save` → port owned by pm2 child, restarts=0, stable. `/api/bi/overview` then returned 200 with real data.
+**Hardening (this section):** `scripts/deploy.sh` Step 8 now (a) kills any :3000 listener that is not pm2's child before restarting, (b) **fails the deploy** if, after restart, the port holder ≠ pm2's child (health probe alone is NOT sufficient — the orphan proved it).
+**Also learned:** the GitHub `Deploy` workflow has always been a no-op (DEPLOY_HOST secret unset → skips). Deploys are manual by design for now; enabling CD = set DEPLOY_HOST/DEPLOY_USER/DEPLOY_SSH_KEY secrets.
+
+### C) Semgrep registry drift broke main CI (PR #463)
+New community rules turned main red on an unrelated merge: `dependabot-missing-cooldown` + `github-actions-mutable-action-tag`. Fixed properly (both are real supply-chain hardening): `cooldown: default-days: 7` on all 4 dependabot ecosystems (would also have delayed #454's broken RN bump), and every workflow `uses:` pinned to a full commit SHA (tag kept as comment; dependabot bumps SHA pins natively).
+
+### D) Dependabot round
+#462 (mobile) merged clean — the §154 Expo-ignore rule (#457) worked: no RN/Expo packages in the bump. #455 (frontend) merged; #453 (backend) auto-merge pending.
+
+### E) Sales deck (constrai-deck/, on Desktop — not in this repo)
+Rebuilt the deck generator with a per-menu walkthrough: 6 group slides with **Details ›** buttons → one detail slide per sidebar menu (25 menus, what/how/role + screen frame placeholder auto-swapped for img/<key>.png when present) + Back buttons; EN+FR; pricing slide REMOVED (Hedar: no pricing for now); Reports corrected to the two distance reports (41 km+ = T2200/TP-64.3 tax form, 65 km+ = paid $/day) ; Android updated to "available (Google Play internal testing)". Hedar's visual review pending; real screenshots pending (capture pipeline from Cowork blocked — Hedar will capture to constrai-deck/img/).
+
+Next tracks (Hedar's call): sales-deck review + real screenshots · Android device QA + eas submit service-account + production track (12×14d closed test) · Leave Management build (§155) · coverage → 80% (§151.9) · enable CD secrets?
