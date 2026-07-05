@@ -21,6 +21,10 @@ updates:
       time: '08:00'
       timezone: America/Toronto
     open-pull-requests-limit: 5
+    # Supply-chain cooldown: wait 7 days before proposing a newly published
+    # version (freshly published packages can be malicious or unstable).
+    cooldown:
+      default-days: 7
     labels:
       - dependencies
       - backend
@@ -47,6 +51,10 @@ updates:
       time: '08:00'
       timezone: America/Toronto
     open-pull-requests-limit: 5
+    # Supply-chain cooldown: wait 7 days before proposing a newly published
+    # version (freshly published packages can be malicious or unstable).
+    cooldown:
+      default-days: 7
     labels:
       - dependencies
       - frontend
@@ -76,6 +84,10 @@ updates:
       time: '08:00'
       timezone: America/Toronto
     open-pull-requests-limit: 5
+    # Supply-chain cooldown: wait 7 days before proposing a newly published
+    # version (freshly published packages can be malicious or unstable).
+    cooldown:
+      default-days: 7
     labels:
       - dependencies
       - mobile
@@ -92,6 +104,19 @@ updates:
       - dependency-name: '*'
         update-types:
           - version-update:semver-major
+      # Expo SDK pins react-native + the RN-ecosystem packages. Their 0.x
+      # versioning means a breaking RN jump (e.g. 0.81 -> 0.86) looks like a
+      # "minor" to Dependabot and slips past the semver-major ignore, but it
+      # breaks jest-expo / the native build. These move ONLY via `expo upgrade`
+      # to a new SDK — never piecemeal. (PR #454 closed for exactly this.)
+      - dependency-name: 'expo'
+      - dependency-name: 'expo-*'
+      - dependency-name: 'jest-expo'
+      - dependency-name: 'babel-preset-expo'
+      - dependency-name: 'react-native'
+      - dependency-name: 'react-native-*'
+      - dependency-name: '@react-native/*'
+      - dependency-name: '@react-native-community/*'
 
   # ---------------- GitHub Actions ----------------
   - package-ecosystem: github-actions
@@ -102,6 +127,8 @@ updates:
       time: '08:00'
       timezone: America/Toronto
     open-pull-requests-limit: 3
+    cooldown:
+      default-days: 7
     labels:
       - dependencies
       - github-actions
