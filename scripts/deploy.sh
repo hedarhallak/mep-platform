@@ -227,9 +227,38 @@ echo
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Step 8: pm2 restart (always — picks up env + new code)
+#
+# §156 hardening: an orphaned node process once held :3000 with month-old
+# code while pm2 crash-looped on EADDRINUSE (134k restarts). Deploys LOOKED
+# successful — the health probe passed because the orphan served /health
+# fine — but new code never actually served. So: (a) kill any listener on
+# the app port that is not pm2's child before restarting, and (b) after
+# restarting, verify the port is held by pm2's child, not by a stranger.
 # ──────────────────────────────────────────────────────────────────────────────
+APP_PORT="${APP_PORT:-3000}"
+port_holder() { ss -ltnp 2>/dev/null | grep ":${APP_PORT} " | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2; }
+
+PM2_PID=$(pm2 pid "${PM2_APP}" 2>/dev/null | tr -d '[:space:]' || echo "")
+PORT_PID=$(port_holder || true)
+if [ -n "${PORT_PID}" ] && [ "${PORT_PID}" != "${PM2_PID}" ]; then
+  log "WARN: orphan PID ${PORT_PID} holds :${APP_PORT} (pm2 ${PM2_APP} pid=${PM2_PID:-none}) — killing it."
+  kill -9 "${PORT_PID}" 2>/dev/null || true
+  sleep 1
+fi
+
 log "Restarting pm2 ${PM2_APP}..."
 pm2 restart "${PM2_APP}" --update-env
+sleep 2
+
+PM2_PID=$(pm2 pid "${PM2_APP}" 2>/dev/null | tr -d '[:space:]' || echo "")
+PORT_PID=$(port_holder || true)
+if [ -z "${PORT_PID}" ] || [ "${PORT_PID}" != "${PM2_PID}" ]; then
+  err "Port :${APP_PORT} is held by pid '${PORT_PID:-nobody}' but pm2 ${PM2_APP} is pid '${PM2_PID}'."
+  err "The restarted process does NOT own the port — old code may still be serving (EADDRINUSE loop)."
+  err "Fix: pm2 delete ${PM2_APP}; fuser -k ${APP_PORT}/tcp; cd ${REPO_DIR} && pm2 start index.js --name ${PM2_APP} --update-env && pm2 save"
+  exit 1
+fi
+log "Port :${APP_PORT} owned by pm2 child pid ${PM2_PID} ✓"
 echo
 
 # ──────────────────────────────────────────────────────────────────────────────
