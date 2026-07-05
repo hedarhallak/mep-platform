@@ -21,6 +21,10 @@ updates:
       time: '08:00'
       timezone: America/Toronto
     open-pull-requests-limit: 5
+    # Supply-chain cooldown: wait 7 days before proposing a newly published
+    # version (freshly published packages can be malicious or unstable).
+    cooldown:
+      default-days: 7
     labels:
       - dependencies
       - backend
@@ -47,6 +51,10 @@ updates:
       time: '08:00'
       timezone: America/Toronto
     open-pull-requests-limit: 5
+    # Supply-chain cooldown: wait 7 days before proposing a newly published
+    # version (freshly published packages can be malicious or unstable).
+    cooldown:
+      default-days: 7
     labels:
       - dependencies
       - frontend
@@ -76,6 +84,10 @@ updates:
       time: '08:00'
       timezone: America/Toronto
     open-pull-requests-limit: 5
+    # Supply-chain cooldown: wait 7 days before proposing a newly published
+    # version (freshly published packages can be malicious or unstable).
+    cooldown:
+      default-days: 7
     labels:
       - dependencies
       - mobile
@@ -115,6 +127,8 @@ updates:
       time: '08:00'
       timezone: America/Toronto
     open-pull-requests-limit: 3
+    cooldown:
+      default-days: 7
     labels:
       - dependencies
       - github-actions
