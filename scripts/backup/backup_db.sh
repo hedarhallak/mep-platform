@@ -17,11 +17,12 @@ fi
 source "$CONFIG_FILE"
 
 # ---- Required config variables ---------------------------------------------
+# §157: DB_USER/DB_PASSWORD/DB_HOST/DB_PORT are no longer used. The dump now
+# runs as the postgres superuser via local peer auth — no password to rotate
+# (the May 11 rotation silently broke password auth here) and BYPASSRLS by
+# nature (strict RLS had already broken mepuser dumps on May 7). Backups had
+# been failing silently for 3 months because of those two.
 : "${DB_NAME:?DB_NAME not set in $CONFIG_FILE}"
-: "${DB_USER:?DB_USER not set in $CONFIG_FILE}"
-: "${DB_PASSWORD:?DB_PASSWORD not set in $CONFIG_FILE}"
-: "${DB_HOST:=localhost}"
-: "${DB_PORT:=5432}"
 : "${SPACES_BUCKET:?SPACES_BUCKET not set in $CONFIG_FILE}"
 
 # ---- Constants -------------------------------------------------------------
@@ -54,21 +55,18 @@ log "===== Starting backup for database '$DB_NAME' ====="
 
 # ---- Step 1: pg_dump -------------------------------------------------------
 DUMP_FILE="$TMP_DIR/mepdb_${DATE}.sql"
-log "Running pg_dump..."
-export PGPASSWORD="$DB_PASSWORD"
+log "Running pg_dump (as postgres via peer auth — no password, bypasses RLS)..."
 # Note: ownership info is INCLUDED (no --no-owner) so restore as postgres
 # superuser correctly reassigns objects back to mepuser. Required because
 # PostGIS extension creation needs superuser at restore time.
-pg_dump \
-    -U "$DB_USER" \
-    -h "$DB_HOST" \
-    -p "$DB_PORT" \
+# `cd /` because postgres cannot read root's mktemp cwd; the redirect is
+# opened by this (root) shell, so the dump file lands in TMP_DIR fine.
+(cd / && sudo -u postgres pg_dump \
     -d "$DB_NAME" \
     --clean \
     --if-exists \
-    --format=plain \
+    --format=plain) \
     > "$DUMP_FILE"
-unset PGPASSWORD
 
 DUMP_SIZE=$(du -h "$DUMP_FILE" | cut -f1)
 log "pg_dump done — size: $DUMP_SIZE"
