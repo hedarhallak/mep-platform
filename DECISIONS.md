@@ -16957,3 +16957,14 @@ Both failed silently for 3 months (cron kept "starting", cleanup kept running, l
 Web (app + mep tenants) ✅ healthy · iOS TestFlight ✅ · Android Play internal ✅ (Hedar re-verified both phones) · docs current through §156 · 4 dependabot PRs pending triage.
 
 Next tracks (September conference deadline looms): sales deck review + real screenshots · Android production track (12 testers × 14 days — must start soon) · Leave Management build (§155) · coverage → 80%.
+
+### D) §157.2 — Pilot-readiness audit (same day, "may hand the platform to a real company for trial")
+
+Full sweep before a potential pilot company:
+- **Functional:** all 25+ API modules return correctly as COMPANY_ADMIN (earlier 404s were wrong probe paths; `/reports/distance` 400 was a malformed probe — needs `from`/`to`, frontend already sends them, 200 verified).
+- **Tenant isolation:** RLS enabled (`relrowsecurity=t`) on all core tables; 22 tenant/RLS/vhost test files. Solid.
+- **Performance:** heaviest endpoints (BI 90d, 8-month hours report, matrix) all < 0.22s. Server: disk 11%, RAM 449/1967MB.
+- **Ops:** Sentry wired, UptimeRobot live (fired correctly during the DO password-reset power-cycle), backups fixed today (§157B), SSL valid to Oct 2 (auto-renew).
+- **FIXED during audit — missing security headers:** none of the vhosts sent HSTS / X-Frame-Options / X-Content-Type-Options / Referrer-Policy. Added `/etc/nginx/snippets/security-headers.conf`, included after every `listen 443 ssl` across all 5 sites-enabled files, verified live on app/mep/admin. (Strict CSP deliberately deferred — not worth breaking the SPA pre-pilot.) **Server-ops pitfall learned: never leave config backups INSIDE `/etc/nginx/sites-enabled/`** — nginx loads every file there; the `.bak` caused a duplicate-default-server config failure until moved to `/root/nginx-backups/`.
+- **TODOs in code:** 5, all benign notes (no pilot blockers).
+- **Remaining before handing to a company:** run the new-company onboarding path once end-to-end via admin.constrai.ca (SUPER_ADMIN → create company → provision OWNER → activation email → PIN → invite an employee) — flow exists and was verified in §142, but re-verify with fresh eyes before a pilot.
