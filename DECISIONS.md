@@ -16937,3 +16937,23 @@ New community rules turned main red on an unrelated merge: `dependabot-missing-c
 Rebuilt the deck generator with a per-menu walkthrough: 6 group slides with **Details ›** buttons → one detail slide per sidebar menu (25 menus, what/how/role + screen frame placeholder auto-swapped for img/<key>.png when present) + Back buttons; EN+FR; pricing slide REMOVED (Hedar: no pricing for now); Reports corrected to the two distance reports (41 km+ = T2200/TP-64.3 tax form, 65 km+ = paid $/day) ; Android updated to "available (Google Play internal testing)". Hedar's visual review pending; real screenshots pending (capture pipeline from Cowork blocked — Hedar will capture to constrai-deck/img/).
 
 Next tracks (Hedar's call): sales-deck review + real screenshots · Android device QA + eas submit service-account + production track (12×14d closed test) · Leave Management build (§155) · coverage → 80% (§151.9) · enable CD secrets?
+
+## 157. Section 157 — Aug 14, 2026 — Return session: server access recovered + THE SILENT BACKUP FAILURE (3 months)
+
+Hedar returned after ~5 weeks away. State review + two incidents resolved:
+
+### A) Server access recovered + SSH key auth
+Root password forgotten. Recovered via DO Settings → Reset root password (note: causes a ~2min power-cycle → Better Stack fired + auto-resolved). New password set by Hedar. **SSH key (ed25519) generated on the laptop and installed** — Claude now has direct passwordless server access for diagnostics/ops. ⚠️ The new password was accidentally pasted into MASTER_README.md (working tree only, NEVER committed) — scrubbed immediately; password rotated again; store credentials ONLY in OneDrive "Constrai Keys", never in the repo folder.
+
+### B) THE SILENT BACKUP FAILURE — no DB backup since May 6 (3+ months)
+`/api/health/deep` had been reporting "no successful backup marker" — surfaced during the review. Last good file in Spaces: `mepdb_2026-05-06`. Two sequential causes:
+1. **May 7** — strict RLS broke `pg_dump` as mepuser ("query would be affected by row-level security policy for app_users").
+2. **May 11** — DB password rotation left the OLD password in `/etc/mep-backup.env` → auth failure.
+Both failed silently for 3 months (cron kept "starting", cleanup kept running, log tail buried it; nobody read the health backup field).
+**Fix (PR #476):** dump as **postgres via local peer auth** — no password (immune to rotations), BYPASSRLS by nature. Validated live (13k-line dump). **One-off manual backup taken immediately**: `mepdb_2026-08-14_20-58.sql.gz` (106KB) verified in Spaces. Cron takes over with the fixed script post-merge.
+**Lesson:** the health endpoint HAD the signal all along — check the `backup` field of /api/health/deep at every session start (add to Bootstrap habits).
+
+### C) Platform state (verified Aug 14)
+Web (app + mep tenants) ✅ healthy · iOS TestFlight ✅ · Android Play internal ✅ (Hedar re-verified both phones) · docs current through §156 · 4 dependabot PRs pending triage.
+
+Next tracks (September conference deadline looms): sales deck review + real screenshots · Android production track (12 testers × 14 days — must start soon) · Leave Management build (§155) · coverage → 80%.
