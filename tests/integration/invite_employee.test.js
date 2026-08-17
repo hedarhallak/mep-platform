@@ -256,4 +256,33 @@ describeIfDb('Invite employee — POST /api/invite-employee', () => {
     expect(res.statusCode).toBe(201);
     expect(res.body.ok).toBe(true);
   });
+
+  test('§158: same employee_code allowed across companies, blocked within one (per-company unique)', async () => {
+    const companyA = await seedCompanyWithSubscription();
+    const adminA = await seedUser({ company_id: companyA.company_id, role: 'COMPANY_ADMIN' });
+    const { token: tokenA } = await loginUser(adminA);
+
+    const companyB = await seedCompanyWithSubscription();
+    const adminB = await seedUser({ company_id: companyB.company_id, role: 'COMPANY_ADMIN' });
+    const { token: tokenB } = await loginUser(adminB);
+
+    const code = `S158-${Date.now()}`;
+    const invite = (token, email) =>
+      request(app)
+        .post('/api/invite-employee')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ first_name: 'Code', last_name: 'Test', email, role: 'WORKER', emp_code: code });
+
+    // Company A claims the code.
+    const a = await invite(tokenA, `s158_a_${Date.now()}@constrai.ca`);
+    expect(a.statusCode).toBe(201);
+
+    // Company B may reuse the SAME code (was globally blocked pre-040).
+    const b = await invite(tokenB, `s158_b_${Date.now()}@constrai.ca`);
+    expect(b.statusCode).toBe(201);
+
+    // Company A may NOT reuse it internally.
+    const a2 = await invite(tokenA, `s158_a2_${Date.now()}@constrai.ca`);
+    expect(a2.statusCode).toBeGreaterThanOrEqual(400);
+  });
 });
