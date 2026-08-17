@@ -320,6 +320,13 @@ router.post('/', can('employees.invite'), async (req, res) => {
       invite_url: inviteUrl, // useful for dev/testing
     });
   } catch (err) {
+    // §158: unique-index backstop (race past the code-level pre-check).
+    if (err && err.code === '23505') {
+      const c = String(err.constraint || '');
+      if (c.includes('email')) return res.status(409).json({ ok: false, error: 'EMAIL_EXISTS' });
+      if (c.includes('company_code'))
+        return res.status(409).json({ ok: false, error: 'EMPLOYEE_CODE_EXISTS' });
+    }
     console.error('POST /api/invite-employee error:', err);
     return res.status(500).json({ ok: false, error: 'SERVER_ERROR', message: err.message });
   }

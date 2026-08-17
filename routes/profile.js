@@ -496,11 +496,64 @@ router.post('/', async (req, res) => {
       console.warn('PROFILE_STATUS_UPDATE failed:', e2?.message || e2);
     }
 
+    // §158: non-blocking duplicate check — same-company employees sharing this
+    // phone (digits-only compare) or home address. Shared addresses are LEGAL
+    // (family members / roommates at the same contractor are common), so this
+    // is a warning for typo-detection, never a hard block.
+    const warnings = [];
+    try {
+      if (phone || home_address) {
+        const dup = await q(
+          req,
+          `SELECT ep.employee_id, ep.full_name,
+                  (regexp_replace(COALESCE(ep.phone,''), '\\D', '', 'g') <> ''
+                   AND regexp_replace(COALESCE(ep.phone,''), '\\D', '', 'g')
+                       = regexp_replace(COALESCE($2,''), '\\D', '', 'g'))       AS same_phone,
+                  (lower(trim(COALESCE(ep.home_address,''))) <> ''
+                   AND lower(trim(COALESCE(ep.home_address,'')))
+                       = lower(trim(COALESCE($3,''))))                          AS same_address
+             FROM public.employee_profiles ep
+             JOIN public.employees e  ON e.id = ep.employee_id
+             JOIN public.employees me ON me.id = $1
+            WHERE e.company_id = me.company_id
+              AND ep.employee_id <> $1
+              AND (
+                (regexp_replace(COALESCE(ep.phone,''), '\\D', '', 'g') <> ''
+                 AND regexp_replace(COALESCE(ep.phone,''), '\\D', '', 'g')
+                     = regexp_replace(COALESCE($2,''), '\\D', '', 'g'))
+                OR
+                (lower(trim(COALESCE(ep.home_address,''))) <> ''
+                 AND lower(trim(COALESCE(ep.home_address,'')))
+                     = lower(trim(COALESCE($3,''))))
+              )
+            LIMIT 5`,
+          [employee_id, phone || null, home_address || null]
+        );
+        for (const d of dup.rows) {
+          if (d.same_phone)
+            warnings.push({
+              type: 'DUPLICATE_PHONE',
+              employee_id: d.employee_id,
+              name: d.full_name,
+            });
+          if (d.same_address)
+            warnings.push({
+              type: 'DUPLICATE_ADDRESS',
+              employee_id: d.employee_id,
+              name: d.full_name,
+            });
+        }
+      }
+    } catch (eW) {
+      console.warn('profile duplicate-check failed (non-fatal):', eW?.message || eW);
+    }
+
     return res.json({
       ok: true,
       employee_id: r.rows[0]?.employee_id || employee_id,
       saved: true,
       geocoded: true,
+      warnings,
     });
   } catch (e) {
     if (e && e.code === '23505') {

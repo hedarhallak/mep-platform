@@ -134,7 +134,7 @@ async function seed() {
         `
         INSERT INTO public.employees (employee_code, first_name, last_name, company_id, home_lat, home_lng)
         VALUES ($1, $2, $3, $4, $5, $6)
-        ON CONFLICT (employee_code) DO UPDATE SET first_name = EXCLUDED.first_name
+        ON CONFLICT (company_id, employee_code) DO UPDATE SET first_name = EXCLUDED.first_name
         RETURNING id
       `,
         [
