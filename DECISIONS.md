@@ -16957,3 +16957,8 @@ Full submission completed today (Hedar driving ASC, Claude preparing everything)
 - **Google Cloud trial ends in ~30 days**: only affects Google Routes precision; fallback chain (Google→Mapbox→haversine) means nothing breaks. Hedar to decide on paid upgrade.
 
 Next: Android closed test (12 testers × 14 days — START SOON for September) · pilot company onboarding (§ walkthrough ready) · deck review · post-approval: rotate review PIN, update deck "App Store" line.
+
+### §159.2 — Plan addendum (Aug 17 evening)
+- **Conference identified: ALL IN 2026 (AI event), Sept 16–17, Palais des congrès de Montréal** — allinevent.ai. §105's "construction industry conference" wording was wrong; the goal is meeting BIG companies (enterprise partnership/deal). CONTECH Montréal (Nov) is the volume-sales event for contractors — decide on a booth after September.
+- **TODO tomorrow — Google Cloud upgrade (Routes API):** trial ends ~mid-Sept. Upgrade to paid = card on file only; Routes API has 10,000 free calls/month (post-March-2025 per-SKU tiers), Constrai's volume is far below → expected bill $0/mo. Also set a GCP budget alert (~$10). Mapbox fallback remains regardless.
+- **Android closed test:** Hedar gathering 12–14 testers himself (no public APK on the site — his call). Opt-in link (once Alpha track is set up + emails listed): https://play.google.com/apps/testing/ca.constrai.app. NOT a blocker for ALL IN (App Store + demo suffice); production listing can land by CONTECH.
