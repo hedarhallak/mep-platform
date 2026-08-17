@@ -16937,3 +16937,23 @@ New community rules turned main red on an unrelated merge: `dependabot-missing-c
 Rebuilt the deck generator with a per-menu walkthrough: 6 group slides with **Details ›** buttons → one detail slide per sidebar menu (25 menus, what/how/role + screen frame placeholder auto-swapped for img/<key>.png when present) + Back buttons; EN+FR; pricing slide REMOVED (Hedar: no pricing for now); Reports corrected to the two distance reports (41 km+ = T2200/TP-64.3 tax form, 65 km+ = paid $/day) ; Android updated to "available (Google Play internal testing)". Hedar's visual review pending; real screenshots pending (capture pipeline from Cowork blocked — Hedar will capture to constrai-deck/img/).
 
 Next tracks (Hedar's call): sales-deck review + real screenshots · Android device QA + eas submit service-account + production track (12×14d closed test) · Leave Management build (§155) · coverage → 80% (§151.9) · enable CD secrets?
+
+## 159. Section 159 — Aug 17, 2026 — CONSTRAI SUBMITTED TO THE APP STORE 🎉 (+ identity uniqueness shipped)
+
+### A) App Store submission — "Waiting for Review"
+Full submission completed today (Hedar driving ASC, Claude preparing everything):
+- **Privacy policy** (EN/FR, Law 25, accurate to real data practices) written + deployed: `https://www.constrai.ca/privacy.html` (PR #480).
+- **Screenshots**: 9 FR screenshots taken by Hedar on iPhone (foreman account renamed to "Constrai Roy" for display), auto-resized/cropped by Claude to 6.9" (1290×2796) + 6.5" (1284×2778) sets → `Downloads/appstore-screenshots-ready.zip`.
+- **Listing**: name Constrai · subtitle "Construction workforce ERP" · category Business · keywords · EN+FR descriptions · support/privacy URLs (all in `Downloads/appstore-listing-texts.md`).
+- **App Privacy label**: Contact Info (name/email/phone/physical address) + User Content (photos), all App-Functionality + linked-to-identity + **NO tracking**. Age rating 4+. Content rights: no third-party content.
+- **Review access**: sign-in required, demo foreman `seed.worker6@meptest.com` / PIN 1234 + reviewer notes (invite-only B2B, suggested flows, FR default). ⚠️ **Rotate/disable this PIN after approval.**
+- **Pricing/availability**: Free, **Canada + United States only** (deliberately excludes EU → avoids DSA trader-status publication; expand per-country on demand — availability changes need no re-review).
+- **Release**: automatic on approval. Build 13 (1.0.0). Apple says up to 48h.
+- Verified beforehand: app had NEVER been submitted (public page 404 + ASC "Prepare for Submission") — TestFlight only since June.
+
+### B) Also this session (§158 backlog cleared)
+- **Identity uniqueness (PR #479 + migration 040, applied to prod)**: per-company unique email (app_users + employees, case-insensitive) — login identity had no DB constraint; employee_code rescoped GLOBAL→per-company (multi-tenant fix); phone/address duplicate WARNINGS (non-blocking, shared addresses are legal) in profile save; 409 backstops. Verified live: duplicate invite → EMAIL_ALREADY_REGISTERED.
+- **Invite flow verified e2e** on prod (send → email → activate → login) after fixing demo-company seats 8→60 (**pitfall: new companies default to 5 seats** — set seats at creation for the pilot).
+- **Google Cloud trial ends in ~30 days**: only affects Google Routes precision; fallback chain (Google→Mapbox→haversine) means nothing breaks. Hedar to decide on paid upgrade.
+
+Next: Android closed test (12 testers × 14 days — START SOON for September) · pilot company onboarding (§ walkthrough ready) · deck review · post-approval: rotate review PIN, update deck "App Store" line.
