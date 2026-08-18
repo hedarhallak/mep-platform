@@ -16962,3 +16962,21 @@ Next: Android closed test (12 testers × 14 days — START SOON for September) �
 - **Conference identified: ALL IN 2026 (AI event), Sept 16–17, Palais des congrès de Montréal** — allinevent.ai. §105's "construction industry conference" wording was wrong; the goal is meeting BIG companies (enterprise partnership/deal). CONTECH Montréal (Nov) is the volume-sales event for contractors — decide on a booth after September.
 - **TODO tomorrow — Google Cloud upgrade (Routes API):** trial ends ~mid-Sept. Upgrade to paid = card on file only; Routes API has 10,000 free calls/month (post-March-2025 per-SKU tiers), Constrai's volume is far below → expected bill $0/mo. Also set a GCP budget alert (~$10). Mapbox fallback remains regardless.
 - **Android closed test:** Hedar gathering 12–14 testers himself (no public APK on the site — his call). Opt-in link (once Alpha track is set up + emails listed): https://play.google.com/apps/testing/ca.constrai.app. NOT a blocker for ALL IN (App Store + demo suffice); production listing can land by CONTECH.
+
+## 160. Section 160 — Aug 18, 2026 — GOOGLE PLAY CLOSED TEST SUBMITTED 🤖 (both stores now in review)
+
+One day after the App Store submission (§159), the full Google Play submission went in — **Constrai is now simultaneously in review at Apple ("Waiting for Review") and Google ("Changes in review")**.
+
+### What was submitted (13 changes, one batch)
+- **Closed testing – Alpha track**: release 2 (1.0.0) promoted from internal, Canada targeted, email list "Closed Testers" attached (Hedar gathering 12–14 people himself; opt-in link `https://play.google.com/apps/testing/ca.constrai.app` works only for listed emails, only after Google approves the release).
+- **All app-content declarations completed** (mirroring the Apple answers): privacy policy URL · sign-in details (demo foreman + full-access note) · no ads · IARC content rating (All Other App Types, everything No → Everyone) · target audience 18+ (no minor-block, Quebec apprentices can be 16–17) · Data safety (collected: name/email/address/phone + photos; encrypted; deletion via policy URL; **no in-app account creation — accounts via employment/enterprise**) · not a government app · **no financial features** (expense tracking is internal admin tooling) · no health features · **advertising ID: No** (the quick-check blocker).
+- **Store listing**: EN texts (same as Apple listing), **branded icon-512 + 1024×500 feature graphic generated from the landing logo/brand** (`Downloads/play-store-graphics/`), 9 original iPhone screenshots (Play accepts them as-is). AI-asset label: none (code-composed brand graphics, not generative AI).
+- **Data-deletion section** added to the privacy page (EN `#delete` + FR `#suppression`: steps, deleted-vs-kept, retention — Google's 3 URL requirements) — PR #483, deployed.
+
+### ⚠️ Discovery — the app BINARY icon is still the Expo placeholder
+`mep-mobile/assets/icon.png` is the default grid placeholder (visible in both consoles and on device home screens). The branded green building icon exists only in-app + now on the Play listing. **Follow-up: replace assets/icon.png (+ adaptive-icon/splash) with the brand icon and ship new builds** — also a possible Apple review rejection reason (2.3 metadata); if Apple rejects on it, fix + resubmit same day.
+
+### The Production clock (for ALL IN, Sept 16–17)
+Play Dashboard now shows the gate explicitly: publish closed release → **12 testers opted-in** (currently 0) → **14 days** → Apply for production. Sequence: Google approves review (days) → Hedar distributes link as he collects emails → clock runs. Tight but feasible pre-conference; NOT a blocker for the conference itself (App Store + demo suffice — §159.2).
+
+Next: watch both reviews (fix-and-resubmit same day on any rejection) · collect testers · pilot company onboarding · deck · binary icon fix + new builds.
