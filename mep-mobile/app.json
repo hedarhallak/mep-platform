@@ -21,7 +21,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#1E3A5F"
+        "backgroundColor": "#16A34A"
       },
       "package": "ca.constrai.app"
     },
@@ -34,7 +34,14 @@
       }
     },
     "plugins": [
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Constrai uses the camera to take photos you attach as task proof of completion or expense receipts.",
+          "photosPermission": "Constrai uses your photo library to let you attach existing photos to tasks and expense receipts."
+        }
+      ]
     ]
   }
 }

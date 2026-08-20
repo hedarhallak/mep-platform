@@ -1,6 +1,11 @@
 export default {
   // Common
   common: {
+    addPhoto: 'Add a photo',
+    takePhoto: 'Take a photo',
+    chooseFromLibrary: 'Choose from library',
+    cameraPermission: 'Camera access is required to take a photo. You can enable it in Settings.',
+    photoPermission: 'Photo library access is required to choose a photo. You can enable it in Settings.',
     save: 'Save',
     cancel: 'Cancel',
     delete: 'Delete',

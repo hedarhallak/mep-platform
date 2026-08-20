@@ -1,6 +1,11 @@
 export default {
   // Common
   common: {
+    addPhoto: 'Ajouter une photo',
+    takePhoto: 'Prendre une photo',
+    chooseFromLibrary: 'Choisir de la galerie',
+    cameraPermission: "L'accès à la caméra est requis pour prendre une photo. Vous pouvez l'activer dans Réglages.",
+    photoPermission: "L'accès à la photothèque est requis pour choisir une photo. Vous pouvez l'activer dans Réglages.",
     save: 'Enregistrer',
     cancel: 'Annuler',
     delete: 'Supprimer',

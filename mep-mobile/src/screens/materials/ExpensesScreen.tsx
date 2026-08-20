@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import * as ImagePicker from 'expo-image-picker';
+import { pickImageWithSource } from '../../lib/imagePicker';
 import { apiClient } from '../../api/client';
 import Colors from '../../theme/colors';
 
@@ -62,13 +62,8 @@ export default function ExpensesScreen() {
   useEffect(() => { fetchData(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pickPhoto = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') { Alert.alert(t('common.error'), t('expenses.photoPermission')); return; }
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.6 });
-    if (!res.canceled && res.assets[0]) {
-      const a = res.assets[0];
-      setPhoto({ uri: a.uri, name: a.uri.split('/').pop() || 'receipt.jpg', type: 'image/jpeg' });
-    }
+    const picked = await pickImageWithSource(t, { quality: 0.6, namePrefix: 'receipt' });
+    if (picked) setPhoto(picked);
   };
 
   const reset = () => { setVendor(''); setAmount(''); setDescription(''); setPhoto(null); setShowForm(false); };

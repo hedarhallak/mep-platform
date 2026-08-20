@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import * as ImagePicker from 'expo-image-picker';
+import { pickImageWithSource } from '../../lib/imagePicker';
 import { apiClient } from '../../api/client';
 import Colors from '../../theme/colors';
 
@@ -129,13 +129,8 @@ export default function NewTaskScreen() {
   };
 
   const pickImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') { Alert.alert(t('common.error'), t('tasks.photoPermission')); return; }
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: false, quality: 0.7 });
-    if (!result.canceled && result.assets[0]) {
-      const asset = result.assets[0];
-      setAttachedFile({ uri: asset.uri, name: asset.uri.split('/').pop() || 'image.jpg', type: 'image/jpeg' });
-    }
+    const picked = await pickImageWithSource(t, { quality: 0.7, namePrefix: 'task' });
+    if (picked) setAttachedFile(picked);
   };
 
   const handleSend = async () => {

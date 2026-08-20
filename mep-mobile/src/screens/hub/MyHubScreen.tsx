@@ -7,7 +7,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import * as ImagePicker from 'expo-image-picker';
+import { pickImageWithSource } from '../../lib/imagePicker';
 import { Image } from 'react-native';
 import { apiClient } from '../../api/client';
 import { useAuthStore } from '../../store/useAuthStore';
@@ -132,21 +132,8 @@ export default function MyHubScreen() {
 
   const pickCompletionImage = async () => {
     try {
-      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!perm.granted) {
-        Alert.alert(t('common.error'), t('hub.photoPermission'));
-        return;
-      }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: false,
-        quality: 0.7,
-      });
-      if (result.canceled || !result.assets?.length) return;
-      const asset = result.assets[0];
-      const name = asset.fileName || `completion_${Date.now()}.jpg`;
-      const type = asset.mimeType || 'image/jpeg';
-      setCompletionFile({ uri: asset.uri, name, type });
+      const picked = await pickImageWithSource(t, { quality: 0.7, namePrefix: 'completion' });
+      if (picked) setCompletionFile(picked);
     } catch (e: any) {
       Alert.alert(t('common.error'), e?.message || t('hub.pickImageFailed'));
     }
